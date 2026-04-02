@@ -129,19 +129,19 @@ function CompanyLogo({ company, logoUrl }: { company: string; logoUrl?: string }
   );
 }
 
-// 多选筛选器组件
+// 多选筛选器组件 - 现代化设计
 function MultiSelectFilter({
   label,
+  icon: Icon,
   options,
   selected,
   onChange,
-  placeholder,
 }: {
   label: string;
+  icon: React.ElementType;
   options: JobConfig[];
   selected: string[];
   onChange: (values: string[]) => void;
-  placeholder: string;
 }) {
   const handleToggle = (value: string) => {
     if (selected.includes(value)) {
@@ -151,52 +151,118 @@ function MultiSelectFilter({
     }
   };
 
-  const handleClear = (e: React.MouseEvent) => {
-    e.stopPropagation();
-    onChange([]);
-  };
-
   return (
-    <div className="space-y-1.5">
-      <label className="text-sm font-medium text-muted-foreground">{label}</label>
-      <Popover>
-        <PopoverTrigger asChild>
-          <Button
-            variant="outline"
-            className={`w-full md:w-40 justify-between font-normal ${selected.length > 0 ? 'text-foreground' : 'text-muted-foreground'}`}
-          >
-            <span className="truncate">
-              {selected.length === 0 ? placeholder : selected.length === 1 ? selected[0] : `已选 ${selected.length} 项`}
-            </span>
-            {selected.length > 0 ? (
-              <X className="h-4 w-4 shrink-0 opacity-50 hover:opacity-100" onClick={handleClear} />
-            ) : (
-              <ChevronDown className="h-4 w-4 shrink-0 opacity-50" />
-            )}
-          </Button>
-        </PopoverTrigger>
-        <PopoverContent className="w-48 p-2" align="start">
-          <div className="max-h-60 overflow-y-auto space-y-1">
-            {options.map((option) => (
-              <label
-                key={option.id}
-                className="flex items-center gap-2 px-2 py-1.5 rounded hover:bg-muted cursor-pointer"
-                translate="no"
-              >
-                <Checkbox
-                  checked={selected.includes(option.config_value)}
-                  onCheckedChange={() => handleToggle(option.config_value)}
-                />
-                <span className="text-sm">{option.config_value}</span>
-              </label>
-            ))}
-          </div>
-          {options.length === 0 && (
-            <div className="text-center py-2 text-sm text-muted-foreground">暂无选项</div>
+    <Popover>
+      <PopoverTrigger asChild>
+        <button className="inline-flex items-center gap-2 px-3 py-2 rounded-full border border-input bg-background hover:bg-accent hover:text-accent-foreground transition-colors text-sm">
+          <Icon className="h-4 w-4 text-muted-foreground" />
+          <span className="font-medium">{label}</span>
+          {selected.length > 0 && (
+            <Badge variant="secondary" className="ml-0.5 h-5 px-1.5 rounded-full">
+              {selected.length}
+            </Badge>
           )}
-        </PopoverContent>
-      </Popover>
-    </div>
+          <ChevronDown className="h-3.5 w-3.5 text-muted-foreground" />
+        </button>
+      </PopoverTrigger>
+      <PopoverContent className="w-48 p-2" align="start">
+        <div className="max-h-60 overflow-y-auto space-y-1">
+          {options.map((option) => (
+            <label
+              key={option.id}
+              className={`flex items-center gap-2 px-2 py-1.5 rounded-md cursor-pointer transition-colors ${
+                selected.includes(option.config_value) 
+                  ? 'bg-primary/10 text-primary' 
+                  : 'hover:bg-muted'
+              }`}
+              translate="no"
+            >
+              <Checkbox
+                checked={selected.includes(option.config_value)}
+                onCheckedChange={() => handleToggle(option.config_value)}
+                className="data-[state=checked]:bg-primary data-[state=checked]:border-primary"
+              />
+              <span className="text-sm font-medium">{option.config_value}</span>
+            </label>
+          ))}
+        </div>
+        {options.length === 0 && (
+          <div className="text-center py-2 text-sm text-muted-foreground">暂无选项</div>
+        )}
+        {selected.length > 0 && (
+          <div className="border-t mt-2 pt-2">
+            <button
+              onClick={() => onChange([])}
+              className="w-full text-xs text-muted-foreground hover:text-foreground transition-colors py-1"
+            >
+              清除全部
+            </button>
+          </div>
+        )}
+      </PopoverContent>
+    </Popover>
+  );
+}
+
+// 单选筛选器组件 - 现代化设计
+function SingleSelectFilter({
+  label,
+  icon: Icon,
+  options,
+  selected,
+  onChange,
+}: {
+  label: string;
+  icon: React.ElementType;
+  options: JobConfig[];
+  selected: string;
+  onChange: (value: string) => void;
+}) {
+  const displayValue = selected === '全部' ? null : selected;
+  
+  return (
+    <Popover>
+      <PopoverTrigger asChild>
+        <button className="inline-flex items-center gap-2 px-3 py-2 rounded-full border border-input bg-background hover:bg-accent hover:text-accent-foreground transition-colors text-sm">
+          <Icon className="h-4 w-4 text-muted-foreground" />
+          <span className="font-medium">{label}</span>
+          {displayValue && (
+            <Badge variant="secondary" className="ml-0.5 h-5 px-1.5 rounded-full text-xs">
+              {displayValue}
+            </Badge>
+          )}
+          <ChevronDown className="h-3.5 w-3.5 text-muted-foreground" />
+        </button>
+      </PopoverTrigger>
+      <PopoverContent className="w-40 p-1" align="start">
+        <div className="space-y-0.5">
+          <button
+            onClick={() => onChange('全部')}
+            className={`w-full text-left px-3 py-2 rounded-md text-sm transition-colors ${
+              selected === '全部' 
+                ? 'bg-primary text-primary-foreground' 
+                : 'hover:bg-muted'
+            }`}
+          >
+            全部
+          </button>
+          {options.map((option) => (
+            <button
+              key={option.id}
+              onClick={() => onChange(option.config_value)}
+              className={`w-full text-left px-3 py-2 rounded-md text-sm transition-colors ${
+                selected === option.config_value 
+                  ? 'bg-primary text-primary-foreground' 
+                  : 'hover:bg-muted'
+              }`}
+              translate="no"
+            >
+              {option.config_value}
+            </button>
+          ))}
+        </div>
+      </PopoverContent>
+    </Popover>
   );
 }
 
@@ -298,51 +364,59 @@ export default function JobsPage() {
         </div>
 
         {/* Filters */}
-        <Card className="mb-6">
-          <CardContent className="pt-6">
-            <div className="flex flex-col md:flex-row gap-4">
-              <div className="flex-1">
-                <div className="relative">
-                  <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
-                  <Input
-                    placeholder="搜索岗位名称或公司..."
-                    value={searchTerm}
-                    onChange={(e) => setSearchTerm(e.target.value)}
-                    className="pl-10"
-                  />
-                </div>
+        <Card className="mb-6 border-0 shadow-sm bg-gradient-to-r from-background to-muted/30">
+          <CardContent className="pt-5 pb-5">
+            <div className="flex flex-col gap-4">
+              {/* 搜索框 */}
+              <div className="relative max-w-md">
+                <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
+                <Input
+                  placeholder="搜索岗位名称或公司..."
+                  value={searchTerm}
+                  onChange={(e) => setSearchTerm(e.target.value)}
+                  className="pl-10 h-11 bg-background"
+                />
               </div>
-              <div className="flex flex-col md:flex-row gap-4 md:items-end">
+              
+              {/* 筛选器组 */}
+              <div className="flex flex-wrap items-center gap-3">
+                <span className="text-sm text-muted-foreground mr-1">筛选</span>
                 <MultiSelectFilter
                   label="地区"
+                  icon={MapPin}
                   options={configs.region || []}
                   selected={selectedRegions}
                   onChange={setSelectedRegions}
-                  placeholder="全部地区"
                 />
                 <MultiSelectFilter
                   label="方向"
+                  icon={Briefcase}
                   options={configs.direction || []}
                   selected={selectedDirections}
                   onChange={setSelectedDirections}
-                  placeholder="全部方向"
                 />
-                <div className="space-y-1.5">
-                  <label className="text-sm font-medium text-muted-foreground">受众</label>
-                  <Select value={selectedAudience} onValueChange={setSelectedAudience}>
-                    <SelectTrigger className="w-full md:w-36">
-                      <SelectValue placeholder="全部受众" />
-                    </SelectTrigger>
-                    <SelectContent translate="no">
-                      <SelectItem value="全部">全部</SelectItem>
-                      {configs.audience?.map((config) => (
-                        <SelectItem key={config.id} value={config.config_value}>
-                          {config.config_value}
-                        </SelectItem>
-                      ))}
-                    </SelectContent>
-                  </Select>
-                </div>
+                <SingleSelectFilter
+                  label="受众"
+                  icon={Users}
+                  options={configs.audience || []}
+                  selected={selectedAudience}
+                  onChange={setSelectedAudience}
+                />
+                
+                {/* 清除筛选按钮 */}
+                {(selectedRegions.length > 0 || selectedDirections.length > 0 || selectedAudience !== '全部') && (
+                  <button
+                    onClick={() => {
+                      setSelectedRegions([]);
+                      setSelectedDirections([]);
+                      setSelectedAudience('全部');
+                    }}
+                    className="inline-flex items-center gap-1 px-2 py-1 text-xs text-muted-foreground hover:text-foreground transition-colors"
+                  >
+                    <X className="h-3 w-3" />
+                    清除全部
+                  </button>
+                )}
               </div>
             </div>
           </CardContent>
