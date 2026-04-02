@@ -26,6 +26,7 @@ import {
   User,
   Calendar,
   Link as LinkIcon,
+  Languages,
 } from 'lucide-react';
 import Link from 'next/link';
 import { AccessGuard, useAccessCode } from '@/components/access-guard';
@@ -54,6 +55,7 @@ function ResumeContent() {
   const [uploadProgress, setUploadProgress] = useState(0);
   const [selectedFile, setSelectedFile] = useState<File | null>(null);
   const [selectedResume, setSelectedResume] = useState<Resume | null>(null);
+  const [translatingId, setTranslatingId] = useState<number | null>(null);
   const { accessCodeId } = useAccessCode();
 
   const handleFileSelect = useCallback((e: React.ChangeEvent<HTMLInputElement>) => {
@@ -137,6 +139,32 @@ function ResumeContent() {
       setResumes(resumes.filter((r) => r.id !== id));
     } catch (error) {
       console.error('Failed to delete resume:', error);
+    }
+  };
+
+  const translateResume = async (resume: Resume) => {
+    setTranslatingId(resume.id);
+    try {
+      const response = await fetch('/api/ai/translate-resume-content', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          resumeId: resume.id,
+          content: resume.parsed_content,
+          userInfo: resume.user_info,
+        }),
+      });
+
+      const data = await response.json();
+      if (data.resume) {
+        setResumes(resumes.map(r => 
+          r.id === resume.id ? { ...r, ...data.resume } : r
+        ));
+      }
+    } catch (error) {
+      console.error('Translation failed:', error);
+    } finally {
+      setTranslatingId(null);
     }
   };
 
@@ -284,6 +312,24 @@ function ResumeContent() {
                       </div>
                     </div>
                     <div className="flex gap-2">
+                      <Button 
+                        variant="outline" 
+                        size="sm"
+                        onClick={() => translateResume(resume)}
+                        disabled={translatingId === resume.id}
+                      >
+                        {translatingId === resume.id ? (
+                          <>
+                            <Loader2 className="h-4 w-4 mr-1 animate-spin" />
+                            翻译中...
+                          </>
+                        ) : (
+                          <>
+                            <Languages className="h-4 w-4 mr-1" />
+                            翻译
+                          </>
+                        )}
+                      </Button>
                       <Dialog>
                         <DialogTrigger asChild>
                           <Button 
