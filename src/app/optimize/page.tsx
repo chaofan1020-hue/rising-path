@@ -1,10 +1,12 @@
 'use client';
 
-import { useState, useEffect, Suspense, useMemo } from 'react';
+import { useState, useEffect, Suspense } from 'react';
 import { useSearchParams } from 'next/navigation';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
+import { Badge } from '@/components/ui/badge';
 import { Progress } from '@/components/ui/progress';
+import { Textarea } from '@/components/ui/textarea';
 import { Input } from '@/components/ui/input';
 import {
   Select,
@@ -31,9 +33,8 @@ import {
   Wand2,
   Target,
   AlertCircle,
-  Plus,
-  Minus,
-  Edit3,
+  ArrowRight,
+  FileCheck,
 } from 'lucide-react';
 import Link from 'next/link';
 
@@ -42,103 +43,6 @@ interface Resume {
   file_name: string;
   parsed_content: string;
   user_info: Record<string, unknown>;
-}
-
-// Simple diff function to compare texts
-function diffTexts(oldText: string, newText: string) {
-  const oldLines = oldText.split('\n');
-  const newLines = newText.split('\n');
-  
-  const result: Array<{
-    type: 'unchanged' | 'added' | 'removed' | 'modified';
-    oldLine?: string;
-    newLine?: string;
-  }> = [];
-  
-  const maxLen = Math.max(oldLines.length, newLines.length);
-  
-  for (let i = 0; i < maxLen; i++) {
-    const oldLine = oldLines[i];
-    const newLine = newLines[i];
-    
-    if (oldLine === undefined) {
-      result.push({ type: 'added', newLine });
-    } else if (newLine === undefined) {
-      result.push({ type: 'removed', oldLine });
-    } else if (oldLine === newLine) {
-      result.push({ type: 'unchanged', oldLine, newLine });
-    } else {
-      result.push({ type: 'modified', oldLine, newLine });
-    }
-  }
-  
-  return result;
-}
-
-// Component to render diff view
-function DiffView({ original, optimized }: { original: string; optimized: string }) {
-  const diff = useMemo(() => diffTexts(original, optimized), [original, optimized]);
-  
-  const addedCount = diff.filter(d => d.type === 'added').length;
-  const modifiedCount = diff.filter(d => d.type === 'modified').length;
-  const removedCount = diff.filter(d => d.type === 'removed').length;
-  
-  return (
-    <div className="space-y-3">
-      {/* Stats */}
-      <div className="flex gap-4 text-sm mb-4">
-        <div className="flex items-center gap-1.5 text-green-600">
-          <Plus className="h-4 w-4" />
-          <span>{addedCount} 新增</span>
-        </div>
-        <div className="flex items-center gap-1.5 text-amber-600">
-          <Edit3 className="h-4 w-4" />
-          <span>{modifiedCount} 修改</span>
-        </div>
-        <div className="flex items-center gap-1.5 text-red-600">
-          <Minus className="h-4 w-4" />
-          <span>{removedCount} 删除</span>
-        </div>
-      </div>
-      
-      {/* Diff Content */}
-      <div className="bg-white dark:bg-gray-900 rounded-lg border overflow-hidden">
-        {diff.map((item, index) => (
-          <div key={index} className="border-b last:border-b-0">
-            {item.type === 'unchanged' && (
-              <div className="px-4 py-2 text-sm font-mono whitespace-pre-wrap">
-                {item.newLine}
-              </div>
-            )}
-            {item.type === 'removed' && (
-              <div className="px-4 py-2 text-sm font-mono whitespace-pre-wrap bg-red-50 dark:bg-red-950/30 text-red-700 dark:text-red-400 line-through">
-                <Minus className="inline h-3 w-3 mr-2" />
-                {item.oldLine}
-              </div>
-            )}
-            {item.type === 'added' && (
-              <div className="px-4 py-2 text-sm font-mono whitespace-pre-wrap bg-green-50 dark:bg-green-950/30 text-green-700 dark:text-green-400">
-                <Plus className="inline h-3 w-3 mr-2" />
-                {item.newLine}
-              </div>
-            )}
-            {item.type === 'modified' && (
-              <>
-                <div className="px-4 py-2 text-sm font-mono whitespace-pre-wrap bg-red-50 dark:bg-red-950/30 text-red-700 dark:text-red-400 line-through">
-                  <Minus className="inline h-3 w-3 mr-2" />
-                  {item.oldLine}
-                </div>
-                <div className="px-4 py-2 text-sm font-mono whitespace-pre-wrap bg-green-50 dark:bg-green-950/30 text-green-700 dark:text-green-400">
-                  <Plus className="inline h-3 w-3 mr-2" />
-                  {item.newLine}
-                </div>
-              </>
-            )}
-          </div>
-        ))}
-      </div>
-    </div>
-  );
 }
 
 function OptimizePageContent() {
@@ -407,20 +311,69 @@ function OptimizePageContent() {
 
       {/* Result Dialog */}
       <Dialog open={showResult} onOpenChange={setShowResult}>
-        <DialogContent className="max-w-5xl max-h-[90vh] !flex !flex-col p-0 gap-0">
+        <DialogContent className="max-w-6xl max-h-[90vh] !flex !flex-col p-0 gap-0">
           <DialogHeader className="px-6 pt-6 pb-4 border-b shrink-0">
             <DialogTitle className="flex items-center gap-2">
               <CheckCircle className="h-5 w-5 text-green-600" />
               简历优化完成
             </DialogTitle>
             <DialogDescription>
-              AI已根据目标岗位优化了您的简历，以下是修改标注
+              AI已根据目标岗位优化了您的简历内容，以下是原简历与优化后简历的对比
             </DialogDescription>
           </DialogHeader>
           
-          {/* Diff View */}
+          {/* Comparison View */}
           <div className="flex-1 min-h-0 overflow-auto px-6 py-4">
-            <DiffView original={originalContent} optimized={optimizedContent} />
+            <div className="grid md:grid-cols-2 gap-6 min-h-[400px]">
+              {/* Original Resume */}
+              <div className="flex flex-col h-[400px] md:h-[50vh]">
+                <div className="flex items-center gap-2 mb-3 pb-2 border-b shrink-0">
+                  <div className="w-8 h-8 rounded-lg bg-gray-100 dark:bg-gray-800 flex items-center justify-center">
+                    <FileText className="h-4 w-4 text-gray-600 dark:text-gray-400" />
+                  </div>
+                  <div>
+                    <h4 className="font-medium text-sm">原简历</h4>
+                    <p className="text-xs text-muted-foreground">优化前内容</p>
+                  </div>
+                </div>
+                <div className="flex-1 overflow-y-auto bg-gray-50 dark:bg-gray-900/50 rounded-lg p-4 border">
+                  <pre className="whitespace-pre-wrap text-sm font-mono text-gray-700 dark:text-gray-300">
+                    {originalContent}
+                  </pre>
+                </div>
+              </div>
+
+              {/* Arrow */}
+              <div className="hidden md:flex absolute left-1/2 top-1/2 -translate-x-1/2 -translate-y-1/2 z-10">
+                <div className="w-12 h-12 rounded-full bg-gradient-to-r from-orange-500 to-red-500 flex items-center justify-center shadow-lg">
+                  <ArrowRight className="h-6 w-6 text-white" />
+                </div>
+              </div>
+
+              {/* Optimized Resume */}
+              <div className="flex flex-col h-[400px] md:h-[50vh]">
+                <div className="flex items-center justify-between mb-3 pb-2 border-b shrink-0">
+                  <div className="flex items-center gap-2">
+                    <div className="w-8 h-8 rounded-lg bg-gradient-to-r from-orange-100 to-red-100 dark:from-orange-900/30 dark:to-red-900/30 flex items-center justify-center">
+                      <FileCheck className="h-4 w-4 text-orange-600" />
+                    </div>
+                    <div>
+                      <h4 className="font-medium text-sm">优化后简历</h4>
+                      <p className="text-xs text-muted-foreground">ATS优化内容</p>
+                    </div>
+                  </div>
+                  <Badge variant="secondary" className="bg-green-100 text-green-700 dark:bg-green-900/30 dark:text-green-400">
+                    <Sparkles className="h-3 w-3 mr-1" />
+                    AI优化
+                  </Badge>
+                </div>
+                <div className="flex-1 overflow-y-auto bg-gradient-to-br from-orange-50/50 to-red-50/50 dark:from-orange-950/20 dark:to-red-950/20 rounded-lg p-4 border border-orange-200 dark:border-orange-900">
+                  <pre className="whitespace-pre-wrap text-sm font-mono text-gray-800 dark:text-gray-200">
+                    {optimizedContent}
+                  </pre>
+                </div>
+              </div>
+            </div>
           </div>
 
           {/* Actions */}
