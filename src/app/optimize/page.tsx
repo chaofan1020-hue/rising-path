@@ -1,6 +1,7 @@
 'use client';
 
 import { useState, useEffect } from 'react';
+import { useSearchParams } from 'next/navigation';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
@@ -45,6 +46,7 @@ interface Resume {
 
 // 内部组件
 function OptimizeContent() {
+  const searchParams = useSearchParams();
   const [resumes, setResumes] = useState<Resume[]>([]);
   const [selectedResumeId, setSelectedResumeId] = useState<string>('');
   const [targetCompany, setTargetCompany] = useState('');
@@ -60,6 +62,17 @@ function OptimizeContent() {
       fetchResumes();
     }
   }, [accessCodeId]);
+
+  // 从URL参数读取预填充数据
+  useEffect(() => {
+    const resumeIdParam = searchParams.get('resumeId');
+    const companyParam = searchParams.get('company');
+    const positionParam = searchParams.get('position');
+    
+    if (resumeIdParam) setSelectedResumeId(resumeIdParam);
+    if (companyParam) setTargetCompany(companyParam);
+    if (positionParam) setTargetPosition(positionParam);
+  }, [searchParams]);
 
   const fetchResumes = async () => {
     if (!accessCodeId) return;

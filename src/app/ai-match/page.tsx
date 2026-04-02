@@ -31,6 +31,7 @@ import {
   Compass,
   ChevronDown,
   X,
+  Wand2,
 } from 'lucide-react';
 import Link from 'next/link';
 import { AccessGuard, useAccessCode } from '@/components/access-guard';
@@ -454,6 +455,12 @@ function AIMatchContent() {
                         <Button size="sm" asChild>
                           <Link href={`/jobs/${result.job_id}`}>
                             查看岗位
+                          </Link>
+                        </Button>
+                        <Button size="sm" variant="outline" asChild>
+                          <Link href={`/optimize?resumeId=${selectedResumeId}&company=${encodeURIComponent(result.company)}&position=${encodeURIComponent(result.job_title)}`}>
+                            <Wand2 className="mr-1 h-3 w-3" />
+                            优化简历
                           </Link>
                         </Button>
                         <Button size="sm" variant="outline">
