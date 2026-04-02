@@ -106,7 +106,25 @@ export async function DELETE(request: NextRequest) {
       );
     }
 
-    // 批量删除
+    // 先删除关联的 ai_matches 记录
+    await client
+      .from('ai_matches')
+      .delete()
+      .in('job_id', body.ids);
+
+    // 先删除关联的 applications 记录
+    await client
+      .from('applications')
+      .delete()
+      .in('job_id', body.ids);
+
+    // 先删除关联的 application_fields 记录
+    await client
+      .from('application_fields')
+      .delete()
+      .in('job_id', body.ids);
+
+    // 最后批量删除岗位
     const { error } = await client
       .from('jobs')
       .delete()

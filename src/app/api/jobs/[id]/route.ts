@@ -42,6 +42,25 @@ export async function DELETE(
     const client = getSupabaseClient();
     const { id } = await params;
 
+    // 先删除关联的 ai_matches 记录
+    await client
+      .from('ai_matches')
+      .delete()
+      .eq('job_id', id);
+
+    // 先删除关联的 applications 记录
+    await client
+      .from('applications')
+      .delete()
+      .eq('job_id', id);
+
+    // 先删除关联的 application_fields 记录
+    await client
+      .from('application_fields')
+      .delete()
+      .eq('job_id', id);
+
+    // 最后删除岗位
     const { error } = await client
       .from('jobs')
       .delete()
