@@ -1370,9 +1370,12 @@ export default function AdminPage() {
           </AlertDialogHeader>
           <AlertDialogFooter>
             <AlertDialogCancel disabled={batchDeleting}>取消</AlertDialogCancel>
-            <AlertDialogAction
-              className="bg-destructive text-destructive-foreground"
-              onClick={handleBatchDelete}
+            <Button
+              variant="destructive"
+              onClick={(e) => {
+                e.preventDefault();
+                handleBatchDelete();
+              }}
               disabled={batchDeleting}
             >
               {batchDeleting ? (
@@ -1383,7 +1386,7 @@ export default function AdminPage() {
               ) : (
                 `删除 ${selectedJobIds.size} 个岗位`
               )}
-            </AlertDialogAction>
+            </Button>
           </AlertDialogFooter>
         </AlertDialogContent>
       </AlertDialog>
