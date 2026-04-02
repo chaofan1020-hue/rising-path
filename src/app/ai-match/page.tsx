@@ -45,7 +45,8 @@ interface MatchResult {
   suggestions: string;
 }
 
-export default function AIMatchPage() {
+// 内部组件
+function AIMatchContent() {
   const [resumes, setResumes] = useState<Resume[]>([]);
   const [selectedResumeId, setSelectedResumeId] = useState<string>('');
   const [matching, setMatching] = useState(false);
@@ -54,17 +55,16 @@ export default function AIMatchPage() {
   const { accessCodeId } = useAccessCode();
 
   useEffect(() => {
-    if (accessCodeId !== undefined) {
+    if (accessCodeId) {
       fetchResumes();
     }
   }, [accessCodeId]);
 
   const fetchResumes = async () => {
+    if (!accessCodeId) return;
     try {
       const params = new URLSearchParams();
-      if (accessCodeId) {
-        params.append('access_code_id', accessCodeId.toString());
-      }
+      params.append('access_code_id', accessCodeId.toString());
       const response = await fetch(`/api/resume?${params.toString()}`);
       const data = await response.json();
       setResumes(data.resumes || []);
@@ -74,7 +74,7 @@ export default function AIMatchPage() {
   };
 
   const handleMatch = async () => {
-    if (!selectedResumeId) return;
+    if (!selectedResumeId || !accessCodeId) return;
 
     setMatching(true);
     setMatchProgress(0);
@@ -124,13 +124,12 @@ export default function AIMatchPage() {
   };
 
   return (
-    <AccessGuard>
-      <div className="min-h-screen bg-background">
-        {/* Header */}
-        <header className="border-b sticky top-0 bg-background/95 backdrop-blur z-50">
-          <div className="container mx-auto px-4 h-16 flex items-center justify-between">
-            <Link href="/" className="flex items-center gap-2">
-              <Briefcase className="h-6 w-6 text-primary" />
+    <div className="min-h-screen bg-background">
+      {/* Header */}
+      <header className="border-b sticky top-0 bg-background/95 backdrop-blur z-50">
+        <div className="container mx-auto px-4 h-16 flex items-center justify-between">
+          <Link href="/" className="flex items-center gap-2">
+            <Briefcase className="h-6 w-6 text-primary" />
             <span className="font-bold text-xl">PathUp</span>
           </Link>
           <nav className="flex items-center gap-4">
@@ -303,6 +302,14 @@ export default function AIMatchPage() {
         )}
       </main>
     </div>
+  );
+}
+
+// 主组件
+export default function AIMatchPage() {
+  return (
+    <AccessGuard>
+      <AIMatchContent />
     </AccessGuard>
   );
 }

@@ -46,7 +46,8 @@ interface Resume {
   created_at: string;
 }
 
-export default function ResumePage() {
+// 内部组件 - 在 AccessGuard 内部使用 useAccessCode
+function ResumeContent() {
   const [resumes, setResumes] = useState<Resume[]>([]);
   const [loading, setLoading] = useState(false);
   const [uploading, setUploading] = useState(false);
@@ -65,15 +66,18 @@ export default function ResumePage() {
   const handleUpload = async () => {
     if (!selectedFile) return;
 
+    if (!accessCodeId) {
+      alert('请先登录');
+      return;
+    }
+
     setUploading(true);
     setUploadProgress(0);
 
     try {
       const formData = new FormData();
       formData.append('file', selectedFile);
-      if (accessCodeId) {
-        formData.append('access_code_id', accessCodeId.toString());
-      }
+      formData.append('access_code_id', accessCodeId.toString());
 
       // Simulate progress
       const progressInterval = setInterval(() => {
@@ -111,10 +115,12 @@ export default function ResumePage() {
   const fetchResumes = async () => {
     setLoading(true);
     try {
-      const params = new URLSearchParams();
-      if (accessCodeId) {
-        params.append('access_code_id', accessCodeId.toString());
+      if (!accessCodeId) {
+        setResumes([]);
+        return;
       }
+      const params = new URLSearchParams();
+      params.append('access_code_id', accessCodeId.toString());
       const response = await fetch(`/api/resume?${params.toString()}`);
       const data = await response.json();
       setResumes(data.resumes || []);
@@ -136,18 +142,17 @@ export default function ResumePage() {
 
   // Fetch resumes when accessCodeId changes
   useEffect(() => {
-    if (accessCodeId !== undefined) {
+    if (accessCodeId) {
       fetchResumes();
     }
   }, [accessCodeId]);
 
   return (
-    <AccessGuard>
-      <div className="min-h-screen bg-background">
-        {/* Header */}
-        <header className="border-b sticky top-0 bg-background/95 backdrop-blur z-50">
-          <div className="container mx-auto px-4 h-16 flex items-center justify-between">
-            <Link href="/" className="flex items-center gap-2">
+    <div className="min-h-screen bg-background">
+      {/* Header */}
+      <header className="border-b sticky top-0 bg-background/95 backdrop-blur z-50">
+        <div className="container mx-auto px-4 h-16 flex items-center justify-between">
+          <Link href="/" className="flex items-center gap-2">
             <Briefcase className="h-6 w-6 text-primary" />
             <span className="font-bold text-xl">PathUp</span>
           </Link>
@@ -356,6 +361,14 @@ export default function ResumePage() {
         </div>
       </main>
     </div>
+  );
+}
+
+// 主组件 - 使用 AccessGuard 包裹内部组件
+export default function ResumePage() {
+  return (
+    <AccessGuard>
+      <ResumeContent />
     </AccessGuard>
   );
 }

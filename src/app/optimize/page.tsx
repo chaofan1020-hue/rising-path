@@ -43,7 +43,8 @@ interface Resume {
   user_info: Record<string, unknown>;
 }
 
-export default function OptimizePage() {
+// 内部组件
+function OptimizeContent() {
   const [resumes, setResumes] = useState<Resume[]>([]);
   const [selectedResumeId, setSelectedResumeId] = useState<string>('');
   const [targetCompany, setTargetCompany] = useState('');
@@ -55,17 +56,16 @@ export default function OptimizePage() {
   const { accessCodeId } = useAccessCode();
 
   useEffect(() => {
-    if (accessCodeId !== undefined) {
+    if (accessCodeId) {
       fetchResumes();
     }
   }, [accessCodeId]);
 
   const fetchResumes = async () => {
+    if (!accessCodeId) return;
     try {
       const params = new URLSearchParams();
-      if (accessCodeId) {
-        params.append('access_code_id', accessCodeId.toString());
-      }
+      params.append('access_code_id', accessCodeId.toString());
       const response = await fetch(`/api/resume?${params.toString()}`);
       const data = await response.json();
       setResumes(data.resumes || []);
@@ -75,7 +75,7 @@ export default function OptimizePage() {
   };
 
   const handleOptimize = async () => {
-    if (!selectedResumeId || !targetPosition) return;
+    if (!selectedResumeId || !targetPosition || !accessCodeId) return;
 
     setOptimizing(true);
     setOptimizeProgress(0);
@@ -119,8 +119,7 @@ export default function OptimizePage() {
   };
 
   return (
-    <AccessGuard>
-      <div className="min-h-screen bg-background">
+    <div className="min-h-screen bg-background">
       {/* Header */}
       <header className="border-b sticky top-0 bg-background/95 backdrop-blur z-50">
         <div className="container mx-auto px-4 h-16 flex items-center justify-between">
@@ -310,7 +309,15 @@ export default function OptimizePage() {
           </div>
         </DialogContent>
       </Dialog>
-      </div>
+    </div>
+  );
+}
+
+// 主组件
+export default function OptimizePage() {
+  return (
+    <AccessGuard>
+      <OptimizeContent />
     </AccessGuard>
   );
 }
