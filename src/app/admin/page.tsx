@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useRef } from 'react';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Input } from '@/components/ui/input';
@@ -35,6 +35,7 @@ import {
 } from '@/components/ui/alert-dialog';
 import { Label } from '@/components/ui/label';
 import { AdminAuthGuard } from '@/components/admin-auth-guard';
+import Image from 'next/image';
 import { 
   LayoutDashboard,
   Briefcase,
@@ -54,6 +55,9 @@ import {
   Clock,
   Calendar,
   LogOut,
+  Settings,
+  Upload,
+  X,
 } from 'lucide-react';
 import Link from 'next/link';
 
@@ -94,9 +98,14 @@ interface Application {
   resumes: { file_name: string };
 }
 
-const regions = ['北美', '欧洲', '亚太', '澳洲', '中东'];
-const directions = ['技术', '产品', '设计', '运营', '市场', '金融', '咨询'];
-const audiences = ['应届生', '社招', '实习', '校招'];
+interface JobConfig {
+  id: number;
+  config_type: string;
+  config_value: string;
+  sort_order: number;
+  is_active: boolean;
+}
+
 const statusOptions = ['pending', 'submitted', 'interview', 'rejected', 'offer'];
 
 const statusLabels: Record<string, string> = {
@@ -113,13 +122,27 @@ export default function AdminPage() {
   const [applications, setApplications] = useState<Application[]>([]);
   const [loading, setLoading] = useState(true);
 
+  // Config state
+  const [configs, setConfigs] = useState<Record<string, JobConfig[]>>({
+    region: [],
+    direction: [],
+    audience: [],
+  });
+  const [configDialogOpen, setConfigDialogOpen] = useState(false);
+  const [configForm, setConfigForm] = useState({ type: 'region', value: '' });
+  const [editingConfig, setEditingConfig] = useState<JobConfig | null>(null);
+
+  // Logo upload state
+  const [logoUploading, setLogoUploading] = useState(false);
+  const fileInputRef = useRef<HTMLInputElement>(null);
+
   // Job form state
   const [jobForm, setJobForm] = useState({
     title: '',
     company: '',
-    region: '北美',
-    direction: '技术',
-    audience: '应届生',
+    region: '',
+    direction: '',
+    audience: '',
     description: '',
     requirements: '',
     salary_range: '',
@@ -144,21 +167,106 @@ export default function AdminPage() {
   const fetchData = async () => {
     setLoading(true);
     try {
-      const [jobsRes, resumesRes, appsRes] = await Promise.all([
+      const [jobsRes, resumesRes, appsRes, configsRes] = await Promise.all([
         fetch('/api/jobs'),
         fetch('/api/resume'),
         fetch('/api/applications'),
+        fetch('/api/configs'),
       ]);
       const jobsData = await jobsRes.json();
       const resumesData = await resumesRes.json();
       const appsData = await appsRes.json();
+      const configsData = await configsRes.json();
       setJobs(jobsData.jobs || []);
       setResumes(resumesData.resumes || []);
       setApplications(appsData.applications || []);
+      setConfigs(configsData.configs || {});
+      
+      // Set default form values from configs
+      if (configsData.configs?.region?.[0]) {
+        setJobForm(prev => ({ ...prev, region: configsData.configs.region[0].config_value }));
+      }
+      if (configsData.configs?.direction?.[0]) {
+        setJobForm(prev => ({ ...prev, direction: configsData.configs.direction[0].config_value }));
+      }
+      if (configsData.configs?.audience?.[0]) {
+        setJobForm(prev => ({ ...prev, audience: configsData.configs.audience[0].config_value }));
+      }
     } catch (error) {
       console.error('Failed to fetch data:', error);
     } finally {
       setLoading(false);
+    }
+  };
+
+  // Logo upload
+  const handleLogoUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+
+    setLogoUploading(true);
+    try {
+      const formData = new FormData();
+      formData.append('file', file);
+
+      const response = await fetch('/api/upload/logo', {
+        method: 'POST',
+        body: formData,
+      });
+      const data = await response.json();
+      
+      if (data.url) {
+        setJobForm({ ...jobForm, logo_url: data.url });
+      } else {
+        alert('上传失败: ' + (data.error || '未知错误'));
+      }
+    } catch (error) {
+      console.error('Upload failed:', error);
+      alert('上传失败');
+    } finally {
+      setLogoUploading(false);
+      if (fileInputRef.current) {
+        fileInputRef.current.value = '';
+      }
+    }
+  };
+
+  // Config CRUD
+  const handleCreateConfig = async () => {
+    if (!configForm.value.trim()) return;
+    
+    try {
+      const response = await fetch('/api/configs', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          config_type: configForm.type,
+          config_value: configForm.value.trim(),
+        }),
+      });
+      const data = await response.json();
+      if (data.config) {
+        setConfigs(prev => ({
+          ...prev,
+          [configForm.type]: [...(prev[configForm.type] || []), data.config],
+        }));
+        setConfigForm({ type: configForm.type, value: '' });
+        setConfigDialogOpen(false);
+      }
+    } catch (error) {
+      console.error('Failed to create config:', error);
+    }
+  };
+
+  const handleDeleteConfig = async (id: number, type: string) => {
+    try {
+      await fetch(`/api/configs?id=${id}`, { method: 'DELETE' });
+      setConfigs(prev => ({
+        ...prev,
+        [type]: prev[type].filter(c => c.id !== id),
+      }));
+    } catch (error) {
+      console.error('Failed to delete config:', error);
     }
   };
 
@@ -215,9 +323,9 @@ export default function AdminPage() {
     setJobForm({
       title: '',
       company: '',
-      region: '北美',
-      direction: '技术',
-      audience: '应届生',
+      region: configs.region?.[0]?.config_value || '',
+      direction: configs.direction?.[0]?.config_value || '',
+      audience: configs.audience?.[0]?.config_value || '',
       description: '',
       requirements: '',
       salary_range: '',
@@ -331,7 +439,7 @@ export default function AdminPage() {
           </div>
         ) : (
           <Tabs defaultValue="overview" className="space-y-6">
-            <TabsList className="grid w-full grid-cols-4 lg:w-auto lg:inline-grid">
+            <TabsList className="grid w-full grid-cols-5 lg:w-auto lg:inline-grid">
               <TabsTrigger value="overview">
                 <LayoutDashboard className="h-4 w-4 mr-2" />
                 概览
@@ -347,6 +455,10 @@ export default function AdminPage() {
               <TabsTrigger value="applications">
                 <Send className="h-4 w-4 mr-2" />
                 网申管理
+              </TabsTrigger>
+              <TabsTrigger value="configs">
+                <Settings className="h-4 w-4 mr-2" />
+                配置管理
               </TabsTrigger>
             </TabsList>
 
@@ -428,11 +540,11 @@ export default function AdminPage() {
                     </CardHeader>
                     <CardContent>
                       <div className="space-y-2">
-                        {regions.map(region => {
-                          const count = jobs.filter(j => j.region === region).length;
+                        {configs.region?.map(config => {
+                          const count = jobs.filter(j => j.region === config.config_value).length;
                           return (
-                            <div key={region} className="flex items-center justify-between">
-                              <span className="text-sm">{region}</span>
+                            <div key={config.id} className="flex items-center justify-between">
+                              <span className="text-sm">{config.config_value}</span>
                               <Badge variant="secondary">{count} 个岗位</Badge>
                             </div>
                           );
@@ -446,11 +558,11 @@ export default function AdminPage() {
                     </CardHeader>
                     <CardContent>
                       <div className="space-y-2">
-                        {directions.map(dir => {
-                          const count = jobs.filter(j => j.direction === dir).length;
+                        {configs.direction?.map(config => {
+                          const count = jobs.filter(j => j.direction === config.config_value).length;
                           return (
-                            <div key={dir} className="flex items-center justify-between">
-                              <span className="text-sm">{dir}</span>
+                            <div key={config.id} className="flex items-center justify-between">
+                              <span className="text-sm">{config.config_value}</span>
                               <Badge variant="secondary">{count} 个岗位</Badge>
                             </div>
                           );
@@ -464,11 +576,11 @@ export default function AdminPage() {
                     </CardHeader>
                     <CardContent>
                       <div className="space-y-2">
-                        {audiences.map(aud => {
-                          const count = jobs.filter(j => j.audience === aud).length;
+                        {configs.audience?.map(config => {
+                          const count = jobs.filter(j => j.audience === config.config_value).length;
                           return (
-                            <div key={aud} className="flex items-center justify-between">
-                              <span className="text-sm">{aud}</span>
+                            <div key={config.id} className="flex items-center justify-between">
+                              <span className="text-sm">{config.config_value}</span>
                               <Badge variant="secondary">{count} 个岗位</Badge>
                             </div>
                           );
@@ -535,11 +647,11 @@ export default function AdminPage() {
                               <Label>地区 *</Label>
                               <Select value={jobForm.region} onValueChange={(v) => setJobForm({ ...jobForm, region: v })}>
                                 <SelectTrigger>
-                                  <SelectValue />
+                                  <SelectValue placeholder="选择地区" />
                                 </SelectTrigger>
                                 <SelectContent>
-                                  {regions.map(r => (
-                                    <SelectItem key={r} value={r}>{r}</SelectItem>
+                                  {configs.region?.map(r => (
+                                    <SelectItem key={r.id} value={r.config_value}>{r.config_value}</SelectItem>
                                   ))}
                                 </SelectContent>
                               </Select>
@@ -548,11 +660,11 @@ export default function AdminPage() {
                               <Label>方向 *</Label>
                               <Select value={jobForm.direction} onValueChange={(v) => setJobForm({ ...jobForm, direction: v })}>
                                 <SelectTrigger>
-                                  <SelectValue />
+                                  <SelectValue placeholder="选择方向" />
                                 </SelectTrigger>
                                 <SelectContent>
-                                  {directions.map(d => (
-                                    <SelectItem key={d} value={d}>{d}</SelectItem>
+                                  {configs.direction?.map(d => (
+                                    <SelectItem key={d.id} value={d.config_value}>{d.config_value}</SelectItem>
                                   ))}
                                 </SelectContent>
                               </Select>
@@ -561,11 +673,11 @@ export default function AdminPage() {
                               <Label>受众 *</Label>
                               <Select value={jobForm.audience} onValueChange={(v) => setJobForm({ ...jobForm, audience: v })}>
                                 <SelectTrigger>
-                                  <SelectValue />
+                                  <SelectValue placeholder="选择受众" />
                                 </SelectTrigger>
                                 <SelectContent>
-                                  {audiences.map(a => (
-                                    <SelectItem key={a} value={a}>{a}</SelectItem>
+                                  {configs.audience?.map(a => (
+                                    <SelectItem key={a.id} value={a.config_value}>{a.config_value}</SelectItem>
                                   ))}
                                 </SelectContent>
                               </Select>
@@ -592,13 +704,59 @@ export default function AdminPage() {
                             </div>
                           </div>
                           <div>
-                            <Label htmlFor="logo">公司Logo URL</Label>
-                            <Input
-                              id="logo"
-                              value={jobForm.logo_url}
-                              onChange={(e) => setJobForm({ ...jobForm, logo_url: e.target.value })}
-                              placeholder="可选，留空则自动获取或显示首字母"
-                            />
+                            <Label>公司Logo</Label>
+                            <div className="flex gap-4 items-start">
+                              <div className="flex-1">
+                                <Input
+                                  id="logo"
+                                  value={jobForm.logo_url}
+                                  onChange={(e) => setJobForm({ ...jobForm, logo_url: e.target.value })}
+                                  placeholder="输入Logo URL或上传图片"
+                                />
+                                <p className="text-xs text-muted-foreground mt-1">
+                                  支持 PNG、JPG、SVG、WebP 格式，最大 2MB
+                                </p>
+                              </div>
+                              <div className="flex flex-col gap-2">
+                                <input
+                                  ref={fileInputRef}
+                                  type="file"
+                                  accept="image/png,image/jpeg,image/jpg,image/svg+xml,image/webp"
+                                  onChange={handleLogoUpload}
+                                  className="hidden"
+                                />
+                                <Button
+                                  type="button"
+                                  variant="outline"
+                                  onClick={() => fileInputRef.current?.click()}
+                                  disabled={logoUploading}
+                                >
+                                  {logoUploading ? (
+                                    <Loader2 className="h-4 w-4 animate-spin mr-2" />
+                                  ) : (
+                                    <Upload className="h-4 w-4 mr-2" />
+                                  )}
+                                  上传
+                                </Button>
+                              </div>
+                              {jobForm.logo_url && (
+                                <div className="relative w-12 h-12 rounded-lg border overflow-hidden bg-white">
+                                  <Image
+                                    src={jobForm.logo_url}
+                                    alt="Logo preview"
+                                    fill
+                                    className="object-contain p-1"
+                                  />
+                                  <button
+                                    type="button"
+                                    onClick={() => setJobForm({ ...jobForm, logo_url: '' })}
+                                    className="absolute -top-1 -right-1 w-5 h-5 rounded-full bg-destructive text-destructive-foreground flex items-center justify-center text-xs"
+                                  >
+                                    <X className="h-3 w-3" />
+                                  </button>
+                                </div>
+                              )}
+                            </div>
                           </div>
                           <div>
                             <Label htmlFor="desc">岗位描述</Label>
@@ -845,6 +1003,134 @@ export default function AdminPage() {
                 </CardContent>
               </Card>
             </TabsContent>
+
+            {/* Configs Tab */}
+            <TabsContent value="configs">
+              <div className="grid md:grid-cols-3 gap-6">
+                {/* Region Config */}
+                <Card>
+                  <CardHeader>
+                    <div className="flex items-center justify-between">
+                      <div>
+                        <CardTitle className="text-lg">地区配置</CardTitle>
+                        <CardDescription>管理岗位地区选项</CardDescription>
+                      </div>
+                      <Button
+                        size="sm"
+                        onClick={() => {
+                          setConfigForm({ type: 'region', value: '' });
+                          setConfigDialogOpen(true);
+                        }}
+                      >
+                        <Plus className="h-4 w-4" />
+                      </Button>
+                    </div>
+                  </CardHeader>
+                  <CardContent>
+                    <div className="space-y-2">
+                      {configs.region?.map((config) => (
+                        <div key={config.id} className="flex items-center justify-between p-2 rounded-lg bg-muted/50">
+                          <span className="text-sm">{config.config_value}</span>
+                          <Button
+                            size="sm"
+                            variant="ghost"
+                            className="text-destructive h-8 w-8 p-0"
+                            onClick={() => handleDeleteConfig(config.id, 'region')}
+                          >
+                            <Trash2 className="h-4 w-4" />
+                          </Button>
+                        </div>
+                      ))}
+                      {configs.region?.length === 0 && (
+                        <p className="text-sm text-muted-foreground text-center py-4">暂无配置</p>
+                      )}
+                    </div>
+                  </CardContent>
+                </Card>
+
+                {/* Direction Config */}
+                <Card>
+                  <CardHeader>
+                    <div className="flex items-center justify-between">
+                      <div>
+                        <CardTitle className="text-lg">方向配置</CardTitle>
+                        <CardDescription>管理岗位方向选项</CardDescription>
+                      </div>
+                      <Button
+                        size="sm"
+                        onClick={() => {
+                          setConfigForm({ type: 'direction', value: '' });
+                          setConfigDialogOpen(true);
+                        }}
+                      >
+                        <Plus className="h-4 w-4" />
+                      </Button>
+                    </div>
+                  </CardHeader>
+                  <CardContent>
+                    <div className="space-y-2">
+                      {configs.direction?.map((config) => (
+                        <div key={config.id} className="flex items-center justify-between p-2 rounded-lg bg-muted/50">
+                          <span className="text-sm">{config.config_value}</span>
+                          <Button
+                            size="sm"
+                            variant="ghost"
+                            className="text-destructive h-8 w-8 p-0"
+                            onClick={() => handleDeleteConfig(config.id, 'direction')}
+                          >
+                            <Trash2 className="h-4 w-4" />
+                          </Button>
+                        </div>
+                      ))}
+                      {configs.direction?.length === 0 && (
+                        <p className="text-sm text-muted-foreground text-center py-4">暂无配置</p>
+                      )}
+                    </div>
+                  </CardContent>
+                </Card>
+
+                {/* Audience Config */}
+                <Card>
+                  <CardHeader>
+                    <div className="flex items-center justify-between">
+                      <div>
+                        <CardTitle className="text-lg">受众配置</CardTitle>
+                        <CardDescription>管理岗位受众选项</CardDescription>
+                      </div>
+                      <Button
+                        size="sm"
+                        onClick={() => {
+                          setConfigForm({ type: 'audience', value: '' });
+                          setConfigDialogOpen(true);
+                        }}
+                      >
+                        <Plus className="h-4 w-4" />
+                      </Button>
+                    </div>
+                  </CardHeader>
+                  <CardContent>
+                    <div className="space-y-2">
+                      {configs.audience?.map((config) => (
+                        <div key={config.id} className="flex items-center justify-between p-2 rounded-lg bg-muted/50">
+                          <span className="text-sm">{config.config_value}</span>
+                          <Button
+                            size="sm"
+                            variant="ghost"
+                            className="text-destructive h-8 w-8 p-0"
+                            onClick={() => handleDeleteConfig(config.id, 'audience')}
+                          >
+                            <Trash2 className="h-4 w-4" />
+                          </Button>
+                        </div>
+                      ))}
+                      {configs.audience?.length === 0 && (
+                        <p className="text-sm text-muted-foreground text-center py-4">暂无配置</p>
+                      )}
+                    </div>
+                  </CardContent>
+                </Card>
+              </div>
+            </TabsContent>
           </Tabs>
         )}
       </main>
@@ -914,6 +1200,35 @@ export default function AdminPage() {
             </Button>
             <Button onClick={handleUpdateApplication}>
               保存
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      {/* Add Config Dialog */}
+      <Dialog open={configDialogOpen} onOpenChange={setConfigDialogOpen}>
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>
+              添加{configForm.type === 'region' ? '地区' : configForm.type === 'direction' ? '方向' : '受众'}
+            </DialogTitle>
+          </DialogHeader>
+          <div className="space-y-4 py-4">
+            <div>
+              <Label>名称</Label>
+              <Input
+                value={configForm.value}
+                onChange={(e) => setConfigForm({ ...configForm, value: e.target.value })}
+                placeholder={`输入${configForm.type === 'region' ? '地区' : configForm.type === 'direction' ? '方向' : '受众'}名称`}
+              />
+            </div>
+          </div>
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setConfigDialogOpen(false)}>
+              取消
+            </Button>
+            <Button onClick={handleCreateConfig} disabled={!configForm.value.trim()}>
+              添加
             </Button>
           </DialogFooter>
         </DialogContent>

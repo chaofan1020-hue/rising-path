@@ -31,9 +31,13 @@ interface Job {
   created_at: string;
 }
 
-const regions = ['全部', '北美', '欧洲', '亚太', '澳洲', '中东'];
-const directions = ['全部', '技术', '产品', '设计', '运营', '市场', '金融', '咨询'];
-const audiences = ['全部', '应届生', '社招', '实习', '校招'];
+interface JobConfig {
+  id: number;
+  config_type: string;
+  config_value: string;
+  sort_order: number;
+  is_active: boolean;
+}
 
 // 根据公司名生成首字母占位符的颜色
 function getCompanyGradient(company: string): string {
@@ -125,6 +129,25 @@ export default function JobsPage() {
   const [selectedRegion, setSelectedRegion] = useState('全部');
   const [selectedDirection, setSelectedDirection] = useState('全部');
   const [selectedAudience, setSelectedAudience] = useState('全部');
+  
+  // 动态配置
+  const [configs, setConfigs] = useState<{
+    region: JobConfig[];
+    direction: JobConfig[];
+    audience: JobConfig[];
+  }>({ region: [], direction: [], audience: [] });
+
+  useEffect(() => {
+    // 获取配置
+    fetch('/api/configs')
+      .then(res => res.json())
+      .then(data => {
+        setConfigs(data.configs || {});
+      })
+      .catch(console.error);
+    
+    fetchJobs();
+  }, []);
 
   useEffect(() => {
     fetchJobs();
@@ -201,9 +224,10 @@ export default function JobsPage() {
                   <SelectValue placeholder="地区" />
                 </SelectTrigger>
                 <SelectContent>
-                  {regions.map((region) => (
-                    <SelectItem key={region} value={region}>
-                      {region}
+                  <SelectItem value="全部">全部</SelectItem>
+                  {configs.region?.map((config) => (
+                    <SelectItem key={config.id} value={config.config_value}>
+                      {config.config_value}
                     </SelectItem>
                   ))}
                 </SelectContent>
@@ -213,9 +237,10 @@ export default function JobsPage() {
                   <SelectValue placeholder="方向" />
                 </SelectTrigger>
                 <SelectContent>
-                  {directions.map((direction) => (
-                    <SelectItem key={direction} value={direction}>
-                      {direction}
+                  <SelectItem value="全部">全部</SelectItem>
+                  {configs.direction?.map((config) => (
+                    <SelectItem key={config.id} value={config.config_value}>
+                      {config.config_value}
                     </SelectItem>
                   ))}
                 </SelectContent>
@@ -225,9 +250,10 @@ export default function JobsPage() {
                   <SelectValue placeholder="受众" />
                 </SelectTrigger>
                 <SelectContent>
-                  {audiences.map((audience) => (
-                    <SelectItem key={audience} value={audience}>
-                      {audience}
+                  <SelectItem value="全部">全部</SelectItem>
+                  {configs.audience?.map((config) => (
+                    <SelectItem key={config.id} value={config.config_value}>
+                      {config.config_value}
                     </SelectItem>
                   ))}
                 </SelectContent>
