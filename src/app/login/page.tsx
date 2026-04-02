@@ -1,7 +1,7 @@
 'use client';
 
-import { useState, useEffect } from 'react';
-import { useRouter, useSearchParams } from 'next/navigation';
+import { useState } from 'react';
+import { useSearchParams } from 'next/navigation';
 import Link from 'next/link';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
@@ -9,13 +9,10 @@ import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { Briefcase, Loader2, Mail, Lock, User, ArrowLeft, CheckCircle } from 'lucide-react';
-import { useAuth } from '@/hooks/useAuth';
 
 export default function LoginPage() {
-  const router = useRouter();
   const searchParams = useSearchParams();
   const redirectTo = searchParams.get('redirect') || '/';
-  const { user, loading: authLoading, refreshUser } = useAuth();
 
   const [activeTab, setActiveTab] = useState('login');
   const [isLoading, setIsLoading] = useState(false);
@@ -31,13 +28,6 @@ export default function LoginPage() {
   const [registerPassword, setRegisterPassword] = useState('');
   const [registerName, setRegisterName] = useState('');
   const [confirmPassword, setConfirmPassword] = useState('');
-
-  // Check if already logged in
-  useEffect(() => {
-    if (!authLoading && user) {
-      router.push(redirectTo);
-    }
-  }, [user, authLoading, router, redirectTo]);
 
   const handleLogin = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -58,16 +48,14 @@ export default function LoginPage() {
 
       if (!response.ok) {
         setError(data.error || '登录失败');
+        setIsLoading(false);
         return;
       }
 
-      // Refresh user state
-      await refreshUser();
-      // Login successful, redirect
-      router.push(redirectTo);
+      // Login successful, redirect using window.location for reliability
+      window.location.href = redirectTo;
     } catch (err) {
       setError('网络错误，请重试');
-    } finally {
       setIsLoading(false);
     }
   };
@@ -105,35 +93,18 @@ export default function LoginPage() {
 
       if (!response.ok) {
         setError(data.error || '注册失败');
+        setIsLoading(false);
         return;
       }
 
-      // Registration successful, refresh user and redirect
-      setSuccess('注册成功！正在跳转...');
-      await refreshUser();
-      setTimeout(() => {
-        router.push(redirectTo);
-      }, 500);
+      // Registration successful, redirect using window.location
+      window.location.href = redirectTo;
     } catch (err) {
       setError('网络错误，请重试');
     } finally {
       setIsLoading(false);
     }
   };
-
-  // Show loading while checking auth state
-  if (authLoading) {
-    return (
-      <div className="min-h-screen bg-gradient-to-br from-blue-50 to-indigo-100 dark:from-gray-900 dark:to-gray-800 flex items-center justify-center">
-        <Loader2 className="h-8 w-8 animate-spin text-primary" />
-      </div>
-    );
-  }
-
-  // Redirect if already logged in
-  if (user) {
-    return null;
-  }
 
   return (
     <div className="min-h-screen bg-gradient-to-br from-blue-50 to-indigo-100 dark:from-gray-900 dark:to-gray-800 flex items-center justify-center p-4">
