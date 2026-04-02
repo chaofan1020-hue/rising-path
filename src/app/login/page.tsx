@@ -52,7 +52,7 @@ export default function LoginPage() {
         return;
       }
 
-      // Login successful, redirect using window.location for reliability
+      // Login successful, use full page reload to ensure cookies are properly set
       window.location.href = redirectTo;
     } catch (err) {
       setError('网络错误，请重试');
@@ -97,7 +97,7 @@ export default function LoginPage() {
         return;
       }
 
-      // Registration successful, redirect using window.location
+      // Registration successful, use full page reload to ensure cookies are properly set
       window.location.href = redirectTo;
     } catch (err) {
       setError('网络错误，请重试');
