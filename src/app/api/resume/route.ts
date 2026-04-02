@@ -27,9 +27,24 @@ async function extractTextFromPDF(buffer: Buffer): Promise<string> {
       const text: string[] = [];
       for (const page of pdfData.Pages || []) {
         for (const textItem of page.Texts || []) {
-          // 解码URI编码的文本
-          const decodedText = decodeURIComponent(textItem.R[0].T);
-          text.push(decodedText);
+          try {
+            // 解码URI编码的文本，添加错误处理
+            const rawText = textItem.R?.[0]?.T || '';
+            if (rawText) {
+              // 使用 try-catch 处理可能的 URI 错误
+              let decodedText: string;
+              try {
+                decodedText = decodeURIComponent(rawText);
+              } catch {
+                // 如果 decodeURIComponent 失败，直接使用原始文本
+                decodedText = rawText;
+              }
+              text.push(decodedText);
+            }
+          } catch (e) {
+            // 跳过有问题的文本项
+            console.error('Failed to decode text item:', e);
+          }
         }
         text.push('\n'); // 页面之间添加换行
       }
