@@ -13,43 +13,60 @@ import {
   ArrowRight,
   Zap,
   Target,
+  Layers,
+  Wand2,
 } from 'lucide-react';
 
 const features = [
   {
     title: '岗位查询',
-    description: '按地区、方向、受众筛选海量海外岗位，一键收藏心仪机会',
+    description: '按地区、方向、受众筛选海量海外岗位',
+    detail: '支持多维度筛选，一键收藏心仪机会',
     icon: Search,
     href: '/jobs',
-    gradient: 'from-blue-500 to-cyan-500',
-  },
-  {
-    title: '简历管理',
-    description: '智能解析简历关键信息，支持PDF、Word多格式上传',
-    icon: FileText,
-    href: '/resume',
-    gradient: 'from-emerald-500 to-teal-500',
+    gradient: 'from-blue-600 via-blue-500 to-cyan-500',
+    pattern: 'dots',
+    size: 'normal',
   },
   {
     title: 'AI智能选岗',
-    description: '基于简历深度分析，精准匹配最适合的岗位机会',
+    description: '基于简历深度分析，精准匹配岗位',
+    detail: 'AI驱动智能推荐，找到最适合你的机会',
     icon: Brain,
     href: '/ai-match',
-    gradient: 'from-violet-500 to-purple-500',
+    gradient: 'from-violet-600 via-purple-500 to-fuchsia-500',
+    pattern: 'grid',
+    size: 'large',
+  },
+  {
+    title: '简历管理',
+    description: '智能解析简历，一键管理',
+    detail: '支持 PDF、Word 多格式上传',
+    icon: FileText,
+    href: '/resume',
+    gradient: 'from-emerald-600 via-green-500 to-teal-500',
+    pattern: 'dots',
+    size: 'normal',
   },
   {
     title: 'ATS简历优化',
-    description: '针对企业招聘系统优化，显著提高简历通过率',
-    icon: Sparkles,
+    description: '针对招聘系统优化简历',
+    detail: '提高简历通过率，让 HR 更容易看到你',
+    icon: Wand2,
     href: '/optimize',
-    gradient: 'from-orange-500 to-amber-500',
+    gradient: 'from-orange-600 via-amber-500 to-yellow-500',
+    pattern: 'grid',
+    size: 'normal',
   },
   {
     title: '自动网申',
-    description: '智能学习填写规则，自动完成企业网申表单',
+    description: '智能填写企业网申表单',
+    detail: '学习记录填写规则，高效完成投递',
     icon: Send,
     href: '/applications',
-    gradient: 'from-pink-500 to-rose-500',
+    gradient: 'from-pink-600 via-rose-500 to-red-500',
+    pattern: 'dots',
+    size: 'normal',
   },
 ];
 
@@ -57,20 +74,20 @@ const advantages = [
   {
     icon: Globe,
     title: '全球岗位覆盖',
-    description: '覆盖美国、英国、新加坡、香港等主流留学地区，实时同步优质岗位',
-    gradient: 'from-blue-500 to-indigo-500',
+    description: '覆盖美国、英国、新加坡、香港等主流留学地区',
+    gradient: 'from-blue-500 to-indigo-600',
   },
   {
     icon: Target,
     title: '精准智能匹配',
-    description: 'AI深度分析简历与岗位匹配度，推荐最适合的机会',
-    gradient: 'from-purple-500 to-pink-500',
+    description: 'AI深度分析简历与岗位匹配度',
+    gradient: 'from-purple-500 to-pink-600',
   },
   {
     icon: Zap,
     title: '高效求职工具',
-    description: '一站式完成简历优化、岗位筛选、网申投递全流程',
-    gradient: 'from-amber-500 to-orange-500',
+    description: '一站式完成简历优化、岗位筛选、网申投递',
+    gradient: 'from-amber-500 to-orange-600',
   },
 ];
 
@@ -79,19 +96,19 @@ export default function Home() {
     <div className="min-h-screen bg-background relative overflow-hidden">
       {/* Background Decoration */}
       <div className="absolute inset-0 -z-10">
-        <div className="absolute top-0 left-1/4 w-[600px] h-[600px] bg-gradient-to-r from-blue-500/20 to-purple-500/20 rounded-full blur-3xl opacity-30" />
-        <div className="absolute bottom-1/4 right-1/4 w-[500px] h-[500px] bg-gradient-to-r from-pink-500/20 to-orange-500/20 rounded-full blur-3xl opacity-30" />
-        <div className="absolute inset-0 bg-[linear-gradient(to_right,#8080800a_1px,transparent_1px),linear-gradient(to_bottom,#8080800a_1px,transparent_1px)] bg-[size:24px_24px]" />
+        <div className="absolute top-0 left-1/4 w-[600px] h-[600px] bg-gradient-to-r from-blue-500/10 to-purple-500/10 rounded-full blur-3xl" />
+        <div className="absolute bottom-1/4 right-1/4 w-[500px] h-[500px] bg-gradient-to-r from-pink-500/10 to-orange-500/10 rounded-full blur-3xl" />
+        <div className="absolute inset-0 bg-[linear-gradient(to_right,#80808005_1px,transparent_1px),linear-gradient(to_bottom,#80808005_1px,transparent_1px)] bg-[size:32px_32px]" />
       </div>
 
       {/* Navigation */}
-      <nav className="border-b/50 bg-background/80 backdrop-blur-xl sticky top-0 z-50">
+      <nav className="border-b/40 bg-background/80 backdrop-blur-xl sticky top-0 z-50">
         <div className="container mx-auto px-6 h-16 flex items-center justify-between">
           <Link href="/" className="flex items-center gap-3 group">
-            <div className="w-9 h-9 rounded-xl bg-gradient-to-br from-primary to-primary/60 flex items-center justify-center shadow-lg shadow-primary/25 group-hover:shadow-primary/40 transition-shadow">
+            <div className="w-9 h-9 rounded-xl bg-gradient-to-br from-primary to-primary/70 flex items-center justify-center shadow-lg shadow-primary/20">
               <Briefcase className="h-5 w-5 text-primary-foreground" />
             </div>
-            <span className="font-bold text-xl bg-gradient-to-r from-foreground to-foreground/70 bg-clip-text">PathUp</span>
+            <span className="font-bold text-xl">PathUp</span>
           </Link>
           <div className="flex items-center gap-2">
             <Link href="/jobs">
@@ -105,7 +122,7 @@ export default function Home() {
               </Button>
             </Link>
             <Link href="/ai-match">
-              <Button size="sm" className="bg-gradient-to-r from-primary to-primary/80 hover:opacity-90 shadow-lg shadow-primary/25">
+              <Button size="sm" className="bg-gradient-to-r from-primary to-primary/80 hover:opacity-90 shadow-lg shadow-primary/20">
                 开始使用
               </Button>
             </Link>
@@ -114,37 +131,35 @@ export default function Home() {
       </nav>
 
       {/* Hero Section */}
-      <section className="container mx-auto px-6 pt-24 pb-20">
+      <section className="container mx-auto px-6 pt-28 pb-24">
         <div className="max-w-4xl mx-auto text-center">
-          <div className="inline-flex items-center gap-2 px-4 py-2 rounded-full bg-muted/50 border border-muted/50 mb-8">
-            <Sparkles className="h-4 w-4 text-primary" />
-            <span className="text-sm font-medium">专为海外留学生打造的智能求职平台</span>
+          <div className="inline-flex items-center gap-2 px-4 py-2 rounded-full bg-primary/5 border border-primary/10 mb-10">
+            <div className="w-2 h-2 rounded-full bg-primary animate-pulse" />
+            <span className="text-sm font-medium text-primary">专为海外留学生打造的智能求职平台</span>
           </div>
           
-          <h1 className="text-5xl md:text-7xl font-bold tracking-tight mb-8 leading-tight">
-            <span className="bg-gradient-to-r from-foreground via-foreground to-foreground/70 bg-clip-text">
-              智能求职
-            </span>
-            <br />
+          <h1 className="text-5xl md:text-7xl font-bold tracking-tight mb-8 leading-[1.1]">
+            <span className="block mb-2">智能求职</span>
             <span className="bg-gradient-to-r from-primary via-primary/80 to-primary/60 bg-clip-text text-transparent">
               一步到位
             </span>
           </h1>
           
           <p className="text-lg md:text-xl text-muted-foreground max-w-2xl mx-auto mb-12 leading-relaxed">
-            AI驱动的求职助手，从简历优化到岗位匹配，让每一步都更精准、更高效
+            AI驱动的求职助手，从简历优化到岗位匹配<br className="hidden md:block" />
+            让每一步都更精准、更高效
           </p>
           
           <div className="flex flex-col sm:flex-row gap-4 justify-center">
             <Link href="/jobs">
-              <Button size="lg" className="h-12 px-8 bg-gradient-to-r from-primary to-primary/80 hover:opacity-90 shadow-xl shadow-primary/25 rounded-xl group">
+              <Button size="lg" className="h-14 px-10 bg-gradient-to-r from-primary to-primary/80 hover:opacity-90 shadow-2xl shadow-primary/20 rounded-2xl group">
                 <Search className="mr-2 h-5 w-5" />
                 探索岗位
                 <ArrowRight className="ml-2 h-4 w-4 group-hover:translate-x-1 transition-transform" />
               </Button>
             </Link>
             <Link href="/resume">
-              <Button size="lg" variant="outline" className="h-12 px-8 rounded-xl border-2 hover:bg-muted/50">
+              <Button size="lg" variant="outline" className="h-14 px-10 rounded-2xl border-2 hover:bg-muted/50">
                 <Upload className="mr-2 h-5 w-5" />
                 上传简历
               </Button>
@@ -154,61 +169,92 @@ export default function Home() {
       </section>
 
       {/* Advantages Section */}
-      <section className="container mx-auto px-6 py-20">
-        <div className="grid md:grid-cols-3 gap-6">
+      <section className="container mx-auto px-6 py-16">
+        <div className="grid md:grid-cols-3 gap-5">
           {advantages.map((item) => (
             <div
               key={item.title}
-              className="relative group"
+              className="group relative"
             >
-              <div className="absolute inset-0 bg-gradient-to-r opacity-0 group-hover:opacity-100 transition-opacity duration-500 rounded-2xl blur-xl -z-10"
-                style={{ background: `linear-gradient(to right, var(--tw-gradient-stops))` }}
-              />
-              <div className="p-8 rounded-2xl bg-muted/30 border border-muted/50 hover:border-muted/80 transition-all duration-300 hover:-translate-y-1">
-                <div className={`w-12 h-12 rounded-xl bg-gradient-to-br ${item.gradient} flex items-center justify-center mb-5 shadow-lg`}>
-                  <item.icon className="h-6 w-6 text-white" />
+              <div className="p-7 rounded-2xl bg-gradient-to-br from-muted/40 to-muted/20 border border-muted/30 hover:border-muted/60 transition-all duration-500 hover:-translate-y-1">
+                <div className={`w-11 h-11 rounded-xl bg-gradient-to-br ${item.gradient} flex items-center justify-center mb-4 shadow-lg group-hover:scale-105 transition-transform duration-300`}>
+                  <item.icon className="h-5 w-5 text-white" />
                 </div>
-                <h3 className="font-semibold text-xl mb-3">{item.title}</h3>
-                <p className="text-muted-foreground leading-relaxed">{item.description}</p>
+                <h3 className="font-semibold text-lg mb-2">{item.title}</h3>
+                <p className="text-muted-foreground text-sm leading-relaxed">{item.description}</p>
               </div>
             </div>
           ))}
         </div>
       </section>
 
-      {/* Features Section */}
+      {/* Features Section - Bento Grid Style */}
       <section className="container mx-auto px-6 py-20">
         <div className="text-center mb-16">
-          <h2 className="text-4xl font-bold mb-4">核心功能</h2>
-          <p className="text-muted-foreground text-lg">
-            全方位求职工具，让求职之路更加顺畅
+          <div className="inline-flex items-center gap-2 px-3 py-1.5 rounded-full bg-muted/50 border border-muted/50 mb-6">
+            <Layers className="h-4 w-4 text-primary" />
+            <span className="text-sm font-medium">五大核心能力</span>
+          </div>
+          <h2 className="text-4xl md:text-5xl font-bold mb-4">
+            为求职而生的
+            <span className="bg-gradient-to-r from-primary to-primary/60 bg-clip-text text-transparent ml-2">超级工具</span>
+          </h2>
+          <p className="text-muted-foreground text-lg max-w-xl mx-auto">
+            每一个功能都经过精心设计，让求职之路更加顺畅
           </p>
         </div>
         
-        <div className="grid md:grid-cols-2 lg:grid-cols-3 gap-6">
-          {features.map((feature, index) => (
-            <Link href={feature.href} key={feature.title}>
-              <div className="group relative h-full">
-                {/* Gradient border effect */}
-                <div className={`absolute inset-0 bg-gradient-to-br ${feature.gradient} rounded-2xl opacity-0 group-hover:opacity-100 transition-opacity duration-300 p-[1px]`}>
-                  <div className="w-full h-full bg-background rounded-2xl" />
+        {/* Bento Grid */}
+        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-5 auto-rows-[200px]">
+          {features.map((feature) => (
+            <Link 
+              href={feature.href} 
+              key={feature.title}
+              className={`group relative overflow-hidden rounded-3xl transition-all duration-500 hover:-translate-y-1 ${
+                feature.size === 'large' ? 'md:col-span-2 lg:col-span-1 lg:row-span-2' : ''
+              }`}
+            >
+              {/* Background */}
+              <div className="absolute inset-0 bg-gradient-to-br from-muted/30 to-muted/10" />
+              
+              {/* Pattern */}
+              <div className="absolute inset-0 opacity-30">
+                {feature.pattern === 'dots' && (
+                  <div className="w-full h-full bg-[radial-gradient(circle,_hsl(var(--muted-foreground))_1px,_transparent_1px)] bg-[size:16px_16px]" />
+                )}
+                {feature.pattern === 'grid' && (
+                  <div className="w-full h-full bg-[linear-gradient(to_right,_hsl(var(--muted-foreground))_1px,_transparent_1px),linear-gradient(to_bottom,_hsl(var(--muted-foreground))_1px,_transparent_1px)] bg-[size:24px_24px]" />
+                )}
+              </div>
+              
+              {/* Gradient overlay on hover */}
+              <div className={`absolute inset-0 bg-gradient-to-br ${feature.gradient} opacity-0 group-hover:opacity-5 transition-opacity duration-500`} />
+              
+              {/* Content */}
+              <div className="relative h-full p-7 flex flex-col">
+                {/* Icon */}
+                <div className={`w-14 h-14 rounded-2xl bg-gradient-to-br ${feature.gradient} flex items-center justify-center mb-auto shadow-xl group-hover:scale-110 group-hover:rotate-3 transition-all duration-500`}>
+                  <feature.icon className="h-7 w-7 text-white" />
                 </div>
                 
-                {/* Card content */}
-                <div className="relative p-8 rounded-2xl bg-muted/20 border border-muted/50 group-hover:border-transparent transition-all duration-300 h-full flex flex-col">
-                  <div className={`w-12 h-12 rounded-xl bg-gradient-to-br ${feature.gradient} flex items-center justify-center mb-5 shadow-lg group-hover:scale-110 transition-transform duration-300`}>
-                    <feature.icon className="h-6 w-6 text-white" />
-                  </div>
-                  <h3 className="font-semibold text-xl mb-3 group-hover:text-primary transition-colors">
+                {/* Text */}
+                <div>
+                  <h3 className="font-bold text-xl mb-2 group-hover:text-primary transition-colors">
                     {feature.title}
                   </h3>
-                  <p className="text-muted-foreground leading-relaxed flex-1">
+                  <p className="text-muted-foreground text-sm leading-relaxed mb-1">
                     {feature.description}
                   </p>
-                  <div className="flex items-center text-sm text-muted-foreground mt-4 group-hover:text-primary transition-colors">
-                    <span>立即体验</span>
-                    <ChevronRight className="h-4 w-4 ml-1 group-hover:translate-x-1 transition-transform" />
-                  </div>
+                  {feature.size === 'large' && (
+                    <p className="text-muted-foreground/70 text-sm">
+                      {feature.detail}
+                    </p>
+                  )}
+                </div>
+                
+                {/* Arrow */}
+                <div className="absolute bottom-7 right-7 w-10 h-10 rounded-xl bg-muted/50 flex items-center justify-center opacity-0 group-hover:opacity-100 transition-all duration-300 group-hover:translate-x-1">
+                  <ArrowRight className="h-5 w-5 text-primary" />
                 </div>
               </div>
             </Link>
@@ -218,33 +264,46 @@ export default function Home() {
 
       {/* How it works */}
       <section className="container mx-auto px-6 py-20">
-        <div className="relative rounded-3xl bg-gradient-to-br from-muted/50 to-muted/30 border border-muted/50 p-12 md:p-16 overflow-hidden">
+        <div className="relative rounded-3xl bg-gradient-to-br from-muted/60 via-muted/30 to-muted/10 border border-muted/30 p-12 md:p-16 overflow-hidden">
           {/* Decorative elements */}
-          <div className="absolute top-0 right-0 w-64 h-64 bg-gradient-to-br from-primary/10 to-transparent rounded-full blur-3xl" />
-          <div className="absolute bottom-0 left-0 w-48 h-48 bg-gradient-to-tr from-purple-500/10 to-transparent rounded-full blur-3xl" />
+          <div className="absolute top-0 right-0 w-80 h-80 bg-gradient-to-br from-primary/5 to-transparent rounded-full blur-3xl" />
+          <div className="absolute bottom-0 left-0 w-60 h-60 bg-gradient-to-tr from-purple-500/5 to-transparent rounded-full blur-3xl" />
           
           <div className="relative">
-            <div className="text-center mb-16">
-              <h2 className="text-4xl font-bold mb-4">三步开启求职之旅</h2>
-              <p className="text-muted-foreground text-lg">简单几步，让AI帮你找到理想工作</p>
+            <div className="text-center mb-14">
+              <div className="inline-flex items-center gap-2 px-3 py-1.5 rounded-full bg-primary/5 border border-primary/10 mb-6">
+                <Zap className="h-4 w-4 text-primary" />
+                <span className="text-sm font-medium">简单三步</span>
+              </div>
+              <h2 className="text-4xl font-bold mb-4">开启求职之旅</h2>
+              <p className="text-muted-foreground text-lg">让AI帮你找到理想工作</p>
             </div>
             
-            <div className="grid md:grid-cols-3 gap-8">
+            <div className="grid md:grid-cols-3 gap-10">
               {[
-                { step: '01', title: '上传简历', desc: '上传PDF或Word简历，系统自动解析关键信息' },
-                { step: '02', title: '智能匹配', desc: 'AI分析简历内容，精准推荐匹配岗位' },
-                { step: '03', title: '一键投递', desc: '优化简历并自动填写网申，高效完成投递' },
+                { step: '01', title: '上传简历', desc: '上传 PDF 或 Word 简历\n系统自动解析关键信息', icon: Upload },
+                { step: '02', title: '智能匹配', desc: 'AI 分析简历内容\n精准推荐匹配岗位', icon: Brain },
+                { step: '03', title: '一键投递', desc: '优化简历并自动填写\n高效完成网申投递', icon: Send },
               ].map((item, index) => (
-                <div key={item.step} className="relative">
+                <div key={item.step} className="relative group">
+                  {/* Connector line */}
                   {index < 2 && (
-                    <div className="hidden md:block absolute top-8 left-full w-full h-[1px] bg-gradient-to-r from-muted-foreground/20 to-transparent" />
+                    <div className="hidden md:block absolute top-10 left-[60%] w-[80%] h-[2px] bg-gradient-to-r from-primary/30 to-transparent" />
                   )}
+                  
                   <div className="flex flex-col items-center text-center">
-                    <div className="w-16 h-16 rounded-2xl bg-gradient-to-br from-primary to-primary/60 flex items-center justify-center text-white font-bold text-lg mb-6 shadow-xl shadow-primary/20">
-                      {item.step}
+                    {/* Step number with icon */}
+                    <div className="relative mb-6">
+                      <div className="w-20 h-20 rounded-2xl bg-gradient-to-br from-primary to-primary/70 flex items-center justify-center shadow-2xl shadow-primary/20 group-hover:scale-105 transition-transform duration-300">
+                        <item.icon className="h-8 w-8 text-primary-foreground" />
+                      </div>
+                      <div className="absolute -top-2 -right-2 w-7 h-7 rounded-full bg-background border-2 border-primary flex items-center justify-center text-xs font-bold text-primary">
+                        {item.step}
+                      </div>
                     </div>
+                    
                     <h3 className="font-semibold text-xl mb-3">{item.title}</h3>
-                    <p className="text-muted-foreground leading-relaxed">{item.desc}</p>
+                    <p className="text-muted-foreground text-sm leading-relaxed whitespace-pre-line">{item.desc}</p>
                   </div>
                 </div>
               ))}
@@ -254,30 +313,46 @@ export default function Home() {
       </section>
 
       {/* CTA Section */}
-      <section className="container mx-auto px-6 py-20">
-        <div className="text-center">
-          <h2 className="text-4xl font-bold mb-4">准备好开始了吗？</h2>
-          <p className="text-muted-foreground text-lg mb-8">
-            加入PathUp，让求职变得更简单
-          </p>
-          <Link href="/resume">
-            <Button size="lg" className="h-14 px-10 text-lg bg-gradient-to-r from-primary to-primary/80 hover:opacity-90 shadow-xl shadow-primary/25 rounded-xl group">
-              免费开始
-              <ArrowRight className="ml-2 h-5 w-5 group-hover:translate-x-1 transition-transform" />
-            </Button>
-          </Link>
+      <section className="container mx-auto px-6 py-24">
+        <div className="relative text-center">
+          {/* Background glow */}
+          <div className="absolute inset-0 flex items-center justify-center">
+            <div className="w-[400px] h-[400px] bg-gradient-to-r from-primary/10 to-purple-500/10 rounded-full blur-3xl" />
+          </div>
+          
+          <div className="relative">
+            <h2 className="text-4xl md:text-5xl font-bold mb-6">
+              准备好开始了吗？
+            </h2>
+            <p className="text-muted-foreground text-lg mb-10 max-w-md mx-auto">
+              加入 PathUp，让求职变得更简单
+            </p>
+            <div className="flex flex-col sm:flex-row gap-4 justify-center">
+              <Link href="/resume">
+                <Button size="lg" className="h-14 px-12 text-lg bg-gradient-to-r from-primary to-primary/80 hover:opacity-90 shadow-2xl shadow-primary/20 rounded-2xl group">
+                  免费开始
+                  <ArrowRight className="ml-2 h-5 w-5 group-hover:translate-x-1 transition-transform" />
+                </Button>
+              </Link>
+              <Link href="/jobs">
+                <Button size="lg" variant="outline" className="h-14 px-10 rounded-2xl border-2">
+                  浏览岗位
+                </Button>
+              </Link>
+            </div>
+          </div>
         </div>
       </section>
 
       {/* Footer */}
-      <footer className="border-t border-muted/50">
-        <div className="container mx-auto px-6 py-8">
+      <footer className="border-t border-muted/30 bg-muted/10">
+        <div className="container mx-auto px-6 py-10">
           <div className="flex flex-col md:flex-row items-center justify-between gap-4">
-            <Link href="/" className="flex items-center gap-2">
-              <div className="w-8 h-8 rounded-lg bg-gradient-to-br from-primary to-primary/60 flex items-center justify-center">
+            <Link href="/" className="flex items-center gap-2.5">
+              <div className="w-8 h-8 rounded-lg bg-gradient-to-br from-primary to-primary/70 flex items-center justify-center shadow-md shadow-primary/10">
                 <Briefcase className="h-4 w-4 text-primary-foreground" />
               </div>
-              <span className="font-semibold">PathUp</span>
+              <span className="font-semibold text-lg">PathUp</span>
             </Link>
             <p className="text-sm text-muted-foreground">
               © 2024 PathUp. 专为海外留学生打造
