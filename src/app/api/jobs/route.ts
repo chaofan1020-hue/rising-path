@@ -6,8 +6,9 @@ export async function GET(request: NextRequest) {
     const client = getSupabaseClient();
     const searchParams = request.nextUrl.searchParams;
     
-    const region = searchParams.get('region');
-    const direction = searchParams.get('direction');
+    // 获取多选参数（地区和方向支持多选）
+    const regions = searchParams.getAll('region');
+    const directions = searchParams.getAll('direction');
     const audience = searchParams.get('audience');
 
     let query = client
@@ -15,12 +16,15 @@ export async function GET(request: NextRequest) {
       .select('*')
       .order('created_at', { ascending: false });
 
-    if (region && region !== '全部') {
-      query = query.eq('region', region);
+    // 地区多选筛选
+    if (regions.length > 0) {
+      query = query.in('region', regions);
     }
-    if (direction && direction !== '全部') {
-      query = query.eq('direction', direction);
+    // 方向多选筛选
+    if (directions.length > 0) {
+      query = query.in('direction', directions);
     }
+    // 受众单选筛选
     if (audience && audience !== '全部') {
       query = query.eq('audience', audience);
     }

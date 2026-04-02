@@ -5,6 +5,7 @@ import { Button } from '@/components/ui/button';
 import { Card, CardContent } from '@/components/ui/card';
 import { Input } from '@/components/ui/input';
 import { Badge } from '@/components/ui/badge';
+import { Checkbox } from '@/components/ui/checkbox';
 import {
   Select,
   SelectContent,
@@ -12,7 +13,12 @@ import {
   SelectTrigger,
   SelectValue,
 } from '@/components/ui/select';
-import { Search, MapPin, Briefcase, Users, ExternalLink, Building } from 'lucide-react';
+import {
+  Popover,
+  PopoverContent,
+  PopoverTrigger,
+} from '@/components/ui/popover';
+import { Search, MapPin, Briefcase, Users, ExternalLink, Building, ChevronDown, X } from 'lucide-react';
 import Link from 'next/link';
 import Image from 'next/image';
 
@@ -123,12 +129,83 @@ function CompanyLogo({ company, logoUrl }: { company: string; logoUrl?: string }
   );
 }
 
+// 多选筛选器组件
+function MultiSelectFilter({
+  label,
+  options,
+  selected,
+  onChange,
+  placeholder,
+}: {
+  label: string;
+  options: JobConfig[];
+  selected: string[];
+  onChange: (values: string[]) => void;
+  placeholder: string;
+}) {
+  const handleToggle = (value: string) => {
+    if (selected.includes(value)) {
+      onChange(selected.filter(v => v !== value));
+    } else {
+      onChange([...selected, value]);
+    }
+  };
+
+  const handleClear = (e: React.MouseEvent) => {
+    e.stopPropagation();
+    onChange([]);
+  };
+
+  return (
+    <div className="space-y-1.5">
+      <label className="text-sm font-medium text-muted-foreground">{label}</label>
+      <Popover>
+        <PopoverTrigger asChild>
+          <Button
+            variant="outline"
+            className={`w-full md:w-40 justify-between font-normal ${selected.length > 0 ? 'text-foreground' : 'text-muted-foreground'}`}
+          >
+            <span className="truncate">
+              {selected.length === 0 ? placeholder : selected.length === 1 ? selected[0] : `已选 ${selected.length} 项`}
+            </span>
+            {selected.length > 0 ? (
+              <X className="h-4 w-4 shrink-0 opacity-50 hover:opacity-100" onClick={handleClear} />
+            ) : (
+              <ChevronDown className="h-4 w-4 shrink-0 opacity-50" />
+            )}
+          </Button>
+        </PopoverTrigger>
+        <PopoverContent className="w-48 p-2" align="start">
+          <div className="max-h-60 overflow-y-auto space-y-1">
+            {options.map((option) => (
+              <label
+                key={option.id}
+                className="flex items-center gap-2 px-2 py-1.5 rounded hover:bg-muted cursor-pointer"
+                translate="no"
+              >
+                <Checkbox
+                  checked={selected.includes(option.config_value)}
+                  onCheckedChange={() => handleToggle(option.config_value)}
+                />
+                <span className="text-sm">{option.config_value}</span>
+              </label>
+            ))}
+          </div>
+          {options.length === 0 && (
+            <div className="text-center py-2 text-sm text-muted-foreground">暂无选项</div>
+          )}
+        </PopoverContent>
+      </Popover>
+    </div>
+  );
+}
+
 export default function JobsPage() {
   const [jobs, setJobs] = useState<Job[]>([]);
   const [loading, setLoading] = useState(true);
   const [searchTerm, setSearchTerm] = useState('');
-  const [selectedRegion, setSelectedRegion] = useState('全部');
-  const [selectedDirection, setSelectedDirection] = useState('全部');
+  const [selectedRegions, setSelectedRegions] = useState<string[]>([]);
+  const [selectedDirections, setSelectedDirections] = useState<string[]>([]);
   const [selectedAudience, setSelectedAudience] = useState('全部');
   
   // 动态配置
@@ -152,14 +229,18 @@ export default function JobsPage() {
 
   useEffect(() => {
     fetchJobs();
-  }, [selectedRegion, selectedDirection, selectedAudience]);
+  }, [selectedRegions, selectedDirections, selectedAudience]);
 
   const fetchJobs = async () => {
     setLoading(true);
     try {
       const params = new URLSearchParams();
-      if (selectedRegion !== '全部') params.append('region', selectedRegion);
-      if (selectedDirection !== '全部') params.append('direction', selectedDirection);
+      if (selectedRegions.length > 0) {
+        selectedRegions.forEach(r => params.append('region', r));
+      }
+      if (selectedDirections.length > 0) {
+        selectedDirections.forEach(d => params.append('direction', d));
+      }
       if (selectedAudience !== '全部') params.append('audience', selectedAudience);
 
       const response = await fetch(`/api/jobs?${params.toString()}`);
@@ -232,38 +313,20 @@ export default function JobsPage() {
                 </div>
               </div>
               <div className="flex flex-col md:flex-row gap-4 md:items-end">
-                <div className="space-y-1.5">
-                  <label className="text-sm font-medium text-muted-foreground">地区</label>
-                  <Select value={selectedRegion} onValueChange={setSelectedRegion}>
-                    <SelectTrigger className="w-full md:w-36">
-                      <SelectValue placeholder="全部地区" />
-                    </SelectTrigger>
-                    <SelectContent translate="no">
-                      <SelectItem value="全部">全部</SelectItem>
-                      {configs.region?.map((config) => (
-                        <SelectItem key={config.id} value={config.config_value}>
-                          {config.config_value}
-                        </SelectItem>
-                      ))}
-                    </SelectContent>
-                  </Select>
-                </div>
-                <div className="space-y-1.5">
-                  <label className="text-sm font-medium text-muted-foreground">方向</label>
-                  <Select value={selectedDirection} onValueChange={setSelectedDirection}>
-                    <SelectTrigger className="w-full md:w-36">
-                      <SelectValue placeholder="全部方向" />
-                    </SelectTrigger>
-                    <SelectContent translate="no">
-                      <SelectItem value="全部">全部</SelectItem>
-                      {configs.direction?.map((config) => (
-                        <SelectItem key={config.id} value={config.config_value}>
-                          {config.config_value}
-                        </SelectItem>
-                      ))}
-                    </SelectContent>
-                  </Select>
-                </div>
+                <MultiSelectFilter
+                  label="地区"
+                  options={configs.region || []}
+                  selected={selectedRegions}
+                  onChange={setSelectedRegions}
+                  placeholder="全部地区"
+                />
+                <MultiSelectFilter
+                  label="方向"
+                  options={configs.direction || []}
+                  selected={selectedDirections}
+                  onChange={setSelectedDirections}
+                  placeholder="全部方向"
+                />
                 <div className="space-y-1.5">
                   <label className="text-sm font-medium text-muted-foreground">受众</label>
                   <Select value={selectedAudience} onValueChange={setSelectedAudience}>
