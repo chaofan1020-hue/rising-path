@@ -7,18 +7,18 @@ export async function POST(request: NextRequest) {
     const client = getSupabaseClient();
     const { resumeId, accessCodeId } = await request.json();
 
-    // Build resume query
-    let resumeQuery = client
-      .from('resumes')
-      .select('*')
-      .eq('id', resumeId);
-    
-    // If access code is provided, verify ownership
-    if (accessCodeId) {
-      resumeQuery = resumeQuery.eq('access_code_id', accessCodeId);
+    // 必须提供 access_code_id
+    if (!accessCodeId) {
+      return NextResponse.json({ error: '未授权的访问' }, { status: 401 });
     }
 
-    const { data: resume, error: resumeError } = await resumeQuery.single();
+    // Get resume info and verify ownership
+    const { data: resume, error: resumeError } = await client
+      .from('resumes')
+      .select('*')
+      .eq('id', resumeId)
+      .eq('access_code_id', accessCodeId)
+      .single();
 
     if (resumeError || !resume) {
       return NextResponse.json({ error: '简历不存在或无权访问' }, { status: 404 });
@@ -120,7 +120,7 @@ ${JSON.stringify(jobsList, null, 2)}
         match_score: match.match_score,
         match_reason: match.match_reason,
         suggestions: match.suggestions,
-        access_code_id: accessCodeId || null,
+        access_code_id: accessCodeId,
       });
     }
 

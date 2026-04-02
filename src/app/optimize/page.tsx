@@ -93,6 +93,7 @@ export default function OptimizePage() {
           resumeId: selectedResumeId,
           targetCompany,
           targetPosition,
+          accessCodeId,
         }),
       });
 

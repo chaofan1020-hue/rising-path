@@ -7,22 +7,21 @@ export async function GET(request: NextRequest) {
     const { searchParams } = new URL(request.url);
     const accessCodeId = searchParams.get('access_code_id');
     
+    // 必须提供 access_code_id，否则返回空列表
+    if (!accessCodeId) {
+      return NextResponse.json({ applications: [] });
+    }
+
     // Get applications with job and resume info
-    let query = client
+    const { data, error } = await client
       .from('applications')
       .select(`
         *,
         jobs (title, company, region, direction),
         resumes (file_name)
       `)
+      .eq('access_code_id', parseInt(accessCodeId))
       .order('created_at', { ascending: false });
-    
-    // 如果有 access_code_id，只返回该用户的网申记录
-    if (accessCodeId) {
-      query = query.eq('access_code_id', parseInt(accessCodeId));
-    }
-
-    const { data, error } = await query;
 
     if (error) {
       throw new Error(`查询网申记录失败: ${error.message}`);
@@ -46,11 +45,16 @@ export async function POST(request: NextRequest) {
     // 从请求体中提取 access_code_id
     const { access_code_id, ...applicationData } = body;
 
+    // 必须提供 access_code_id
+    if (!access_code_id) {
+      return NextResponse.json({ error: '未授权的访问' }, { status: 401 });
+    }
+
     const { data, error } = await client
       .from('applications')
       .insert({
         ...applicationData,
-        access_code_id: access_code_id || null,
+        access_code_id: access_code_id,
       })
       .select()
       .single();

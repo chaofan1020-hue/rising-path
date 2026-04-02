@@ -5,17 +5,23 @@ import { LLMClient, Config, HeaderUtils } from 'coze-coding-dev-sdk';
 export async function POST(request: NextRequest) {
   try {
     const client = getSupabaseClient();
-    const { resumeId, targetCompany, targetPosition } = await request.json();
+    const { resumeId, targetCompany, targetPosition, accessCodeId } = await request.json();
 
-    // Get resume
+    // 必须提供 access_code_id
+    if (!accessCodeId) {
+      return NextResponse.json({ error: '未授权的访问' }, { status: 401 });
+    }
+
+    // Get resume and verify ownership
     const { data: resume, error } = await client
       .from('resumes')
       .select('*')
       .eq('id', resumeId)
+      .eq('access_code_id', accessCodeId)
       .single();
 
     if (error || !resume) {
-      return NextResponse.json({ error: '简历不存在' }, { status: 404 });
+      return NextResponse.json({ error: '简历不存在或无权访问' }, { status: 404 });
     }
 
     // AI optimization

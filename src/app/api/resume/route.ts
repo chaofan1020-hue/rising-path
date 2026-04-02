@@ -134,17 +134,16 @@ export async function GET(request: NextRequest) {
     const { searchParams } = new URL(request.url);
     const accessCodeId = searchParams.get('access_code_id');
     
-    let query = client
+    // 必须提供 access_code_id，否则返回空列表
+    if (!accessCodeId) {
+      return NextResponse.json({ resumes: [] });
+    }
+    
+    const { data, error } = await client
       .from('resumes')
       .select('*')
+      .eq('access_code_id', parseInt(accessCodeId))
       .order('created_at', { ascending: false });
-    
-    // 如果有 access_code_id，只返回该用户的简历
-    if (accessCodeId) {
-      query = query.eq('access_code_id', parseInt(accessCodeId));
-    }
-
-    const { data, error } = await query;
 
     if (error) {
       throw new Error(`查询简历失败: ${error.message}`);
@@ -169,6 +168,11 @@ export async function POST(request: NextRequest) {
 
     if (!file) {
       return NextResponse.json({ error: '未提供文件' }, { status: 400 });
+    }
+
+    // 必须提供 access_code_id
+    if (!accessCodeId) {
+      return NextResponse.json({ error: '未授权的访问' }, { status: 401 });
     }
 
     // Convert file to buffer
