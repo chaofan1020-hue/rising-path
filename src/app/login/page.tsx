@@ -56,7 +56,7 @@ export default function LoginPage() {
         <div className="text-center mb-8">
           <Link href="/" className="inline-flex items-center gap-2 mb-4">
             <Image 
-              src="/logo.png?v=2" 
+              src="/logo.png" 
               alt="PathUp" 
               width={40} 
               height={40}

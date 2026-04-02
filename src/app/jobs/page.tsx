@@ -345,7 +345,7 @@ export default function JobsPage() {
           <div className="container mx-auto px-4 h-16 flex items-center justify-between">
             <Link href="/" className="flex items-center gap-2">
               <Image 
-                src="/logo.png?v=2" 
+                src="/logo.png" 
                 alt="PathUp" 
                 width={24} 
                 height={24}

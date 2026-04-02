@@ -107,7 +107,7 @@ export default function Home() {
         <div className="container mx-auto px-6 h-16 flex items-center justify-between">
           <Link href="/" className="flex items-center gap-3 group">
             <Image 
-              src="/logo.png?v=2" 
+              src="/logo.png" 
               alt="PathUp" 
               width={36} 
               height={36}
@@ -355,7 +355,7 @@ export default function Home() {
           <div className="flex flex-col md:flex-row items-center justify-between gap-4">
             <Link href="/" className="flex items-center gap-2.5">
               <Image 
-                src="/logo.png?v=2" 
+                src="/logo.png" 
                 alt="PathUp" 
                 width={32} 
                 height={32}
