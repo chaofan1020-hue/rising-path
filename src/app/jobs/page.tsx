@@ -160,8 +160,8 @@ function PremiumFilterChip({
       <PopoverTrigger asChild>
         <button 
           className={`
-            group relative inline-flex items-center gap-1 px-2 py-1 
-            rounded-md text-xs font-medium
+            group relative inline-flex items-center gap-1.5 px-3 py-1.5 
+            rounded-lg text-sm font-medium
             transition-all duration-300 ease-out
             ${hasSelection 
               ? 'bg-gradient-to-r from-primary/90 to-primary text-primary-foreground shadow-lg shadow-primary/25' 
@@ -169,14 +169,14 @@ function PremiumFilterChip({
             }
           `}
         >
-          <Icon className={`h-3 w-3 transition-colors ${hasSelection ? 'text-primary-foreground' : 'text-gray-400 group-hover:text-primary'}`} />
+          <Icon className={`h-3.5 w-3.5 transition-colors ${hasSelection ? 'text-primary-foreground' : 'text-gray-400 group-hover:text-primary'}`} />
           <span>{label}</span>
           {hasSelection && (
-            <span className="flex items-center justify-center min-w-[14px] h-3.5 px-0.5 rounded-full bg-white/20 text-[9px] font-semibold">
+            <span className="flex items-center justify-center min-w-[16px] h-4 px-1 rounded-full bg-white/20 text-[10px] font-semibold">
               {selectedArray.length}
             </span>
           )}
-          <ChevronDown className={`h-2.5 w-2.5 transition-transform duration-200 ${isOpen ? 'rotate-180' : ''} ${hasSelection ? 'text-primary-foreground/70' : 'text-gray-400'}`} />
+          <ChevronDown className={`h-3 w-3 transition-transform duration-200 ${isOpen ? 'rotate-180' : ''} ${hasSelection ? 'text-primary-foreground/70' : 'text-gray-400'}`} />
         </button>
       </PopoverTrigger>
       <PopoverContent 
@@ -426,9 +426,9 @@ export default function JobsPage() {
                         setSelectedDirections([]);
                         setSelectedAudience('全部');
                       }}
-                      className="inline-flex items-center gap-0.5 px-1.5 py-0.5 text-[10px] text-gray-400 hover:text-primary transition-colors group"
+                      className="inline-flex items-center gap-1 px-2 py-1 text-xs text-gray-400 hover:text-primary transition-colors group"
                     >
-                      <X className="h-2.5 w-2.5 transition-transform group-hover:rotate-90" />
+                      <X className="h-3 w-3 transition-transform group-hover:rotate-90" />
                       <span>重置</span>
                     </button>
                   )}
