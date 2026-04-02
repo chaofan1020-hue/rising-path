@@ -86,7 +86,10 @@ export default function ResumePage() {
       const data = await response.json();
       
       if (data.resume) {
-        setResumes([data.resume, ...resumes]);
+        // 等待几秒后刷新列表以获取解析结果
+        setTimeout(() => {
+          fetchResumes();
+        }, 3000);
         setSelectedFile(null);
         setUploadProgress(0);
       } else if (data.error) {
@@ -162,7 +165,7 @@ export default function ResumePage() {
               上传简历
             </CardTitle>
             <CardDescription>
-              支持 PDF、Word 格式，系统将自动解析简历内容
+              支持 PDF、Word、TXT 格式，推荐上传 TXT 文本格式以获得最佳解析效果
             </CardDescription>
           </CardHeader>
           <CardContent>
@@ -170,10 +173,13 @@ export default function ResumePage() {
               <div className="flex-1">
                 <Input
                   type="file"
-                  accept=".pdf,.doc,.docx"
+                  accept=".pdf,.doc,.docx,.txt"
                   onChange={handleFileSelect}
                   disabled={uploading}
                 />
+                <p className="text-xs text-muted-foreground mt-1">
+                  支持 PDF、Word、TXT 格式，推荐上传 TXT 文本格式以获得最佳解析效果
+                </p>
                 {selectedFile && (
                   <p className="text-sm text-muted-foreground mt-2">
                     已选择: {selectedFile.name}
@@ -207,7 +213,12 @@ export default function ResumePage() {
 
         {/* Resume List */}
         <div className="space-y-4">
-          <h2 className="text-xl font-semibold">我的简历</h2>
+          <div className="flex items-center justify-between">
+            <h2 className="text-xl font-semibold">我的简历</h2>
+            <Button variant="outline" size="sm" onClick={fetchResumes}>
+              刷新列表
+            </Button>
+          </div>
           {loading ? (
             <div className="text-center py-12 text-muted-foreground">
               <Loader2 className="h-8 w-8 animate-spin mx-auto mb-2" />
@@ -236,14 +247,19 @@ export default function ResumePage() {
                             <Calendar className="h-3 w-3 mr-1" />
                             {new Date(resume.created_at).toLocaleDateString()}
                           </Badge>
-                          {resume.user_info?.name && (
+                          {resume.user_info?.name ? (
                             <Badge variant="outline">
                               <User className="h-3 w-3 mr-1" />
                               {resume.user_info.name}
                             </Badge>
+                          ) : (
+                            <Badge variant="outline" className="text-yellow-600">
+                              <Loader2 className="h-3 w-3 mr-1 animate-spin" />
+                              解析中...
+                            </Badge>
                           )}
                         </div>
-                        {resume.parsed_content && (
+                        {resume.parsed_content && !resume.parsed_content.includes('正在解析') && (
                           <p className="text-sm text-muted-foreground mt-2 line-clamp-2">
                             {resume.parsed_content.substring(0, 150)}...
                           </p>
