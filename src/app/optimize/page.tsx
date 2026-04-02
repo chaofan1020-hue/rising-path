@@ -233,6 +233,23 @@ function OptimizeContent() {
               </Button>
             </div>
 
+            {/* AI匹配优化建议 */}
+            {suggestions && (
+              <div className="mt-4 p-4 rounded-lg bg-purple-50 dark:bg-purple-950/30 border border-purple-200 dark:border-purple-800">
+                <div className="flex items-start gap-3">
+                  <Sparkles className="h-5 w-5 text-purple-600 mt-0.5 flex-shrink-0" />
+                  <div className="flex-1">
+                    <h4 className="font-medium text-purple-700 dark:text-purple-300 mb-2">
+                      来自AI智能选岗的优化建议
+                    </h4>
+                    <p className="text-sm text-purple-600 dark:text-purple-400 whitespace-pre-wrap">
+                      {suggestions}
+                    </p>
+                  </div>
+                </div>
+              </div>
+            )}
+
             {optimizing && (
               <div className="mt-4">
                 <div className="flex items-center justify-between mb-2">
