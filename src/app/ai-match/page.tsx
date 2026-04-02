@@ -5,6 +5,7 @@ import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
 import { Progress } from '@/components/ui/progress';
+import { Textarea } from '@/components/ui/textarea';
 import {
   Select,
   SelectContent,
@@ -12,11 +13,6 @@ import {
   SelectTrigger,
   SelectValue,
 } from '@/components/ui/select';
-import {
-  Popover,
-  PopoverContent,
-  PopoverTrigger,
-} from '@/components/ui/popover';
 import { 
   Brain, 
   Target, 
@@ -24,16 +20,11 @@ import {
   CheckCircle, 
   ArrowRight,
   Briefcase,
+  FileText,
   Sparkles,
   TrendingUp,
-  MapPin,
-  Compass,
-  ChevronDown,
-  X,
-  Wand2,
 } from 'lucide-react';
 import Link from 'next/link';
-import { AuthGuard } from '@/components/auth-guard';
 
 interface Resume {
   id: number;
@@ -42,14 +33,6 @@ interface Resume {
     name?: string;
     skills?: string[];
   };
-}
-
-interface JobConfig {
-  id: number;
-  config_type: string;
-  config_value: string;
-  sort_order: number;
-  is_active: boolean;
 }
 
 interface MatchResult {
@@ -61,118 +44,15 @@ interface MatchResult {
   suggestions: string;
 }
 
-// 多选筛选器组件
-function MultiSelectChip({
-  label,
-  icon: Icon,
-  options,
-  selected,
-  onChange,
-}: {
-  label: string;
-  icon: React.ElementType;
-  options: JobConfig[];
-  selected: string[];
-  onChange: (values: string[]) => void;
-}) {
-  const [isOpen, setIsOpen] = useState(false);
-  
-  const handleToggle = (value: string) => {
-    if (selected.includes(value)) {
-      onChange(selected.filter(v => v !== value));
-    } else {
-      onChange([...selected, value]);
-    }
-  };
-
-  return (
-    <Popover open={isOpen} onOpenChange={setIsOpen}>
-      <PopoverTrigger asChild>
-        <button 
-          className={`
-            w-full inline-flex items-center justify-between gap-2 px-3 py-2.5 
-            rounded-xl text-sm font-medium border
-            transition-all duration-300
-            ${selected.length > 0 
-              ? 'bg-primary text-primary-foreground border-primary shadow-md' 
-              : 'bg-white border-gray-200 hover:border-primary/30 hover:shadow-sm'
-            }
-          `}
-        >
-          <div className="flex items-center gap-2">
-            <Icon className={`h-4 w-4 ${selected.length > 0 ? 'text-primary-foreground' : 'text-gray-400'}`} />
-            <span>{label}</span>
-            {selected.length > 0 && (
-              <Badge variant="secondary" className="bg-white/20 text-primary-foreground h-5 px-1.5 text-xs">
-                {selected.length}
-              </Badge>
-            )}
-          </div>
-          <ChevronDown className={`h-4 w-4 transition-transform ${isOpen ? 'rotate-180' : ''} ${selected.length > 0 ? 'text-primary-foreground/70' : 'text-gray-400'}`} />
-        </button>
-      </PopoverTrigger>
-      <PopoverContent className="w-48 p-2" align="start">
-        <div className="max-h-56 overflow-y-auto space-y-1">
-          {options.map((option) => {
-            const isSelected = selected.includes(option.config_value);
-            return (
-              <button
-                key={option.id}
-                onClick={() => handleToggle(option.config_value)}
-                className={`
-                  w-full flex items-center gap-2 px-3 py-2 rounded-lg text-sm font-medium
-                  transition-all duration-200
-                  ${isSelected 
-                    ? 'bg-primary text-primary-foreground' 
-                    : 'hover:bg-gray-100 text-gray-700'
-                  }
-                `}
-                translate="no"
-              >
-                <div className={`
-                  flex items-center justify-center w-4 h-4 rounded border 
-                  transition-all duration-200
-                  ${isSelected 
-                    ? 'bg-white border-white' 
-                    : 'border-gray-300'
-                  }
-                `}>
-                  {isSelected && <svg className="w-3 h-3 text-primary" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={3} d="M5 13l4 4L19 7" /></svg>}
-                </div>
-                <span>{option.config_value}</span>
-              </button>
-            );
-          })}
-        </div>
-        {selected.length > 0 && (
-          <div className="border-t mt-2 pt-2">
-            <button
-              onClick={() => onChange([])}
-              className="w-full text-center text-xs text-gray-500 hover:text-primary py-1 transition-colors"
-            >
-              清除选择
-            </button>
-          </div>
-        )}
-      </PopoverContent>
-    </Popover>
-  );
-}
-
 export default function AIMatchPage() {
   const [resumes, setResumes] = useState<Resume[]>([]);
   const [selectedResumeId, setSelectedResumeId] = useState<string>('');
-  const [selectedRegions, setSelectedRegions] = useState<string[]>([]);
-  const [selectedDirections, setSelectedDirections] = useState<string[]>([]);
-  const [regions, setRegions] = useState<JobConfig[]>([]);
-  const [directions, setDirections] = useState<JobConfig[]>([]);
   const [matching, setMatching] = useState(false);
   const [matchProgress, setMatchProgress] = useState(0);
   const [matchResults, setMatchResults] = useState<MatchResult[]>([]);
 
   useEffect(() => {
     fetchResumes();
-    fetchConfigs();
   }, []);
 
   const fetchResumes = async () => {
@@ -182,17 +62,6 @@ export default function AIMatchPage() {
       setResumes(data.resumes || []);
     } catch (error) {
       console.error('Failed to fetch resumes:', error);
-    }
-  };
-
-  const fetchConfigs = async () => {
-    try {
-      const response = await fetch('/api/configs');
-      const data = await response.json();
-      setRegions(data.configs?.region || []);
-      setDirections(data.configs?.direction || []);
-    } catch (error) {
-      console.error('Failed to fetch configs:', error);
     }
   };
 
@@ -212,11 +81,7 @@ export default function AIMatchPage() {
       const response = await fetch('/api/ai/match', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ 
-          resumeId: selectedResumeId,
-          regions: selectedRegions,
-          directions: selectedDirections,
-        }),
+        body: JSON.stringify({ resumeId: selectedResumeId }),
       });
 
       clearInterval(progressInterval);
@@ -248,8 +113,7 @@ export default function AIMatchPage() {
   };
 
   return (
-    <AuthGuard>
-      <div className="min-h-screen bg-background">
+    <div className="min-h-screen bg-background">
       {/* Header */}
       <header className="border-b sticky top-0 bg-background/95 backdrop-blur z-50">
         <div className="container mx-auto px-4 h-16 flex items-center justify-between">
@@ -292,9 +156,8 @@ export default function AIMatchPage() {
             </CardDescription>
           </CardHeader>
           <CardContent>
-            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
-              <div className="lg:col-span-2">
-                <label className="text-sm font-medium text-muted-foreground mb-1.5 block">选择简历</label>
+            <div className="flex flex-col md:flex-row gap-4">
+              <div className="flex-1">
                 <Select value={selectedResumeId} onValueChange={setSelectedResumeId}>
                   <SelectTrigger>
                     <SelectValue placeholder="选择简历" />
@@ -309,64 +172,10 @@ export default function AIMatchPage() {
                   </SelectContent>
                 </Select>
               </div>
-              <div>
-                <label className="text-sm font-medium text-muted-foreground mb-1.5 block">目标地区</label>
-                <MultiSelectChip
-                  label="地区"
-                  icon={MapPin}
-                  options={regions}
-                  selected={selectedRegions}
-                  onChange={setSelectedRegions}
-                />
-              </div>
-              <div>
-                <label className="text-sm font-medium text-muted-foreground mb-1.5 block">岗位方向</label>
-                <MultiSelectChip
-                  label="方向"
-                  icon={Compass}
-                  options={directions}
-                  selected={selectedDirections}
-                  onChange={setSelectedDirections}
-                />
-              </div>
-            </div>
-            
-            {/* 已选筛选条件 */}
-            {(selectedRegions.length > 0 || selectedDirections.length > 0) && (
-              <div className="mt-3 flex items-center gap-2 flex-wrap">
-                <span className="text-xs text-muted-foreground">已选筛选：</span>
-                {selectedRegions.map(r => (
-                  <Badge key={r} variant="secondary" className="gap-1">
-                    <MapPin className="h-3 w-3" />
-                    {r}
-                    <button onClick={() => setSelectedRegions(selectedRegions.filter(v => v !== r))} className="ml-1 hover:text-destructive">
-                      <X className="h-3 w-3" />
-                    </button>
-                  </Badge>
-                ))}
-                {selectedDirections.map(d => (
-                  <Badge key={d} variant="secondary" className="gap-1">
-                    <Compass className="h-3 w-3" />
-                    {d}
-                    <button onClick={() => setSelectedDirections(selectedDirections.filter(v => v !== d))} className="ml-1 hover:text-destructive">
-                      <X className="h-3 w-3" />
-                    </button>
-                  </Badge>
-                ))}
-                <button 
-                  onClick={() => { setSelectedRegions([]); setSelectedDirections([]); }}
-                  className="text-xs text-muted-foreground hover:text-primary"
-                >
-                  清除全部
-                </button>
-              </div>
-            )}
-            
-            <div className="mt-4 flex justify-end">
               <Button 
                 onClick={handleMatch} 
                 disabled={!selectedResumeId || matching}
-                className="bg-gradient-to-r from-purple-600 to-blue-600 hover:from-purple-700 hover:to-blue-700 min-w-[140px]"
+                className="bg-gradient-to-r from-purple-600 to-blue-600 hover:from-purple-700 hover:to-blue-700"
               >
                 {matching ? (
                   <>
@@ -455,11 +264,9 @@ export default function AIMatchPage() {
                             查看岗位
                           </Link>
                         </Button>
-                        <Button size="sm" asChild variant="outline" className="bg-gradient-to-r from-orange-50 to-amber-50 border-orange-200 hover:from-orange-100 hover:to-amber-100 text-orange-700">
-                          <Link href={`/optimize?resumeId=${selectedResumeId}&company=${encodeURIComponent(result.company)}&position=${encodeURIComponent(result.job_title)}&suggestions=${encodeURIComponent(result.suggestions || '')}`}>
-                            <Wand2 className="mr-1.5 h-4 w-4" />
-                            一键优化简历
-                          </Link>
+                        <Button size="sm" variant="outline">
+                          立即申请
+                          <ArrowRight className="ml-2 h-4 w-4" />
                         </Button>
                       </div>
                     </div>
@@ -483,7 +290,6 @@ export default function AIMatchPage() {
           </Card>
         )}
       </main>
-      </div>
-    </AuthGuard>
+    </div>
   );
 }

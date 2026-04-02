@@ -1,6 +1,5 @@
 import Link from 'next/link';
 import { Button } from '@/components/ui/button';
-import { MainNav } from '@/components/main-nav';
 import {
   Briefcase,
   FileText,
@@ -22,19 +21,12 @@ const features = [
   {
     title: '岗位查询',
     description: '按地区、方向、受众筛选海量海外岗位',
+    detail: '支持多维度筛选，一键收藏心仪机会',
     icon: Search,
     href: '/jobs',
     gradient: 'from-blue-600 via-blue-500 to-cyan-500',
-    position: 'left-top',
-  },
-  {
-    title: '简历管理',
-    description: '智能解析简历，一键管理',
-    detail: '支持 PDF、Word 多格式上传',
-    icon: FileText,
-    href: '/resume',
-    gradient: 'from-emerald-600 via-green-500 to-teal-500',
-    position: 'left-bottom',
+    pattern: 'dots',
+    size: 'normal',
   },
   {
     title: 'AI智能选岗',
@@ -43,7 +35,18 @@ const features = [
     icon: Brain,
     href: '/ai-match',
     gradient: 'from-violet-600 via-purple-500 to-fuchsia-500',
-    position: 'center',
+    pattern: 'grid',
+    size: 'large',
+  },
+  {
+    title: '简历管理',
+    description: '智能解析简历，一键管理',
+    detail: '支持 PDF、Word 多格式上传',
+    icon: FileText,
+    href: '/resume',
+    gradient: 'from-emerald-600 via-green-500 to-teal-500',
+    pattern: 'dots',
+    size: 'normal',
   },
   {
     title: 'ATS简历优化',
@@ -52,7 +55,8 @@ const features = [
     icon: Wand2,
     href: '/optimize',
     gradient: 'from-orange-600 via-amber-500 to-yellow-500',
-    position: 'right-top',
+    pattern: 'grid',
+    size: 'normal',
   },
   {
     title: '自动网申',
@@ -61,7 +65,8 @@ const features = [
     icon: Send,
     href: '/applications',
     gradient: 'from-pink-600 via-rose-500 to-red-500',
-    position: 'right-bottom',
+    pattern: 'dots',
+    size: 'normal',
   },
 ];
 
@@ -97,7 +102,33 @@ export default function Home() {
       </div>
 
       {/* Navigation */}
-      <MainNav />
+      <nav className="border-b/40 bg-background/80 backdrop-blur-xl sticky top-0 z-50">
+        <div className="container mx-auto px-6 h-16 flex items-center justify-between">
+          <Link href="/" className="flex items-center gap-3 group">
+            <div className="w-9 h-9 rounded-xl bg-gradient-to-br from-primary to-primary/70 flex items-center justify-center shadow-lg shadow-primary/20">
+              <Briefcase className="h-5 w-5 text-primary-foreground" />
+            </div>
+            <span className="font-bold text-xl">PathUp</span>
+          </Link>
+          <div className="flex items-center gap-2">
+            <Link href="/jobs">
+              <Button variant="ghost" size="sm" className="text-muted-foreground hover:text-foreground">
+                岗位查询
+              </Button>
+            </Link>
+            <Link href="/resume">
+              <Button variant="ghost" size="sm" className="text-muted-foreground hover:text-foreground">
+                简历管理
+              </Button>
+            </Link>
+            <Link href="/ai-match">
+              <Button size="sm" className="bg-gradient-to-r from-primary to-primary/80 hover:opacity-90 shadow-lg shadow-primary/20">
+                开始使用
+              </Button>
+            </Link>
+          </div>
+        </div>
+      </nav>
 
       {/* Hero Section */}
       <section className="container mx-auto px-6 pt-28 pb-24">
@@ -157,7 +188,7 @@ export default function Home() {
         </div>
       </section>
 
-      {/* Features Section */}
+      {/* Features Section - Bento Grid Style */}
       <section className="container mx-auto px-6 py-20">
         <div className="text-center mb-16">
           <div className="inline-flex items-center gap-2 px-3 py-1.5 rounded-full bg-muted/50 border border-muted/50 mb-6">
@@ -173,125 +204,61 @@ export default function Home() {
           </p>
         </div>
         
-        {/* New Layout - Center Featured */}
-        <div className="grid grid-cols-1 lg:grid-cols-12 gap-6 lg:gap-8">
-          {/* Left Column */}
-          <div className="lg:col-span-3 space-y-6">
-            {features.filter(f => f.position === 'left-top' || f.position === 'left-bottom').map((feature) => (
-              <Link 
-                href={feature.href} 
-                key={feature.title}
-                className="group block"
-              >
-                <div className="relative overflow-hidden rounded-2xl bg-white border border-gray-100 shadow-sm hover:shadow-xl transition-all duration-500 hover:-translate-y-1 p-6">
-                  {/* Hover gradient */}
-                  <div className={`absolute inset-0 bg-gradient-to-br ${feature.gradient} opacity-0 group-hover:opacity-5 transition-opacity duration-500`} />
-                  
-                  <div className="relative flex items-start gap-4">
-                    <div className={`w-12 h-12 rounded-xl bg-gradient-to-br ${feature.gradient} flex items-center justify-center shadow-lg group-hover:scale-110 group-hover:rotate-6 transition-all duration-300 flex-shrink-0`}>
-                      <feature.icon className="h-6 w-6 text-white" />
-                    </div>
-                    <div className="flex-1 min-w-0">
-                      <h3 className="font-bold text-lg mb-1 group-hover:text-primary transition-colors">
-                        {feature.title}
-                      </h3>
-                      <p className="text-muted-foreground text-sm leading-relaxed">
-                        {feature.description}
-                      </p>
-                    </div>
-                  </div>
-                  
-                  <div className="absolute bottom-4 right-4 w-8 h-8 rounded-lg bg-gray-50 flex items-center justify-center opacity-0 group-hover:opacity-100 transition-all duration-300 group-hover:translate-x-0 translate-x-2">
-                    <ArrowRight className="h-4 w-4 text-primary" />
-                  </div>
-                </div>
-              </Link>
-            ))}
-          </div>
-          
-          {/* Center - AI Feature (Featured) */}
-          {features.filter(f => f.position === 'center').map((feature) => (
+        {/* Bento Grid */}
+        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-5 auto-rows-[200px]">
+          {features.map((feature) => (
             <Link 
               href={feature.href} 
               key={feature.title}
-              className="lg:col-span-6 group"
+              className={`group relative overflow-hidden rounded-3xl transition-all duration-500 hover:-translate-y-1 ${
+                feature.size === 'large' ? 'md:col-span-2 lg:col-span-1 lg:row-span-2' : ''
+              }`}
             >
-              <div className="relative overflow-hidden rounded-3xl h-full min-h-[320px] bg-gradient-to-br from-violet-600 via-purple-500 to-fuchsia-500 shadow-2xl shadow-purple-500/20 hover:shadow-purple-500/40 transition-all duration-500 hover:-translate-y-1">
-                {/* Animated background pattern */}
-                <div className="absolute inset-0">
-                  <div className="absolute inset-0 bg-[linear-gradient(45deg,transparent_25%,rgba(255,255,255,0.05)_25%,rgba(255,255,255,0.05)_50%,transparent_50%,transparent_75%,rgba(255,255,255,0.05)_75%)] bg-[length:30px_30px]" />
-                  <div className="absolute inset-0 bg-gradient-to-t from-black/20 to-transparent" />
+              {/* Background */}
+              <div className="absolute inset-0 bg-gradient-to-br from-muted/30 to-muted/10" />
+              
+              {/* Pattern */}
+              <div className="absolute inset-0 opacity-30">
+                {feature.pattern === 'dots' && (
+                  <div className="w-full h-full bg-[radial-gradient(circle,_hsl(var(--muted-foreground))_1px,_transparent_1px)] bg-[size:16px_16px]" />
+                )}
+                {feature.pattern === 'grid' && (
+                  <div className="w-full h-full bg-[linear-gradient(to_right,_hsl(var(--muted-foreground))_1px,_transparent_1px),linear-gradient(to_bottom,_hsl(var(--muted-foreground))_1px,_transparent_1px)] bg-[size:24px_24px]" />
+                )}
+              </div>
+              
+              {/* Gradient overlay on hover */}
+              <div className={`absolute inset-0 bg-gradient-to-br ${feature.gradient} opacity-0 group-hover:opacity-5 transition-opacity duration-500`} />
+              
+              {/* Content */}
+              <div className="relative h-full p-7 flex flex-col">
+                {/* Icon */}
+                <div className={`w-14 h-14 rounded-2xl bg-gradient-to-br ${feature.gradient} flex items-center justify-center mb-auto shadow-xl group-hover:scale-110 group-hover:rotate-3 transition-all duration-500`}>
+                  <feature.icon className="h-7 w-7 text-white" />
                 </div>
                 
-                {/* Glowing orbs */}
-                <div className="absolute top-10 right-10 w-32 h-32 bg-white/10 rounded-full blur-3xl group-hover:bg-white/20 transition-all duration-500" />
-                <div className="absolute bottom-10 left-10 w-24 h-24 bg-pink-400/20 rounded-full blur-2xl" />
-                
-                {/* Content */}
-                <div className="relative h-full p-8 lg:p-10 flex flex-col">
-                  <div className="flex-1">
-                    <div className="w-20 h-20 rounded-2xl bg-white/20 backdrop-blur-sm flex items-center justify-center mb-6 shadow-xl group-hover:scale-110 group-hover:rotate-3 transition-all duration-500">
-                      <feature.icon className="h-10 w-10 text-white" />
-                    </div>
-                    
-                    <h3 className="font-bold text-3xl lg:text-4xl text-white mb-4">
-                      {feature.title}
-                    </h3>
-                    <p className="text-white/90 text-lg leading-relaxed mb-2">
-                      {feature.description}
-                    </p>
-                    <p className="text-white/70 text-base">
+                {/* Text */}
+                <div>
+                  <h3 className="font-bold text-xl mb-2 group-hover:text-primary transition-colors">
+                    {feature.title}
+                  </h3>
+                  <p className="text-muted-foreground text-sm leading-relaxed mb-1">
+                    {feature.description}
+                  </p>
+                  {feature.size === 'large' && (
+                    <p className="text-muted-foreground/70 text-sm">
                       {feature.detail}
                     </p>
-                  </div>
-                  
-                  <div className="mt-auto pt-6 flex items-center justify-between">
-                    <span className="inline-flex items-center gap-2 px-4 py-2 rounded-full bg-white/20 backdrop-blur-sm text-white text-sm font-medium">
-                      <Sparkles className="h-4 w-4" />
-                      AI 驱动
-                    </span>
-                    <div className="w-12 h-12 rounded-xl bg-white/20 backdrop-blur-sm flex items-center justify-center group-hover:bg-white/30 transition-all duration-300">
-                      <ArrowRight className="h-6 w-6 text-white group-hover:translate-x-1 transition-transform" />
-                    </div>
-                  </div>
+                  )}
+                </div>
+                
+                {/* Arrow */}
+                <div className="absolute bottom-7 right-7 w-10 h-10 rounded-xl bg-muted/50 flex items-center justify-center opacity-0 group-hover:opacity-100 transition-all duration-300 group-hover:translate-x-1">
+                  <ArrowRight className="h-5 w-5 text-primary" />
                 </div>
               </div>
             </Link>
           ))}
-          
-          {/* Right Column */}
-          <div className="lg:col-span-3 space-y-6">
-            {features.filter(f => f.position === 'right-top' || f.position === 'right-bottom').map((feature) => (
-              <Link 
-                href={feature.href} 
-                key={feature.title}
-                className="group block"
-              >
-                <div className="relative overflow-hidden rounded-2xl bg-white border border-gray-100 shadow-sm hover:shadow-xl transition-all duration-500 hover:-translate-y-1 p-6">
-                  {/* Hover gradient */}
-                  <div className={`absolute inset-0 bg-gradient-to-br ${feature.gradient} opacity-0 group-hover:opacity-5 transition-opacity duration-500`} />
-                  
-                  <div className="relative flex items-start gap-4">
-                    <div className={`w-12 h-12 rounded-xl bg-gradient-to-br ${feature.gradient} flex items-center justify-center shadow-lg group-hover:scale-110 group-hover:rotate-6 transition-all duration-300 flex-shrink-0`}>
-                      <feature.icon className="h-6 w-6 text-white" />
-                    </div>
-                    <div className="flex-1 min-w-0">
-                      <h3 className="font-bold text-lg mb-1 group-hover:text-primary transition-colors">
-                        {feature.title}
-                      </h3>
-                      <p className="text-muted-foreground text-sm leading-relaxed">
-                        {feature.description}
-                      </p>
-                    </div>
-                  </div>
-                  
-                  <div className="absolute bottom-4 right-4 w-8 h-8 rounded-lg bg-gray-50 flex items-center justify-center opacity-0 group-hover:opacity-100 transition-all duration-300 group-hover:translate-x-0 translate-x-2">
-                    <ArrowRight className="h-4 w-4 text-primary" />
-                  </div>
-                </div>
-              </Link>
-            ))}
-          </div>
         </div>
       </section>
 
