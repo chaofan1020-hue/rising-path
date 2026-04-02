@@ -78,13 +78,13 @@ function CompanyLogo({ company, logoUrl }: { company: string; logoUrl?: string }
   // 如果有logo_url且图片加载成功
   if (logoUrl && !imgError) {
     return (
-      <div className="w-12 h-12 rounded-xl overflow-hidden bg-white border border-muted/50 flex-shrink-0 shadow-sm">
+      <div className="w-10 h-10 rounded-lg overflow-hidden bg-gray-50 border border-gray-100 flex-shrink-0">
         <Image
           src={logoUrl}
           alt={company}
-          width={48}
-          height={48}
-          className="w-full h-full object-contain p-1"
+          width={40}
+          height={40}
+          className="w-full h-full object-contain p-1.5"
           onError={() => setImgError(true)}
         />
       </div>
@@ -96,12 +96,12 @@ function CompanyLogo({ company, logoUrl }: { company: string; logoUrl?: string }
   
   if (!imgError) {
     return (
-      <div className="w-9 h-9 rounded-lg overflow-hidden bg-white border border-muted/50 flex-shrink-0 shadow-sm">
+      <div className="w-10 h-10 rounded-lg overflow-hidden bg-white border border-gray-100 flex-shrink-0">
         <Image
           src={clearbitUrl}
           alt={company}
-          width={36}
-          height={36}
+          width={40}
+          height={40}
           className="w-full h-full object-contain p-1"
           onError={() => setImgError(true)}
           unoptimized
@@ -112,8 +112,8 @@ function CompanyLogo({ company, logoUrl }: { company: string; logoUrl?: string }
   
   // 使用首字母占位符
   return (
-    <div className={`w-9 h-9 rounded-lg bg-gradient-to-br ${getCompanyGradient(company)} flex items-center justify-center flex-shrink-0 shadow-sm`}>
-      <span className="text-white font-bold text-sm">
+    <div className={`w-10 h-10 rounded-lg bg-gradient-to-br ${getCompanyGradient(company)} flex items-center justify-center flex-shrink-0`}>
+      <span className="text-white font-semibold text-sm">
         {getCompanyInitial(company)}
       </span>
     </div>
@@ -439,7 +439,7 @@ export default function JobsPage() {
         </div>
 
         {/* Results */}
-        <div className="space-y-2">
+        <div className="grid gap-3">
           {loading ? (
             <div className="text-center py-12 text-muted-foreground">加载中...</div>
           ) : filteredJobs.length === 0 ? (
@@ -449,95 +449,109 @@ export default function JobsPage() {
               </CardContent>
             </Card>
           ) : (
-            filteredJobs.map((job) => (
-              <Card key={job.id} className="hover:shadow-md transition-all duration-200 group">
-                <CardContent className="py-3 px-4">
-                  <div className="flex items-center gap-3">
+            filteredJobs.map((job) => {
+              const isActive = job.is_active !== false;
+              return (
+                <Link 
+                  key={job.id} 
+                  href={`/jobs/${job.id}`}
+                  className="group block"
+                >
+                  <div className={`
+                    relative flex items-center gap-4 p-3.5 rounded-xl
+                    bg-white border border-gray-100
+                    hover:border-primary/20 hover:shadow-lg hover:shadow-primary/5
+                    transition-all duration-300 cursor-pointer
+                    ${!isActive ? 'opacity-75' : ''}
+                  `}>
+                    {/* 左侧状态指示条 */}
+                    <div className={`
+                      absolute left-0 top-3 bottom-3 w-0.5 rounded-full
+                      ${isActive ? 'bg-gradient-to-b from-primary to-primary/50' : 'bg-gray-300'}
+                    `} />
+                    
                     {/* Logo */}
                     <CompanyLogo company={job.company} logoUrl={job.logo_url} />
                     
                     {/* 主要信息 */}
                     <div className="flex-1 min-w-0">
-                      <div className="flex items-center gap-2">
-                        <h3 className="font-semibold text-sm truncate group-hover:text-primary transition-colors">
+                      <div className="flex items-center gap-2 mb-0.5">
+                        <h3 className="font-semibold text-[13px] text-gray-900 group-hover:text-primary transition-colors truncate">
                           {job.title}
                         </h3>
-                        {job.is_active === false ? (
-                          <Badge variant="secondary" className="bg-gray-100 text-gray-500 text-[10px] px-1.5 py-0 h-4 shrink-0">
-                            不可投递
-                          </Badge>
-                        ) : (
-                          <Badge className="bg-green-600 text-[10px] px-1.5 py-0 h-4 shrink-0">
-                            可投递
-                          </Badge>
-                        )}
                       </div>
-                      <p className="text-xs text-muted-foreground">{job.company}</p>
+                      <p className="text-xs text-gray-500 truncate">{job.company}</p>
                     </div>
                     
                     {/* 标签组 */}
-                    <div className="hidden md:flex items-center gap-1.5">
-                      <Badge variant="outline" className="text-[11px] px-2 py-0.5 h-5 rounded-full border-gray-200" translate="no">
+                    <div className="hidden lg:flex items-center gap-2">
+                      <span className="inline-flex items-center px-2.5 py-1 rounded-full bg-gray-50 text-[11px] font-medium text-gray-600" translate="no">
                         {job.region}
-                      </Badge>
-                      <Badge variant="outline" className="text-[11px] px-2 py-0.5 h-5 rounded-full border-gray-200" translate="no">
+                      </span>
+                      <span className="inline-flex items-center px-2.5 py-1 rounded-full bg-gray-50 text-[11px] font-medium text-gray-600" translate="no">
                         {job.direction}
-                      </Badge>
-                      <Badge variant="outline" className="text-[11px] px-2 py-0.5 h-5 rounded-full border-gray-200" translate="no">
+                      </span>
+                      <span className="inline-flex items-center px-2.5 py-1 rounded-full bg-gray-50 text-[11px] font-medium text-gray-600" translate="no">
                         {job.audience}
-                      </Badge>
+                      </span>
                       {job.salary_range && (
-                        <Badge className="text-[11px] px-2 py-0.5 h-5 rounded-full bg-emerald-50 text-emerald-700 border border-emerald-200">
+                        <span className="inline-flex items-center px-2.5 py-1 rounded-full bg-emerald-50 text-[11px] font-medium text-emerald-600" translate="no">
                           {job.salary_range}
-                        </Badge>
+                        </span>
                       )}
                     </div>
                     
-                    {/* 操作按钮 */}
-                    <div className="flex items-center gap-2 shrink-0">
-                      <Button size="sm" variant="ghost" asChild className="h-7 px-2.5 text-xs">
-                        <Link href={`/jobs/${job.id}`}>
-                          查看
-                        </Link>
-                      </Button>
-                      {job.job_url && (
-                        <Button size="sm" variant="outline" asChild className="h-7 px-2.5 text-xs">
-                          <a href={job.job_url} target="_blank" rel="noopener noreferrer">
-                            <ExternalLink className="h-3 w-3 mr-1" />
-                            原链接
-                          </a>
-                        </Button>
+                    {/* 状态标签 */}
+                    <div className="flex items-center gap-3">
+                      {isActive ? (
+                        <span className="inline-flex items-center gap-1 px-2.5 py-1 rounded-full bg-green-50 text-[11px] font-medium text-green-600">
+                          <span className="w-1.5 h-1.5 rounded-full bg-green-500 animate-pulse" />
+                          可投递
+                        </span>
+                      ) : (
+                        <span className="inline-flex items-center px-2.5 py-1 rounded-full bg-gray-100 text-[11px] font-medium text-gray-400">
+                          已关闭
+                        </span>
                       )}
+                      
+                      {/* 箭头 */}
+                      <div className="w-8 h-8 rounded-full bg-gray-50 group-hover:bg-primary flex items-center justify-center transition-all duration-300">
+                        <svg className="w-4 h-4 text-gray-400 group-hover:text-white transition-colors" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5l7 7-7 7" />
+                        </svg>
+                      </div>
                     </div>
                   </div>
                   
                   {/* 移动端标签 */}
-                  <div className="flex md:hidden items-center gap-1.5 mt-2 flex-wrap">
-                    <Badge variant="outline" className="text-[10px] px-1.5 py-0 h-4 rounded-full" translate="no">
+                  <div className="lg:hidden flex items-center gap-2 mt-2 px-2">
+                    <span className="inline-flex items-center px-2 py-0.5 rounded-full bg-gray-50 text-[10px] text-gray-500" translate="no">
                       {job.region}
-                    </Badge>
-                    <Badge variant="outline" className="text-[10px] px-1.5 py-0 h-4 rounded-full" translate="no">
+                    </span>
+                    <span className="inline-flex items-center px-2 py-0.5 rounded-full bg-gray-50 text-[10px] text-gray-500" translate="no">
                       {job.direction}
-                    </Badge>
-                    <Badge variant="outline" className="text-[10px] px-1.5 py-0 h-4 rounded-full" translate="no">
+                    </span>
+                    <span className="inline-flex items-center px-2 py-0.5 rounded-full bg-gray-50 text-[10px] text-gray-500" translate="no">
                       {job.audience}
-                    </Badge>
+                    </span>
                     {job.salary_range && (
-                      <Badge className="text-[10px] px-1.5 py-0 h-4 rounded-full bg-emerald-50 text-emerald-700">
+                      <span className="inline-flex items-center px-2 py-0.5 rounded-full bg-emerald-50 text-[10px] text-emerald-600" translate="no">
                         {job.salary_range}
-                      </Badge>
+                      </span>
                     )}
                   </div>
-                </CardContent>
-              </Card>
-            ))
+                </Link>
+              );
+            })
           )}
         </div>
 
         {/* Results count */}
         {!loading && filteredJobs.length > 0 && (
-          <div className="mt-6 text-center text-sm text-muted-foreground">
-            共找到 {filteredJobs.length} 个岗位
+          <div className="mt-6 flex items-center justify-center gap-2 text-sm text-muted-foreground">
+            <div className="w-8 h-px bg-gray-200" />
+            <span>共 {filteredJobs.length} 个岗位</span>
+            <div className="w-8 h-px bg-gray-200" />
           </div>
         )}
       </main>
