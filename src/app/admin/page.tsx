@@ -423,17 +423,18 @@ export default function AdminPage() {
       return;
     }
 
-    console.log('Starting batch delete for jobs:', Array.from(selectedJobIds));
+    const idsArray = Array.from(selectedJobIds);
+    console.log('Starting batch delete for jobs:', idsArray);
     setBatchDeleting(true);
+    
+    const requestBody = JSON.stringify({ ids: idsArray });
+    console.log('Request body:', requestBody);
+    
     try {
-      const ids = Array.from(selectedJobIds);
-      const payload = { ids };
-      console.log('Sending delete request with payload:', JSON.stringify(payload));
-      
-      const response = await fetch('/api/jobs/batch?_=' + Date.now(), {
-        method: 'DELETE',
+      const response = await fetch('/api/jobs/batch', {
+        method: 'PUT',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(payload),
+        body: requestBody,
       });
       
       console.log('Response status:', response.status);

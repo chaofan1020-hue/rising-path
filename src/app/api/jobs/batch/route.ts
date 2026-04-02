@@ -95,6 +95,14 @@ export async function POST(request: NextRequest) {
 }
 
 export async function DELETE(request: NextRequest) {
+  return handleBatchDelete(request);
+}
+
+export async function PUT(request: NextRequest) {
+  return handleBatchDelete(request);
+}
+
+async function handleBatchDelete(request: NextRequest) {
   try {
     const client = getSupabaseClient();
     
