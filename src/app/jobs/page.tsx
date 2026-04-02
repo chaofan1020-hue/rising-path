@@ -172,11 +172,22 @@ export default function JobsPage() {
     }
   };
 
-  const filteredJobs = jobs.filter(
-    (job) =>
-      job.title.toLowerCase().includes(searchTerm.toLowerCase()) ||
-      job.company.toLowerCase().includes(searchTerm.toLowerCase())
-  );
+  const filteredJobs = jobs
+    .filter(
+      (job) =>
+        job.title.toLowerCase().includes(searchTerm.toLowerCase()) ||
+        job.company.toLowerCase().includes(searchTerm.toLowerCase())
+    )
+    .sort((a, b) => {
+      // 首先按投递状态排序：可投递排在前面
+      const aActive = a.is_active !== false;
+      const bActive = b.is_active !== false;
+      if (aActive !== bActive) {
+        return aActive ? -1 : 1;
+      }
+      // 然后按创建时间排序：最新排在前面
+      return new Date(b.created_at).getTime() - new Date(a.created_at).getTime();
+    });
 
   return (
     <div className="min-h-screen bg-background">
