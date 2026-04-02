@@ -160,6 +160,18 @@ export default function AdminPage() {
   // Search state
   const [jobSearch, setJobSearch] = useState('');
 
+  // Batch import state
+  const [batchImportOpen, setBatchImportOpen] = useState(false);
+  const [batchText, setBatchText] = useState('');
+  const [batchImporting, setBatchImporting] = useState(false);
+  const [batchResult, setBatchResult] = useState<{
+    success?: boolean;
+    created?: number;
+    total?: number;
+    invalidCount?: number;
+    invalidJobs?: { index: number; reason: string; data: Record<string, unknown> }[];
+  } | null>(null);
+
   useEffect(() => {
     fetchData();
   }, []);
@@ -287,6 +299,98 @@ export default function AdminPage() {
     } catch (error) {
       console.error('Failed to create job:', error);
     }
+  };
+
+  // Batch import jobs
+  const parseBatchText = (text: string) => {
+    const lines = text.trim().split('\n').filter(line => line.trim());
+    const jobs: Array<{
+      title: string;
+      company: string;
+      region: string;
+      direction: string;
+      audience: string;
+      salary_range?: string;
+      job_url?: string;
+      description?: string;
+    }> = [];
+
+    for (const line of lines) {
+      // 支持多种分隔符：| 或 Tab 或 ,
+      const parts = line.split(/[|\t,]/).map(p => p.trim()).filter(p => p);
+      
+      if (parts.length >= 5) {
+        jobs.push({
+          title: parts[0],
+          company: parts[1],
+          region: parts[2],
+          direction: parts[3],
+          audience: parts[4],
+          salary_range: parts[5] || '',
+          job_url: parts[6] || '',
+          description: parts[7] || '',
+        });
+      }
+    }
+
+    return jobs;
+  };
+
+  const handleBatchImport = async () => {
+    const jobsToImport = parseBatchText(batchText);
+    
+    if (jobsToImport.length === 0) {
+      setBatchResult({
+        success: false,
+        created: 0,
+        total: 0,
+        invalidCount: 1,
+        invalidJobs: [{ index: 0, reason: '无法解析任何有效岗位，请检查格式', data: {} }]
+      });
+      return;
+    }
+
+    setBatchImporting(true);
+    try {
+      const response = await fetch('/api/jobs/batch', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ jobs: jobsToImport }),
+      });
+      const data = await response.json();
+      
+      setBatchResult({
+        success: data.success,
+        created: data.created,
+        total: data.total,
+        invalidCount: data.invalidCount,
+        invalidJobs: data.invalidJobs
+      });
+
+      if (data.success && data.created > 0) {
+        // 刷新岗位列表
+        const jobsRes = await fetch('/api/jobs');
+        const jobsData = await jobsRes.json();
+        setJobs(jobsData.jobs || []);
+      }
+    } catch (error) {
+      console.error('Failed to batch import:', error);
+      setBatchResult({
+        success: false,
+        created: 0,
+        total: jobsToImport.length,
+        invalidCount: jobsToImport.length,
+        invalidJobs: [{ index: 0, reason: '导入失败，请稍后重试', data: {} }]
+      });
+    } finally {
+      setBatchImporting(false);
+    }
+  };
+
+  const resetBatchImport = () => {
+    setBatchText('');
+    setBatchResult(null);
+    setBatchImportOpen(false);
   };
 
   const handleUpdateJob = async () => {
@@ -601,19 +705,31 @@ export default function AdminPage() {
                       <CardTitle>岗位管理</CardTitle>
                       <CardDescription>添加、编辑和删除岗位信息</CardDescription>
                     </div>
-                    <Dialog open={jobDialogOpen} onOpenChange={(open) => {
-                      setJobDialogOpen(open);
-                      if (!open) {
-                        resetJobForm();
-                        setEditingJob(null);
-                      }
-                    }}>
-                      <DialogTrigger asChild>
-                        <Button>
-                          <Plus className="h-4 w-4 mr-2" />
-                          添加岗位
-                        </Button>
-                      </DialogTrigger>
+                    <div className="flex gap-2">
+                      <Button 
+                        variant="outline"
+                        onClick={() => {
+                          setBatchResult(null);
+                          setBatchText('');
+                          setBatchImportOpen(true);
+                        }}
+                      >
+                        <Upload className="h-4 w-4 mr-2" />
+                        批量导入
+                      </Button>
+                      <Dialog open={jobDialogOpen} onOpenChange={(open) => {
+                        setJobDialogOpen(open);
+                        if (!open) {
+                          resetJobForm();
+                          setEditingJob(null);
+                        }
+                      }}>
+                        <DialogTrigger asChild>
+                          <Button>
+                            <Plus className="h-4 w-4 mr-2" />
+                            添加岗位
+                          </Button>
+                        </DialogTrigger>
                       <DialogContent className="max-w-2xl">
                         <DialogHeader>
                           <DialogTitle>{editingJob ? '编辑岗位' : '添加新岗位'}</DialogTitle>
@@ -796,6 +912,7 @@ export default function AdminPage() {
                         </DialogFooter>
                       </DialogContent>
                     </Dialog>
+                    </div>
                   </div>
                 </CardHeader>
                 <CardContent>
@@ -1232,6 +1349,108 @@ export default function AdminPage() {
             <Button onClick={handleCreateConfig} disabled={!configForm.value.trim()}>
               添加
             </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      {/* Batch Import Dialog */}
+      <Dialog open={batchImportOpen} onOpenChange={setBatchImportOpen}>
+        <DialogContent className="max-w-3xl max-h-[90vh] overflow-y-auto">
+          <DialogHeader>
+            <DialogTitle>批量导入岗位</DialogTitle>
+            <DialogDescription>
+              每行一个岗位，字段用 | 或 Tab 或逗号分隔
+            </DialogDescription>
+          </DialogHeader>
+          
+          <div className="space-y-4 py-4">
+            {/* Format hint */}
+            <div className="bg-muted/50 rounded-lg p-4 text-sm space-y-2">
+              <p className="font-medium">格式说明：</p>
+              <code className="block bg-background p-2 rounded text-xs overflow-x-auto">
+                岗位名称 | 公司名称 | 地区 | 方向 | 受众 | 薪资范围 | JD链接 | 描述
+              </code>
+              <p className="text-muted-foreground">前5项为必填，后3项可选</p>
+              <div className="border-t pt-2 mt-2">
+                <p className="font-medium mb-1">示例：</p>
+                <code className="block bg-background p-2 rounded text-xs overflow-x-auto">
+                  Software Engineer | Google | 美国 | SDE | 应届生 | 15-25万 | https://careers.google.com/xxx
+                </code>
+              </div>
+            </div>
+
+            {/* Input area */}
+            <div>
+              <Label>岗位数据</Label>
+              <Textarea
+                value={batchText}
+                onChange={(e) => setBatchText(e.target.value)}
+                placeholder="粘贴岗位数据，每行一个岗位..."
+                className="min-h-[200px] font-mono text-sm"
+                disabled={batchImporting}
+              />
+            </div>
+
+            {/* Result */}
+            {batchResult && (
+              <div className={`rounded-lg p-4 ${batchResult.success ? 'bg-green-50 border border-green-200' : 'bg-red-50 border border-red-200'}`}>
+                <div className="flex items-center gap-2 mb-2">
+                  {batchResult.success ? (
+                    <CheckCircle className="h-5 w-5 text-green-600" />
+                  ) : (
+                    <XCircle className="h-5 w-5 text-red-600" />
+                  )}
+                  <span className={`font-medium ${batchResult.success ? 'text-green-800' : 'text-red-800'}`}>
+                    导入{batchResult.success ? '成功' : '失败'}
+                  </span>
+                </div>
+                <div className={`text-sm ${batchResult.success ? 'text-green-700' : 'text-red-700'}`}>
+                  <p>成功导入：{batchResult.created} / {batchResult.total} 条</p>
+                  {batchResult.invalidCount && batchResult.invalidCount > 0 && (
+                    <p>失败：{batchResult.invalidCount} 条</p>
+                  )}
+                </div>
+                {batchResult.invalidJobs && batchResult.invalidJobs.length > 0 && (
+                  <div className="mt-3 text-sm">
+                    <p className="font-medium text-red-800 mb-1">失败详情：</p>
+                    <div className="space-y-1 max-h-[150px] overflow-y-auto">
+                      {batchResult.invalidJobs.map((job, idx) => (
+                        <div key={idx} className="bg-white/50 p-2 rounded text-xs">
+                          <span className="text-red-600">第{job.index}行：</span>
+                          <span className="text-red-500">{job.reason}</span>
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+                )}
+              </div>
+            )}
+          </div>
+
+          <DialogFooter>
+            <Button variant="outline" onClick={resetBatchImport} disabled={batchImporting}>
+              {batchResult?.success ? '关闭' : '取消'}
+            </Button>
+            {!batchResult?.success && (
+              <Button onClick={handleBatchImport} disabled={batchImporting || !batchText.trim()}>
+                {batchImporting ? (
+                  <>
+                    <Loader2 className="h-4 w-4 mr-2 animate-spin" />
+                    导入中...
+                  </>
+                ) : (
+                  <>
+                    <Upload className="h-4 w-4 mr-2" />
+                    开始导入
+                  </>
+                )}
+              </Button>
+            )}
+            {batchResult?.success && batchResult.created && batchResult.created > 0 && (
+              <Button onClick={resetBatchImport}>
+                继续导入
+              </Button>
+            )}
           </DialogFooter>
         </DialogContent>
       </Dialog>
