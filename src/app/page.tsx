@@ -188,7 +188,7 @@ export default function Home() {
         </div>
       </section>
 
-      {/* Features Section - Bento Grid Style */}
+      {/* Features Section - Premium Cards */}
       <section className="container mx-auto px-6 py-20">
         <div className="text-center mb-16">
           <div className="inline-flex items-center gap-2 px-3 py-1.5 rounded-full bg-muted/50 border border-muted/50 mb-6">
@@ -204,58 +204,74 @@ export default function Home() {
           </p>
         </div>
         
-        {/* Bento Grid */}
-        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-5 auto-rows-[200px]">
+        {/* Premium Feature Grid */}
+        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
           {features.map((feature) => (
             <Link 
               href={feature.href} 
               key={feature.title}
-              className={`group relative overflow-hidden rounded-3xl transition-all duration-500 hover:-translate-y-1 ${
-                feature.size === 'large' ? 'md:col-span-2 lg:col-span-1 lg:row-span-2' : ''
-              }`}
+              className={`group relative ${feature.size === 'large' ? 'md:col-span-2 lg:col-span-1 lg:row-span-2' : ''}`}
             >
-              {/* Background */}
-              <div className="absolute inset-0 bg-gradient-to-br from-muted/30 to-muted/10" />
-              
-              {/* Pattern */}
-              <div className="absolute inset-0 opacity-30">
-                {feature.pattern === 'dots' && (
-                  <div className="w-full h-full bg-[radial-gradient(circle,_hsl(var(--muted-foreground))_1px,_transparent_1px)] bg-[size:16px_16px]" />
-                )}
-                {feature.pattern === 'grid' && (
-                  <div className="w-full h-full bg-[linear-gradient(to_right,_hsl(var(--muted-foreground))_1px,_transparent_1px),linear-gradient(to_bottom,_hsl(var(--muted-foreground))_1px,_transparent_1px)] bg-[size:24px_24px]" />
-                )}
-              </div>
-              
-              {/* Gradient overlay on hover */}
-              <div className={`absolute inset-0 bg-gradient-to-br ${feature.gradient} opacity-0 group-hover:opacity-5 transition-opacity duration-500`} />
-              
-              {/* Content */}
-              <div className="relative h-full p-7 flex flex-col">
-                {/* Icon */}
-                <div className={`w-14 h-14 rounded-2xl bg-gradient-to-br ${feature.gradient} flex items-center justify-center mb-auto shadow-xl group-hover:scale-110 group-hover:rotate-3 transition-all duration-500`}>
-                  <feature.icon className="h-7 w-7 text-white" />
+              <div className={`
+                relative overflow-hidden rounded-3xl h-full
+                bg-white/80 backdrop-blur-sm
+                border border-gray-200/50
+                shadow-xl shadow-gray-200/30
+                hover:shadow-2xl hover:shadow-gray-300/40
+                transition-all duration-500 ease-out
+                hover:-translate-y-2
+                ${feature.size === 'large' ? 'min-h-[380px]' : 'min-h-[220px]'}
+              `}>
+                {/* Animated gradient border on hover */}
+                <div className={`absolute inset-0 bg-gradient-to-br ${feature.gradient} opacity-0 group-hover:opacity-100 transition-opacity duration-500`} style={{padding: '2px'}}>
+                  <div className="absolute inset-[2px] bg-white rounded-[22px]" />
                 </div>
                 
-                {/* Text */}
-                <div>
-                  <h3 className="font-bold text-xl mb-2 group-hover:text-primary transition-colors">
-                    {feature.title}
-                  </h3>
-                  <p className="text-muted-foreground text-sm leading-relaxed mb-1">
-                    {feature.description}
-                  </p>
-                  {feature.size === 'large' && (
-                    <p className="text-muted-foreground/70 text-sm">
-                      {feature.detail}
+                {/* Inner content */}
+                <div className="relative h-full p-8 flex flex-col">
+                  {/* Icon with glow effect */}
+                  <div className="relative mb-6">
+                    <div className={`absolute inset-0 bg-gradient-to-br ${feature.gradient} blur-2xl opacity-0 group-hover:opacity-40 transition-opacity duration-500 rounded-2xl`} />
+                    <div className={`
+                      relative w-16 h-16 rounded-2xl 
+                      bg-gradient-to-br ${feature.gradient}
+                      flex items-center justify-center 
+                      shadow-lg group-hover:shadow-xl
+                      group-hover:scale-110 group-hover:rotate-6
+                      transition-all duration-500 ease-out
+                    `}>
+                      <feature.icon className="h-8 w-8 text-white" />
+                    </div>
+                  </div>
+                  
+                  {/* Text content */}
+                  <div className="flex-1">
+                    <h3 className="font-bold text-xl mb-3 group-hover:bg-gradient-to-r group-hover:bg-clip-text group-hover:text-transparent group-hover:from-gray-900 group-hover:to-gray-600 transition-all duration-300">
+                      {feature.title}
+                    </h3>
+                    <p className="text-gray-500 text-sm leading-relaxed mb-2">
+                      {feature.description}
                     </p>
-                  )}
+                    {feature.size === 'large' && (
+                      <p className="text-gray-400 text-sm">
+                        {feature.detail}
+                      </p>
+                    )}
+                  </div>
+                  
+                  {/* Arrow indicator */}
+                  <div className="flex items-center justify-between mt-4 pt-4 border-t border-gray-100">
+                    <span className="text-xs font-medium text-gray-400 uppercase tracking-wider group-hover:text-primary transition-colors">
+                      立即体验
+                    </span>
+                    <div className="w-8 h-8 rounded-full bg-gray-50 group-hover:bg-primary flex items-center justify-center transition-all duration-300">
+                      <ArrowRight className="h-4 w-4 text-gray-400 group-hover:text-white group-hover:translate-x-0.5 transition-all duration-300" />
+                    </div>
+                  </div>
                 </div>
                 
-                {/* Arrow */}
-                <div className="absolute bottom-7 right-7 w-10 h-10 rounded-xl bg-muted/50 flex items-center justify-center opacity-0 group-hover:opacity-100 transition-all duration-300 group-hover:translate-x-1">
-                  <ArrowRight className="h-5 w-5 text-primary" />
-                </div>
+                {/* Decorative corner element */}
+                <div className={`absolute top-0 right-0 w-32 h-32 bg-gradient-to-br ${feature.gradient} opacity-5 rounded-bl-[100px] group-hover:opacity-10 transition-opacity duration-500`} />
               </div>
             </Link>
           ))}
