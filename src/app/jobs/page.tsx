@@ -96,13 +96,13 @@ function CompanyLogo({ company, logoUrl }: { company: string; logoUrl?: string }
   
   if (!imgError) {
     return (
-      <div className="w-12 h-12 rounded-xl overflow-hidden bg-white border border-muted/50 flex-shrink-0 shadow-sm">
+      <div className="w-9 h-9 rounded-lg overflow-hidden bg-white border border-muted/50 flex-shrink-0 shadow-sm">
         <Image
           src={clearbitUrl}
           alt={company}
-          width={48}
-          height={48}
-          className="w-full h-full object-contain p-1.5"
+          width={36}
+          height={36}
+          className="w-full h-full object-contain p-1"
           onError={() => setImgError(true)}
           unoptimized
         />
@@ -112,8 +112,8 @@ function CompanyLogo({ company, logoUrl }: { company: string; logoUrl?: string }
   
   // 使用首字母占位符
   return (
-    <div className={`w-12 h-12 rounded-xl bg-gradient-to-br ${getCompanyGradient(company)} flex items-center justify-center flex-shrink-0 shadow-sm`}>
-      <span className="text-white font-bold text-lg">
+    <div className={`w-9 h-9 rounded-lg bg-gradient-to-br ${getCompanyGradient(company)} flex items-center justify-center flex-shrink-0 shadow-sm`}>
+      <span className="text-white font-bold text-sm">
         {getCompanyInitial(company)}
       </span>
     </div>
@@ -439,7 +439,7 @@ export default function JobsPage() {
         </div>
 
         {/* Results */}
-        <div className="space-y-4">
+        <div className="space-y-2">
           {loading ? (
             <div className="text-center py-12 text-muted-foreground">加载中...</div>
           ) : filteredJobs.length === 0 ? (
@@ -450,68 +450,83 @@ export default function JobsPage() {
             </Card>
           ) : (
             filteredJobs.map((job) => (
-              <Card key={job.id} className="hover:shadow-lg transition-all duration-300 hover:-translate-y-0.5">
-                <CardContent className="pt-6">
-                  <div className="flex flex-col md:flex-row md:items-start justify-between gap-4">
-                    <div className="flex-1">
-                      <div className="flex items-start gap-4">
-                        <CompanyLogo company={job.company} logoUrl={job.logo_url} />
-                        <div className="flex-1 min-w-0">
-                          <h3 className="font-semibold text-lg hover:text-primary cursor-pointer transition-colors">
-                            {job.title}
-                          </h3>
-                          <p className="text-muted-foreground">{job.company}</p>
-                        </div>
-                      </div>
-                      <div className="flex flex-wrap gap-2 mt-4">
-                        <Badge variant="secondary" className="rounded-md" translate="no">
-                          <MapPin className="h-3 w-3 mr-1" />
-                          {job.region}
-                        </Badge>
-                        <Badge variant="secondary" className="rounded-md" translate="no">
-                          <Briefcase className="h-3 w-3 mr-1" />
-                          {job.direction}
-                        </Badge>
-                        <Badge variant="secondary" className="rounded-md" translate="no">
-                          <Users className="h-3 w-3 mr-1" />
-                          {job.audience}
-                        </Badge>
-                        {job.salary_range && (
-                          <Badge variant="outline" className="text-green-600 border-green-600 rounded-md">
-                            {job.salary_range}
-                          </Badge>
-                        )}
+              <Card key={job.id} className="hover:shadow-md transition-all duration-200 group">
+                <CardContent className="py-3 px-4">
+                  <div className="flex items-center gap-3">
+                    {/* Logo */}
+                    <CompanyLogo company={job.company} logoUrl={job.logo_url} />
+                    
+                    {/* 主要信息 */}
+                    <div className="flex-1 min-w-0">
+                      <div className="flex items-center gap-2">
+                        <h3 className="font-semibold text-sm truncate group-hover:text-primary transition-colors">
+                          {job.title}
+                        </h3>
                         {job.is_active === false ? (
-                          <Badge variant="secondary" className="bg-gray-100 text-gray-600 rounded-md">
+                          <Badge variant="secondary" className="bg-gray-100 text-gray-500 text-[10px] px-1.5 py-0 h-4 shrink-0">
                             不可投递
                           </Badge>
                         ) : (
-                          <Badge variant="default" className="bg-green-600 rounded-md">
+                          <Badge className="bg-green-600 text-[10px] px-1.5 py-0 h-4 shrink-0">
                             可投递
                           </Badge>
                         )}
                       </div>
-                      {job.description && (
-                        <p className="text-sm text-muted-foreground mt-3 line-clamp-2">
-                          {job.description}
-                        </p>
+                      <p className="text-xs text-muted-foreground">{job.company}</p>
+                    </div>
+                    
+                    {/* 标签组 */}
+                    <div className="hidden md:flex items-center gap-1.5">
+                      <Badge variant="outline" className="text-[11px] px-2 py-0.5 h-5 rounded-full border-gray-200" translate="no">
+                        {job.region}
+                      </Badge>
+                      <Badge variant="outline" className="text-[11px] px-2 py-0.5 h-5 rounded-full border-gray-200" translate="no">
+                        {job.direction}
+                      </Badge>
+                      <Badge variant="outline" className="text-[11px] px-2 py-0.5 h-5 rounded-full border-gray-200" translate="no">
+                        {job.audience}
+                      </Badge>
+                      {job.salary_range && (
+                        <Badge className="text-[11px] px-2 py-0.5 h-5 rounded-full bg-emerald-50 text-emerald-700 border border-emerald-200">
+                          {job.salary_range}
+                        </Badge>
                       )}
                     </div>
-                    <div className="flex md:flex-col gap-2">
-                      <Button size="sm" asChild className="rounded-lg">
+                    
+                    {/* 操作按钮 */}
+                    <div className="flex items-center gap-2 shrink-0">
+                      <Button size="sm" variant="ghost" asChild className="h-7 px-2.5 text-xs">
                         <Link href={`/jobs/${job.id}`}>
-                          查看详情
+                          查看
                         </Link>
                       </Button>
                       {job.job_url && (
-                        <Button size="sm" variant="outline" asChild className="rounded-lg">
+                        <Button size="sm" variant="outline" asChild className="h-7 px-2.5 text-xs">
                           <a href={job.job_url} target="_blank" rel="noopener noreferrer">
-                            <ExternalLink className="h-4 w-4 mr-1" />
+                            <ExternalLink className="h-3 w-3 mr-1" />
                             原链接
                           </a>
                         </Button>
                       )}
                     </div>
+                  </div>
+                  
+                  {/* 移动端标签 */}
+                  <div className="flex md:hidden items-center gap-1.5 mt-2 flex-wrap">
+                    <Badge variant="outline" className="text-[10px] px-1.5 py-0 h-4 rounded-full" translate="no">
+                      {job.region}
+                    </Badge>
+                    <Badge variant="outline" className="text-[10px] px-1.5 py-0 h-4 rounded-full" translate="no">
+                      {job.direction}
+                    </Badge>
+                    <Badge variant="outline" className="text-[10px] px-1.5 py-0 h-4 rounded-full" translate="no">
+                      {job.audience}
+                    </Badge>
+                    {job.salary_range && (
+                      <Badge className="text-[10px] px-1.5 py-0 h-4 rounded-full bg-emerald-50 text-emerald-700">
+                        {job.salary_range}
+                      </Badge>
+                    )}
                   </div>
                 </CardContent>
               </Card>
