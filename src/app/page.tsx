@@ -1,5 +1,6 @@
 import Link from 'next/link';
 import { Button } from '@/components/ui/button';
+import { Logo } from '@/components/logo';
 import {
   Briefcase,
   FileText,
@@ -105,10 +106,7 @@ export default function Home() {
       <nav className="border-b/40 bg-background/80 backdrop-blur-xl sticky top-0 z-50">
         <div className="container mx-auto px-6 h-16 flex items-center justify-between">
           <Link href="/" className="flex items-center gap-3 group">
-            <div className="w-9 h-9 rounded-xl bg-gradient-to-br from-primary to-primary/70 flex items-center justify-center shadow-lg shadow-primary/20">
-              <Briefcase className="h-5 w-5 text-primary-foreground" />
-            </div>
-            <span className="font-bold text-xl">PathUp</span>
+            <Logo size="sm" />
           </Link>
           <div className="flex items-center gap-2">
             <Link href="/jobs">
@@ -349,10 +347,7 @@ export default function Home() {
         <div className="container mx-auto px-6 py-10">
           <div className="flex flex-col md:flex-row items-center justify-between gap-4">
             <Link href="/" className="flex items-center gap-2.5">
-              <div className="w-8 h-8 rounded-lg bg-gradient-to-br from-primary to-primary/70 flex items-center justify-center shadow-md shadow-primary/10">
-                <Briefcase className="h-4 w-4 text-primary-foreground" />
-              </div>
-              <span className="font-semibold text-lg">PathUp</span>
+              <Logo size="sm" />
             </Link>
             <p className="text-sm text-muted-foreground">
               © 2024 PathUp. 专为海外留学生打造

@@ -6,8 +6,9 @@ import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
-import { Briefcase, Key, Loader2 } from 'lucide-react';
+import { Key, Loader2 } from 'lucide-react';
 import Link from 'next/link';
+import { Logo } from '@/components/logo';
 
 export default function LoginPage() {
   const router = useRouter();
@@ -54,8 +55,7 @@ export default function LoginPage() {
         {/* Logo */}
         <div className="text-center mb-8">
           <Link href="/" className="inline-flex items-center gap-2 mb-4">
-            <Briefcase className="h-10 w-10 text-primary" />
-            <span className="font-bold text-3xl">PathUp</span>
+            <Logo size="lg" />
           </Link>
           <p className="text-muted-foreground">海外留学生求职平台</p>
         </div>
