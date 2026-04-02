@@ -223,7 +223,7 @@ export default function JobsPage() {
                 <SelectTrigger className="w-full md:w-40">
                   <SelectValue placeholder="地区" />
                 </SelectTrigger>
-                <SelectContent>
+                <SelectContent translate="no">
                   <SelectItem value="全部">全部</SelectItem>
                   {configs.region?.map((config) => (
                     <SelectItem key={config.id} value={config.config_value}>
@@ -236,7 +236,7 @@ export default function JobsPage() {
                 <SelectTrigger className="w-full md:w-40">
                   <SelectValue placeholder="方向" />
                 </SelectTrigger>
-                <SelectContent>
+                <SelectContent translate="no">
                   <SelectItem value="全部">全部</SelectItem>
                   {configs.direction?.map((config) => (
                     <SelectItem key={config.id} value={config.config_value}>
@@ -249,7 +249,7 @@ export default function JobsPage() {
                 <SelectTrigger className="w-full md:w-40">
                   <SelectValue placeholder="受众" />
                 </SelectTrigger>
-                <SelectContent>
+                <SelectContent translate="no">
                   <SelectItem value="全部">全部</SelectItem>
                   {configs.audience?.map((config) => (
                     <SelectItem key={config.id} value={config.config_value}>
@@ -288,15 +288,15 @@ export default function JobsPage() {
                         </div>
                       </div>
                       <div className="flex flex-wrap gap-2 mt-4">
-                        <Badge variant="secondary" className="rounded-md">
+                        <Badge variant="secondary" className="rounded-md" translate="no">
                           <MapPin className="h-3 w-3 mr-1" />
                           {job.region}
                         </Badge>
-                        <Badge variant="secondary" className="rounded-md">
+                        <Badge variant="secondary" className="rounded-md" translate="no">
                           <Briefcase className="h-3 w-3 mr-1" />
                           {job.direction}
                         </Badge>
-                        <Badge variant="secondary" className="rounded-md">
+                        <Badge variant="secondary" className="rounded-md" translate="no">
                           <Users className="h-3 w-3 mr-1" />
                           {job.audience}
                         </Badge>

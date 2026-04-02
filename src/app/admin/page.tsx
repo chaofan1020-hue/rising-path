@@ -1030,7 +1030,7 @@ export default function AdminPage() {
                     <div className="space-y-2">
                       {configs.region?.map((config) => (
                         <div key={config.id} className="flex items-center justify-between p-2 rounded-lg bg-muted/50">
-                          <span className="text-sm">{config.config_value}</span>
+                          <span className="text-sm" translate="no">{config.config_value}</span>
                           <Button
                             size="sm"
                             variant="ghost"
@@ -1071,7 +1071,7 @@ export default function AdminPage() {
                     <div className="space-y-2">
                       {configs.direction?.map((config) => (
                         <div key={config.id} className="flex items-center justify-between p-2 rounded-lg bg-muted/50">
-                          <span className="text-sm">{config.config_value}</span>
+                          <span className="text-sm" translate="no">{config.config_value}</span>
                           <Button
                             size="sm"
                             variant="ghost"
@@ -1112,7 +1112,7 @@ export default function AdminPage() {
                     <div className="space-y-2">
                       {configs.audience?.map((config) => (
                         <div key={config.id} className="flex items-center justify-between p-2 rounded-lg bg-muted/50">
-                          <span className="text-sm">{config.config_value}</span>
+                          <span className="text-sm" translate="no">{config.config_value}</span>
                           <Button
                             size="sm"
                             variant="ghost"
@@ -1220,6 +1220,8 @@ export default function AdminPage() {
                 value={configForm.value}
                 onChange={(e) => setConfigForm({ ...configForm, value: e.target.value })}
                 placeholder={`输入${configForm.type === 'region' ? '地区' : configForm.type === 'direction' ? '方向' : '受众'}名称`}
+                translate="no"
+                autoComplete="off"
               />
             </div>
           </div>
