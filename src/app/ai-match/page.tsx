@@ -33,6 +33,7 @@ import {
   Wand2,
 } from 'lucide-react';
 import Link from 'next/link';
+import { AuthGuard } from '@/components/auth-guard';
 
 interface Resume {
   id: number;
@@ -247,7 +248,8 @@ export default function AIMatchPage() {
   };
 
   return (
-    <div className="min-h-screen bg-background">
+    <AuthGuard>
+      <div className="min-h-screen bg-background">
       {/* Header */}
       <header className="border-b sticky top-0 bg-background/95 backdrop-blur z-50">
         <div className="container mx-auto px-4 h-16 flex items-center justify-between">
@@ -481,6 +483,7 @@ export default function AIMatchPage() {
           </Card>
         )}
       </main>
-    </div>
+      </div>
+    </AuthGuard>
   );
 }
