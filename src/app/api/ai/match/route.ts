@@ -5,7 +5,7 @@ import { LLMClient, Config, HeaderUtils } from 'coze-coding-dev-sdk';
 export async function POST(request: NextRequest) {
   try {
     const client = getSupabaseClient();
-    const { resumeId } = await request.json();
+    const { resumeId, region } = await request.json();
 
     // Get resume info
     const { data: resume, error: resumeError } = await client
@@ -18,14 +18,24 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ error: '简历不存在' }, { status: 404 });
     }
 
-    // Get jobs
-    const { data: jobs, error: jobsError } = await client
+    // Get jobs with optional region filter
+    let query = client
       .from('jobs')
       .select('*')
       .limit(20);
+    
+    if (region) {
+      query = query.eq('region', region);
+    }
+
+    const { data: jobs, error: jobsError } = await query;
 
     if (jobsError) {
       throw new Error(`查询岗位失败: ${jobsError.message}`);
+    }
+
+    if (!jobs || jobs.length === 0) {
+      return NextResponse.json({ matches: [], message: region ? `未找到${region}地区的岗位` : '暂无可匹配的岗位' });
     }
 
     // AI matching

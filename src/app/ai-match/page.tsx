@@ -5,7 +5,6 @@ import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
 import { Progress } from '@/components/ui/progress';
-import { Textarea } from '@/components/ui/textarea';
 import {
   Select,
   SelectContent,
@@ -20,9 +19,9 @@ import {
   CheckCircle, 
   ArrowRight,
   Briefcase,
-  FileText,
   Sparkles,
   TrendingUp,
+  MapPin,
 } from 'lucide-react';
 import Link from 'next/link';
 
@@ -33,6 +32,14 @@ interface Resume {
     name?: string;
     skills?: string[];
   };
+}
+
+interface JobConfig {
+  id: number;
+  config_type: string;
+  config_value: string;
+  sort_order: number;
+  is_active: boolean;
 }
 
 interface MatchResult {
@@ -47,12 +54,15 @@ interface MatchResult {
 export default function AIMatchPage() {
   const [resumes, setResumes] = useState<Resume[]>([]);
   const [selectedResumeId, setSelectedResumeId] = useState<string>('');
+  const [selectedRegion, setSelectedRegion] = useState<string>('全部');
+  const [regions, setRegions] = useState<JobConfig[]>([]);
   const [matching, setMatching] = useState(false);
   const [matchProgress, setMatchProgress] = useState(0);
   const [matchResults, setMatchResults] = useState<MatchResult[]>([]);
 
   useEffect(() => {
     fetchResumes();
+    fetchConfigs();
   }, []);
 
   const fetchResumes = async () => {
@@ -62,6 +72,16 @@ export default function AIMatchPage() {
       setResumes(data.resumes || []);
     } catch (error) {
       console.error('Failed to fetch resumes:', error);
+    }
+  };
+
+  const fetchConfigs = async () => {
+    try {
+      const response = await fetch('/api/configs');
+      const data = await response.json();
+      setRegions(data.configs?.region || []);
+    } catch (error) {
+      console.error('Failed to fetch configs:', error);
     }
   };
 
@@ -81,7 +101,10 @@ export default function AIMatchPage() {
       const response = await fetch('/api/ai/match', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ resumeId: selectedResumeId }),
+        body: JSON.stringify({ 
+          resumeId: selectedResumeId,
+          region: selectedRegion !== '全部' ? selectedRegion : undefined,
+        }),
       });
 
       clearInterval(progressInterval);
@@ -158,6 +181,7 @@ export default function AIMatchPage() {
           <CardContent>
             <div className="flex flex-col md:flex-row gap-4">
               <div className="flex-1">
+                <label className="text-sm font-medium text-muted-foreground mb-1.5 block">选择简历</label>
                 <Select value={selectedResumeId} onValueChange={setSelectedResumeId}>
                   <SelectTrigger>
                     <SelectValue placeholder="选择简历" />
@@ -172,23 +196,44 @@ export default function AIMatchPage() {
                   </SelectContent>
                 </Select>
               </div>
-              <Button 
-                onClick={handleMatch} 
-                disabled={!selectedResumeId || matching}
-                className="bg-gradient-to-r from-purple-600 to-blue-600 hover:from-purple-700 hover:to-blue-700"
-              >
-                {matching ? (
-                  <>
-                    <Loader2 className="mr-2 h-4 w-4 animate-spin" />
-                    匹配中...
-                  </>
-                ) : (
-                  <>
-                    <Sparkles className="mr-2 h-4 w-4" />
-                    开始AI匹配
-                  </>
-                )}
-              </Button>
+              <div className="w-full md:w-48">
+                <label className="text-sm font-medium text-muted-foreground mb-1.5 block">目标地区</label>
+                <Select value={selectedRegion} onValueChange={setSelectedRegion}>
+                  <SelectTrigger>
+                    <div className="flex items-center gap-2">
+                      <MapPin className="h-4 w-4 text-muted-foreground" />
+                      <SelectValue placeholder="全部地区" />
+                    </div>
+                  </SelectTrigger>
+                  <SelectContent translate="no">
+                    <SelectItem value="全部">全部地区</SelectItem>
+                    {regions.map((region) => (
+                      <SelectItem key={region.id} value={region.config_value}>
+                        {region.config_value}
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+              </div>
+              <div className="flex items-end">
+                <Button 
+                  onClick={handleMatch} 
+                  disabled={!selectedResumeId || matching}
+                  className="bg-gradient-to-r from-purple-600 to-blue-600 hover:from-purple-700 hover:to-blue-700 w-full md:w-auto"
+                >
+                  {matching ? (
+                    <>
+                      <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                      匹配中...
+                    </>
+                  ) : (
+                    <>
+                      <Sparkles className="mr-2 h-4 w-4" />
+                      开始AI匹配
+                    </>
+                  )}
+                </Button>
+              </div>
             </div>
 
             {matching && (
