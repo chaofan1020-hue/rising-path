@@ -2,7 +2,7 @@
 
 import { useState, useEffect } from 'react';
 import { Button } from '@/components/ui/button';
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
+import { Card, CardContent } from '@/components/ui/card';
 import { Input } from '@/components/ui/input';
 import { Badge } from '@/components/ui/badge';
 import {
@@ -12,8 +12,9 @@ import {
   SelectTrigger,
   SelectValue,
 } from '@/components/ui/select';
-import { Search, MapPin, Briefcase, Users, ExternalLink, Bookmark, Building } from 'lucide-react';
+import { Search, MapPin, Briefcase, Users, ExternalLink, Building } from 'lucide-react';
 import Link from 'next/link';
+import Image from 'next/image';
 
 interface Job {
   id: number;
@@ -26,12 +27,96 @@ interface Job {
   requirements: string;
   salary_range: string;
   job_url: string;
+  logo_url?: string;
   created_at: string;
 }
 
 const regions = ['全部', '北美', '欧洲', '亚太', '澳洲', '中东'];
 const directions = ['全部', '技术', '产品', '设计', '运营', '市场', '金融', '咨询'];
 const audiences = ['全部', '应届生', '社招', '实习', '校招'];
+
+// 根据公司名生成首字母占位符的颜色
+function getCompanyGradient(company: string): string {
+  const gradients = [
+    'from-blue-500 to-cyan-500',
+    'from-purple-500 to-pink-500',
+    'from-emerald-500 to-teal-500',
+    'from-orange-500 to-amber-500',
+    'from-rose-500 to-red-500',
+    'from-indigo-500 to-violet-500',
+    'from-cyan-500 to-blue-500',
+    'from-pink-500 to-rose-500',
+  ];
+  
+  let hash = 0;
+  for (let i = 0; i < company.length; i++) {
+    hash = company.charCodeAt(i) + ((hash << 5) - hash);
+  }
+  return gradients[Math.abs(hash) % gradients.length];
+}
+
+// 获取公司首字母
+function getCompanyInitial(company: string): string {
+  // 处理中文公司名
+  if (/[\u4e00-\u9fa5]/.test(company)) {
+    return company.charAt(0);
+  }
+  // 处理英文公司名，取首字母大写
+  const words = company.split(/[\s-]+/);
+  if (words.length >= 2) {
+    return (words[0].charAt(0) + words[1].charAt(0)).toUpperCase();
+  }
+  return company.charAt(0).toUpperCase();
+}
+
+// 公司Logo组件
+function CompanyLogo({ company, logoUrl }: { company: string; logoUrl?: string }) {
+  const [imgError, setImgError] = useState(false);
+  
+  // 如果有logo_url且图片加载成功
+  if (logoUrl && !imgError) {
+    return (
+      <div className="w-12 h-12 rounded-xl overflow-hidden bg-white border border-muted/50 flex-shrink-0 shadow-sm">
+        <Image
+          src={logoUrl}
+          alt={company}
+          width={48}
+          height={48}
+          className="w-full h-full object-contain p-1"
+          onError={() => setImgError(true)}
+        />
+      </div>
+    );
+  }
+  
+  // 尝试使用 Clearbit Logo API
+  const clearbitUrl = `https://logo.clearbit.com/${company.toLowerCase().replace(/\s+/g, '')}.com?size=96`;
+  
+  if (!imgError) {
+    return (
+      <div className="w-12 h-12 rounded-xl overflow-hidden bg-white border border-muted/50 flex-shrink-0 shadow-sm">
+        <Image
+          src={clearbitUrl}
+          alt={company}
+          width={48}
+          height={48}
+          className="w-full h-full object-contain p-1.5"
+          onError={() => setImgError(true)}
+          unoptimized
+        />
+      </div>
+    );
+  }
+  
+  // 使用首字母占位符
+  return (
+    <div className={`w-12 h-12 rounded-xl bg-gradient-to-br ${getCompanyGradient(company)} flex items-center justify-center flex-shrink-0 shadow-sm`}>
+      <span className="text-white font-bold text-lg">
+        {getCompanyInitial(company)}
+      </span>
+    </div>
+  );
+}
 
 export default function JobsPage() {
   const [jobs, setJobs] = useState<Job[]>([]);
@@ -72,7 +157,7 @@ export default function JobsPage() {
   return (
     <div className="min-h-screen bg-background">
       {/* Header */}
-      <header className="border-b sticky top-0 bg-background/95 backdrop-blur z-50">
+      <header className="border-b bg-background/95 backdrop-blur supports-[backdrop-filter]:bg-background/60 sticky top-0 z-50">
         <div className="container mx-auto px-4 h-16 flex items-center justify-between">
           <Link href="/" className="flex items-center gap-2">
             <Briefcase className="h-6 w-6 text-primary" />
@@ -163,36 +248,34 @@ export default function JobsPage() {
             </Card>
           ) : (
             filteredJobs.map((job) => (
-              <Card key={job.id} className="hover:shadow-md transition-shadow">
+              <Card key={job.id} className="hover:shadow-lg transition-all duration-300 hover:-translate-y-0.5">
                 <CardContent className="pt-6">
                   <div className="flex flex-col md:flex-row md:items-start justify-between gap-4">
                     <div className="flex-1">
-                      <div className="flex items-start gap-3">
-                        <div className="w-12 h-12 rounded-lg bg-primary/10 flex items-center justify-center flex-shrink-0">
-                          <Building className="h-6 w-6 text-primary" />
-                        </div>
-                        <div>
-                          <h3 className="font-semibold text-lg hover:text-primary cursor-pointer">
+                      <div className="flex items-start gap-4">
+                        <CompanyLogo company={job.company} logoUrl={job.logo_url} />
+                        <div className="flex-1 min-w-0">
+                          <h3 className="font-semibold text-lg hover:text-primary cursor-pointer transition-colors">
                             {job.title}
                           </h3>
                           <p className="text-muted-foreground">{job.company}</p>
                         </div>
                       </div>
                       <div className="flex flex-wrap gap-2 mt-4">
-                        <Badge variant="secondary">
+                        <Badge variant="secondary" className="rounded-md">
                           <MapPin className="h-3 w-3 mr-1" />
                           {job.region}
                         </Badge>
-                        <Badge variant="secondary">
+                        <Badge variant="secondary" className="rounded-md">
                           <Briefcase className="h-3 w-3 mr-1" />
                           {job.direction}
                         </Badge>
-                        <Badge variant="secondary">
+                        <Badge variant="secondary" className="rounded-md">
                           <Users className="h-3 w-3 mr-1" />
                           {job.audience}
                         </Badge>
                         {job.salary_range && (
-                          <Badge variant="outline" className="text-green-600 border-green-600">
+                          <Badge variant="outline" className="text-green-600 border-green-600 rounded-md">
                             {job.salary_range}
                           </Badge>
                         )}
@@ -204,13 +287,13 @@ export default function JobsPage() {
                       )}
                     </div>
                     <div className="flex md:flex-col gap-2">
-                      <Button size="sm" asChild>
+                      <Button size="sm" asChild className="rounded-lg">
                         <Link href={`/jobs/${job.id}`}>
                           查看详情
                         </Link>
                       </Button>
                       {job.job_url && (
-                        <Button size="sm" variant="outline" asChild>
+                        <Button size="sm" variant="outline" asChild className="rounded-lg">
                           <a href={job.job_url} target="_blank" rel="noopener noreferrer">
                             <ExternalLink className="h-4 w-4 mr-1" />
                             原链接

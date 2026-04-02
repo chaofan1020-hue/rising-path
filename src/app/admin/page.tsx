@@ -69,6 +69,7 @@ interface Job {
   requirements: string;
   salary_range: string;
   job_url: string;
+  logo_url?: string;
   created_at: string;
 }
 
@@ -123,6 +124,7 @@ export default function AdminPage() {
     requirements: '',
     salary_range: '',
     job_url: '',
+    logo_url: '',
   });
   const [editingJob, setEditingJob] = useState<Job | null>(null);
   const [jobDialogOpen, setJobDialogOpen] = useState(false);
@@ -220,6 +222,7 @@ export default function AdminPage() {
       requirements: '',
       salary_range: '',
       job_url: '',
+      logo_url: '',
     });
   };
 
@@ -235,6 +238,7 @@ export default function AdminPage() {
       requirements: job.requirements || '',
       salary_range: job.salary_range || '',
       job_url: job.job_url || '',
+      logo_url: job.logo_url || '',
     });
     setJobDialogOpen(true);
   };
@@ -586,6 +590,15 @@ export default function AdminPage() {
                                 placeholder="https://..."
                               />
                             </div>
+                          </div>
+                          <div>
+                            <Label htmlFor="logo">公司Logo URL</Label>
+                            <Input
+                              id="logo"
+                              value={jobForm.logo_url}
+                              onChange={(e) => setJobForm({ ...jobForm, logo_url: e.target.value })}
+                              placeholder="可选，留空则自动获取或显示首字母"
+                            />
                           </div>
                           <div>
                             <Label htmlFor="desc">岗位描述</Label>
