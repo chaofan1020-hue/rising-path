@@ -311,8 +311,8 @@ function OptimizePageContent() {
 
       {/* Result Dialog */}
       <Dialog open={showResult} onOpenChange={setShowResult}>
-        <DialogContent className="max-w-6xl max-h-[85vh] overflow-hidden flex flex-col">
-          <DialogHeader>
+        <DialogContent className="max-w-6xl max-h-[90vh] !flex !flex-col p-0 gap-0">
+          <DialogHeader className="px-6 pt-6 pb-4 border-b shrink-0">
             <DialogTitle className="flex items-center gap-2">
               <CheckCircle className="h-5 w-5 text-green-600" />
               简历优化完成
@@ -323,11 +323,11 @@ function OptimizePageContent() {
           </DialogHeader>
           
           {/* Comparison View */}
-          <div className="h-[50vh] overflow-hidden">
-            <div className="grid md:grid-cols-2 gap-4 h-full">
+          <div className="flex-1 min-h-0 overflow-auto px-6 py-4">
+            <div className="grid md:grid-cols-2 gap-6 min-h-[400px]">
               {/* Original Resume */}
-              <div className="flex flex-col">
-                <div className="flex items-center gap-2 mb-3 pb-2 border-b">
+              <div className="flex flex-col h-[400px] md:h-[50vh]">
+                <div className="flex items-center gap-2 mb-3 pb-2 border-b shrink-0">
                   <div className="w-8 h-8 rounded-lg bg-gray-100 dark:bg-gray-800 flex items-center justify-center">
                     <FileText className="h-4 w-4 text-gray-600 dark:text-gray-400" />
                   </div>
@@ -351,8 +351,8 @@ function OptimizePageContent() {
               </div>
 
               {/* Optimized Resume */}
-              <div className="flex flex-col">
-                <div className="flex items-center justify-between mb-3 pb-2 border-b">
+              <div className="flex flex-col h-[400px] md:h-[50vh]">
+                <div className="flex items-center justify-between mb-3 pb-2 border-b shrink-0">
                   <div className="flex items-center gap-2">
                     <div className="w-8 h-8 rounded-lg bg-gradient-to-r from-orange-100 to-red-100 dark:from-orange-900/30 dark:to-red-900/30 flex items-center justify-center">
                       <FileCheck className="h-4 w-4 text-orange-600" />
@@ -377,7 +377,7 @@ function OptimizePageContent() {
           </div>
 
           {/* Actions */}
-          <div className="flex justify-end gap-2 pt-4 border-t mt-4">
+          <div className="flex justify-end gap-2 px-6 py-4 border-t shrink-0 bg-background">
             <Button variant="outline" size="sm" onClick={handleCopy}>
               <Copy className="mr-2 h-4 w-4" />
               复制优化内容
