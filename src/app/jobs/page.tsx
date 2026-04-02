@@ -439,7 +439,7 @@ export default function JobsPage() {
         </div>
 
         {/* Results */}
-        <div className="space-y-4">
+        <div className="max-w-2xl mx-auto space-y-3">
           {loading ? (
             <div className="text-center py-12 text-muted-foreground">加载中...</div>
           ) : filteredJobs.length === 0 ? (
@@ -451,62 +451,54 @@ export default function JobsPage() {
           ) : (
             filteredJobs.map((job) => (
               <Card key={job.id} className="hover:shadow-lg transition-all duration-300 hover:-translate-y-0.5">
-                <CardContent className="pt-6">
-                  <div className="flex flex-col md:flex-row md:items-start justify-between gap-4">
-                    <div className="flex-1">
-                      <div className="flex items-start gap-4">
+                <CardContent className="py-4 px-5">
+                  <div className="flex flex-col md:flex-row md:items-center justify-between gap-2">
+                    <div className="flex-1 min-w-0">
+                      <div className="flex items-center gap-3">
                         <CompanyLogo company={job.company} logoUrl={job.logo_url} />
                         <div className="flex-1 min-w-0">
-                          <h3 className="font-semibold text-lg hover:text-primary cursor-pointer transition-colors">
+                          <h3 className="font-semibold text-sm hover:text-primary cursor-pointer transition-colors line-clamp-1">
                             {job.title}
                           </h3>
-                          <p className="text-muted-foreground">{job.company}</p>
+                          <p className="text-xs text-muted-foreground">{job.company}</p>
                         </div>
                       </div>
-                      <div className="flex flex-wrap gap-2 mt-4">
-                        <Badge variant="secondary" className="rounded-md" translate="no">
-                          <MapPin className="h-3 w-3 mr-1" />
+                      <div className="flex flex-wrap gap-1 mt-2 ml-12">
+                        <Badge variant="secondary" className="rounded text-xs px-2 py-0.5" translate="no">
                           {job.region}
                         </Badge>
-                        <Badge variant="secondary" className="rounded-md" translate="no">
-                          <Briefcase className="h-3 w-3 mr-1" />
+                        <Badge variant="secondary" className="rounded text-xs px-2 py-0.5" translate="no">
                           {job.direction}
                         </Badge>
-                        <Badge variant="secondary" className="rounded-md" translate="no">
-                          <Users className="h-3 w-3 mr-1" />
+                        <Badge variant="secondary" className="rounded text-xs px-2 py-0.5" translate="no">
                           {job.audience}
                         </Badge>
                         {job.salary_range && (
-                          <Badge variant="outline" className="text-green-600 border-green-600 rounded-md">
+                          <Badge variant="outline" className="text-green-600 border-green-600 rounded text-xs px-2 py-0.5">
                             {job.salary_range}
                           </Badge>
                         )}
                         {job.is_active === false ? (
-                          <Badge variant="secondary" className="bg-gray-100 text-gray-600 rounded-md">
+                          <Badge variant="secondary" className="bg-gray-100 text-gray-500 rounded text-xs px-2 py-0.5">
                             不可投递
                           </Badge>
                         ) : (
-                          <Badge variant="default" className="bg-green-600 rounded-md">
+                          <Badge variant="default" className="bg-green-600 rounded text-xs px-2 py-0.5">
                             可投递
                           </Badge>
                         )}
                       </div>
-                      {job.description && (
-                        <p className="text-sm text-muted-foreground mt-3 line-clamp-2">
-                          {job.description}
-                        </p>
-                      )}
                     </div>
-                    <div className="flex md:flex-col gap-2">
-                      <Button size="sm" asChild className="rounded-lg">
+                    <div className="flex gap-2 flex-shrink-0 ml-12 md:ml-0">
+                      <Button size="sm" asChild className="rounded h-7 text-xs px-3">
                         <Link href={`/jobs/${job.id}`}>
                           查看详情
                         </Link>
                       </Button>
                       {job.job_url && (
-                        <Button size="sm" variant="outline" asChild className="rounded-lg">
+                        <Button size="sm" variant="outline" asChild className="rounded h-7 text-xs px-3">
                           <a href={job.job_url} target="_blank" rel="noopener noreferrer">
-                            <ExternalLink className="h-4 w-4 mr-1" />
+                            <ExternalLink className="h-3 w-3 mr-1" />
                             原链接
                           </a>
                         </Button>
@@ -517,14 +509,14 @@ export default function JobsPage() {
               </Card>
             ))
           )}
+          
+          {/* Results count */}
+          {!loading && filteredJobs.length > 0 && (
+            <div className="pt-2 text-center text-sm text-muted-foreground">
+              共找到 {filteredJobs.length} 个岗位
+            </div>
+          )}
         </div>
-
-        {/* Results count */}
-        {!loading && filteredJobs.length > 0 && (
-          <div className="mt-6 text-center text-sm text-muted-foreground">
-            共找到 {filteredJobs.length} 个岗位
-          </div>
-        )}
       </main>
     </div>
   );
