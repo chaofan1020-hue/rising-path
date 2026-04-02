@@ -120,11 +120,14 @@ ${JSON.stringify(jobsList, null, 2)}
       };
     });
 
-    // Sort by score
+    // Sort by score and filter out low scores
     enrichedMatches.sort((a: { match_score: number }, b: { match_score: number }) => b.match_score - a.match_score);
+    
+    // Only return matches with score >= 50
+    const filteredMatches = enrichedMatches.filter((match: { match_score: number }) => match.match_score >= 50);
 
     // Save matches to database
-    for (const match of enrichedMatches) {
+    for (const match of filteredMatches) {
       await client.from('ai_matches').insert({
         resume_id: resumeId,
         job_id: match.job_id,
@@ -134,7 +137,7 @@ ${JSON.stringify(jobsList, null, 2)}
       });
     }
 
-    return NextResponse.json({ matches: enrichedMatches });
+    return NextResponse.json({ matches: filteredMatches });
   } catch (error) {
     console.error('AI match error:', error);
     return NextResponse.json(
