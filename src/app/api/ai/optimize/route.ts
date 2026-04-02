@@ -5,7 +5,7 @@ import { LLMClient, Config, HeaderUtils } from 'coze-coding-dev-sdk';
 export async function POST(request: NextRequest) {
   try {
     const client = getSupabaseClient();
-    const { resumeId, targetCompany, targetPosition } = await request.json();
+    const { resumeId, targetCompany, targetPosition, suggestions } = await request.json();
 
     // Get resume
     const { data: resume, error } = await client
@@ -29,7 +29,7 @@ export async function POST(request: NextRequest) {
 
 目标公司：${targetCompany || '通用'}
 目标岗位：${targetPosition}
-
+${suggestions ? `\n优化建议：\n${suggestions}\n` : ''}
 原简历内容：
 ${resumeContent}
 

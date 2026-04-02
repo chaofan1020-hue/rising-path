@@ -30,6 +30,7 @@ import {
   Compass,
   ChevronDown,
   X,
+  Wand2,
 } from 'lucide-react';
 import Link from 'next/link';
 
@@ -452,9 +453,11 @@ export default function AIMatchPage() {
                             查看岗位
                           </Link>
                         </Button>
-                        <Button size="sm" variant="outline">
-                          立即申请
-                          <ArrowRight className="ml-2 h-4 w-4" />
+                        <Button size="sm" asChild variant="outline" className="bg-gradient-to-r from-orange-50 to-amber-50 border-orange-200 hover:from-orange-100 hover:to-amber-100 text-orange-700">
+                          <Link href={`/optimize?resumeId=${selectedResumeId}&company=${encodeURIComponent(result.company)}&position=${encodeURIComponent(result.job_title)}&suggestions=${encodeURIComponent(result.suggestions || '')}`}>
+                            <Wand2 className="mr-1.5 h-4 w-4" />
+                            一键优化简历
+                          </Link>
                         </Button>
                       </div>
                     </div>

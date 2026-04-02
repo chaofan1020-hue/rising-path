@@ -1,6 +1,7 @@
 'use client';
 
-import { useState, useEffect } from 'react';
+import { useState, useEffect, Suspense } from 'react';
+import { useSearchParams } from 'next/navigation';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
@@ -42,11 +43,13 @@ interface Resume {
   user_info: Record<string, unknown>;
 }
 
-export default function OptimizePage() {
+function OptimizePageContent() {
+  const searchParams = useSearchParams();
   const [resumes, setResumes] = useState<Resume[]>([]);
   const [selectedResumeId, setSelectedResumeId] = useState<string>('');
   const [targetCompany, setTargetCompany] = useState('');
   const [targetPosition, setTargetPosition] = useState('');
+  const [suggestions, setSuggestions] = useState('');
   const [optimizing, setOptimizing] = useState(false);
   const [optimizeProgress, setOptimizeProgress] = useState(0);
   const [optimizedContent, setOptimizedContent] = useState('');
@@ -55,6 +58,19 @@ export default function OptimizePage() {
   useEffect(() => {
     fetchResumes();
   }, []);
+
+  useEffect(() => {
+    // Read URL parameters and pre-fill form
+    const resumeIdParam = searchParams.get('resumeId');
+    const companyParam = searchParams.get('company');
+    const positionParam = searchParams.get('position');
+    const suggestionsParam = searchParams.get('suggestions');
+    
+    if (resumeIdParam) setSelectedResumeId(resumeIdParam);
+    if (companyParam) setTargetCompany(companyParam);
+    if (positionParam) setTargetPosition(positionParam);
+    if (suggestionsParam) setSuggestions(suggestionsParam);
+  }, [searchParams]);
 
   const fetchResumes = async () => {
     try {
@@ -85,6 +101,7 @@ export default function OptimizePage() {
           resumeId: selectedResumeId,
           targetCompany,
           targetPosition,
+          suggestions,
         }),
       });
 
@@ -153,6 +170,21 @@ export default function OptimizePage() {
             </CardDescription>
           </CardHeader>
           <CardContent className="space-y-4">
+            {/* AI选岗优化建议 */}
+            {suggestions && (
+              <div className="p-4 rounded-lg bg-gradient-to-r from-purple-50 to-blue-50 dark:from-purple-950/30 dark:to-blue-950/30 border border-purple-100 dark:border-purple-900">
+                <div className="flex items-start gap-3">
+                  <div className="w-8 h-8 rounded-lg bg-gradient-to-r from-purple-500 to-blue-500 flex items-center justify-center flex-shrink-0">
+                    <Sparkles className="h-4 w-4 text-white" />
+                  </div>
+                  <div className="flex-1">
+                    <h4 className="font-medium text-sm mb-1">来自AI选岗的优化建议</h4>
+                    <p className="text-sm text-muted-foreground">{suggestions}</p>
+                  </div>
+                </div>
+              </div>
+            )}
+            
             <div className="grid md:grid-cols-3 gap-4">
               <div>
                 <label className="text-sm font-medium mb-2 block">选择简历</label>
@@ -301,5 +333,17 @@ export default function OptimizePage() {
         </DialogContent>
       </Dialog>
     </div>
+  );
+}
+
+export default function OptimizePage() {
+  return (
+    <Suspense fallback={
+      <div className="min-h-screen bg-background flex items-center justify-center">
+        <Loader2 className="h-8 w-8 animate-spin text-primary" />
+      </div>
+    }>
+      <OptimizePageContent />
+    </Suspense>
   );
 }
