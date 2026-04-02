@@ -8,6 +8,7 @@ import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Briefcase, Key, Loader2 } from 'lucide-react';
 import Link from 'next/link';
+import Image from 'next/image';
 
 export default function LoginPage() {
   const router = useRouter();
@@ -54,8 +55,14 @@ export default function LoginPage() {
         {/* Logo */}
         <div className="text-center mb-8">
           <Link href="/" className="inline-flex items-center gap-2 mb-4">
-            <Briefcase className="h-10 w-10 text-primary" />
-            <span className="font-bold text-3xl">PathUp</span>
+            <Image 
+              src="/logo.png" 
+              alt="PathUp" 
+              width={40} 
+              height={40}
+              className="rounded-lg"
+            />
+            <span className="font-bold text-3xl text-black">PathUp</span>
           </Link>
           <p className="text-muted-foreground">海外留学生求职平台</p>
         </div>
