@@ -418,24 +418,38 @@ export default function AdminPage() {
   };
 
   const handleBatchDelete = async () => {
-    if (selectedJobIds.size === 0) return;
+    if (selectedJobIds.size === 0) {
+      console.log('No jobs selected');
+      return;
+    }
 
+    console.log('Starting batch delete for jobs:', Array.from(selectedJobIds));
     setBatchDeleting(true);
     try {
+      const ids = Array.from(selectedJobIds);
+      console.log('Sending delete request with ids:', ids);
+      
       const response = await fetch('/api/jobs/batch', {
         method: 'DELETE',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ ids: Array.from(selectedJobIds) }),
+        body: JSON.stringify({ ids }),
       });
+      
+      console.log('Response status:', response.status);
       const data = await response.json();
+      console.log('Response data:', data);
 
       if (data.success) {
         setJobs(jobs.filter(j => !selectedJobIds.has(j.id)));
         setSelectedJobIds(new Set());
         setBatchDeleteConfirmOpen(false);
+      } else {
+        console.error('Delete failed:', data.error);
+        alert('删除失败: ' + data.error);
       }
     } catch (error) {
       console.error('Failed to batch delete:', error);
+      alert('删除失败，请查看控制台');
     } finally {
       setBatchDeleting(false);
     }
@@ -1360,22 +1374,26 @@ export default function AdminPage() {
       </AlertDialog>
 
       {/* Batch Delete Confirmation */}
-      <AlertDialog open={batchDeleteConfirmOpen} onOpenChange={setBatchDeleteConfirmOpen}>
-        <AlertDialogContent>
-          <AlertDialogHeader>
-            <AlertDialogTitle>确认批量删除</AlertDialogTitle>
-            <AlertDialogDescription>
+      <Dialog open={batchDeleteConfirmOpen} onOpenChange={setBatchDeleteConfirmOpen}>
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>确认批量删除</DialogTitle>
+            <DialogDescription>
               此操作将永久删除选中的 {selectedJobIds.size} 个岗位，删除后无法恢复。确定要继续吗？
-            </AlertDialogDescription>
-          </AlertDialogHeader>
-          <AlertDialogFooter>
-            <AlertDialogCancel disabled={batchDeleting}>取消</AlertDialogCancel>
+            </DialogDescription>
+          </DialogHeader>
+          <DialogFooter>
+            <Button 
+              variant="outline" 
+              onClick={() => setBatchDeleteConfirmOpen(false)}
+              disabled={batchDeleting}
+            >
+              取消
+            </Button>
             <Button
+              type="button"
               variant="destructive"
-              onClick={(e) => {
-                e.preventDefault();
-                handleBatchDelete();
-              }}
+              onClick={handleBatchDelete}
               disabled={batchDeleting}
             >
               {batchDeleting ? (
@@ -1387,9 +1405,9 @@ export default function AdminPage() {
                 `删除 ${selectedJobIds.size} 个岗位`
               )}
             </Button>
-          </AlertDialogFooter>
-        </AlertDialogContent>
-      </AlertDialog>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
 
       {/* Edit Application Dialog */}
       <Dialog open={appDialogOpen} onOpenChange={(open) => {
