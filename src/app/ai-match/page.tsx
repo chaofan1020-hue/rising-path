@@ -453,19 +453,15 @@ function AIMatchContent() {
 
                       <div className="flex gap-2">
                         <Button size="sm" asChild>
-                          <Link href={`/jobs/${result.job_id}`}>
-                            查看岗位
-                          </Link>
-                        </Button>
-                        <Button size="sm" variant="outline" asChild>
-                          <Link href={`/optimize?resumeId=${selectedResumeId}&company=${encodeURIComponent(result.company)}&position=${encodeURIComponent(result.job_title)}`}>
+                          <Link href={`/optimize?resumeId=${selectedResumeId}&company=${encodeURIComponent(result.company)}&position=${encodeURIComponent(result.job_title)}&suggestions=${encodeURIComponent(result.suggestions || '')}`}>
                             <Wand2 className="mr-1 h-3 w-3" />
                             优化简历
                           </Link>
                         </Button>
-                        <Button size="sm" variant="outline">
-                          立即申请
-                          <ArrowRight className="ml-2 h-4 w-4" />
+                        <Button size="sm" variant="outline" asChild>
+                          <Link href={`/jobs/${result.job_id}`}>
+                            查看岗位
+                          </Link>
                         </Button>
                       </div>
                     </div>

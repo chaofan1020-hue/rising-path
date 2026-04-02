@@ -5,7 +5,7 @@ import { LLMClient, Config, HeaderUtils } from 'coze-coding-dev-sdk';
 export async function POST(request: NextRequest) {
   try {
     const client = getSupabaseClient();
-    const { resumeId, targetCompany, targetPosition, accessCodeId } = await request.json();
+    const { resumeId, targetCompany, targetPosition, suggestions, accessCodeId } = await request.json();
 
     // 必须提供 access_code_id
     if (!accessCodeId) {
@@ -29,6 +29,11 @@ export async function POST(request: NextRequest) {
     
     const resumeContent = resume.parsed_content || JSON.stringify(resume.user_info);
 
+    // 构建优化建议部分
+    const suggestionsSection = suggestions 
+      ? `\n\n参考优化建议：\n${suggestions}\n\n请根据以上建议重点优化简历的相应部分。`
+      : '';
+
     const prompt = `你是一个专业的简历优化专家，擅长针对ATS（Applicant Tracking System）系统优化简历。
 
 请根据以下信息优化简历：
@@ -37,7 +42,7 @@ export async function POST(request: NextRequest) {
 目标岗位：${targetPosition}
 
 原简历内容：
-${resumeContent}
+${resumeContent}${suggestionsSection}
 
 请从以下方面优化简历：
 1. 添加目标岗位相关的关键词和技能标签

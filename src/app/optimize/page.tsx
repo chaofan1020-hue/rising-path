@@ -51,6 +51,7 @@ function OptimizeContent() {
   const [selectedResumeId, setSelectedResumeId] = useState<string>('');
   const [targetCompany, setTargetCompany] = useState('');
   const [targetPosition, setTargetPosition] = useState('');
+  const [suggestions, setSuggestions] = useState('');
   const [optimizing, setOptimizing] = useState(false);
   const [optimizeProgress, setOptimizeProgress] = useState(0);
   const [optimizedContent, setOptimizedContent] = useState('');
@@ -68,10 +69,12 @@ function OptimizeContent() {
     const resumeIdParam = searchParams.get('resumeId');
     const companyParam = searchParams.get('company');
     const positionParam = searchParams.get('position');
+    const suggestionsParam = searchParams.get('suggestions');
     
     if (resumeIdParam) setSelectedResumeId(resumeIdParam);
     if (companyParam) setTargetCompany(companyParam);
     if (positionParam) setTargetPosition(positionParam);
+    if (suggestionsParam) setSuggestions(suggestionsParam);
   }, [searchParams]);
 
   const fetchResumes = async () => {
@@ -106,6 +109,7 @@ function OptimizeContent() {
           resumeId: selectedResumeId,
           targetCompany,
           targetPosition,
+          suggestions,
           accessCodeId,
         }),
       });
