@@ -231,45 +231,56 @@ export default function JobsPage() {
                   />
                 </div>
               </div>
-              <Select value={selectedRegion} onValueChange={setSelectedRegion}>
-                <SelectTrigger className="w-full md:w-40">
-                  <SelectValue placeholder="地区" />
-                </SelectTrigger>
-                <SelectContent translate="no">
-                  <SelectItem value="全部">全部</SelectItem>
-                  {configs.region?.map((config) => (
-                    <SelectItem key={config.id} value={config.config_value}>
-                      {config.config_value}
-                    </SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
-              <Select value={selectedDirection} onValueChange={setSelectedDirection}>
-                <SelectTrigger className="w-full md:w-40">
-                  <SelectValue placeholder="方向" />
-                </SelectTrigger>
-                <SelectContent translate="no">
-                  <SelectItem value="全部">全部</SelectItem>
-                  {configs.direction?.map((config) => (
-                    <SelectItem key={config.id} value={config.config_value}>
-                      {config.config_value}
-                    </SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
-              <Select value={selectedAudience} onValueChange={setSelectedAudience}>
-                <SelectTrigger className="w-full md:w-40">
-                  <SelectValue placeholder="受众" />
-                </SelectTrigger>
-                <SelectContent translate="no">
-                  <SelectItem value="全部">全部</SelectItem>
-                  {configs.audience?.map((config) => (
-                    <SelectItem key={config.id} value={config.config_value}>
-                      {config.config_value}
-                    </SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
+              <div className="flex flex-col md:flex-row gap-4 md:items-end">
+                <div className="space-y-1.5">
+                  <label className="text-sm font-medium text-muted-foreground">地区</label>
+                  <Select value={selectedRegion} onValueChange={setSelectedRegion}>
+                    <SelectTrigger className="w-full md:w-36">
+                      <SelectValue placeholder="全部地区" />
+                    </SelectTrigger>
+                    <SelectContent translate="no">
+                      <SelectItem value="全部">全部</SelectItem>
+                      {configs.region?.map((config) => (
+                        <SelectItem key={config.id} value={config.config_value}>
+                          {config.config_value}
+                        </SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                </div>
+                <div className="space-y-1.5">
+                  <label className="text-sm font-medium text-muted-foreground">方向</label>
+                  <Select value={selectedDirection} onValueChange={setSelectedDirection}>
+                    <SelectTrigger className="w-full md:w-36">
+                      <SelectValue placeholder="全部方向" />
+                    </SelectTrigger>
+                    <SelectContent translate="no">
+                      <SelectItem value="全部">全部</SelectItem>
+                      {configs.direction?.map((config) => (
+                        <SelectItem key={config.id} value={config.config_value}>
+                          {config.config_value}
+                        </SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                </div>
+                <div className="space-y-1.5">
+                  <label className="text-sm font-medium text-muted-foreground">受众</label>
+                  <Select value={selectedAudience} onValueChange={setSelectedAudience}>
+                    <SelectTrigger className="w-full md:w-36">
+                      <SelectValue placeholder="全部受众" />
+                    </SelectTrigger>
+                    <SelectContent translate="no">
+                      <SelectItem value="全部">全部</SelectItem>
+                      {configs.audience?.map((config) => (
+                        <SelectItem key={config.id} value={config.config_value}>
+                          {config.config_value}
+                        </SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                </div>
+              </div>
             </div>
           </CardContent>
         </Card>
