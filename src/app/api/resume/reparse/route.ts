@@ -1,16 +1,8 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { getSupabaseClient } from '@/storage/database/supabase-client';
-import { S3Storage, LLMClient, Config } from 'coze-coding-dev-sdk';
+import { LLMClient, Config } from 'coze-coding-dev-sdk';
 import PDFParser from 'pdf2json';
 import mammoth from 'mammoth';
-
-const storage = new S3Storage({
-  endpointUrl: process.env.COZE_BUCKET_ENDPOINT_URL,
-  accessKey: '',
-  secretKey: '',
-  bucketName: process.env.COZE_BUCKET_NAME,
-  region: 'cn-beijing',
-});
 
 // 从PDF提取文本（带错误处理）
 async function extractTextFromPDF(buffer: Buffer): Promise<string> {
@@ -147,9 +139,15 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ error: '简历不存在或无权访问' }, { status: 404 });
     }
 
-    // 从 S3 下载文件
-    console.log('Downloading file from S3:', resume.file_key);
-    const fileBuffer = await storage.readFile({ fileKey: resume.file_key });
+    // 从数据库的 user_info.file_base64 获取文件内容
+    const fileBase64 = resume.user_info?.file_base64;
+    const fileType = resume.user_info?.file_type || 'application/pdf';
+    
+    if (!fileBase64) {
+      return NextResponse.json({ error: '简历文件内容不存在' }, { status: 404 });
+    }
+    
+    const fileBuffer = Buffer.from(fileBase64, 'base64');
 
     // 更新状态为解析中
     await client
@@ -160,14 +158,11 @@ export async function POST(request: NextRequest) {
     // 提取文本
     let textContent = '';
     const fileName = resume.file_name;
-    const contentType = fileName.endsWith('.pdf') ? 'application/pdf' : 
-                        fileName.endsWith('.docx') ? 'application/vnd.openxmlformats-officedocument.wordprocessingml.document' :
-                        'text/plain';
 
-    if (contentType === 'application/pdf') {
+    if (fileType === 'application/pdf' || fileName.endsWith('.pdf')) {
       console.log('Parsing PDF file:', fileName);
       textContent = await extractTextFromPDF(fileBuffer);
-    } else if (contentType.includes('word')) {
+    } else if (fileType.includes('word') || fileName.endsWith('.docx') || fileName.endsWith('.doc')) {
       console.log('Parsing Word file:', fileName);
       textContent = await extractTextFromWord(fileBuffer);
     } else {
@@ -179,12 +174,18 @@ export async function POST(request: NextRequest) {
     // 解析简历
     const parsed = await parseResumeContent(textContent);
 
+    // 保留 file_base64，更新其他字段
+    const updatedUserInfo = {
+      ...resume.user_info,
+      ...parsed.user_info,
+    };
+
     // 更新数据库
     const { error: updateError } = await client
       .from('resumes')
       .update({
         parsed_content: parsed.parsed_content,
-        user_info: parsed.user_info,
+        user_info: updatedUserInfo,
         updated_at: new Date().toISOString(),
       })
       .eq('id', resumeId);

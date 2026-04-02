@@ -1,16 +1,8 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { getSupabaseClient } from '@/storage/database/supabase-client';
-import { S3Storage, LLMClient, Config } from 'coze-coding-dev-sdk';
+import { LLMClient, Config } from 'coze-coding-dev-sdk';
 import PDFParser from 'pdf2json';
 import mammoth from 'mammoth';
-
-const storage = new S3Storage({
-  endpointUrl: process.env.COZE_BUCKET_ENDPOINT_URL,
-  accessKey: '',
-  secretKey: '',
-  bucketName: process.env.COZE_BUCKET_NAME,
-  region: 'cn-beijing',
-});
 
 // 从PDF提取文本
 async function extractTextFromPDF(buffer: Buffer): Promise<string> {
@@ -194,21 +186,15 @@ export async function POST(request: NextRequest) {
     const arrayBuffer = await file.arrayBuffer();
     const buffer = Buffer.from(arrayBuffer);
 
-    // Upload to S3
-    const fileKey = await storage.uploadFile({
-      fileContent: buffer,
-      fileName: `resumes/${Date.now()}_${file.name}`,
-      contentType: file.type,
-    });
-
-    // Create initial resume record
+    // Create initial resume record (将文件存储为 base64)
+    const fileBase64 = buffer.toString('base64');
     const { data: resumeData, error: insertError } = await client
       .from('resumes')
       .insert({
-        file_key: fileKey,
+        file_key: `local://${file.name}`,
         file_name: file.name,
         parsed_content: '正在解析简历内容...',
-        user_info: {},
+        user_info: { file_base64: fileBase64, file_type: file.type },
         access_code_id: accessCodeId ? parseInt(accessCodeId) : null,
       })
       .select()
