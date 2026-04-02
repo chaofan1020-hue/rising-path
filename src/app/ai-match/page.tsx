@@ -2,8 +2,10 @@
 
 import { useState, useEffect } from 'react';
 import { Button } from '@/components/ui/button';
+import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
 import { Progress } from '@/components/ui/progress';
+import { Checkbox } from '@/components/ui/checkbox';
 import {
   Select,
   SelectContent,
@@ -18,7 +20,9 @@ import {
 } from '@/components/ui/popover';
 import { 
   Brain, 
+  Target, 
   Loader2, 
+  CheckCircle, 
   ArrowRight,
   Briefcase,
   Sparkles,
@@ -26,9 +30,6 @@ import {
   MapPin,
   Compass,
   ChevronDown,
-  FileText,
-  Star,
-  Zap,
 } from 'lucide-react';
 import Link from 'next/link';
 import { AccessGuard, useAccessCode } from '@/components/access-guard';
@@ -59,8 +60,8 @@ interface JobConfig {
   is_active: boolean;
 }
 
-// 筛选标签组件
-function FilterTag({
+// 多选筛选器组件
+function MultiSelectFilter({
   label,
   icon: Icon,
   options,
@@ -84,111 +85,53 @@ function FilterTag({
   return (
     <Popover>
       <PopoverTrigger asChild>
-        <button className="inline-flex items-center gap-2 px-4 py-2.5 rounded-lg bg-white/5 hover:bg-white/10 border border-white/10 hover:border-white/20 transition-all text-sm">
-          <Icon className="h-4 w-4 text-violet-400" />
-          <span>{label}</span>
+        <button className="inline-flex items-center gap-2 px-3 py-2 rounded-full border border-input bg-background hover:bg-accent hover:text-accent-foreground transition-colors text-sm">
+          <Icon className="h-4 w-4 text-muted-foreground" />
+          <span className="font-medium">{label}</span>
           {selected.length > 0 && (
-            <span className="px-1.5 py-0.5 rounded bg-violet-500 text-xs">{selected.length}</span>
+            <Badge variant="secondary" className="ml-0.5 h-5 px-1.5 rounded-full">
+              {selected.length}
+            </Badge>
           )}
-          <ChevronDown className="h-4 w-4 opacity-50" />
+          <ChevronDown className="h-3.5 w-3.5 text-muted-foreground" />
         </button>
       </PopoverTrigger>
-      <PopoverContent className="w-56 bg-slate-900 border-white/10">
-        <div className="grid grid-cols-2 gap-2">
+      <PopoverContent className="w-48 p-2" align="start">
+        <div className="max-h-60 overflow-y-auto space-y-1">
           {options.map((option) => (
-            <button
+            <label
               key={option.id}
-              onClick={() => handleToggle(option.config_value)}
-              className={`px-3 py-2 rounded-lg text-sm font-medium transition-all ${
-                selected.includes(option.config_value)
-                  ? 'bg-violet-500 text-white'
-                  : 'bg-white/5 hover:bg-white/10 text-slate-300'
+              className={`flex items-center gap-2 px-2 py-1.5 rounded-md cursor-pointer transition-colors ${
+                selected.includes(option.config_value) 
+                  ? 'bg-primary/10 text-primary' 
+                  : 'hover:bg-muted'
               }`}
               translate="no"
             >
-              {option.config_value}
-            </button>
+              <Checkbox
+                checked={selected.includes(option.config_value)}
+                onCheckedChange={() => handleToggle(option.config_value)}
+                className="data-[state=checked]:bg-primary data-[state=checked]:border-primary"
+              />
+              <span className="text-sm font-medium">{option.config_value}</span>
+            </label>
           ))}
         </div>
+        {options.length === 0 && (
+          <div className="text-center py-2 text-sm text-muted-foreground">暂无选项</div>
+        )}
         {selected.length > 0 && (
-          <button
-            onClick={() => onChange([])}
-            className="w-full mt-3 py-2 text-xs text-slate-400 hover:text-white transition-colors"
-          >
-            清除选择
-          </button>
+          <div className="border-t mt-2 pt-2">
+            <button
+              onClick={() => onChange([])}
+              className="w-full text-xs text-muted-foreground hover:text-foreground transition-colors py-1"
+            >
+              清除全部
+            </button>
+          </div>
         )}
       </PopoverContent>
     </Popover>
-  );
-}
-
-// 结果卡片
-function ResultCard({ result }: { result: MatchResult }) {
-  const getScoreGradient = (score: number) => {
-    if (score >= 80) return 'from-emerald-400 to-cyan-400';
-    if (score >= 60) return 'from-amber-400 to-orange-400';
-    return 'from-rose-400 to-pink-400';
-  };
-
-  return (
-    <div className="group relative bg-gradient-to-br from-white/5 to-white/[0.02] border border-white/10 rounded-2xl p-6 hover:border-violet-500/50 transition-all duration-300">
-      {/* 发光效果 */}
-      <div className={`absolute inset-0 rounded-2xl bg-gradient-to-r ${getScoreGradient(result.match_score)} opacity-0 group-hover:opacity-5 transition-opacity`} />
-      
-      <div className="relative flex items-start gap-5">
-        {/* 分数环 */}
-        <div className="relative flex-shrink-0">
-          <svg className="w-16 h-16 -rotate-90" viewBox="0 0 36 36">
-            <circle cx="18" cy="18" r="15" fill="none" stroke="currentColor" strokeWidth="2" className="text-white/10" />
-            <circle 
-              cx="18" cy="18" r="15" fill="none" stroke="url(#gradient)" strokeWidth="2" 
-              strokeDasharray={`${result.match_score} 100`}
-              strokeLinecap="round"
-            />
-            <defs>
-              <linearGradient id="gradient" x1="0%" y1="0%" x2="100%" y2="0%">
-                <stop offset="0%" stopColor="#8b5cf6" />
-                <stop offset="100%" stopColor="#06b6d4" />
-              </linearGradient>
-            </defs>
-          </svg>
-          <div className="absolute inset-0 flex items-center justify-center">
-            <span className={`text-lg font-bold bg-gradient-to-r ${getScoreGradient(result.match_score)} bg-clip-text text-transparent`}>
-              {result.match_score}
-            </span>
-          </div>
-        </div>
-
-        {/* 内容 */}
-        <div className="flex-1 min-w-0">
-          <div className="flex items-start justify-between gap-4 mb-3">
-            <div>
-              <h3 className="text-lg font-semibold text-white mb-1">{result.job_title}</h3>
-              <p className="text-sm text-slate-400">{result.company}</p>
-            </div>
-            <Badge className="bg-violet-500/20 text-violet-300 border-0 shrink-0">
-              {result.match_score >= 80 ? '强烈推荐' : result.match_score >= 60 ? '值得尝试' : '可以投递'}
-            </Badge>
-          </div>
-
-          <div className="flex items-start gap-2 mb-4">
-            <TrendingUp className="h-4 w-4 text-emerald-400 mt-0.5 shrink-0" />
-            <p className="text-sm text-slate-400 leading-relaxed">{result.match_reason}</p>
-          </div>
-
-          <div className="flex items-center gap-3">
-            <Button size="sm" variant="outline" className="border-white/10 bg-white/5 hover:bg-white/10 text-white" asChild>
-              <Link href={`/jobs/${result.job_id}`}>查看详情</Link>
-            </Button>
-            <Button size="sm" className="bg-gradient-to-r from-violet-500 to-cyan-500 hover:from-violet-600 hover:to-cyan-600 text-white border-0">
-              一键申请
-              <ArrowRight className="ml-1.5 h-3.5 w-3.5" />
-            </Button>
-          </div>
-        </div>
-      </div>
-    </div>
   );
 }
 
@@ -201,6 +144,7 @@ function AIMatchContent() {
   const [matchResults, setMatchResults] = useState<MatchResult[]>([]);
   const { accessCodeId } = useAccessCode();
   
+  // 筛选相关状态
   const [regions, setRegions] = useState<JobConfig[]>([]);
   const [directions, setDirections] = useState<JobConfig[]>([]);
   const [selectedRegions, setSelectedRegions] = useState<string[]>([]);
@@ -247,6 +191,7 @@ function AIMatchContent() {
     setMatchResults([]);
 
     try {
+      // Simulate progress
       const progressInterval = setInterval(() => {
         setMatchProgress((prev) => Math.min(prev + 5, 90));
       }, 100);
@@ -278,157 +223,225 @@ function AIMatchContent() {
     }
   };
 
-  return (
-    <div className="min-h-screen bg-slate-950 text-white">
-      {/* 背景装饰 */}
-      <div className="fixed inset-0 overflow-hidden pointer-events-none">
-        <div className="absolute top-0 left-1/4 w-96 h-96 bg-violet-500/20 rounded-full blur-[128px]" />
-        <div className="absolute bottom-0 right-1/4 w-96 h-96 bg-cyan-500/20 rounded-full blur-[128px]" />
-      </div>
+  const getScoreColor = (score: number) => {
+    if (score >= 80) return 'text-green-600';
+    if (score >= 60) return 'text-yellow-600';
+    return 'text-red-600';
+  };
 
+  const getScoreLabel = (score: number) => {
+    if (score >= 80) return '高度匹配';
+    if (score >= 60) return '中等匹配';
+    return '匹配度较低';
+  };
+
+  return (
+    <div className="min-h-screen bg-background">
       {/* Header */}
-      <header className="relative border-b border-white/5">
-        <div className="max-w-5xl mx-auto px-6 h-16 flex items-center justify-between">
+      <header className="border-b sticky top-0 bg-background/95 backdrop-blur z-50">
+        <div className="container mx-auto px-4 h-16 flex items-center justify-between">
           <Link href="/" className="flex items-center gap-2">
-            <div className="w-8 h-8 rounded-lg bg-gradient-to-br from-violet-500 to-cyan-500 flex items-center justify-center">
-              <Briefcase className="h-4 w-4 text-white" />
-            </div>
-            <span className="font-bold text-lg">PathUp</span>
+            <Briefcase className="h-6 w-6 text-primary" />
+            <span className="font-bold text-xl">PathUp</span>
           </Link>
-          <nav className="flex items-center gap-6 text-sm">
-            <Link href="/jobs" className="text-slate-400 hover:text-white transition-colors">岗位查询</Link>
-            <Link href="/resume" className="text-slate-400 hover:text-white transition-colors">简历管理</Link>
+          <nav className="flex items-center gap-4">
+            <Link href="/jobs">
+              <Button variant="ghost" size="sm">岗位查询</Button>
+            </Link>
+            <Link href="/resume">
+              <Button variant="ghost" size="sm">简历管理</Button>
+            </Link>
           </nav>
         </div>
       </header>
 
-      <main className="relative max-w-5xl mx-auto px-6 py-12">
-        {/* 标题区 */}
-        <div className="text-center mb-12">
-          <div className="inline-flex items-center gap-2 px-4 py-2 rounded-full bg-violet-500/10 border border-violet-500/20 text-violet-300 text-sm mb-6">
-            <Star className="h-4 w-4" />
-            AI 驱动的智能匹配
-          </div>
-          <h1 className="text-4xl font-bold mb-4">
-            <span className="bg-gradient-to-r from-white via-violet-200 to-cyan-200 bg-clip-text text-transparent">
-              智能选岗
-            </span>
+      <main className="container mx-auto px-4 py-8">
+        {/* Page Title */}
+        <div className="mb-8">
+          <h1 className="text-3xl font-bold mb-2 flex items-center gap-3">
+            <Brain className="h-8 w-8 text-purple-600" />
+            AI智能选岗
           </h1>
-          <p className="text-slate-400 text-lg max-w-xl mx-auto">
-            基于 AI 深度分析你的简历，精准匹配最适合的岗位
+          <p className="text-muted-foreground">
+            基于你的简历，AI将智能分析并推荐最匹配的岗位
           </p>
         </div>
 
-        {/* 主内容区 */}
-        <div className="grid lg:grid-cols-5 gap-8">
-          {/* 左侧控制面板 */}
-          <div className="lg:col-span-2">
-            <div className="sticky top-24 space-y-6">
+        {/* Match Form */}
+        <Card className="mb-8">
+          <CardHeader>
+            <CardTitle className="flex items-center gap-2">
+              <Target className="h-5 w-5" />
+              开始匹配
+            </CardTitle>
+            <CardDescription>
+              选择一份简历，AI将分析你的技能和经验，匹配最合适的岗位
+            </CardDescription>
+          </CardHeader>
+          <CardContent>
+            <div className="space-y-4">
               {/* 简历选择 */}
-              <div className="bg-white/5 border border-white/10 rounded-2xl p-6">
-                <label className="text-sm font-medium text-slate-300 mb-3 flex items-center gap-2">
-                  <FileText className="h-4 w-4 text-violet-400" />
-                  选择简历
-                </label>
-                <Select value={selectedResumeId} onValueChange={setSelectedResumeId}>
-                  <SelectTrigger className="bg-white/5 border-white/10 hover:border-white/20 text-white">
-                    <SelectValue placeholder="选择要匹配的简历" />
-                  </SelectTrigger>
-                  <SelectContent className="bg-slate-900 border-white/10">
-                    {resumes.map((resume) => (
-                      <SelectItem key={resume.id} value={resume.id.toString()} className="text-white hover:bg-white/10">
-                        {resume.file_name}
-                        {resume.user_info?.name && ` - ${resume.user_info.name}`}
-                      </SelectItem>
-                    ))}
-                  </SelectContent>
-                </Select>
+              <div className="flex flex-col md:flex-row gap-4">
+                <div className="flex-1">
+                  <label className="text-sm font-medium mb-2 block">选择简历</label>
+                  <Select value={selectedResumeId} onValueChange={setSelectedResumeId}>
+                    <SelectTrigger>
+                      <SelectValue placeholder="选择要匹配的简历" />
+                    </SelectTrigger>
+                    <SelectContent>
+                      {resumes.map((resume) => (
+                        <SelectItem key={resume.id} value={resume.id.toString()}>
+                          {resume.file_name}
+                          {resume.user_info?.name && ` - ${resume.user_info.name}`}
+                        </SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                </div>
               </div>
 
               {/* 筛选条件 */}
-              <div className="bg-white/5 border border-white/10 rounded-2xl p-6">
-                <label className="text-sm font-medium text-slate-300 mb-3 flex items-center gap-2">
-                  <Zap className="h-4 w-4 text-violet-400" />
-                  筛选条件
-                  <span className="text-slate-500 font-normal">(可选)</span>
-                </label>
-                <div className="flex flex-wrap gap-2">
-                  <FilterTag
-                    label="地区"
-                    icon={MapPin}
-                    options={regions}
-                    selected={selectedRegions}
-                    onChange={setSelectedRegions}
-                  />
-                  <FilterTag
-                    label="方向"
-                    icon={Compass}
-                    options={directions}
-                    selected={selectedDirections}
-                    onChange={setSelectedDirections}
-                  />
-                </div>
+              <div className="flex flex-wrap gap-3">
+                <MultiSelectFilter
+                  label="地区"
+                  icon={MapPin}
+                  options={regions}
+                  selected={selectedRegions}
+                  onChange={setSelectedRegions}
+                />
+                <MultiSelectFilter
+                  label="方向"
+                  icon={Compass}
+                  options={directions}
+                  selected={selectedDirections}
+                  onChange={setSelectedDirections}
+                />
               </div>
 
-              {/* 匹配按钮 */}
+              {/* 开始匹配按钮 */}
               <Button 
                 onClick={handleMatch} 
                 disabled={!selectedResumeId || matching}
-                size="lg"
-                className="w-full h-12 bg-gradient-to-r from-violet-500 to-cyan-500 hover:from-violet-600 hover:to-cyan-600 text-white font-medium rounded-xl shadow-lg shadow-violet-500/25"
+                className="bg-gradient-to-r from-purple-600 to-blue-600 hover:from-purple-700 hover:to-blue-700"
               >
                 {matching ? (
                   <>
-                    <Loader2 className="mr-2 h-5 w-5 animate-spin" />
-                    AI 分析中...
+                    <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                    匹配中...
                   </>
                 ) : (
                   <>
-                    <Sparkles className="mr-2 h-5 w-5" />
-                    开始智能匹配
+                    <Sparkles className="mr-2 h-4 w-4" />
+                    开始AI匹配
                   </>
                 )}
               </Button>
-
-              {/* 进度 */}
-              {matching && (
-                <div className="space-y-2">
-                  <Progress value={matchProgress} className="h-1.5 bg-white/10" />
-                  <p className="text-xs text-slate-500 text-center">正在分析简历内容...</p>
-                </div>
-              )}
             </div>
-          </div>
 
-          {/* 右侧结果区 */}
-          <div className="lg:col-span-3">
-            {matchResults.length > 0 ? (
-              <div className="space-y-4">
+            {matching && (
+              <div className="mt-6">
                 <div className="flex items-center justify-between mb-2">
-                  <h2 className="text-lg font-semibold">匹配结果</h2>
-                  <span className="text-sm text-slate-400">{matchResults.length} 个推荐岗位</span>
+                  <span className="text-sm text-muted-foreground">正在分析简历并匹配岗位...</span>
+                  <span className="text-sm font-medium">{matchProgress}%</span>
                 </div>
-                {matchResults.map((result) => (
-                  <ResultCard key={result.job_id} result={result} />
-                ))}
-              </div>
-            ) : (
-              <div className="h-full flex items-center justify-center">
-                <div className="text-center py-20">
-                  <div className="w-16 h-16 rounded-2xl bg-white/5 border border-white/10 flex items-center justify-center mx-auto mb-4">
-                    <Brain className="h-8 w-8 text-slate-600" />
-                  </div>
-                  <p className="text-slate-500">选择简历后开始匹配</p>
-                </div>
+                <Progress value={matchProgress} className="h-2" />
               </div>
             )}
+          </CardContent>
+        </Card>
+
+        {/* Match Results */}
+        {matchResults.length > 0 && (
+          <div className="space-y-4">
+            <div className="flex items-center justify-between">
+              <h2 className="text-xl font-semibold flex items-center gap-2">
+                <CheckCircle className="h-5 w-5 text-green-600" />
+                匹配结果
+              </h2>
+              <Badge variant="secondary">共 {matchResults.length} 个推荐</Badge>
+            </div>
+
+            {matchResults.map((result, index) => (
+              <Card key={result.job_id} className="hover:shadow-lg transition-all">
+                <CardContent className="pt-6">
+                  <div className="flex flex-col md:flex-row gap-6">
+                    {/* Score */}
+                    <div className="flex flex-col items-center justify-center p-4 rounded-lg bg-gradient-to-br from-purple-50 to-blue-50 dark:from-purple-950 dark:to-blue-950">
+                      <div className={`text-4xl font-bold ${getScoreColor(result.match_score)}`}>
+                        {result.match_score}
+                      </div>
+                      <div className="text-sm text-muted-foreground mt-1">匹配分数</div>
+                      <Badge className="mt-2" variant={result.match_score >= 80 ? 'default' : 'secondary'}>
+                        {getScoreLabel(result.match_score)}
+                      </Badge>
+                    </div>
+
+                    {/* Details */}
+                    <div className="flex-1 space-y-4">
+                      <div>
+                        <h3 className="text-lg font-semibold">{result.job_title}</h3>
+                        <p className="text-muted-foreground">{result.company}</p>
+                      </div>
+
+                      <div>
+                        <h4 className="font-medium flex items-center gap-2 mb-2">
+                          <TrendingUp className="h-4 w-4 text-green-600" />
+                          匹配原因
+                        </h4>
+                        <p className="text-sm text-muted-foreground bg-muted/50 p-3 rounded-lg">
+                          {result.match_reason}
+                        </p>
+                      </div>
+
+                      {result.suggestions && (
+                        <div>
+                          <h4 className="font-medium flex items-center gap-2 mb-2">
+                            <Sparkles className="h-4 w-4 text-orange-600" />
+                            优化建议
+                          </h4>
+                          <p className="text-sm text-muted-foreground bg-orange-50 dark:bg-orange-950/30 p-3 rounded-lg">
+                            {result.suggestions}
+                          </p>
+                        </div>
+                      )}
+
+                      <div className="flex gap-2">
+                        <Button size="sm" asChild>
+                          <Link href={`/jobs/${result.job_id}`}>
+                            查看岗位
+                          </Link>
+                        </Button>
+                        <Button size="sm" variant="outline">
+                          立即申请
+                          <ArrowRight className="ml-2 h-4 w-4" />
+                        </Button>
+                      </div>
+                    </div>
+                  </div>
+                </CardContent>
+              </Card>
+            ))}
           </div>
-        </div>
+        )}
+
+        {/* Empty State */}
+        {!matching && matchResults.length === 0 && (
+          <Card className="border-dashed">
+            <CardContent className="py-12 text-center">
+              <Brain className="h-16 w-16 mx-auto mb-4 text-muted-foreground opacity-50" />
+              <h3 className="text-lg font-medium mb-2">选择简历开始匹配</h3>
+              <p className="text-muted-foreground max-w-md mx-auto">
+                AI将分析你的简历内容，结合岗位要求，为你推荐最匹配的工作机会
+              </p>
+            </CardContent>
+          </Card>
+        )}
       </main>
     </div>
   );
 }
 
+// 主组件
 export default function AIMatchPage() {
   return (
     <AccessGuard>
