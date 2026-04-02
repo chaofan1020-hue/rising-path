@@ -97,7 +97,22 @@ export async function POST(request: NextRequest) {
 export async function DELETE(request: NextRequest) {
   try {
     const client = getSupabaseClient();
-    const body: BatchDeleteInput = await request.json();
+    
+    // 安全解析请求体
+    let body: BatchDeleteInput;
+    try {
+      const text = await request.text();
+      console.log('Request body text:', text);
+      body = JSON.parse(text || '{}');
+    } catch (parseError) {
+      console.error('Failed to parse request body:', parseError);
+      return NextResponse.json(
+        { error: '请求体格式错误' },
+        { status: 400 }
+      );
+    }
+
+    console.log('Parsed body:', body);
 
     if (!body.ids || !Array.isArray(body.ids) || body.ids.length === 0) {
       return NextResponse.json(
@@ -105,6 +120,8 @@ export async function DELETE(request: NextRequest) {
         { status: 400 }
       );
     }
+
+    console.log('Deleting jobs with ids:', body.ids);
 
     // 先删除关联的 ai_matches 记录
     await client
@@ -131,8 +148,11 @@ export async function DELETE(request: NextRequest) {
       .in('id', body.ids);
 
     if (error) {
+      console.error('Database delete error:', error);
       throw new Error(`批量删除岗位失败: ${error.message}`);
     }
+
+    console.log('Successfully deleted', body.ids.length, 'jobs');
 
     return NextResponse.json({
       success: true,
