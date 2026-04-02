@@ -5,7 +5,7 @@ import './globals.css';
 export const metadata: Metadata = {
   title: {
     default: '留学生求职平台',
-    template: '%s | CareerPath',
+    template: '%s | PathUp',
   },
   description:
     '专为海外留学生打造的一站式求职平台，提供岗位查询、AI选岗、简历优化、自动网申等功能',
@@ -19,7 +19,7 @@ export const metadata: Metadata = {
     '网申',
     '求职平台',
   ],
-  authors: [{ name: 'CareerPath Team' }],
+  authors: [{ name: 'PathUp Team' }],
   generator: 'Coze Code',
 };
 

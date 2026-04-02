@@ -77,7 +77,7 @@ export default function Home() {
         <div className="container mx-auto px-4 h-16 flex items-center justify-between">
           <div className="flex items-center gap-2">
             <Briefcase className="h-6 w-6 text-primary" />
-            <span className="font-bold text-xl">CareerPath</span>
+            <span className="font-bold text-xl">PathUp</span>
           </div>
           <div className="flex items-center gap-4">
             <Link href="/jobs">
@@ -210,10 +210,10 @@ export default function Home() {
           <div className="flex flex-col md:flex-row items-center justify-between gap-4">
             <div className="flex items-center gap-2">
               <Briefcase className="h-5 w-5 text-primary" />
-              <span className="font-semibold">CareerPath</span>
+              <span className="font-semibold">PathUp</span>
             </div>
             <p className="text-sm text-muted-foreground">
-              © 2024 CareerPath. 专为海外留学生打造
+              © 2024 PathUp. 专为海外留学生打造
             </p>
           </div>
         </div>

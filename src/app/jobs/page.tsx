@@ -76,7 +76,7 @@ export default function JobsPage() {
         <div className="container mx-auto px-4 h-16 flex items-center justify-between">
           <Link href="/" className="flex items-center gap-2">
             <Briefcase className="h-6 w-6 text-primary" />
-            <span className="font-bold text-xl">CareerPath</span>
+            <span className="font-bold text-xl">PathUp</span>
           </Link>
           <nav className="flex items-center gap-4">
             <Link href="/resume">

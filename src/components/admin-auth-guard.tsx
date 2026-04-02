@@ -12,7 +12,7 @@ interface AdminAuthGuardProps {
 }
 
 // 简单的管理密码（生产环境应该使用更安全的方式）
-const ADMIN_PASSWORD = 'careerpath2024';
+const ADMIN_PASSWORD = 'pathup2024';
 
 export function AdminAuthGuard({ children }: AdminAuthGuardProps) {
   const [isAuthenticated, setIsAuthenticated] = useState(false);
