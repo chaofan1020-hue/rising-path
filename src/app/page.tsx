@@ -1,9 +1,6 @@
-'use client';
-
-import { useState } from 'react';
 import Link from 'next/link';
 import { Button } from '@/components/ui/button';
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
+import { Card, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
 import {
   Briefcase,
@@ -15,8 +12,6 @@ import {
   Upload,
   ChevronRight,
   Globe,
-  GraduationCap,
-  Users,
 } from 'lucide-react';
 
 const features = [
@@ -60,13 +55,6 @@ const features = [
     color: 'text-cyan-600',
     bgColor: 'bg-cyan-50 dark:bg-cyan-950',
   },
-];
-
-const stats = [
-  { label: '覆盖地区', value: '30+', icon: Globe },
-  { label: '合作企业', value: '5000+', icon: Briefcase },
-  { label: '留学生用户', value: '10万+', icon: GraduationCap },
-  { label: '成功案例', value: '5万+', icon: Users },
 ];
 
 export default function Home() {
@@ -124,18 +112,42 @@ export default function Home() {
         </div>
       </section>
 
-      {/* Stats Section */}
-      <section className="container mx-auto px-4 py-12">
-        <div className="grid grid-cols-2 md:grid-cols-4 gap-6">
-          {stats.map((stat) => (
-            <Card key={stat.label}>
-              <CardContent className="pt-6 text-center">
-                <stat.icon className="h-8 w-8 mx-auto mb-2 text-primary" />
-                <div className="text-3xl font-bold">{stat.value}</div>
-                <div className="text-sm text-muted-foreground">{stat.label}</div>
-              </CardContent>
-            </Card>
-          ))}
+      {/* Why Choose Us */}
+      <section className="container mx-auto px-4 py-16">
+        <div className="text-center mb-12">
+          <h2 className="text-3xl font-bold mb-4">为什么选择 PathUp</h2>
+          <p className="text-muted-foreground">
+            专注留学生求职，让每一步都更有价值
+          </p>
+        </div>
+        <div className="grid md:grid-cols-3 gap-8">
+          <div className="flex flex-col items-center text-center p-6">
+            <div className="w-14 h-14 rounded-2xl bg-gradient-to-br from-blue-500 to-blue-600 flex items-center justify-center mb-4 shadow-lg shadow-blue-500/20">
+              <Globe className="h-7 w-7 text-white" />
+            </div>
+            <h3 className="font-semibold text-lg mb-2">全球岗位覆盖</h3>
+            <p className="text-muted-foreground text-sm leading-relaxed">
+              覆盖美国、英国、新加坡、香港等主流留学地区，实时更新优质岗位信息
+            </p>
+          </div>
+          <div className="flex flex-col items-center text-center p-6">
+            <div className="w-14 h-14 rounded-2xl bg-gradient-to-br from-purple-500 to-purple-600 flex items-center justify-center mb-4 shadow-lg shadow-purple-500/20">
+              <Brain className="h-7 w-7 text-white" />
+            </div>
+            <h3 className="font-semibold text-lg mb-2">AI智能推荐</h3>
+            <p className="text-muted-foreground text-sm leading-relaxed">
+              基于简历深度分析，精准匹配最适合的岗位，提高投递成功率
+            </p>
+          </div>
+          <div className="flex flex-col items-center text-center p-6">
+            <div className="w-14 h-14 rounded-2xl bg-gradient-to-br from-green-500 to-green-600 flex items-center justify-center mb-4 shadow-lg shadow-green-500/20">
+              <Sparkles className="h-7 w-7 text-white" />
+            </div>
+            <h3 className="font-semibold text-lg mb-2">ATS简历优化</h3>
+            <p className="text-muted-foreground text-sm leading-relaxed">
+              针对企业招聘系统优化简历格式，让简历更容易被HR看到
+            </p>
+          </div>
         </div>
       </section>
 
