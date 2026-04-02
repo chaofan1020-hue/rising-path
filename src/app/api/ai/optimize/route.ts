@@ -44,6 +44,8 @@ export async function POST(request: NextRequest) {
 原简历内容：
 ${resumeContent}${suggestionsSection}
 
+重要：请保持与原简历相同的语言！如果原简历是中文，则优化后的简历全部使用中文；如果原简历是英文，则优化后的简历全部使用英文。
+
 请优化简历并以JSON格式输出，格式如下：
 {
   "name": "姓名",
@@ -90,11 +92,12 @@ ${resumeContent}${suggestionsSection}
 2. 使用STAR法则量化工作成果
 3. 突出与目标岗位最相关的经验
 4. 保持内容真实，基于原简历优化
+5. 保持与原简历相同的语言（中文或英文）
 
 只返回JSON，不要其他说明文字。`;
 
     const stream = llmClient.stream([
-      { role: 'system', content: '你是一个专业的简历优化专家，擅长针对ATS系统优化简历，提高简历通过率。请始终以有效的JSON格式输出。' },
+      { role: 'system', content: '你是一个专业的简历优化专家，擅长针对ATS系统优化简历，提高简历通过率。请始终以有效的JSON格式输出，并保持与原简历相同的语言。' },
       { role: 'user', content: prompt },
     ], { temperature: 0.7 });
 
