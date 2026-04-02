@@ -28,8 +28,7 @@ import {
   Link as LinkIcon,
 } from 'lucide-react';
 import Link from 'next/link';
-import { AccessGuard } from '@/components/access-guard';
-import { useAccessCode } from '@/hooks/useAccessCode';
+import { AccessGuard, useAccessCode } from '@/components/access-guard';
 
 interface Resume {
   id: number;

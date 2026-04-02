@@ -25,6 +25,7 @@ import {
   TrendingUp,
 } from 'lucide-react';
 import Link from 'next/link';
+import { AccessGuard, useAccessCode } from '@/components/access-guard';
 
 interface Resume {
   id: number;
@@ -50,14 +51,21 @@ export default function AIMatchPage() {
   const [matching, setMatching] = useState(false);
   const [matchProgress, setMatchProgress] = useState(0);
   const [matchResults, setMatchResults] = useState<MatchResult[]>([]);
+  const { accessCodeId } = useAccessCode();
 
   useEffect(() => {
-    fetchResumes();
-  }, []);
+    if (accessCodeId !== undefined) {
+      fetchResumes();
+    }
+  }, [accessCodeId]);
 
   const fetchResumes = async () => {
     try {
-      const response = await fetch('/api/resume');
+      const params = new URLSearchParams();
+      if (accessCodeId) {
+        params.append('access_code_id', accessCodeId.toString());
+      }
+      const response = await fetch(`/api/resume?${params.toString()}`);
       const data = await response.json();
       setResumes(data.resumes || []);
     } catch (error) {
@@ -81,7 +89,10 @@ export default function AIMatchPage() {
       const response = await fetch('/api/ai/match', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ resumeId: selectedResumeId }),
+        body: JSON.stringify({ 
+          resumeId: selectedResumeId,
+          accessCodeId: accessCodeId,
+        }),
       });
 
       clearInterval(progressInterval);
@@ -113,12 +124,13 @@ export default function AIMatchPage() {
   };
 
   return (
-    <div className="min-h-screen bg-background">
-      {/* Header */}
-      <header className="border-b sticky top-0 bg-background/95 backdrop-blur z-50">
-        <div className="container mx-auto px-4 h-16 flex items-center justify-between">
-          <Link href="/" className="flex items-center gap-2">
-            <Briefcase className="h-6 w-6 text-primary" />
+    <AccessGuard>
+      <div className="min-h-screen bg-background">
+        {/* Header */}
+        <header className="border-b sticky top-0 bg-background/95 backdrop-blur z-50">
+          <div className="container mx-auto px-4 h-16 flex items-center justify-between">
+            <Link href="/" className="flex items-center gap-2">
+              <Briefcase className="h-6 w-6 text-primary" />
             <span className="font-bold text-xl">PathUp</span>
           </Link>
           <nav className="flex items-center gap-4">
@@ -291,5 +303,6 @@ export default function AIMatchPage() {
         )}
       </main>
     </div>
+    </AccessGuard>
   );
 }

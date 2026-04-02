@@ -5,17 +5,23 @@ import { LLMClient, Config, HeaderUtils } from 'coze-coding-dev-sdk';
 export async function POST(request: NextRequest) {
   try {
     const client = getSupabaseClient();
-    const { resumeId } = await request.json();
+    const { resumeId, accessCodeId } = await request.json();
 
-    // Get resume info
-    const { data: resume, error: resumeError } = await client
+    // Build resume query
+    let resumeQuery = client
       .from('resumes')
       .select('*')
-      .eq('id', resumeId)
-      .single();
+      .eq('id', resumeId);
+    
+    // If access code is provided, verify ownership
+    if (accessCodeId) {
+      resumeQuery = resumeQuery.eq('access_code_id', accessCodeId);
+    }
+
+    const { data: resume, error: resumeError } = await resumeQuery.single();
 
     if (resumeError || !resume) {
-      return NextResponse.json({ error: '简历不存在' }, { status: 404 });
+      return NextResponse.json({ error: '简历不存在或无权访问' }, { status: 404 });
     }
 
     // Get jobs
@@ -114,6 +120,7 @@ ${JSON.stringify(jobsList, null, 2)}
         match_score: match.match_score,
         match_reason: match.match_reason,
         suggestions: match.suggestions,
+        access_code_id: accessCodeId || null,
       });
     }
 

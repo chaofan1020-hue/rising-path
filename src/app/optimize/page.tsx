@@ -34,6 +34,7 @@ import {
   AlertCircle,
 } from 'lucide-react';
 import Link from 'next/link';
+import { AccessGuard, useAccessCode } from '@/components/access-guard';
 
 interface Resume {
   id: number;
@@ -51,14 +52,21 @@ export default function OptimizePage() {
   const [optimizeProgress, setOptimizeProgress] = useState(0);
   const [optimizedContent, setOptimizedContent] = useState('');
   const [showResult, setShowResult] = useState(false);
+  const { accessCodeId } = useAccessCode();
 
   useEffect(() => {
-    fetchResumes();
-  }, []);
+    if (accessCodeId !== undefined) {
+      fetchResumes();
+    }
+  }, [accessCodeId]);
 
   const fetchResumes = async () => {
     try {
-      const response = await fetch('/api/resume');
+      const params = new URLSearchParams();
+      if (accessCodeId) {
+        params.append('access_code_id', accessCodeId.toString());
+      }
+      const response = await fetch(`/api/resume?${params.toString()}`);
       const data = await response.json();
       setResumes(data.resumes || []);
     } catch (error) {
@@ -110,7 +118,8 @@ export default function OptimizePage() {
   };
 
   return (
-    <div className="min-h-screen bg-background">
+    <AccessGuard>
+      <div className="min-h-screen bg-background">
       {/* Header */}
       <header className="border-b sticky top-0 bg-background/95 backdrop-blur z-50">
         <div className="container mx-auto px-4 h-16 flex items-center justify-between">
@@ -300,6 +309,7 @@ export default function OptimizePage() {
           </div>
         </DialogContent>
       </Dialog>
-    </div>
+      </div>
+    </AccessGuard>
   );
 }

@@ -1,6 +1,6 @@
 'use client';
 
-import { useEffect, useState } from 'react';
+import { createContext, useContext, useEffect, useState, ReactNode } from 'react';
 import { useRouter } from 'next/navigation';
 import { Button } from '@/components/ui/button';
 import { Briefcase, Loader2 } from 'lucide-react';
@@ -13,7 +13,30 @@ interface AccessCode {
   expires_at: string;
 }
 
-export function AccessGuard({ children }: { children: React.ReactNode }) {
+interface AccessCodeContextType {
+  accessCode: AccessCode | null;
+  accessCodeId: number | null;
+  isAuthenticated: boolean;
+  logout: () => void;
+}
+
+const AccessCodeContext = createContext<AccessCodeContextType | null>(null);
+
+export function useAccessCode() {
+  const context = useContext(AccessCodeContext);
+  if (!context) {
+    // 返回默认值，避免报错
+    return {
+      accessCode: null,
+      accessCodeId: null,
+      isAuthenticated: false,
+      logout: () => {},
+    };
+  }
+  return context;
+}
+
+export function AccessGuard({ children }: { children: ReactNode }) {
   const router = useRouter();
   const [loading, setLoading] = useState(true);
   const [authorized, setAuthorized] = useState(false);
@@ -59,9 +82,18 @@ export function AccessGuard({ children }: { children: React.ReactNode }) {
     }
   };
 
-  const handleLogout = () => {
+  const logout = () => {
     localStorage.removeItem('access_code');
+    setAccessCode(null);
+    setAuthorized(false);
     router.push('/login');
+  };
+
+  const contextValue: AccessCodeContextType = {
+    accessCode,
+    accessCodeId: accessCode?.id || null,
+    isAuthenticated: authorized,
+    logout,
   };
 
   if (loading) {
@@ -100,7 +132,7 @@ export function AccessGuard({ children }: { children: React.ReactNode }) {
   }
 
   return (
-    <>
+    <AccessCodeContext.Provider value={contextValue}>
       {/* 顶部提示栏 */}
       <div className="bg-primary/5 border-b py-1.5 px-4">
         <div className="container mx-auto flex items-center justify-between text-sm">
@@ -117,7 +149,7 @@ export function AccessGuard({ children }: { children: React.ReactNode }) {
           <Button 
             variant="ghost" 
             size="sm" 
-            onClick={handleLogout}
+            onClick={logout}
             className="h-7 text-xs"
           >
             退出登录
@@ -125,6 +157,6 @@ export function AccessGuard({ children }: { children: React.ReactNode }) {
         </div>
       </div>
       {children}
-    </>
+    </AccessCodeContext.Provider>
   );
 }
