@@ -30,6 +30,7 @@ import {
   MapPin,
   Compass,
   ChevronDown,
+  X,
 } from 'lucide-react';
 import Link from 'next/link';
 import { AccessGuard, useAccessCode } from '@/components/access-guard';
@@ -333,6 +334,54 @@ function AIMatchContent() {
                 </Button>
               </div>
             </div>
+
+            {/* 已选择的筛选条件显示 */}
+            {(selectedRegions.length > 0 || selectedDirections.length > 0) && (
+              <div className="mt-4 flex flex-wrap gap-2 items-center">
+                <span className="text-sm text-muted-foreground">已选择：</span>
+                {selectedRegions.map((region) => (
+                  <Badge 
+                    key={region} 
+                    variant="secondary" 
+                    className="flex items-center gap-1 pr-1"
+                  >
+                    <MapPin className="h-3 w-3" />
+                    {region}
+                    <button
+                      onClick={() => setSelectedRegions(selectedRegions.filter(r => r !== region))}
+                      className="ml-1 hover:bg-muted-foreground/20 rounded-full p-0.5"
+                    >
+                      <X className="h-3 w-3" />
+                    </button>
+                  </Badge>
+                ))}
+                {selectedDirections.map((direction) => (
+                  <Badge 
+                    key={direction} 
+                    variant="secondary" 
+                    className="flex items-center gap-1 pr-1"
+                  >
+                    <Compass className="h-3 w-3" />
+                    {direction}
+                    <button
+                      onClick={() => setSelectedDirections(selectedDirections.filter(d => d !== direction))}
+                      className="ml-1 hover:bg-muted-foreground/20 rounded-full p-0.5"
+                    >
+                      <X className="h-3 w-3" />
+                    </button>
+                  </Badge>
+                ))}
+                <button
+                  onClick={() => {
+                    setSelectedRegions([]);
+                    setSelectedDirections([]);
+                  }}
+                  className="text-xs text-muted-foreground hover:text-foreground transition-colors"
+                >
+                  清除全部
+                </button>
+              </div>
+            )}
 
             {matching && (
               <div className="mt-6">
