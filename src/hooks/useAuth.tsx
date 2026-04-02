@@ -1,8 +1,17 @@
 'use client';
 
-import { createContext, useContext, useState, useEffect, ReactNode } from 'react';
-import { User, getCurrentUser, signIn, signUp, signOut, updateProfile, onAuthStateChange } from '@/lib/auth-client';
+import { createContext, useContext, useState, useEffect, ReactNode, useCallback } from 'react';
 import { useRouter } from 'next/navigation';
+
+export type User = {
+  id: string;
+  email: string;
+  full_name?: string;
+  avatar_url?: string;
+  university?: string;
+  major?: string;
+  graduation_year?: number;
+};
 
 interface AuthContextType {
   user: User | null;
@@ -10,7 +19,7 @@ interface AuthContextType {
   signIn: (email: string, password: string) => Promise<void>;
   signUp: (email: string, password: string, fullName?: string) => Promise<void>;
   signOut: () => Promise<void>;
-  updateProfile: (updates: Partial<User>) => Promise<void>;
+  refreshUser: () => Promise<void>;
 }
 
 const AuthContext = createContext<AuthContextType | undefined>(undefined);
@@ -20,46 +29,69 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   const [loading, setLoading] = useState(true);
   const router = useRouter();
 
-  useEffect(() => {
-    // Check current user on mount
-    getCurrentUser()
-      .then(setUser)
-      .catch(() => setUser(null))
-      .finally(() => setLoading(false));
-
-    // Subscribe to auth changes
-    const { data: { subscription } } = onAuthStateChange((currentUser) => {
-      setUser(currentUser);
-    });
-
-    return () => {
-      subscription.unsubscribe();
-    };
+  const fetchUser = useCallback(async () => {
+    try {
+      const response = await fetch('/api/auth/me');
+      if (response.ok) {
+        const data = await response.json();
+        setUser(data.user);
+      } else {
+        setUser(null);
+      }
+    } catch {
+      setUser(null);
+    } finally {
+      setLoading(false);
+    }
   }, []);
 
-  const handleSignIn = async (email: string, password: string) => {
-    const { session } = await signIn(email, password);
-    if (session) {
-      const currentUser = await getCurrentUser();
-      setUser(currentUser);
+  useEffect(() => {
+    fetchUser();
+  }, [fetchUser]);
+
+  const signIn = async (email: string, password: string) => {
+    const response = await fetch('/api/auth/login', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ email, password }),
+    });
+
+    const data = await response.json();
+
+    if (!response.ok) {
+      throw new Error(data.error || '登录失败');
+    }
+
+    await fetchUser();
+  };
+
+  const signUp = async (email: string, password: string, fullName?: string) => {
+    const response = await fetch('/api/auth/register', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ email, password, fullName }),
+    });
+
+    const data = await response.json();
+
+    if (!response.ok) {
+      throw new Error(data.error || '注册失败');
+    }
+
+    // If session returned, auto-login
+    if (data.session) {
+      await fetchUser();
     }
   };
 
-  const handleSignUp = async (email: string, password: string, fullName?: string) => {
-    await signUp(email, password, fullName);
-    // After signup, user needs to verify email (if email confirmation is enabled)
-  };
-
-  const handleSignOut = async () => {
-    await signOut();
+  const signOut = async () => {
+    await fetch('/api/auth/logout', { method: 'POST' });
     setUser(null);
     router.push('/login');
   };
 
-  const handleUpdateProfile = async (updates: Partial<User>) => {
-    const updated = await updateProfile(updates);
-    setUser(prev => prev ? { ...prev, ...updates } : null);
-    return updated;
+  const refreshUser = async () => {
+    await fetchUser();
   };
 
   return (
@@ -67,10 +99,10 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       value={{
         user,
         loading,
-        signIn: handleSignIn,
-        signUp: handleSignUp,
-        signOut: handleSignOut,
-        updateProfile: handleUpdateProfile,
+        signIn,
+        signUp,
+        signOut,
+        refreshUser,
       }}
     >
       {children}

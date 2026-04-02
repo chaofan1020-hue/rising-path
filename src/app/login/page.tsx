@@ -1,6 +1,6 @@
 'use client';
 
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { useRouter, useSearchParams } from 'next/navigation';
 import Link from 'next/link';
 import { Button } from '@/components/ui/button';
@@ -8,15 +8,14 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/com
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
-import { Briefcase, Loader2, Mail, Lock, User, ArrowLeft } from 'lucide-react';
-import { useAuth } from '@/hooks/useAuth';
+import { Briefcase, Loader2, Mail, Lock, User, ArrowLeft, CheckCircle } from 'lucide-react';
 
-function LoginPageContent() {
+export default function LoginPage() {
   const router = useRouter();
   const searchParams = useSearchParams();
   const redirectTo = searchParams.get('redirect') || '/';
-  const { signIn, signUp, user, loading: authLoading } = useAuth();
 
+  const [activeTab, setActiveTab] = useState('login');
   const [isLoading, setIsLoading] = useState(false);
   const [error, setError] = useState('');
   const [success, setSuccess] = useState('');
@@ -31,11 +30,21 @@ function LoginPageContent() {
   const [registerName, setRegisterName] = useState('');
   const [confirmPassword, setConfirmPassword] = useState('');
 
-  // Redirect if already logged in
-  if (!authLoading && user) {
-    router.push(redirectTo);
-    return null;
-  }
+  // Check if already logged in
+  useEffect(() => {
+    checkAuth();
+  }, []);
+
+  const checkAuth = async () => {
+    try {
+      const response = await fetch('/api/auth/me');
+      if (response.ok) {
+        router.push(redirectTo);
+      }
+    } catch {
+      // Not logged in, show login form
+    }
+  };
 
   const handleLogin = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -43,11 +52,26 @@ function LoginPageContent() {
     setError('');
 
     try {
-      await signIn(loginEmail, loginPassword);
+      const response = await fetch('/api/auth/login', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          email: loginEmail,
+          password: loginPassword,
+        }),
+      });
+
+      const data = await response.json();
+
+      if (!response.ok) {
+        setError(data.error || '登录失败');
+        return;
+      }
+
+      // Login successful, redirect
       router.push(redirectTo);
-    } catch (err: unknown) {
-      const errorMessage = err instanceof Error ? err.message : '登录失败，请检查邮箱和密码';
-      setError(errorMessage);
+    } catch (err) {
+      setError('网络错误，请重试');
     } finally {
       setIsLoading(false);
     }
@@ -72,23 +96,45 @@ function LoginPageContent() {
     }
 
     try {
-      await signUp(registerEmail, registerPassword, registerName);
-      setSuccess('注册成功！请检查邮箱验证后登录。');
-    } catch (err: unknown) {
-      const errorMessage = err instanceof Error ? err.message : '注册失败，请重试';
-      setError(errorMessage);
+      const response = await fetch('/api/auth/register', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          email: registerEmail,
+          password: registerPassword,
+          fullName: registerName,
+        }),
+      });
+
+      const data = await response.json();
+
+      if (!response.ok) {
+        setError(data.error || '注册失败');
+        return;
+      }
+
+      if (data.requiresEmailConfirmation) {
+        setSuccess(data.message);
+        // Clear form
+        setRegisterEmail('');
+        setRegisterPassword('');
+        setRegisterName('');
+        setConfirmPassword('');
+      } else if (data.session) {
+        // Auto login after registration
+        setSuccess('注册成功！正在跳转...');
+        setTimeout(() => {
+          router.push(redirectTo);
+        }, 1000);
+      } else {
+        setSuccess(data.message || '注册成功！');
+      }
+    } catch (err) {
+      setError('网络错误，请重试');
     } finally {
       setIsLoading(false);
     }
   };
-
-  if (authLoading) {
-    return (
-      <div className="min-h-screen bg-gradient-to-br from-blue-50 to-indigo-100 dark:from-gray-900 dark:to-gray-800 flex items-center justify-center">
-        <Loader2 className="h-8 w-8 animate-spin text-primary" />
-      </div>
-    );
-  }
 
   return (
     <div className="min-h-screen bg-gradient-to-br from-blue-50 to-indigo-100 dark:from-gray-900 dark:to-gray-800 flex items-center justify-center p-4">
@@ -116,7 +162,7 @@ function LoginPageContent() {
             </CardDescription>
           </CardHeader>
           <CardContent>
-            <Tabs defaultValue="login" className="w-full">
+            <Tabs value={activeTab} onValueChange={setActiveTab} className="w-full">
               <TabsList className="grid w-full grid-cols-2 mb-6">
                 <TabsTrigger value="login">登录</TabsTrigger>
                 <TabsTrigger value="register">注册</TabsTrigger>
@@ -243,7 +289,10 @@ function LoginPageContent() {
                     <p className="text-sm text-destructive text-center">{error}</p>
                   )}
                   {success && (
-                    <p className="text-sm text-green-600 text-center">{success}</p>
+                    <div className="flex items-center justify-center gap-2 text-sm text-green-600">
+                      <CheckCircle className="h-4 w-4" />
+                      {success}
+                    </div>
                   )}
                   <Button type="submit" className="w-full" disabled={isLoading || !registerEmail || !registerPassword || !confirmPassword}>
                     {isLoading ? (
@@ -269,11 +318,5 @@ function LoginPageContent() {
         </p>
       </div>
     </div>
-  );
-}
-
-export default function LoginPage() {
-  return (
-    <LoginPageContent />
   );
 }
