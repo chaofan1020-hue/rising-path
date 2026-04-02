@@ -44,17 +44,57 @@ export async function POST(request: NextRequest) {
 原简历内容：
 ${resumeContent}${suggestionsSection}
 
-请从以下方面优化简历：
-1. 添加目标岗位相关的关键词和技能标签
-2. 使用更专业、更有影响力的描述语言
-3. 量化工作成果（如将"提升了性能"改为"性能提升50%"）
-4. 调整格式使其更易于ATS系统解析
-5. 突出与目标岗位最相关的经验
+请优化简历并以JSON格式输出，格式如下：
+{
+  "name": "姓名",
+  "contact": {
+    "email": "邮箱",
+    "phone": "电话",
+    "location": "所在地",
+    "linkedin": "LinkedIn链接（如有）"
+  },
+  "summary": "个人简介（2-3句话概述背景和优势）",
+  "skills": ["技能1", "技能2", "技能3"],
+  "experience": [
+    {
+      "title": "职位名称",
+      "company": "公司名称",
+      "location": "工作地点",
+      "period": "时间段（如：2021.06 - 2023.08）",
+      "highlights": ["成就1", "成就2", "成就3"]
+    }
+  ],
+  "education": [
+    {
+      "degree": "学位",
+      "school": "学校名称",
+      "major": "专业",
+      "period": "时间段",
+      "gpa": "GPA（如有）"
+    }
+  ],
+  "projects": [
+    {
+      "name": "项目名称",
+      "role": "担任角色",
+      "period": "时间段",
+      "description": "项目描述",
+      "highlights": ["成果1", "成果2"]
+    }
+  ],
+  "certifications": ["证书1", "证书2"]
+}
 
-请直接输出优化后的简历内容，保持专业简洁。`;
+优化要求：
+1. 添加目标岗位相关的关键词和技能
+2. 使用STAR法则量化工作成果
+3. 突出与目标岗位最相关的经验
+4. 保持内容真实，基于原简历优化
+
+只返回JSON，不要其他说明文字。`;
 
     const stream = llmClient.stream([
-      { role: 'system', content: '你是一个专业的简历优化专家，擅长针对ATS系统优化简历，提高简历通过率。' },
+      { role: 'system', content: '你是一个专业的简历优化专家，擅长针对ATS系统优化简历，提高简历通过率。请始终以有效的JSON格式输出。' },
       { role: 'user', content: prompt },
     ], { temperature: 0.7 });
 
@@ -65,6 +105,21 @@ ${resumeContent}${suggestionsSection}
       }
     }
 
+    // 尝试解析JSON，验证格式正确
+    try {
+      const jsonMatch = optimizedContent.match(/\{[\s\S]*\}/);
+      if (jsonMatch) {
+        const parsed = JSON.parse(jsonMatch[0]);
+        return NextResponse.json({ 
+          optimized_content: optimizedContent,
+          resume_data: parsed 
+        });
+      }
+    } catch (e) {
+      console.error('Failed to parse optimized resume as JSON:', e);
+    }
+
+    // 如果JSON解析失败，返回原始内容
     return NextResponse.json({ optimized_content: optimizedContent });
   } catch (error) {
     console.error('Optimization error:', error);
