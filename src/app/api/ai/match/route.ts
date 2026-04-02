@@ -5,7 +5,7 @@ import { LLMClient, Config, HeaderUtils } from 'coze-coding-dev-sdk';
 export async function POST(request: NextRequest) {
   try {
     const client = getSupabaseClient();
-    const { resumeId, accessCodeId } = await request.json();
+    const { resumeId, accessCodeId, regions, directions } = await request.json();
 
     // 必须提供 access_code_id
     if (!accessCodeId) {
@@ -24,11 +24,20 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ error: '简历不存在或无权访问' }, { status: 404 });
     }
 
-    // Get jobs
-    const { data: jobs, error: jobsError } = await client
-      .from('jobs')
-      .select('*')
-      .limit(20);
+    // Build jobs query with filters
+    let jobsQuery = client.from('jobs').select('*');
+    
+    // Apply region filter
+    if (regions && regions.length > 0) {
+      jobsQuery = jobsQuery.in('region', regions);
+    }
+    
+    // Apply direction filter
+    if (directions && directions.length > 0) {
+      jobsQuery = jobsQuery.in('direction', directions);
+    }
+    
+    const { data: jobs, error: jobsError } = await jobsQuery.limit(20);
 
     if (jobsError) {
       throw new Error(`查询岗位失败: ${jobsError.message}`);

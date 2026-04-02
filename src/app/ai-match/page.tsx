@@ -5,7 +5,7 @@ import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
 import { Progress } from '@/components/ui/progress';
-import { Textarea } from '@/components/ui/textarea';
+import { Checkbox } from '@/components/ui/checkbox';
 import {
   Select,
   SelectContent,
@@ -13,6 +13,11 @@ import {
   SelectTrigger,
   SelectValue,
 } from '@/components/ui/select';
+import {
+  Popover,
+  PopoverContent,
+  PopoverTrigger,
+} from '@/components/ui/popover';
 import { 
   Brain, 
   Target, 
@@ -20,9 +25,11 @@ import {
   CheckCircle, 
   ArrowRight,
   Briefcase,
-  FileText,
   Sparkles,
   TrendingUp,
+  MapPin,
+  Compass,
+  ChevronDown,
 } from 'lucide-react';
 import Link from 'next/link';
 import { AccessGuard, useAccessCode } from '@/components/access-guard';
@@ -45,6 +52,89 @@ interface MatchResult {
   suggestions: string;
 }
 
+interface JobConfig {
+  id: number;
+  config_type: string;
+  config_value: string;
+  sort_order: number;
+  is_active: boolean;
+}
+
+// 多选筛选器组件
+function MultiSelectFilter({
+  label,
+  icon: Icon,
+  options,
+  selected,
+  onChange,
+}: {
+  label: string;
+  icon: React.ElementType;
+  options: JobConfig[];
+  selected: string[];
+  onChange: (values: string[]) => void;
+}) {
+  const handleToggle = (value: string) => {
+    if (selected.includes(value)) {
+      onChange(selected.filter(v => v !== value));
+    } else {
+      onChange([...selected, value]);
+    }
+  };
+
+  return (
+    <Popover>
+      <PopoverTrigger asChild>
+        <button className="inline-flex items-center gap-2 px-3 py-2 rounded-full border border-input bg-background hover:bg-accent hover:text-accent-foreground transition-colors text-sm">
+          <Icon className="h-4 w-4 text-muted-foreground" />
+          <span className="font-medium">{label}</span>
+          {selected.length > 0 && (
+            <Badge variant="secondary" className="ml-0.5 h-5 px-1.5 rounded-full">
+              {selected.length}
+            </Badge>
+          )}
+          <ChevronDown className="h-3.5 w-3.5 text-muted-foreground" />
+        </button>
+      </PopoverTrigger>
+      <PopoverContent className="w-48 p-2" align="start">
+        <div className="max-h-60 overflow-y-auto space-y-1">
+          {options.map((option) => (
+            <label
+              key={option.id}
+              className={`flex items-center gap-2 px-2 py-1.5 rounded-md cursor-pointer transition-colors ${
+                selected.includes(option.config_value) 
+                  ? 'bg-primary/10 text-primary' 
+                  : 'hover:bg-muted'
+              }`}
+              translate="no"
+            >
+              <Checkbox
+                checked={selected.includes(option.config_value)}
+                onCheckedChange={() => handleToggle(option.config_value)}
+                className="data-[state=checked]:bg-primary data-[state=checked]:border-primary"
+              />
+              <span className="text-sm font-medium">{option.config_value}</span>
+            </label>
+          ))}
+        </div>
+        {options.length === 0 && (
+          <div className="text-center py-2 text-sm text-muted-foreground">暂无选项</div>
+        )}
+        {selected.length > 0 && (
+          <div className="border-t mt-2 pt-2">
+            <button
+              onClick={() => onChange([])}
+              className="w-full text-xs text-muted-foreground hover:text-foreground transition-colors py-1"
+            >
+              清除全部
+            </button>
+          </div>
+        )}
+      </PopoverContent>
+    </Popover>
+  );
+}
+
 // 内部组件
 function AIMatchContent() {
   const [resumes, setResumes] = useState<Resume[]>([]);
@@ -53,10 +143,17 @@ function AIMatchContent() {
   const [matchProgress, setMatchProgress] = useState(0);
   const [matchResults, setMatchResults] = useState<MatchResult[]>([]);
   const { accessCodeId } = useAccessCode();
+  
+  // 筛选相关状态
+  const [regions, setRegions] = useState<JobConfig[]>([]);
+  const [directions, setDirections] = useState<JobConfig[]>([]);
+  const [selectedRegions, setSelectedRegions] = useState<string[]>([]);
+  const [selectedDirections, setSelectedDirections] = useState<string[]>([]);
 
   useEffect(() => {
     if (accessCodeId) {
       fetchResumes();
+      fetchJobConfigs();
     }
   }, [accessCodeId]);
 
@@ -70,6 +167,19 @@ function AIMatchContent() {
       setResumes(data.resumes || []);
     } catch (error) {
       console.error('Failed to fetch resumes:', error);
+    }
+  };
+
+  const fetchJobConfigs = async () => {
+    try {
+      const response = await fetch('/api/jobs/config');
+      const data = await response.json();
+      if (data.configs) {
+        setRegions(data.configs.filter((c: JobConfig) => c.config_type === 'region'));
+        setDirections(data.configs.filter((c: JobConfig) => c.config_type === 'direction'));
+      }
+    } catch (error) {
+      console.error('Failed to fetch job configs:', error);
     }
   };
 
@@ -92,6 +202,8 @@ function AIMatchContent() {
         body: JSON.stringify({ 
           resumeId: selectedResumeId,
           accessCodeId: accessCodeId,
+          regions: selectedRegions,
+          directions: selectedDirections,
         }),
       });
 
@@ -167,22 +279,46 @@ function AIMatchContent() {
             </CardDescription>
           </CardHeader>
           <CardContent>
-            <div className="flex flex-col md:flex-row gap-4">
-              <div className="flex-1">
-                <Select value={selectedResumeId} onValueChange={setSelectedResumeId}>
-                  <SelectTrigger>
-                    <SelectValue placeholder="选择简历" />
-                  </SelectTrigger>
-                  <SelectContent>
-                    {resumes.map((resume) => (
-                      <SelectItem key={resume.id} value={resume.id.toString()}>
-                        {resume.file_name}
-                        {resume.user_info?.name && ` - ${resume.user_info.name}`}
-                      </SelectItem>
-                    ))}
-                  </SelectContent>
-                </Select>
+            <div className="space-y-4">
+              {/* 简历选择 */}
+              <div className="flex flex-col md:flex-row gap-4">
+                <div className="flex-1">
+                  <label className="text-sm font-medium mb-2 block">选择简历</label>
+                  <Select value={selectedResumeId} onValueChange={setSelectedResumeId}>
+                    <SelectTrigger>
+                      <SelectValue placeholder="选择要匹配的简历" />
+                    </SelectTrigger>
+                    <SelectContent>
+                      {resumes.map((resume) => (
+                        <SelectItem key={resume.id} value={resume.id.toString()}>
+                          {resume.file_name}
+                          {resume.user_info?.name && ` - ${resume.user_info.name}`}
+                        </SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                </div>
               </div>
+
+              {/* 筛选条件 */}
+              <div className="flex flex-wrap gap-3">
+                <MultiSelectFilter
+                  label="地区"
+                  icon={MapPin}
+                  options={regions}
+                  selected={selectedRegions}
+                  onChange={setSelectedRegions}
+                />
+                <MultiSelectFilter
+                  label="方向"
+                  icon={Compass}
+                  options={directions}
+                  selected={selectedDirections}
+                  onChange={setSelectedDirections}
+                />
+              </div>
+
+              {/* 开始匹配按钮 */}
               <Button 
                 onClick={handleMatch} 
                 disabled={!selectedResumeId || matching}
