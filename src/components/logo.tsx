@@ -19,12 +19,13 @@ export function Logo({ size = 'md', showText = true }: LogoProps) {
   return (
     <div className="flex items-center gap-2">
       <Image
-        src="/logo.png"
+        src="/logo.png?v=2"
         alt="PathUp"
         width={dimensions}
         height={dimensions}
         className="rounded-lg"
         priority
+        key="logo-v2"
       />
       {showText && (
         <span className="font-bold text-xl">PathUp</span>
