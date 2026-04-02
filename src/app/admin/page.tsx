@@ -34,6 +34,7 @@ import {
   AlertDialogTitle,
 } from '@/components/ui/alert-dialog';
 import { Label } from '@/components/ui/label';
+import { AdminAuthGuard } from '@/components/admin-auth-guard';
 import { 
   LayoutDashboard,
   Briefcase,
@@ -52,6 +53,7 @@ import {
   XCircle,
   Clock,
   Calendar,
+  LogOut,
 } from 'lucide-react';
 import Link from 'next/link';
 
@@ -287,23 +289,37 @@ export default function AdminPage() {
   );
 
   return (
-    <div className="min-h-screen bg-muted/30">
-      {/* Header */}
-      <header className="border-b bg-background sticky top-0 z-50">
-        <div className="container mx-auto px-4 h-16 flex items-center justify-between">
-          <div className="flex items-center gap-3">
-            <LayoutDashboard className="h-6 w-6 text-primary" />
-            <span className="font-bold text-xl">管理后台</span>
+    <AdminAuthGuard>
+      <div className="min-h-screen bg-muted/30">
+        {/* Header */}
+        <header className="border-b bg-background sticky top-0 z-50">
+          <div className="container mx-auto px-4 h-16 flex items-center justify-between">
+            <div className="flex items-center gap-3">
+              <LayoutDashboard className="h-6 w-6 text-primary" />
+              <span className="font-bold text-xl">管理后台</span>
+            </div>
+            <div className="flex items-center gap-2">
+              <Link href="/">
+                <Button variant="outline" size="sm">
+                  返回首页
+                </Button>
+              </Link>
+              <Button 
+                variant="ghost" 
+                size="sm"
+                onClick={() => {
+                  localStorage.removeItem('admin_auth');
+                  window.location.reload();
+                }}
+              >
+                <LogOut className="h-4 w-4 mr-1" />
+                退出登录
+              </Button>
+            </div>
           </div>
-          <Link href="/">
-            <Button variant="outline" size="sm">
-              返回首页
-            </Button>
-          </Link>
-        </div>
-      </header>
+        </header>
 
-      <main className="container mx-auto px-4 py-8">
+        <main className="container mx-auto px-4 py-8">
         {loading ? (
           <div className="text-center py-12">
             <Loader2 className="h-8 w-8 animate-spin mx-auto text-primary" />
@@ -890,5 +906,6 @@ export default function AdminPage() {
         </DialogContent>
       </Dialog>
     </div>
+    </AdminAuthGuard>
   );
 }

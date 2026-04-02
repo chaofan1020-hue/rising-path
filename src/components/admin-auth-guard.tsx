@@ -1,0 +1,106 @@
+'use client';
+
+import { useState, useEffect } from 'react';
+import { Button } from '@/components/ui/button';
+import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
+import { Input } from '@/components/ui/input';
+import { Label } from '@/components/ui/label';
+import { Lock, Loader2 } from 'lucide-react';
+
+interface AdminAuthGuardProps {
+  children: React.ReactNode;
+}
+
+// 简单的管理密码（生产环境应该使用更安全的方式）
+const ADMIN_PASSWORD = 'careerpath2024';
+
+export function AdminAuthGuard({ children }: AdminAuthGuardProps) {
+  const [isAuthenticated, setIsAuthenticated] = useState(false);
+  const [password, setPassword] = useState('');
+  const [error, setError] = useState('');
+  const [loading, setLoading] = useState(false);
+  const [mounted, setMounted] = useState(false);
+
+  // 检查本地存储的登录状态
+  useEffect(() => {
+    const auth = localStorage.getItem('admin_auth');
+    if (auth === 'authenticated') {
+      setIsAuthenticated(true);
+    }
+    setMounted(true);
+  }, []);
+
+  const handleLogin = async (e: React.FormEvent) => {
+    e.preventDefault();
+    setLoading(true);
+    setError('');
+
+    // 模拟延迟
+    await new Promise(resolve => setTimeout(resolve, 500));
+
+    if (password === ADMIN_PASSWORD) {
+      localStorage.setItem('admin_auth', 'authenticated');
+      setIsAuthenticated(true);
+    } else {
+      setError('密码错误，请重试');
+    }
+    setLoading(false);
+  };
+
+  // 避免服务端渲染不一致
+  if (!mounted) {
+    return (
+      <div className="min-h-screen bg-muted/30 flex items-center justify-center">
+        <Loader2 className="h-8 w-8 animate-spin text-primary" />
+      </div>
+    );
+  }
+
+  if (!isAuthenticated) {
+    return (
+      <div className="min-h-screen bg-muted/30 flex items-center justify-center p-4">
+        <Card className="w-full max-w-md">
+          <CardHeader className="text-center">
+            <div className="w-16 h-16 rounded-full bg-primary/10 flex items-center justify-center mx-auto mb-4">
+              <Lock className="h-8 w-8 text-primary" />
+            </div>
+            <CardTitle>管理后台登录</CardTitle>
+            <CardDescription>
+              请输入管理密码访问后台
+            </CardDescription>
+          </CardHeader>
+          <CardContent>
+            <form onSubmit={handleLogin} className="space-y-4">
+              <div>
+                <Label htmlFor="password">管理密码</Label>
+                <Input
+                  id="password"
+                  type="password"
+                  value={password}
+                  onChange={(e) => setPassword(e.target.value)}
+                  placeholder="请输入管理密码"
+                  disabled={loading}
+                />
+              </div>
+              {error && (
+                <p className="text-sm text-destructive">{error}</p>
+              )}
+              <Button type="submit" className="w-full" disabled={loading || !password}>
+                {loading ? (
+                  <>
+                    <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                    验证中...
+                  </>
+                ) : (
+                  '登录'
+                )}
+              </Button>
+            </form>
+          </CardContent>
+        </Card>
+      </div>
+    );
+  }
+
+  return <>{children}</>;
+}

@@ -17,7 +17,6 @@ import {
   Globe,
   GraduationCap,
   Users,
-  Settings,
 } from 'lucide-react';
 
 const features = [
@@ -61,14 +60,6 @@ const features = [
     color: 'text-cyan-600',
     bgColor: 'bg-cyan-50 dark:bg-cyan-950',
   },
-  {
-    title: '管理后台',
-    description: '管理岗位、简历和网申记录',
-    icon: Settings,
-    href: '/admin',
-    color: 'text-gray-600',
-    bgColor: 'bg-gray-50 dark:bg-gray-950',
-  },
 ];
 
 const stats = [
@@ -89,12 +80,6 @@ export default function Home() {
             <span className="font-bold text-xl">CareerPath</span>
           </div>
           <div className="flex items-center gap-4">
-            <Link href="/admin">
-              <Button variant="ghost" size="sm">
-                <Settings className="h-4 w-4 mr-1" />
-                管理后台
-              </Button>
-            </Link>
             <Link href="/jobs">
               <Button variant="ghost" size="sm">
                 岗位查询
