@@ -18,6 +18,10 @@ interface BatchJobInput {
   jobs: JobInput[];
 }
 
+interface BatchDeleteInput {
+  ids: number[];
+}
+
 export async function POST(request: NextRequest) {
   try {
     const client = getSupabaseClient();
@@ -85,6 +89,41 @@ export async function POST(request: NextRequest) {
     console.error('Error batch creating jobs:', error);
     return NextResponse.json(
       { error: '批量创建岗位失败' },
+      { status: 500 }
+    );
+  }
+}
+
+export async function DELETE(request: NextRequest) {
+  try {
+    const client = getSupabaseClient();
+    const body: BatchDeleteInput = await request.json();
+
+    if (!body.ids || !Array.isArray(body.ids) || body.ids.length === 0) {
+      return NextResponse.json(
+        { error: '请提供要删除的岗位ID' },
+        { status: 400 }
+      );
+    }
+
+    // 批量删除
+    const { error } = await client
+      .from('jobs')
+      .delete()
+      .in('id', body.ids);
+
+    if (error) {
+      throw new Error(`批量删除岗位失败: ${error.message}`);
+    }
+
+    return NextResponse.json({
+      success: true,
+      deleted: body.ids.length
+    });
+  } catch (error) {
+    console.error('Error batch deleting jobs:', error);
+    return NextResponse.json(
+      { error: '批量删除岗位失败' },
       { status: 500 }
     );
   }

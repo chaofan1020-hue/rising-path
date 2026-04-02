@@ -172,6 +172,11 @@ export default function AdminPage() {
     invalidJobs?: { index: number; reason: string; data: Record<string, unknown> }[];
   } | null>(null);
 
+  // Batch delete state
+  const [selectedJobIds, setSelectedJobIds] = useState<Set<number>>(new Set());
+  const [batchDeleteConfirmOpen, setBatchDeleteConfirmOpen] = useState(false);
+  const [batchDeleting, setBatchDeleting] = useState(false);
+
   useEffect(() => {
     fetchData();
   }, []);
@@ -391,6 +396,49 @@ export default function AdminPage() {
     setBatchText('');
     setBatchResult(null);
     setBatchImportOpen(false);
+  };
+
+  // Batch delete handlers
+  const toggleJobSelection = (id: number) => {
+    const newSelection = new Set(selectedJobIds);
+    if (newSelection.has(id)) {
+      newSelection.delete(id);
+    } else {
+      newSelection.add(id);
+    }
+    setSelectedJobIds(newSelection);
+  };
+
+  const toggleSelectAll = () => {
+    if (selectedJobIds.size === filteredJobs.length) {
+      setSelectedJobIds(new Set());
+    } else {
+      setSelectedJobIds(new Set(filteredJobs.map(j => j.id)));
+    }
+  };
+
+  const handleBatchDelete = async () => {
+    if (selectedJobIds.size === 0) return;
+
+    setBatchDeleting(true);
+    try {
+      const response = await fetch('/api/jobs/batch', {
+        method: 'DELETE',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ ids: Array.from(selectedJobIds) }),
+      });
+      const data = await response.json();
+
+      if (data.success) {
+        setJobs(jobs.filter(j => !selectedJobIds.has(j.id)));
+        setSelectedJobIds(new Set());
+        setBatchDeleteConfirmOpen(false);
+      }
+    } catch (error) {
+      console.error('Failed to batch delete:', error);
+    } finally {
+      setBatchDeleting(false);
+    }
   };
 
   const handleUpdateJob = async () => {
@@ -916,9 +964,9 @@ export default function AdminPage() {
                   </div>
                 </CardHeader>
                 <CardContent>
-                  {/* Search */}
-                  <div className="mb-4">
-                    <div className="relative">
+                  {/* Search and Batch Actions */}
+                  <div className="mb-4 flex items-center gap-4">
+                    <div className="relative flex-1">
                       <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
                       <Input
                         placeholder="搜索岗位名称或公司..."
@@ -927,6 +975,28 @@ export default function AdminPage() {
                         className="pl-10"
                       />
                     </div>
+                    {selectedJobIds.size > 0 && (
+                      <div className="flex items-center gap-2">
+                        <Badge variant="secondary" className="px-3 py-1">
+                          已选择 {selectedJobIds.size} 项
+                        </Badge>
+                        <Button
+                          variant="destructive"
+                          size="sm"
+                          onClick={() => setBatchDeleteConfirmOpen(true)}
+                        >
+                          <Trash2 className="h-4 w-4 mr-1" />
+                          批量删除
+                        </Button>
+                        <Button
+                          variant="outline"
+                          size="sm"
+                          onClick={() => setSelectedJobIds(new Set())}
+                        >
+                          取消选择
+                        </Button>
+                      </div>
+                    )}
                   </div>
 
                   {/* Jobs Table */}
@@ -935,6 +1005,14 @@ export default function AdminPage() {
                       <table className="w-full">
                         <thead className="bg-muted/50">
                           <tr>
+                            <th className="px-4 py-3 w-12">
+                              <input
+                                type="checkbox"
+                                checked={filteredJobs.length > 0 && selectedJobIds.size === filteredJobs.length}
+                                onChange={toggleSelectAll}
+                                className="h-4 w-4 rounded border-gray-300"
+                              />
+                            </th>
                             <th className="px-4 py-3 text-left text-sm font-medium">岗位</th>
                             <th className="px-4 py-3 text-left text-sm font-medium">公司</th>
                             <th className="px-4 py-3 text-left text-sm font-medium">地区</th>
@@ -946,7 +1024,15 @@ export default function AdminPage() {
                         </thead>
                         <tbody className="divide-y">
                           {filteredJobs.map((job) => (
-                            <tr key={job.id} className="hover:bg-muted/30">
+                            <tr key={job.id} className={`hover:bg-muted/30 ${selectedJobIds.has(job.id) ? 'bg-primary/5' : ''}`}>
+                              <td className="px-4 py-3">
+                                <input
+                                  type="checkbox"
+                                  checked={selectedJobIds.has(job.id)}
+                                  onChange={() => toggleJobSelection(job.id)}
+                                  className="h-4 w-4 rounded border-gray-300"
+                                />
+                              </td>
                               <td className="px-4 py-3 text-sm font-medium">{job.title}</td>
                               <td className="px-4 py-3 text-sm">{job.company}</td>
                               <td className="px-4 py-3 text-sm">
@@ -967,9 +1053,9 @@ export default function AdminPage() {
                                   <Button size="sm" variant="ghost" onClick={() => openEditJob(job)}>
                                     <Edit className="h-4 w-4" />
                                   </Button>
-                                  <Button 
-                                    size="sm" 
-                                    variant="ghost" 
+                                  <Button
+                                    size="sm"
+                                    variant="ghost"
                                     className="text-destructive"
                                     onClick={() => setDeleteJobId(job.id)}
                                   >
@@ -978,7 +1064,7 @@ export default function AdminPage() {
                                 </div>
                               </td>
                             </tr>
-                          ))}
+                          ))} 
                         </tbody>
                       </table>
                     </div>
@@ -1268,6 +1354,35 @@ export default function AdminPage() {
               onClick={() => deleteJobId && handleDeleteJob(deleteJobId)}
             >
               删除
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
+
+      {/* Batch Delete Confirmation */}
+      <AlertDialog open={batchDeleteConfirmOpen} onOpenChange={setBatchDeleteConfirmOpen}>
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>确认批量删除</AlertDialogTitle>
+            <AlertDialogDescription>
+              此操作将永久删除选中的 {selectedJobIds.size} 个岗位，删除后无法恢复。确定要继续吗？
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel disabled={batchDeleting}>取消</AlertDialogCancel>
+            <AlertDialogAction
+              className="bg-destructive text-destructive-foreground"
+              onClick={handleBatchDelete}
+              disabled={batchDeleting}
+            >
+              {batchDeleting ? (
+                <>
+                  <Loader2 className="h-4 w-4 mr-2 animate-spin" />
+                  删除中...
+                </>
+              ) : (
+                `删除 ${selectedJobIds.size} 个岗位`
+              )}
             </AlertDialogAction>
           </AlertDialogFooter>
         </AlertDialogContent>
