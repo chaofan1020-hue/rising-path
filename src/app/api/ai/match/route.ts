@@ -5,7 +5,7 @@ import { LLMClient, Config, HeaderUtils } from 'coze-coding-dev-sdk';
 export async function POST(request: NextRequest) {
   try {
     const client = getSupabaseClient();
-    const { resumeId, region, direction } = await request.json();
+    const { resumeId, regions, directions } = await request.json();
 
     // Get resume info
     const { data: resume, error: resumeError } = await client
@@ -18,18 +18,20 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ error: '简历不存在' }, { status: 404 });
     }
 
-    // Get jobs with optional region and direction filter
+    // Get jobs with optional region and direction filter (support multiple values)
     let query = client
       .from('jobs')
       .select('*')
       .limit(20);
     
-    if (region) {
-      query = query.eq('region', region);
+    // 地区多选筛选
+    if (regions && regions.length > 0) {
+      query = query.in('region', regions);
     }
     
-    if (direction) {
-      query = query.eq('direction', direction);
+    // 方向多选筛选
+    if (directions && directions.length > 0) {
+      query = query.in('direction', directions);
     }
 
     const { data: jobs, error: jobsError } = await query;
@@ -39,7 +41,7 @@ export async function POST(request: NextRequest) {
     }
 
     if (!jobs || jobs.length === 0) {
-      const filters = [region, direction].filter(Boolean).join('、');
+      const filters = [...(regions || []), ...(directions || [])].join('、');
       return NextResponse.json({ matches: [], message: filters ? `未找到${filters}相关的岗位` : '暂无可匹配的岗位' });
     }
 

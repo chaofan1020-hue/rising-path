@@ -12,6 +12,11 @@ import {
   SelectTrigger,
   SelectValue,
 } from '@/components/ui/select';
+import {
+  Popover,
+  PopoverContent,
+  PopoverTrigger,
+} from '@/components/ui/popover';
 import { 
   Brain, 
   Target, 
@@ -23,6 +28,8 @@ import {
   TrendingUp,
   MapPin,
   Compass,
+  ChevronDown,
+  X,
 } from 'lucide-react';
 import Link from 'next/link';
 
@@ -52,11 +59,109 @@ interface MatchResult {
   suggestions: string;
 }
 
+// 多选筛选器组件
+function MultiSelectChip({
+  label,
+  icon: Icon,
+  options,
+  selected,
+  onChange,
+}: {
+  label: string;
+  icon: React.ElementType;
+  options: JobConfig[];
+  selected: string[];
+  onChange: (values: string[]) => void;
+}) {
+  const [isOpen, setIsOpen] = useState(false);
+  
+  const handleToggle = (value: string) => {
+    if (selected.includes(value)) {
+      onChange(selected.filter(v => v !== value));
+    } else {
+      onChange([...selected, value]);
+    }
+  };
+
+  return (
+    <Popover open={isOpen} onOpenChange={setIsOpen}>
+      <PopoverTrigger asChild>
+        <button 
+          className={`
+            w-full inline-flex items-center justify-between gap-2 px-3 py-2.5 
+            rounded-xl text-sm font-medium border
+            transition-all duration-300
+            ${selected.length > 0 
+              ? 'bg-primary text-primary-foreground border-primary shadow-md' 
+              : 'bg-white border-gray-200 hover:border-primary/30 hover:shadow-sm'
+            }
+          `}
+        >
+          <div className="flex items-center gap-2">
+            <Icon className={`h-4 w-4 ${selected.length > 0 ? 'text-primary-foreground' : 'text-gray-400'}`} />
+            <span>{label}</span>
+            {selected.length > 0 && (
+              <Badge variant="secondary" className="bg-white/20 text-primary-foreground h-5 px-1.5 text-xs">
+                {selected.length}
+              </Badge>
+            )}
+          </div>
+          <ChevronDown className={`h-4 w-4 transition-transform ${isOpen ? 'rotate-180' : ''} ${selected.length > 0 ? 'text-primary-foreground/70' : 'text-gray-400'}`} />
+        </button>
+      </PopoverTrigger>
+      <PopoverContent className="w-48 p-2" align="start">
+        <div className="max-h-56 overflow-y-auto space-y-1">
+          {options.map((option) => {
+            const isSelected = selected.includes(option.config_value);
+            return (
+              <button
+                key={option.id}
+                onClick={() => handleToggle(option.config_value)}
+                className={`
+                  w-full flex items-center gap-2 px-3 py-2 rounded-lg text-sm font-medium
+                  transition-all duration-200
+                  ${isSelected 
+                    ? 'bg-primary text-primary-foreground' 
+                    : 'hover:bg-gray-100 text-gray-700'
+                  }
+                `}
+                translate="no"
+              >
+                <div className={`
+                  flex items-center justify-center w-4 h-4 rounded border 
+                  transition-all duration-200
+                  ${isSelected 
+                    ? 'bg-white border-white' 
+                    : 'border-gray-300'
+                  }
+                `}>
+                  {isSelected && <svg className="w-3 h-3 text-primary" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={3} d="M5 13l4 4L19 7" /></svg>}
+                </div>
+                <span>{option.config_value}</span>
+              </button>
+            );
+          })}
+        </div>
+        {selected.length > 0 && (
+          <div className="border-t mt-2 pt-2">
+            <button
+              onClick={() => onChange([])}
+              className="w-full text-center text-xs text-gray-500 hover:text-primary py-1 transition-colors"
+            >
+              清除选择
+            </button>
+          </div>
+        )}
+      </PopoverContent>
+    </Popover>
+  );
+}
+
 export default function AIMatchPage() {
   const [resumes, setResumes] = useState<Resume[]>([]);
   const [selectedResumeId, setSelectedResumeId] = useState<string>('');
-  const [selectedRegion, setSelectedRegion] = useState<string>('全部');
-  const [selectedDirection, setSelectedDirection] = useState<string>('全部');
+  const [selectedRegions, setSelectedRegions] = useState<string[]>([]);
+  const [selectedDirections, setSelectedDirections] = useState<string[]>([]);
   const [regions, setRegions] = useState<JobConfig[]>([]);
   const [directions, setDirections] = useState<JobConfig[]>([]);
   const [matching, setMatching] = useState(false);
@@ -107,8 +212,8 @@ export default function AIMatchPage() {
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ 
           resumeId: selectedResumeId,
-          region: selectedRegion !== '全部' ? selectedRegion : undefined,
-          direction: selectedDirection !== '全部' ? selectedDirection : undefined,
+          regions: selectedRegions,
+          directions: selectedDirections,
         }),
       });
 
@@ -203,43 +308,56 @@ export default function AIMatchPage() {
               </div>
               <div>
                 <label className="text-sm font-medium text-muted-foreground mb-1.5 block">目标地区</label>
-                <Select value={selectedRegion} onValueChange={setSelectedRegion}>
-                  <SelectTrigger>
-                    <div className="flex items-center gap-2">
-                      <MapPin className="h-4 w-4 text-muted-foreground" />
-                      <SelectValue placeholder="全部地区" />
-                    </div>
-                  </SelectTrigger>
-                  <SelectContent translate="no">
-                    <SelectItem value="全部">全部地区</SelectItem>
-                    {regions.map((region) => (
-                      <SelectItem key={region.id} value={region.config_value}>
-                        {region.config_value}
-                      </SelectItem>
-                    ))}
-                  </SelectContent>
-                </Select>
+                <MultiSelectChip
+                  label="地区"
+                  icon={MapPin}
+                  options={regions}
+                  selected={selectedRegions}
+                  onChange={setSelectedRegions}
+                />
               </div>
               <div>
                 <label className="text-sm font-medium text-muted-foreground mb-1.5 block">岗位方向</label>
-                <Select value={selectedDirection} onValueChange={setSelectedDirection}>
-                  <SelectTrigger>
-                    <div className="flex items-center gap-2">
-                      <Compass className="h-4 w-4 text-muted-foreground" />
-                      <SelectValue placeholder="全部方向" />
-                    </div>
-                  </SelectTrigger>
-                  <SelectContent translate="no">
-                    <SelectItem value="全部">全部方向</SelectItem>
-                    {directions.map((direction) => (
-                      <SelectItem key={direction.id} value={direction.config_value}>
-                        {direction.config_value}
-                      </SelectItem>
-                    ))}
-                  </SelectContent>
-                </Select>
+                <MultiSelectChip
+                  label="方向"
+                  icon={Compass}
+                  options={directions}
+                  selected={selectedDirections}
+                  onChange={setSelectedDirections}
+                />
               </div>
             </div>
+            
+            {/* 已选筛选条件 */}
+            {(selectedRegions.length > 0 || selectedDirections.length > 0) && (
+              <div className="mt-3 flex items-center gap-2 flex-wrap">
+                <span className="text-xs text-muted-foreground">已选筛选：</span>
+                {selectedRegions.map(r => (
+                  <Badge key={r} variant="secondary" className="gap-1">
+                    <MapPin className="h-3 w-3" />
+                    {r}
+                    <button onClick={() => setSelectedRegions(selectedRegions.filter(v => v !== r))} className="ml-1 hover:text-destructive">
+                      <X className="h-3 w-3" />
+                    </button>
+                  </Badge>
+                ))}
+                {selectedDirections.map(d => (
+                  <Badge key={d} variant="secondary" className="gap-1">
+                    <Compass className="h-3 w-3" />
+                    {d}
+                    <button onClick={() => setSelectedDirections(selectedDirections.filter(v => v !== d))} className="ml-1 hover:text-destructive">
+                      <X className="h-3 w-3" />
+                    </button>
+                  </Badge>
+                ))}
+                <button 
+                  onClick={() => { setSelectedRegions([]); setSelectedDirections([]); }}
+                  className="text-xs text-muted-foreground hover:text-primary"
+                >
+                  清除全部
+                </button>
+              </div>
+            )}
             
             <div className="mt-4 flex justify-end">
               <Button 
