@@ -323,7 +323,7 @@ function OptimizePageContent() {
           </DialogHeader>
           
           {/* Comparison View */}
-          <div className="flex-1 overflow-hidden">
+          <div className="h-[50vh] overflow-hidden">
             <div className="grid md:grid-cols-2 gap-4 h-full">
               {/* Original Resume */}
               <div className="flex flex-col">
