@@ -33,6 +33,7 @@ import {
   Wand2,
   Target,
   AlertCircle,
+  Languages,
 } from 'lucide-react';
 import Link from 'next/link';
 import { AccessGuard, useAccessCode } from '@/components/access-guard';
@@ -244,6 +245,8 @@ function OptimizeContent() {
   const [resumeData, setResumeData] = useState<ResumeData | null>(null);
   const [originalContent, setOriginalContent] = useState('');
   const [showResult, setShowResult] = useState(false);
+  const [translating, setTranslating] = useState(false);
+  const [isEnglishVersion, setIsEnglishVersion] = useState(false);
   const { accessCodeId } = useAccessCode();
 
   useEffect(() => {
@@ -323,6 +326,32 @@ function OptimizeContent() {
 
   const handleCopy = () => {
     navigator.clipboard.writeText(optimizedContent);
+  };
+
+  const handleTranslate = async () => {
+    if (!resumeData) return;
+    
+    setTranslating(true);
+    try {
+      const response = await fetch('/api/ai/translate-resume', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          resumeData,
+          targetLanguage: isEnglishVersion ? 'chinese' : 'english',
+        }),
+      });
+
+      const data = await response.json();
+      if (data.resume_data) {
+        setResumeData(data.resume_data);
+        setIsEnglishVersion(!isEnglishVersion);
+      }
+    } catch (error) {
+      console.error('Translation failed:', error);
+    } finally {
+      setTranslating(false);
+    }
   };
 
   return (
@@ -519,6 +548,21 @@ function OptimizeContent() {
               <Copy className="mr-2 h-4 w-4" />
               复制优化内容
             </Button>
+            {resumeData && (
+              <Button variant="outline" size="sm" onClick={handleTranslate} disabled={translating}>
+                {translating ? (
+                  <>
+                    <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                    转换中...
+                  </>
+                ) : (
+                  <>
+                    <Languages className="mr-2 h-4 w-4" />
+                    {isEnglishVersion ? '转为中文' : '转为英文'}
+                  </>
+                )}
+              </Button>
+            )}
             <Button size="sm">
               <Download className="mr-2 h-4 w-4" />
               下载简历
