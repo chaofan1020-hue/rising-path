@@ -29,7 +29,6 @@ export async function POST(request: NextRequest) {
         data: {
           full_name: fullName,
         },
-        // Disable email confirmation for development
         emailRedirectTo: undefined,
       },
     });
@@ -37,7 +36,6 @@ export async function POST(request: NextRequest) {
     if (error) {
       console.error('Registration error:', error);
       
-      // Handle specific error cases
       if (error.message.includes('already registered')) {
         return NextResponse.json(
           { error: '该邮箱已被注册' },
@@ -51,7 +49,6 @@ export async function POST(request: NextRequest) {
       );
     }
 
-    // Check if user was created successfully
     if (!data.user) {
       return NextResponse.json(
         { error: '注册失败，请重试' },
@@ -59,28 +56,36 @@ export async function POST(request: NextRequest) {
       );
     }
 
-    // Check if email confirmation is required
-    if (!data.session && data.user.identities?.length === 0) {
-      return NextResponse.json({
-        success: true,
-        message: '注册成功！请检查邮箱验证后登录。',
-        requiresEmailConfirmation: true,
-      });
-    }
-
-    // If session exists, user is auto-confirmed
-    return NextResponse.json({
+    // Create response
+    const response = NextResponse.json({
       success: true,
       message: '注册成功！',
       user: {
         id: data.user.id,
         email: data.user.email,
       },
-      session: data.session ? {
-        access_token: data.session.access_token,
-        refresh_token: data.session.refresh_token,
-      } : null,
     });
+
+    // Set auth cookies if session exists
+    if (data.session) {
+      response.cookies.set('sb-access-token', data.session.access_token, {
+        httpOnly: true,
+        secure: process.env.NODE_ENV === 'production',
+        sameSite: 'lax',
+        maxAge: 60 * 60 * 24 * 7, // 7 days
+        path: '/',
+      });
+
+      response.cookies.set('sb-refresh-token', data.session.refresh_token, {
+        httpOnly: true,
+        secure: process.env.NODE_ENV === 'production',
+        sameSite: 'lax',
+        maxAge: 60 * 60 * 24 * 30, // 30 days
+        path: '/',
+      });
+    }
+
+    return response;
 
   } catch (error) {
     console.error('Registration error:', error);

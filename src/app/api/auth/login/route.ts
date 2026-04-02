@@ -43,18 +43,34 @@ export async function POST(request: NextRequest) {
       );
     }
 
-    return NextResponse.json({
+    // Create response with user data
+    const response = NextResponse.json({
       success: true,
       user: {
-        id: data.user.id,
-        email: data.user.email,
-        full_name: data.user.user_metadata?.full_name,
-      },
-      session: {
-        access_token: data.session.access_token,
-        refresh_token: data.session.refresh_token,
+        id: data.user!.id,
+        email: data.user!.email,
+        full_name: data.user!.user_metadata?.full_name,
       },
     });
+
+    // Set auth cookies
+    response.cookies.set('sb-access-token', data.session!.access_token, {
+      httpOnly: true,
+      secure: process.env.NODE_ENV === 'production',
+      sameSite: 'lax',
+      maxAge: 60 * 60 * 24 * 7, // 7 days
+      path: '/',
+    });
+
+    response.cookies.set('sb-refresh-token', data.session!.refresh_token, {
+      httpOnly: true,
+      secure: process.env.NODE_ENV === 'production',
+      sameSite: 'lax',
+      maxAge: 60 * 60 * 24 * 30, // 30 days
+      path: '/',
+    });
+
+    return response;
 
   } catch (error) {
     console.error('Login error:', error);

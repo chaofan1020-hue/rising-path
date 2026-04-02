@@ -9,11 +9,13 @@ import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { Briefcase, Loader2, Mail, Lock, User, ArrowLeft, CheckCircle } from 'lucide-react';
+import { useAuth } from '@/hooks/useAuth';
 
 export default function LoginPage() {
   const router = useRouter();
   const searchParams = useSearchParams();
   const redirectTo = searchParams.get('redirect') || '/';
+  const { user, loading: authLoading, refreshUser } = useAuth();
 
   const [activeTab, setActiveTab] = useState('login');
   const [isLoading, setIsLoading] = useState(false);
@@ -32,19 +34,10 @@ export default function LoginPage() {
 
   // Check if already logged in
   useEffect(() => {
-    checkAuth();
-  }, []);
-
-  const checkAuth = async () => {
-    try {
-      const response = await fetch('/api/auth/me');
-      if (response.ok) {
-        router.push(redirectTo);
-      }
-    } catch {
-      // Not logged in, show login form
+    if (!authLoading && user) {
+      router.push(redirectTo);
     }
-  };
+  }, [user, authLoading, router, redirectTo]);
 
   const handleLogin = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -68,6 +61,8 @@ export default function LoginPage() {
         return;
       }
 
+      // Refresh user state
+      await refreshUser();
       // Login successful, redirect
       router.push(redirectTo);
     } catch (err) {
@@ -113,28 +108,32 @@ export default function LoginPage() {
         return;
       }
 
-      if (data.requiresEmailConfirmation) {
-        setSuccess(data.message);
-        // Clear form
-        setRegisterEmail('');
-        setRegisterPassword('');
-        setRegisterName('');
-        setConfirmPassword('');
-      } else if (data.session) {
-        // Auto login after registration
-        setSuccess('注册成功！正在跳转...');
-        setTimeout(() => {
-          router.push(redirectTo);
-        }, 1000);
-      } else {
-        setSuccess(data.message || '注册成功！');
-      }
+      // Registration successful, refresh user and redirect
+      setSuccess('注册成功！正在跳转...');
+      await refreshUser();
+      setTimeout(() => {
+        router.push(redirectTo);
+      }, 500);
     } catch (err) {
       setError('网络错误，请重试');
     } finally {
       setIsLoading(false);
     }
   };
+
+  // Show loading while checking auth state
+  if (authLoading) {
+    return (
+      <div className="min-h-screen bg-gradient-to-br from-blue-50 to-indigo-100 dark:from-gray-900 dark:to-gray-800 flex items-center justify-center">
+        <Loader2 className="h-8 w-8 animate-spin text-primary" />
+      </div>
+    );
+  }
+
+  // Redirect if already logged in
+  if (user) {
+    return null;
+  }
 
   return (
     <div className="min-h-screen bg-gradient-to-br from-blue-50 to-indigo-100 dark:from-gray-900 dark:to-gray-800 flex items-center justify-center p-4">

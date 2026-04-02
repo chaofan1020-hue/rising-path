@@ -1,25 +1,11 @@
-import { NextRequest, NextResponse } from 'next/server';
-import { getSupabaseClient } from '@/storage/database/supabase-client';
+import { NextResponse } from 'next/server';
 
-export async function POST(request: NextRequest) {
-  try {
-    const supabase = getSupabaseClient();
-    
-    const { error } = await supabase.auth.signOut();
-    
-    if (error) {
-      return NextResponse.json(
-        { error: error.message },
-        { status: 400 }
-      );
-    }
+export async function POST() {
+  const response = NextResponse.json({ success: true });
 
-    return NextResponse.json({ success: true });
-  } catch (error) {
-    console.error('Logout error:', error);
-    return NextResponse.json(
-      { error: '登出失败' },
-      { status: 500 }
-    );
-  }
+  // Clear auth cookies
+  response.cookies.delete('sb-access-token');
+  response.cookies.delete('sb-refresh-token');
+
+  return response;
 }
