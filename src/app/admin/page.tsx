@@ -134,6 +134,19 @@ export default function AdminPage() {
   const [configForm, setConfigForm] = useState({ type: 'region', value: '' });
   const [editingConfig, setEditingConfig] = useState<JobConfig | null>(null);
 
+  // Access codes state
+  interface AccessCode {
+    id: number;
+    code: string;
+    name: string;
+    duration_days: number;
+    expires_at: string;
+    is_active: boolean;
+    created_at: string;
+    last_used_at: string | null;
+  }
+  const [accessCodes, setAccessCodes] = useState<AccessCode[]>([]);
+
   // Logo upload state
   const [logoUploading, setLogoUploading] = useState(false);
   const fileInputRef = useRef<HTMLInputElement>(null);
@@ -187,20 +200,23 @@ export default function AdminPage() {
   const fetchData = async () => {
     setLoading(true);
     try {
-      const [jobsRes, resumesRes, appsRes, configsRes] = await Promise.all([
+      const [jobsRes, resumesRes, appsRes, configsRes, accessCodesRes] = await Promise.all([
         fetch('/api/jobs'),
         fetch('/api/resume'),
         fetch('/api/applications'),
         fetch('/api/configs'),
+        fetch('/api/access-codes'),
       ]);
       const jobsData = await jobsRes.json();
       const resumesData = await resumesRes.json();
       const appsData = await appsRes.json();
       const configsData = await configsRes.json();
+      const accessCodesData = await accessCodesRes.json();
       setJobs(jobsData.jobs || []);
       setResumes(resumesData.resumes || []);
       setApplications(appsData.applications || []);
       setConfigs(configsData.configs || {});
+      setAccessCodes(accessCodesData.codes || []);
       
       // Set default form values from configs
       if (configsData.configs?.region?.[0]) {
@@ -287,6 +303,65 @@ export default function AdminPage() {
       }));
     } catch (error) {
       console.error('Failed to delete config:', error);
+    }
+  };
+
+  // Access Code CRUD
+  const handleCreateAccessCode = async () => {
+    const name = prompt('请输入访问码名称（可选）', '');
+    if (name === null) return; // 用户取消
+    
+    const durationInput = prompt('请输入有效天数（默认30天）', '30');
+    if (durationInput === null) return; // 用户取消
+    
+    const duration_days = parseInt(durationInput) || 30;
+    
+    try {
+      const response = await fetch('/api/access-codes', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ name: name || undefined, duration_days }),
+      });
+      const data = await response.json();
+      if (data.code) {
+        setAccessCodes([data.code, ...accessCodes]);
+        alert(`访问码创建成功：${data.code.code}\n有效期：${duration_days}天`);
+      }
+    } catch (error) {
+      console.error('Failed to create access code:', error);
+      alert('创建访问码失败');
+    }
+  };
+
+  const handleToggleAccessCode = async (id: number, currentActive: boolean) => {
+    try {
+      const response = await fetch(`/api/access-codes/${id}`, {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ is_active: !currentActive }),
+      });
+      const data = await response.json();
+      if (data.success) {
+        setAccessCodes(accessCodes.map(c => 
+          c.id === id ? { ...c, is_active: !currentActive } : c
+        ));
+      }
+    } catch (error) {
+      console.error('Failed to toggle access code:', error);
+    }
+  };
+
+  const handleDeleteAccessCode = async (id: number) => {
+    if (!confirm('确定要删除此访问码吗？')) return;
+    
+    try {
+      const response = await fetch(`/api/access-codes?id=${id}`, { method: 'DELETE' });
+      const data = await response.json();
+      if (data.success) {
+        setAccessCodes(accessCodes.filter(c => c.id !== id));
+      }
+    } catch (error) {
+      console.error('Failed to delete access code:', error);
     }
   };
 
@@ -623,7 +698,7 @@ export default function AdminPage() {
           </div>
         ) : (
           <Tabs defaultValue="overview" className="space-y-6">
-            <TabsList className="grid w-full grid-cols-5 lg:w-auto lg:inline-grid">
+            <TabsList className="grid w-full grid-cols-6 lg:w-auto lg:inline-grid">
               <TabsTrigger value="overview">
                 <LayoutDashboard className="h-4 w-4 mr-2" />
                 概览
@@ -639,6 +714,10 @@ export default function AdminPage() {
               <TabsTrigger value="applications">
                 <Send className="h-4 w-4 mr-2" />
                 网申管理
+              </TabsTrigger>
+              <TabsTrigger value="access-codes">
+                <Users className="h-4 w-4 mr-2" />
+                访问码
               </TabsTrigger>
               <TabsTrigger value="configs">
                 <Settings className="h-4 w-4 mr-2" />
@@ -1383,6 +1462,100 @@ export default function AdminPage() {
                   </CardContent>
                 </Card>
               </div>
+            </TabsContent>
+
+            {/* Access Codes Tab */}
+            <TabsContent value="access-codes">
+              <Card>
+                <CardHeader>
+                  <div className="flex items-center justify-between">
+                    <div>
+                      <CardTitle>访问码管理</CardTitle>
+                      <CardDescription>生成和管理用户访问码，控制平台访问权限</CardDescription>
+                    </div>
+                    <Button onClick={handleCreateAccessCode}>
+                      <Plus className="h-4 w-4 mr-2" />
+                      生成访问码
+                    </Button>
+                  </div>
+                </CardHeader>
+                <CardContent>
+                  <div className="border rounded-lg overflow-hidden">
+                    <div className="overflow-x-auto">
+                      <table className="w-full">
+                        <thead className="bg-muted/50">
+                          <tr>
+                            <th className="px-4 py-3 text-left text-sm font-medium">访问码</th>
+                            <th className="px-4 py-3 text-left text-sm font-medium">名称</th>
+                            <th className="px-4 py-3 text-left text-sm font-medium">有效期</th>
+                            <th className="px-4 py-3 text-left text-sm font-medium">过期时间</th>
+                            <th className="px-4 py-3 text-left text-sm font-medium">状态</th>
+                            <th className="px-4 py-3 text-left text-sm font-medium">最后使用</th>
+                            <th className="px-4 py-3 text-right text-sm font-medium">操作</th>
+                          </tr>
+                        </thead>
+                        <tbody className="divide-y">
+                          {accessCodes.map((code) => {
+                            const isExpired = new Date(code.expires_at) < new Date();
+                            return (
+                              <tr key={code.id} className="hover:bg-muted/30">
+                                <td className="px-4 py-3">
+                                  <code className="bg-muted px-2 py-1 rounded text-sm font-mono">
+                                    {code.code}
+                                  </code>
+                                </td>
+                                <td className="px-4 py-3 text-sm">{code.name}</td>
+                                <td className="px-4 py-3 text-sm">{code.duration_days} 天</td>
+                                <td className="px-4 py-3 text-sm">
+                                  {new Date(code.expires_at).toLocaleDateString('zh-CN')}
+                                </td>
+                                <td className="px-4 py-3">
+                                  {isExpired ? (
+                                    <Badge variant="secondary" className="bg-red-100 text-red-700">已过期</Badge>
+                                  ) : code.is_active ? (
+                                    <Badge variant="default" className="bg-green-600">有效</Badge>
+                                  ) : (
+                                    <Badge variant="secondary" className="bg-gray-100 text-gray-600">已禁用</Badge>
+                                  )}
+                                </td>
+                                <td className="px-4 py-3 text-sm text-muted-foreground">
+                                  {code.last_used_at 
+                                    ? new Date(code.last_used_at).toLocaleDateString('zh-CN')
+                                    : '未使用'}
+                                </td>
+                                <td className="px-4 py-3 text-right">
+                                  <div className="flex justify-end gap-2">
+                                    <Button
+                                      size="sm"
+                                      variant="ghost"
+                                      onClick={() => handleToggleAccessCode(code.id, code.is_active)}
+                                    >
+                                      {code.is_active ? '禁用' : '启用'}
+                                    </Button>
+                                    <Button
+                                      size="sm"
+                                      variant="ghost"
+                                      className="text-destructive"
+                                      onClick={() => handleDeleteAccessCode(code.id)}
+                                    >
+                                      <Trash2 className="h-4 w-4" />
+                                    </Button>
+                                  </div>
+                                </td>
+                              </tr>
+                            );
+                          })}
+                        </tbody>
+                      </table>
+                    </div>
+                    {accessCodes.length === 0 && (
+                      <div className="text-center py-8 text-muted-foreground">
+                        暂无访问码，点击上方按钮生成
+                      </div>
+                    )}
+                  </div>
+                </CardContent>
+              </Card>
             </TabsContent>
           </Tabs>
         )}

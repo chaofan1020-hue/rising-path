@@ -121,9 +121,9 @@ export default function Home() {
                 简历管理
               </Button>
             </Link>
-            <Link href="/ai-match">
+            <Link href="/login">
               <Button size="sm" className="bg-gradient-to-r from-primary to-primary/80 hover:opacity-90 shadow-lg shadow-primary/20">
-                开始使用
+                登录使用
               </Button>
             </Link>
           </div>
@@ -151,10 +151,10 @@ export default function Home() {
           </p>
           
           <div className="flex flex-col sm:flex-row gap-4 justify-center">
-            <Link href="/jobs">
+            <Link href="/login">
               <Button size="lg" className="h-14 px-10 bg-gradient-to-r from-primary to-primary/80 hover:opacity-90 shadow-2xl shadow-primary/20 rounded-2xl group">
                 <Search className="mr-2 h-5 w-5" />
-                探索岗位
+                开始使用
                 <ArrowRight className="ml-2 h-4 w-4 group-hover:translate-x-1 transition-transform" />
               </Button>
             </Link>

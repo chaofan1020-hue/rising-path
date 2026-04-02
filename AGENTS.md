@@ -66,6 +66,10 @@
 - id, resume_id, job_id, match_score
 - match_reason, suggestions, created_at
 
+### access_codes (访问码表)
+- id, code, name, duration_days, expires_at
+- is_active, created_at, last_used_at
+
 ## 包管理规范
 
 **仅允许使用 pnpm** 作为包管理器，**严禁使用 npm 或 yarn**。
@@ -88,6 +92,7 @@
 3. **AI选岗** - 基于简历智能匹配岗位
 4. **ATS简历优化** - 针对ATS系统优化简历
 5. **自动网申** - 学习记录网申字段，自动填写表单
+6. **访问码管理** - 生成、管理用户访问权限
 
 ## API 接口清单
 
@@ -99,3 +104,6 @@
 | /api/applications | GET/POST | 获取/创建网申记录 |
 | /api/ai/match | POST | AI岗位匹配 |
 | /api/ai/optimize | POST | AI简历优化 |
+| /api/access-codes | GET/POST | 获取/创建访问码 |
+| /api/access-codes/[id] | PATCH/DELETE | 更新/删除访问码 |
+| /api/access-codes/verify | POST | 验证访问码 |
