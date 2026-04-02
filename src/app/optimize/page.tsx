@@ -81,10 +81,10 @@ interface ResumeData {
 // 简历预览组件
 function ResumePreview({ data }: { data: ResumeData }) {
   return (
-    <div className="bg-white text-black p-10 shadow-lg rounded-lg min-h-[500px]">
+    <div className="bg-white text-black p-8 shadow-lg rounded-lg">
       {/* 头部：姓名和联系方式 */}
-      <div className="text-center border-b-2 border-gray-800 pb-5 mb-5">
-        <h1 className="text-3xl font-bold text-gray-900 mb-3">{data.name || '姓名'}</h1>
+      <div className="text-center border-b-2 border-gray-800 pb-4 mb-4">
+        <h1 className="text-2xl font-bold text-gray-900 mb-2">{data.name || '姓名'}</h1>
         <div className="flex flex-wrap justify-center gap-4 text-sm text-gray-600">
           {data.contact?.email && <span>{data.contact.email}</span>}
           {data.contact?.phone && <span>{data.contact.phone}</span>}
@@ -95,8 +95,8 @@ function ResumePreview({ data }: { data: ResumeData }) {
 
       {/* 个人简介 */}
       {data.summary && (
-        <div className="mb-5">
-          <h2 className="text-sm font-bold text-gray-800 uppercase tracking-wide border-b border-gray-300 pb-1 mb-3">
+        <div className="mb-4">
+          <h2 className="text-sm font-bold text-gray-800 uppercase tracking-wide border-b border-gray-300 pb-1 mb-2">
             个人简介
           </h2>
           <p className="text-sm text-gray-700 leading-relaxed">{data.summary}</p>
@@ -105,13 +105,13 @@ function ResumePreview({ data }: { data: ResumeData }) {
 
       {/* 技能 */}
       {data.skills && data.skills.length > 0 && (
-        <div className="mb-5">
-          <h2 className="text-sm font-bold text-gray-800 uppercase tracking-wide border-b border-gray-300 pb-1 mb-3">
+        <div className="mb-4">
+          <h2 className="text-sm font-bold text-gray-800 uppercase tracking-wide border-b border-gray-300 pb-1 mb-2">
             专业技能
           </h2>
           <div className="flex flex-wrap gap-2">
             {data.skills.map((skill, index) => (
-              <span key={index} className="text-sm bg-gray-100 px-3 py-1 rounded text-gray-700">
+              <span key={index} className="text-sm bg-gray-100 px-2 py-1 rounded text-gray-700">
                 {skill}
               </span>
             ))}
@@ -121,14 +121,14 @@ function ResumePreview({ data }: { data: ResumeData }) {
 
       {/* 工作经历 */}
       {data.experience && data.experience.length > 0 && (
-        <div className="mb-5">
-          <h2 className="text-sm font-bold text-gray-800 uppercase tracking-wide border-b border-gray-300 pb-1 mb-3">
+        <div className="mb-4">
+          <h2 className="text-sm font-bold text-gray-800 uppercase tracking-wide border-b border-gray-300 pb-1 mb-2">
             工作经历
           </h2>
-          <div className="space-y-4">
+          <div className="space-y-3">
             {data.experience.map((exp, index) => (
               <div key={index}>
-                <div className="flex justify-between items-start mb-2">
+                <div className="flex justify-between items-start mb-1">
                   <div>
                     <span className="font-semibold text-gray-900">{exp.title}</span>
                     <span className="text-gray-600 mx-2">|</span>
@@ -142,7 +142,7 @@ function ResumePreview({ data }: { data: ResumeData }) {
                   </div>
                   <span className="text-sm text-gray-500 whitespace-nowrap">{exp.period}</span>
                 </div>
-                <ul className="list-disc list-inside text-sm text-gray-700 space-y-1 ml-1">
+                <ul className="list-disc list-inside text-sm text-gray-700 space-y-1">
                   {exp.highlights.map((highlight, i) => (
                     <li key={i}>{highlight}</li>
                   ))}
@@ -155,11 +155,11 @@ function ResumePreview({ data }: { data: ResumeData }) {
 
       {/* 教育背景 */}
       {data.education && data.education.length > 0 && (
-        <div className="mb-5">
-          <h2 className="text-sm font-bold text-gray-800 uppercase tracking-wide border-b border-gray-300 pb-1 mb-3">
+        <div className="mb-4">
+          <h2 className="text-sm font-bold text-gray-800 uppercase tracking-wide border-b border-gray-300 pb-1 mb-2">
             教育背景
           </h2>
-          <div className="space-y-3">
+          <div className="space-y-2">
             {data.education.map((edu, index) => (
               <div key={index} className="flex justify-between items-start">
                 <div>
@@ -178,14 +178,14 @@ function ResumePreview({ data }: { data: ResumeData }) {
 
       {/* 项目经历 */}
       {data.projects && data.projects.length > 0 && (
-        <div className="mb-5">
-          <h2 className="text-sm font-bold text-gray-800 uppercase tracking-wide border-b border-gray-300 pb-1 mb-3">
+        <div className="mb-4">
+          <h2 className="text-sm font-bold text-gray-800 uppercase tracking-wide border-b border-gray-300 pb-1 mb-2">
             项目经历
           </h2>
-          <div className="space-y-4">
+          <div className="space-y-3">
             {data.projects.map((project, index) => (
               <div key={index}>
-                <div className="flex justify-between items-start mb-2">
+                <div className="flex justify-between items-start mb-1">
                   <div>
                     <span className="font-semibold text-gray-900">{project.name}</span>
                     {project.role && (
@@ -198,9 +198,9 @@ function ResumePreview({ data }: { data: ResumeData }) {
                   {project.period && <span className="text-sm text-gray-500 whitespace-nowrap">{project.period}</span>}
                 </div>
                 {project.description && (
-                  <p className="text-sm text-gray-600 mb-2">{project.description}</p>
+                  <p className="text-sm text-gray-600 mb-1">{project.description}</p>
                 )}
-                <ul className="list-disc list-inside text-sm text-gray-700 space-y-1 ml-1">
+                <ul className="list-disc list-inside text-sm text-gray-700 space-y-1">
                   {project.highlights.map((highlight, i) => (
                     <li key={i}>{highlight}</li>
                   ))}
@@ -213,8 +213,8 @@ function ResumePreview({ data }: { data: ResumeData }) {
 
       {/* 证书 */}
       {data.certifications && data.certifications.length > 0 && (
-        <div className="mb-5">
-          <h2 className="text-sm font-bold text-gray-800 uppercase tracking-wide border-b border-gray-300 pb-1 mb-3">
+        <div className="mb-4">
+          <h2 className="text-sm font-bold text-gray-800 uppercase tracking-wide border-b border-gray-300 pb-1 mb-2">
             证书资质
           </h2>
           <div className="flex flex-wrap gap-x-4 gap-y-1">
@@ -504,7 +504,7 @@ function OptimizeContent() {
 
       {/* Result Dialog */}
       <Dialog open={showResult} onOpenChange={setShowResult}>
-        <DialogContent className="w-[95vw] max-w-[1400px] max-h-[90vh] overflow-y-auto">
+        <DialogContent className="w-[98vw] max-w-[1800px] max-h-[90vh] overflow-y-auto">
           <DialogHeader>
             <DialogTitle className="flex items-center gap-2">
               <CheckCircle className="h-5 w-5 text-green-600" />
