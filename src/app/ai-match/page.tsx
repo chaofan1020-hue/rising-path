@@ -172,11 +172,11 @@ function AIMatchContent() {
 
   const fetchJobConfigs = async () => {
     try {
-      const response = await fetch('/api/jobs/config');
+      const response = await fetch('/api/configs');
       const data = await response.json();
       if (data.configs) {
-        setRegions(data.configs.filter((c: JobConfig) => c.config_type === 'region'));
-        setDirections(data.configs.filter((c: JobConfig) => c.config_type === 'direction'));
+        setRegions(data.configs.region || []);
+        setDirections(data.configs.direction || []);
       }
     } catch (error) {
       console.error('Failed to fetch job configs:', error);
