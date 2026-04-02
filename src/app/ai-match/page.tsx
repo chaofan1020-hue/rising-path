@@ -280,9 +280,10 @@ function AIMatchContent() {
           </CardHeader>
           <CardContent>
             <div className="space-y-4">
-              {/* 简历选择 */}
-              <div className="flex flex-col md:flex-row gap-4">
-                <div className="flex-1">
+              {/* 第一行：简历选择 + 筛选条件 */}
+              <div className="flex flex-col md:flex-row gap-4 items-start md:items-center justify-between">
+                {/* 左侧：简历选择 */}
+                <div className="flex-1 max-w-md">
                   <label className="text-sm font-medium mb-2 block">选择简历</label>
                   <Select value={selectedResumeId} onValueChange={setSelectedResumeId}>
                     <SelectTrigger>
@@ -298,24 +299,24 @@ function AIMatchContent() {
                     </SelectContent>
                   </Select>
                 </div>
-              </div>
 
-              {/* 筛选条件 */}
-              <div className="flex flex-wrap gap-3">
-                <MultiSelectFilter
-                  label="地区"
-                  icon={MapPin}
-                  options={regions}
-                  selected={selectedRegions}
-                  onChange={setSelectedRegions}
-                />
-                <MultiSelectFilter
-                  label="方向"
-                  icon={Compass}
-                  options={directions}
-                  selected={selectedDirections}
-                  onChange={setSelectedDirections}
-                />
+                {/* 右侧：筛选条件 */}
+                <div className="flex flex-wrap gap-3">
+                  <MultiSelectFilter
+                    label="地区"
+                    icon={MapPin}
+                    options={regions}
+                    selected={selectedRegions}
+                    onChange={setSelectedRegions}
+                  />
+                  <MultiSelectFilter
+                    label="方向"
+                    icon={Compass}
+                    options={directions}
+                    selected={selectedDirections}
+                    onChange={setSelectedDirections}
+                  />
+                </div>
               </div>
 
               {/* 开始匹配按钮 */}
