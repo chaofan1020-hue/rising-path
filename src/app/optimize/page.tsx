@@ -33,6 +33,8 @@ import {
   Wand2,
   Target,
   AlertCircle,
+  ArrowRight,
+  FileCheck,
 } from 'lucide-react';
 import Link from 'next/link';
 
@@ -52,6 +54,7 @@ function OptimizePageContent() {
   const [suggestions, setSuggestions] = useState('');
   const [optimizing, setOptimizing] = useState(false);
   const [optimizeProgress, setOptimizeProgress] = useState(0);
+  const [originalContent, setOriginalContent] = useState('');
   const [optimizedContent, setOptimizedContent] = useState('');
   const [showResult, setShowResult] = useState(false);
 
@@ -88,6 +91,11 @@ function OptimizePageContent() {
     setOptimizing(true);
     setOptimizeProgress(0);
     setOptimizedContent('');
+
+    // Get original resume content
+    const selectedResume = resumes.find(r => r.id === parseInt(selectedResumeId));
+    const original = selectedResume?.parsed_content || JSON.stringify(selectedResume?.user_info, null, 2) || '';
+    setOriginalContent(original);
 
     try {
       const progressInterval = setInterval(() => {
@@ -303,32 +311,81 @@ function OptimizePageContent() {
 
       {/* Result Dialog */}
       <Dialog open={showResult} onOpenChange={setShowResult}>
-        <DialogContent className="max-w-4xl max-h-[80vh] overflow-y-auto">
+        <DialogContent className="max-w-6xl max-h-[85vh] overflow-hidden flex flex-col">
           <DialogHeader>
             <DialogTitle className="flex items-center gap-2">
               <CheckCircle className="h-5 w-5 text-green-600" />
               简历优化完成
             </DialogTitle>
             <DialogDescription>
-              AI已根据目标岗位优化了您的简历内容
+              AI已根据目标岗位优化了您的简历内容，以下是原简历与优化后简历的对比
             </DialogDescription>
           </DialogHeader>
-          <div className="space-y-4">
-            <div className="flex justify-end gap-2">
-              <Button variant="outline" size="sm" onClick={handleCopy}>
-                <Copy className="mr-2 h-4 w-4" />
-                复制内容
-              </Button>
-              <Button size="sm">
-                <Download className="mr-2 h-4 w-4" />
-                下载简历
-              </Button>
+          
+          {/* Comparison View */}
+          <div className="flex-1 overflow-hidden">
+            <div className="grid md:grid-cols-2 gap-4 h-full">
+              {/* Original Resume */}
+              <div className="flex flex-col">
+                <div className="flex items-center gap-2 mb-3 pb-2 border-b">
+                  <div className="w-8 h-8 rounded-lg bg-gray-100 dark:bg-gray-800 flex items-center justify-center">
+                    <FileText className="h-4 w-4 text-gray-600 dark:text-gray-400" />
+                  </div>
+                  <div>
+                    <h4 className="font-medium text-sm">原简历</h4>
+                    <p className="text-xs text-muted-foreground">优化前内容</p>
+                  </div>
+                </div>
+                <div className="flex-1 overflow-y-auto bg-gray-50 dark:bg-gray-900/50 rounded-lg p-4 border">
+                  <pre className="whitespace-pre-wrap text-sm font-mono text-gray-700 dark:text-gray-300">
+                    {originalContent}
+                  </pre>
+                </div>
+              </div>
+
+              {/* Arrow */}
+              <div className="hidden md:flex absolute left-1/2 top-1/2 -translate-x-1/2 -translate-y-1/2 z-10">
+                <div className="w-12 h-12 rounded-full bg-gradient-to-r from-orange-500 to-red-500 flex items-center justify-center shadow-lg">
+                  <ArrowRight className="h-6 w-6 text-white" />
+                </div>
+              </div>
+
+              {/* Optimized Resume */}
+              <div className="flex flex-col">
+                <div className="flex items-center justify-between mb-3 pb-2 border-b">
+                  <div className="flex items-center gap-2">
+                    <div className="w-8 h-8 rounded-lg bg-gradient-to-r from-orange-100 to-red-100 dark:from-orange-900/30 dark:to-red-900/30 flex items-center justify-center">
+                      <FileCheck className="h-4 w-4 text-orange-600" />
+                    </div>
+                    <div>
+                      <h4 className="font-medium text-sm">优化后简历</h4>
+                      <p className="text-xs text-muted-foreground">ATS优化内容</p>
+                    </div>
+                  </div>
+                  <Badge variant="secondary" className="bg-green-100 text-green-700 dark:bg-green-900/30 dark:text-green-400">
+                    <Sparkles className="h-3 w-3 mr-1" />
+                    AI优化
+                  </Badge>
+                </div>
+                <div className="flex-1 overflow-y-auto bg-gradient-to-br from-orange-50/50 to-red-50/50 dark:from-orange-950/20 dark:to-red-950/20 rounded-lg p-4 border border-orange-200 dark:border-orange-900">
+                  <pre className="whitespace-pre-wrap text-sm font-mono text-gray-800 dark:text-gray-200">
+                    {optimizedContent}
+                  </pre>
+                </div>
+              </div>
             </div>
-            <div className="bg-muted p-4 rounded-lg">
-              <pre className="whitespace-pre-wrap text-sm font-mono">
-                {optimizedContent}
-              </pre>
-            </div>
+          </div>
+
+          {/* Actions */}
+          <div className="flex justify-end gap-2 pt-4 border-t mt-4">
+            <Button variant="outline" size="sm" onClick={handleCopy}>
+              <Copy className="mr-2 h-4 w-4" />
+              复制优化内容
+            </Button>
+            <Button size="sm" className="bg-gradient-to-r from-orange-600 to-red-600 hover:from-orange-700 hover:to-red-700">
+              <Download className="mr-2 h-4 w-4" />
+              下载简历
+            </Button>
           </div>
         </DialogContent>
       </Dialog>
