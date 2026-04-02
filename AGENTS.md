@@ -53,22 +53,30 @@
 
 ### resumes (简历表)
 - id, file_key, file_name, parsed_content
-- user_info (JSONB), created_at, updated_at
+- user_info (JSONB), access_code_id, created_at, updated_at
 
 ### applications (网申记录表)
 - id, job_id, resume_id, status, notes
-- submitted_at, created_at, updated_at
+- access_code_id, submitted_at, created_at, updated_at
 
 ### application_fields (网申字段映射表)
 - id, job_id, field_name, field_value, field_type
 
 ### ai_matches (AI匹配记录表)
 - id, resume_id, job_id, match_score
-- match_reason, suggestions, created_at
+- match_reason, suggestions, access_code_id, created_at
 
 ### access_codes (访问码表)
 - id, code, name, duration_days, expires_at
 - is_active, created_at, last_used_at
+
+## 数据隔离说明
+
+每个访问码对应独立的用户空间：
+- 简历数据按 `access_code_id` 隔离
+- 网申记录按 `access_code_id` 隔离
+- AI匹配记录按 `access_code_id` 隔离
+- 岗位数据为公共数据，所有用户共享
 
 ## 包管理规范
 

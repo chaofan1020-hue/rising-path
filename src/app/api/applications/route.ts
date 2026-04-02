@@ -1,12 +1,14 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { getSupabaseClient } from '@/storage/database/supabase-client';
 
-export async function GET() {
+export async function GET(request: NextRequest) {
   try {
     const client = getSupabaseClient();
+    const { searchParams } = new URL(request.url);
+    const accessCodeId = searchParams.get('access_code_id');
     
     // Get applications with job and resume info
-    const { data, error } = await client
+    let query = client
       .from('applications')
       .select(`
         *,
@@ -14,6 +16,13 @@ export async function GET() {
         resumes (file_name)
       `)
       .order('created_at', { ascending: false });
+    
+    // 如果有 access_code_id，只返回该用户的网申记录
+    if (accessCodeId) {
+      query = query.eq('access_code_id', parseInt(accessCodeId));
+    }
+
+    const { data, error } = await query;
 
     if (error) {
       throw new Error(`查询网申记录失败: ${error.message}`);
@@ -33,10 +42,16 @@ export async function POST(request: NextRequest) {
   try {
     const client = getSupabaseClient();
     const body = await request.json();
+    
+    // 从请求体中提取 access_code_id
+    const { access_code_id, ...applicationData } = body;
 
     const { data, error } = await client
       .from('applications')
-      .insert(body)
+      .insert({
+        ...applicationData,
+        access_code_id: access_code_id || null,
+      })
       .select()
       .single();
 

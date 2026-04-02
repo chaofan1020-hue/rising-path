@@ -28,6 +28,8 @@ import {
   Link as LinkIcon,
 } from 'lucide-react';
 import Link from 'next/link';
+import { AccessGuard } from '@/components/access-guard';
+import { useAccessCode } from '@/hooks/useAccessCode';
 
 interface Resume {
   id: number;
@@ -52,6 +54,7 @@ export default function ResumePage() {
   const [uploadProgress, setUploadProgress] = useState(0);
   const [selectedFile, setSelectedFile] = useState<File | null>(null);
   const [selectedResume, setSelectedResume] = useState<Resume | null>(null);
+  const { accessCodeId } = useAccessCode();
 
   const handleFileSelect = useCallback((e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
@@ -69,6 +72,9 @@ export default function ResumePage() {
     try {
       const formData = new FormData();
       formData.append('file', selectedFile);
+      if (accessCodeId) {
+        formData.append('access_code_id', accessCodeId.toString());
+      }
 
       // Simulate progress
       const progressInterval = setInterval(() => {
@@ -106,7 +112,11 @@ export default function ResumePage() {
   const fetchResumes = async () => {
     setLoading(true);
     try {
-      const response = await fetch('/api/resume');
+      const params = new URLSearchParams();
+      if (accessCodeId) {
+        params.append('access_code_id', accessCodeId.toString());
+      }
+      const response = await fetch(`/api/resume?${params.toString()}`);
       const data = await response.json();
       setResumes(data.resumes || []);
     } catch (error) {
@@ -125,17 +135,20 @@ export default function ResumePage() {
     }
   };
 
-  // Fetch resumes on mount
+  // Fetch resumes when accessCodeId changes
   useEffect(() => {
-    fetchResumes();
-  }, []);
+    if (accessCodeId !== undefined) {
+      fetchResumes();
+    }
+  }, [accessCodeId]);
 
   return (
-    <div className="min-h-screen bg-background">
-      {/* Header */}
-      <header className="border-b sticky top-0 bg-background/95 backdrop-blur z-50">
-        <div className="container mx-auto px-4 h-16 flex items-center justify-between">
-          <Link href="/" className="flex items-center gap-2">
+    <AccessGuard>
+      <div className="min-h-screen bg-background">
+        {/* Header */}
+        <header className="border-b sticky top-0 bg-background/95 backdrop-blur z-50">
+          <div className="container mx-auto px-4 h-16 flex items-center justify-between">
+            <Link href="/" className="flex items-center gap-2">
             <Briefcase className="h-6 w-6 text-primary" />
             <span className="font-bold text-xl">PathUp</span>
           </Link>
@@ -344,5 +357,6 @@ export default function ResumePage() {
         </div>
       </main>
     </div>
+    </AccessGuard>
   );
 }

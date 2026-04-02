@@ -128,13 +128,23 @@ ${content}
   }
 }
 
-export async function GET() {
+export async function GET(request: NextRequest) {
   try {
     const client = getSupabaseClient();
-    const { data, error } = await client
+    const { searchParams } = new URL(request.url);
+    const accessCodeId = searchParams.get('access_code_id');
+    
+    let query = client
       .from('resumes')
       .select('*')
       .order('created_at', { ascending: false });
+    
+    // 如果有 access_code_id，只返回该用户的简历
+    if (accessCodeId) {
+      query = query.eq('access_code_id', parseInt(accessCodeId));
+    }
+
+    const { data, error } = await query;
 
     if (error) {
       throw new Error(`查询简历失败: ${error.message}`);
@@ -155,6 +165,7 @@ export async function POST(request: NextRequest) {
     const client = getSupabaseClient();
     const formData = await request.formData();
     const file = formData.get('file') as File;
+    const accessCodeId = formData.get('access_code_id') as string;
 
     if (!file) {
       return NextResponse.json({ error: '未提供文件' }, { status: 400 });
@@ -179,6 +190,7 @@ export async function POST(request: NextRequest) {
         file_name: file.name,
         parsed_content: '正在解析简历内容...',
         user_info: {},
+        access_code_id: accessCodeId ? parseInt(accessCodeId) : null,
       })
       .select()
       .single();
