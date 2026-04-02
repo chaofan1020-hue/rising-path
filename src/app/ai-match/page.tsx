@@ -22,6 +22,7 @@ import {
   Sparkles,
   TrendingUp,
   MapPin,
+  Compass,
 } from 'lucide-react';
 import Link from 'next/link';
 
@@ -55,7 +56,9 @@ export default function AIMatchPage() {
   const [resumes, setResumes] = useState<Resume[]>([]);
   const [selectedResumeId, setSelectedResumeId] = useState<string>('');
   const [selectedRegion, setSelectedRegion] = useState<string>('全部');
+  const [selectedDirection, setSelectedDirection] = useState<string>('全部');
   const [regions, setRegions] = useState<JobConfig[]>([]);
+  const [directions, setDirections] = useState<JobConfig[]>([]);
   const [matching, setMatching] = useState(false);
   const [matchProgress, setMatchProgress] = useState(0);
   const [matchResults, setMatchResults] = useState<MatchResult[]>([]);
@@ -80,6 +83,7 @@ export default function AIMatchPage() {
       const response = await fetch('/api/configs');
       const data = await response.json();
       setRegions(data.configs?.region || []);
+      setDirections(data.configs?.direction || []);
     } catch (error) {
       console.error('Failed to fetch configs:', error);
     }
@@ -104,6 +108,7 @@ export default function AIMatchPage() {
         body: JSON.stringify({ 
           resumeId: selectedResumeId,
           region: selectedRegion !== '全部' ? selectedRegion : undefined,
+          direction: selectedDirection !== '全部' ? selectedDirection : undefined,
         }),
       });
 
@@ -179,8 +184,8 @@ export default function AIMatchPage() {
             </CardDescription>
           </CardHeader>
           <CardContent>
-            <div className="flex flex-col md:flex-row gap-4">
-              <div className="flex-1">
+            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
+              <div className="lg:col-span-2">
                 <label className="text-sm font-medium text-muted-foreground mb-1.5 block">选择简历</label>
                 <Select value={selectedResumeId} onValueChange={setSelectedResumeId}>
                   <SelectTrigger>
@@ -196,7 +201,7 @@ export default function AIMatchPage() {
                   </SelectContent>
                 </Select>
               </div>
-              <div className="w-full md:w-48">
+              <div>
                 <label className="text-sm font-medium text-muted-foreground mb-1.5 block">目标地区</label>
                 <Select value={selectedRegion} onValueChange={setSelectedRegion}>
                   <SelectTrigger>
@@ -215,25 +220,45 @@ export default function AIMatchPage() {
                   </SelectContent>
                 </Select>
               </div>
-              <div className="flex items-end">
-                <Button 
-                  onClick={handleMatch} 
-                  disabled={!selectedResumeId || matching}
-                  className="bg-gradient-to-r from-purple-600 to-blue-600 hover:from-purple-700 hover:to-blue-700 w-full md:w-auto"
-                >
-                  {matching ? (
-                    <>
-                      <Loader2 className="mr-2 h-4 w-4 animate-spin" />
-                      匹配中...
-                    </>
-                  ) : (
-                    <>
-                      <Sparkles className="mr-2 h-4 w-4" />
-                      开始AI匹配
-                    </>
-                  )}
-                </Button>
+              <div>
+                <label className="text-sm font-medium text-muted-foreground mb-1.5 block">岗位方向</label>
+                <Select value={selectedDirection} onValueChange={setSelectedDirection}>
+                  <SelectTrigger>
+                    <div className="flex items-center gap-2">
+                      <Compass className="h-4 w-4 text-muted-foreground" />
+                      <SelectValue placeholder="全部方向" />
+                    </div>
+                  </SelectTrigger>
+                  <SelectContent translate="no">
+                    <SelectItem value="全部">全部方向</SelectItem>
+                    {directions.map((direction) => (
+                      <SelectItem key={direction.id} value={direction.config_value}>
+                        {direction.config_value}
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
               </div>
+            </div>
+            
+            <div className="mt-4 flex justify-end">
+              <Button 
+                onClick={handleMatch} 
+                disabled={!selectedResumeId || matching}
+                className="bg-gradient-to-r from-purple-600 to-blue-600 hover:from-purple-700 hover:to-blue-700 min-w-[140px]"
+              >
+                {matching ? (
+                  <>
+                    <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                    匹配中...
+                  </>
+                ) : (
+                  <>
+                    <Sparkles className="mr-2 h-4 w-4" />
+                    开始AI匹配
+                  </>
+                )}
+              </Button>
             </div>
 
             {matching && (
