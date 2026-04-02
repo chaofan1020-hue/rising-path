@@ -1,6 +1,37 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { getSupabaseClient } from '@/storage/database/supabase-client';
 
+export async function GET(
+  request: NextRequest,
+  { params }: { params: Promise<{ id: string }> }
+) {
+  try {
+    const client = getSupabaseClient();
+    const { id } = await params;
+
+    const { data, error } = await client
+      .from('jobs')
+      .select('*')
+      .eq('id', id)
+      .single();
+
+    if (error) {
+      return NextResponse.json(
+        { error: '岗位不存在' },
+        { status: 404 }
+      );
+    }
+
+    return NextResponse.json({ job: data });
+  } catch (error) {
+    console.error('Error fetching job:', error);
+    return NextResponse.json(
+      { error: '获取岗位详情失败' },
+      { status: 500 }
+    );
+  }
+}
+
 export async function PUT(
   request: NextRequest,
   { params }: { params: Promise<{ id: string }> }
