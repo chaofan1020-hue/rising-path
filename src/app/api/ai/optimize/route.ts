@@ -112,7 +112,8 @@ ${resumeContent}${suggestionsSection}
         const parsed = JSON.parse(jsonMatch[0]);
         return NextResponse.json({ 
           optimized_content: optimizedContent,
-          resume_data: parsed 
+          resume_data: parsed,
+          original_content: resumeContent 
         });
       }
     } catch (e) {
@@ -120,7 +121,10 @@ ${resumeContent}${suggestionsSection}
     }
 
     // 如果JSON解析失败，返回原始内容
-    return NextResponse.json({ optimized_content: optimizedContent });
+    return NextResponse.json({ 
+      optimized_content: optimizedContent,
+      original_content: resumeContent 
+    });
   } catch (error) {
     console.error('Optimization error:', error);
     return NextResponse.json(
