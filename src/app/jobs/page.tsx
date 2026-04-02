@@ -28,6 +28,7 @@ interface Job {
   salary_range: string;
   job_url: string;
   logo_url?: string;
+  is_active?: boolean;
   created_at: string;
 }
 
@@ -303,6 +304,15 @@ export default function JobsPage() {
                         {job.salary_range && (
                           <Badge variant="outline" className="text-green-600 border-green-600 rounded-md">
                             {job.salary_range}
+                          </Badge>
+                        )}
+                        {job.is_active === false ? (
+                          <Badge variant="secondary" className="bg-gray-100 text-gray-600 rounded-md">
+                            不可投递
+                          </Badge>
+                        ) : (
+                          <Badge variant="default" className="bg-green-600 rounded-md">
+                            可投递
                           </Badge>
                         )}
                       </div>

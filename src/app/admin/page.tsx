@@ -34,6 +34,7 @@ import {
   AlertDialogTitle,
 } from '@/components/ui/alert-dialog';
 import { Label } from '@/components/ui/label';
+import { Switch } from '@/components/ui/switch';
 import { AdminAuthGuard } from '@/components/admin-auth-guard';
 import Image from 'next/image';
 import { 
@@ -74,6 +75,7 @@ interface Job {
   salary_range: string;
   job_url: string;
   logo_url?: string;
+  is_active?: boolean;
   created_at: string;
 }
 
@@ -148,6 +150,7 @@ export default function AdminPage() {
     salary_range: '',
     job_url: '',
     logo_url: '',
+    is_active: true,
   });
   const [editingJob, setEditingJob] = useState<Job | null>(null);
   const [jobDialogOpen, setJobDialogOpen] = useState(false);
@@ -499,6 +502,7 @@ export default function AdminPage() {
       salary_range: '',
       job_url: '',
       logo_url: '',
+      is_active: true,
     });
   };
 
@@ -515,6 +519,7 @@ export default function AdminPage() {
       salary_range: job.salary_range || '',
       job_url: job.job_url || '',
       logo_url: job.logo_url || '',
+      is_active: job.is_active ?? true,
     });
     setJobDialogOpen(true);
   };
@@ -958,6 +963,16 @@ export default function AdminPage() {
                               rows={3}
                             />
                           </div>
+                          <div className="flex items-center justify-between p-4 border rounded-lg bg-muted/50">
+                            <div>
+                              <Label className="text-base font-medium">可投递状态</Label>
+                              <p className="text-sm text-muted-foreground">开启后，该岗位将在岗位列表中显示为"可投递"状态</p>
+                            </div>
+                            <Switch
+                              checked={jobForm.is_active}
+                              onCheckedChange={(checked) => setJobForm({ ...jobForm, is_active: checked })}
+                            />
+                          </div>
                         </div>
                         <DialogFooter>
                           <Button variant="outline" onClick={() => {
@@ -1035,6 +1050,7 @@ export default function AdminPage() {
                             <th className="px-4 py-3 text-left text-sm font-medium">方向</th>
                             <th className="px-4 py-3 text-left text-sm font-medium">受众</th>
                             <th className="px-4 py-3 text-left text-sm font-medium">薪资</th>
+                            <th className="px-4 py-3 text-left text-sm font-medium">状态</th>
                             <th className="px-4 py-3 text-right text-sm font-medium">操作</th>
                           </tr>
                         </thead>
@@ -1057,6 +1073,13 @@ export default function AdminPage() {
                               <td className="px-4 py-3 text-sm">{job.direction}</td>
                               <td className="px-4 py-3 text-sm">{job.audience}</td>
                               <td className="px-4 py-3 text-sm text-green-600">{job.salary_range}</td>
+                              <td className="px-4 py-3 text-sm">
+                                {job.is_active === false ? (
+                                  <Badge variant="secondary" className="bg-gray-100 text-gray-600">不可投递</Badge>
+                                ) : (
+                                  <Badge variant="default" className="bg-green-600">可投递</Badge>
+                                )}
+                              </td>
                               <td className="px-4 py-3 text-right">
                                 <div className="flex justify-end gap-2">
                                   {job.job_url && (
