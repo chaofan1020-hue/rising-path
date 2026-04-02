@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, useCallback } from 'react';
+import { useState, useCallback, useEffect } from 'react';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Input } from '@/components/ui/input';
@@ -75,7 +75,7 @@ export default function ResumePage() {
         setUploadProgress((prev) => Math.min(prev + 10, 90));
       }, 200);
 
-      const response = await fetch('/api/resume/upload', {
+      const response = await fetch('/api/resume', {
         method: 'POST',
         body: formData,
       });
@@ -89,9 +89,12 @@ export default function ResumePage() {
         setResumes([data.resume, ...resumes]);
         setSelectedFile(null);
         setUploadProgress(0);
+      } else if (data.error) {
+        alert('上传失败: ' + data.error);
       }
     } catch (error) {
       console.error('Upload failed:', error);
+      alert('上传失败，请重试');
     } finally {
       setUploading(false);
     }
@@ -120,9 +123,9 @@ export default function ResumePage() {
   };
 
   // Fetch resumes on mount
-  useState(() => {
+  useEffect(() => {
     fetchResumes();
-  });
+  }, []);
 
   return (
     <div className="min-h-screen bg-background">
