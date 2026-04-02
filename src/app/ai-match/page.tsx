@@ -279,64 +279,59 @@ function AIMatchContent() {
             </CardDescription>
           </CardHeader>
           <CardContent>
-            <div className="space-y-4">
-              {/* 第一行：简历选择 + 筛选条件 */}
-              <div className="flex flex-col md:flex-row gap-4 items-start md:items-center justify-between">
-                {/* 左侧：简历选择 */}
-                <div className="flex-1 max-w-md">
-                  <label className="text-sm font-medium mb-2 block">选择简历</label>
-                  <Select value={selectedResumeId} onValueChange={setSelectedResumeId}>
-                    <SelectTrigger>
-                      <SelectValue placeholder="选择要匹配的简历" />
-                    </SelectTrigger>
-                    <SelectContent>
-                      {resumes.map((resume) => (
-                        <SelectItem key={resume.id} value={resume.id.toString()}>
-                          {resume.file_name}
-                          {resume.user_info?.name && ` - ${resume.user_info.name}`}
-                        </SelectItem>
-                      ))}
-                    </SelectContent>
-                  </Select>
-                </div>
-
-                {/* 右侧：筛选条件 */}
-                <div className="flex flex-wrap gap-3">
-                  <MultiSelectFilter
-                    label="地区"
-                    icon={MapPin}
-                    options={regions}
-                    selected={selectedRegions}
-                    onChange={setSelectedRegions}
-                  />
-                  <MultiSelectFilter
-                    label="方向"
-                    icon={Compass}
-                    options={directions}
-                    selected={selectedDirections}
-                    onChange={setSelectedDirections}
-                  />
-                </div>
+            <div className="flex flex-col md:flex-row gap-4 items-start md:items-center justify-between">
+              {/* 左侧：简历选择 */}
+              <div className="flex-1 max-w-md">
+                <label className="text-sm font-medium mb-2 block">选择简历</label>
+                <Select value={selectedResumeId} onValueChange={setSelectedResumeId}>
+                  <SelectTrigger>
+                    <SelectValue placeholder="选择要匹配的简历" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    {resumes.map((resume) => (
+                      <SelectItem key={resume.id} value={resume.id.toString()}>
+                        {resume.file_name}
+                        {resume.user_info?.name && ` - ${resume.user_info.name}`}
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
               </div>
 
-              {/* 开始匹配按钮 */}
-              <Button 
-                onClick={handleMatch} 
-                disabled={!selectedResumeId || matching}
-                className="bg-gradient-to-r from-purple-600 to-blue-600 hover:from-purple-700 hover:to-blue-700"
-              >
-                {matching ? (
-                  <>
-                    <Loader2 className="mr-2 h-4 w-4 animate-spin" />
-                    匹配中...
-                  </>
-                ) : (
-                  <>
-                    <Sparkles className="mr-2 h-4 w-4" />
-                    开始AI匹配
-                  </>
-                )}
-              </Button>
+              {/* 右侧：筛选条件 + 匹配按钮 */}
+              <div className="flex flex-wrap items-center gap-3">
+                <MultiSelectFilter
+                  label="地区"
+                  icon={MapPin}
+                  options={regions}
+                  selected={selectedRegions}
+                  onChange={setSelectedRegions}
+                />
+                <MultiSelectFilter
+                  label="方向"
+                  icon={Compass}
+                  options={directions}
+                  selected={selectedDirections}
+                  onChange={setSelectedDirections}
+                />
+                <Button 
+                  onClick={handleMatch} 
+                  disabled={!selectedResumeId || matching}
+                  className="bg-gradient-to-r from-purple-600 to-blue-600 hover:from-purple-700 hover:to-blue-700"
+                >
+                  {matching ? (
+                    <>
+                      <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                      匹配中...
+                    </>
+                  ) : (
+                    <>
+                      <Sparkles className="mr-2 h-4 w-4" />
+                      开始AI匹配
+                    </>
+                  )}
+                </Button>
+              </div>
             </div>
 
             {matching && (
