@@ -3,16 +3,7 @@
 import { useState, useEffect } from 'react';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent } from '@/components/ui/card';
-import { Input } from '@/components/ui/input';
 import { Badge } from '@/components/ui/badge';
-import { Checkbox } from '@/components/ui/checkbox';
-import {
-  Select,
-  SelectContent,
-  SelectItem,
-  SelectTrigger,
-  SelectValue,
-} from '@/components/ui/select';
 import {
   Popover,
   PopoverContent,
@@ -129,138 +120,152 @@ function CompanyLogo({ company, logoUrl }: { company: string; logoUrl?: string }
   );
 }
 
-// 多选筛选器组件 - 现代化设计
-function MultiSelectFilter({
+// 高级筛选器组件
+function PremiumFilterChip({
   label,
   icon: Icon,
   options,
   selected,
   onChange,
+  multi = false,
 }: {
   label: string;
   icon: React.ElementType;
   options: JobConfig[];
-  selected: string[];
-  onChange: (values: string[]) => void;
+  selected: string | string[];
+  onChange: (value: string | string[]) => void;
+  multi?: boolean;
 }) {
+  const [isOpen, setIsOpen] = useState(false);
+  
+  const selectedArray = Array.isArray(selected) ? selected : selected === '全部' ? [] : [selected];
+  const hasSelection = selectedArray.length > 0;
+
   const handleToggle = (value: string) => {
-    if (selected.includes(value)) {
-      onChange(selected.filter(v => v !== value));
+    if (multi) {
+      const current = selected as string[];
+      if (current.includes(value)) {
+        onChange(current.filter(v => v !== value));
+      } else {
+        onChange([...current, value]);
+      }
     } else {
-      onChange([...selected, value]);
+      onChange(value);
+      setIsOpen(false);
     }
   };
 
   return (
-    <Popover>
+    <Popover open={isOpen} onOpenChange={setIsOpen}>
       <PopoverTrigger asChild>
-        <button className="inline-flex items-center gap-2 px-3 py-2 rounded-full border border-input bg-background hover:bg-accent hover:text-accent-foreground transition-colors text-sm">
-          <Icon className="h-4 w-4 text-muted-foreground" />
-          <span className="font-medium">{label}</span>
-          {selected.length > 0 && (
-            <Badge variant="secondary" className="ml-0.5 h-5 px-1.5 rounded-full">
-              {selected.length}
-            </Badge>
+        <button 
+          className={`
+            group relative inline-flex items-center gap-2 px-4 py-2.5 
+            rounded-xl text-sm font-medium
+            transition-all duration-300 ease-out
+            ${hasSelection 
+              ? 'bg-gradient-to-r from-primary/90 to-primary text-primary-foreground shadow-lg shadow-primary/25' 
+              : 'bg-white/80 backdrop-blur-sm border border-gray-200/60 hover:border-primary/30 hover:bg-white hover:shadow-md'
+            }
+          `}
+        >
+          <Icon className={`h-4 w-4 transition-colors ${hasSelection ? 'text-primary-foreground' : 'text-gray-400 group-hover:text-primary'}`} />
+          <span>{label}</span>
+          {hasSelection && (
+            <span className="flex items-center justify-center min-w-[20px] h-5 px-1.5 rounded-full bg-white/20 text-xs font-semibold">
+              {selectedArray.length}
+            </span>
           )}
-          <ChevronDown className="h-3.5 w-3.5 text-muted-foreground" />
+          <ChevronDown className={`h-3.5 w-3.5 transition-transform duration-200 ${isOpen ? 'rotate-180' : ''} ${hasSelection ? 'text-primary-foreground/70' : 'text-gray-400'}`} />
         </button>
       </PopoverTrigger>
-      <PopoverContent className="w-48 p-2" align="start">
-        <div className="max-h-60 overflow-y-auto space-y-1">
-          {options.map((option) => (
-            <label
-              key={option.id}
-              className={`flex items-center gap-2 px-2 py-1.5 rounded-md cursor-pointer transition-colors ${
-                selected.includes(option.config_value) 
-                  ? 'bg-primary/10 text-primary' 
-                  : 'hover:bg-muted'
-              }`}
-              translate="no"
-            >
-              <Checkbox
-                checked={selected.includes(option.config_value)}
-                onCheckedChange={() => handleToggle(option.config_value)}
-                className="data-[state=checked]:bg-primary data-[state=checked]:border-primary"
-              />
-              <span className="text-sm font-medium">{option.config_value}</span>
-            </label>
-          ))}
-        </div>
-        {options.length === 0 && (
-          <div className="text-center py-2 text-sm text-muted-foreground">暂无选项</div>
-        )}
-        {selected.length > 0 && (
-          <div className="border-t mt-2 pt-2">
+      <PopoverContent 
+        className="w-52 p-1.5 bg-white/95 backdrop-blur-xl border border-gray-200/50 shadow-2xl rounded-xl" 
+        align="start"
+        sideOffset={8}
+      >
+        {multi ? (
+          <>
+            <div className="max-h-56 overflow-y-auto py-1 px-0.5 space-y-0.5">
+              {options.map((option) => {
+                const isSelected = selectedArray.includes(option.config_value);
+                return (
+                  <button
+                    key={option.id}
+                    onClick={() => handleToggle(option.config_value)}
+                    className={`
+                      w-full flex items-center gap-2.5 px-3 py-2 rounded-lg text-sm
+                      transition-all duration-200
+                      ${isSelected 
+                        ? 'bg-primary text-primary-foreground' 
+                        : 'hover:bg-gray-100 text-gray-700'
+                      }
+                    `}
+                    translate="no"
+                  >
+                    <div className={`
+                      flex items-center justify-center w-4 h-4 rounded border 
+                      transition-all duration-200
+                      ${isSelected 
+                        ? 'bg-white border-white' 
+                        : 'border-gray-300'
+                      }
+                    `}>
+                      {isSelected && <svg className="w-3 h-3 text-primary" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={3} d="M5 13l4 4L19 7" /></svg>}
+                    </div>
+                    <span className="font-medium">{option.config_value}</span>
+                  </button>
+                );
+              })}
+            </div>
+            {hasSelection && (
+              <div className="border-t border-gray-100 mt-1 pt-1.5 px-1">
+                <button
+                  onClick={() => onChange([])}
+                  className="w-full text-center text-xs text-gray-500 hover:text-primary py-1.5 rounded-lg hover:bg-gray-50 transition-colors"
+                >
+                  清除选择
+                </button>
+              </div>
+            )}
+          </>
+        ) : (
+          <div className="py-1 px-0.5 space-y-0.5">
             <button
-              onClick={() => onChange([])}
-              className="w-full text-xs text-muted-foreground hover:text-foreground transition-colors py-1"
+              onClick={() => handleToggle('全部')}
+              className={`
+                w-full text-left px-3 py-2 rounded-lg text-sm font-medium
+                transition-all duration-200
+                {(selected as string) === '全部' 
+                  ? 'bg-primary text-primary-foreground' 
+                  : 'hover:bg-gray-100 text-gray-700'
+                }
+              `}
             >
-              清除全部
+              全部
             </button>
+            {options.map((option) => {
+              const isSelected = (selected as string) === option.config_value;
+              return (
+                <button
+                  key={option.id}
+                  onClick={() => handleToggle(option.config_value)}
+                  className={`
+                    w-full text-left px-3 py-2 rounded-lg text-sm font-medium
+                    transition-all duration-200
+                    ${isSelected 
+                      ? 'bg-primary text-primary-foreground' 
+                      : 'hover:bg-gray-100 text-gray-700'
+                    }
+                  `}
+                  translate="no"
+                >
+                  {option.config_value}
+                </button>
+              );
+            })}
           </div>
         )}
-      </PopoverContent>
-    </Popover>
-  );
-}
-
-// 单选筛选器组件 - 现代化设计
-function SingleSelectFilter({
-  label,
-  icon: Icon,
-  options,
-  selected,
-  onChange,
-}: {
-  label: string;
-  icon: React.ElementType;
-  options: JobConfig[];
-  selected: string;
-  onChange: (value: string) => void;
-}) {
-  const displayValue = selected === '全部' ? null : selected;
-  
-  return (
-    <Popover>
-      <PopoverTrigger asChild>
-        <button className="inline-flex items-center gap-2 px-3 py-2 rounded-full border border-input bg-background hover:bg-accent hover:text-accent-foreground transition-colors text-sm">
-          <Icon className="h-4 w-4 text-muted-foreground" />
-          <span className="font-medium">{label}</span>
-          {displayValue && (
-            <Badge variant="secondary" className="ml-0.5 h-5 px-1.5 rounded-full text-xs">
-              {displayValue}
-            </Badge>
-          )}
-          <ChevronDown className="h-3.5 w-3.5 text-muted-foreground" />
-        </button>
-      </PopoverTrigger>
-      <PopoverContent className="w-40 p-1" align="start">
-        <div className="space-y-0.5">
-          <button
-            onClick={() => onChange('全部')}
-            className={`w-full text-left px-3 py-2 rounded-md text-sm transition-colors ${
-              selected === '全部' 
-                ? 'bg-primary text-primary-foreground' 
-                : 'hover:bg-muted'
-            }`}
-          >
-            全部
-          </button>
-          {options.map((option) => (
-            <button
-              key={option.id}
-              onClick={() => onChange(option.config_value)}
-              className={`w-full text-left px-3 py-2 rounded-md text-sm transition-colors ${
-                selected === option.config_value 
-                  ? 'bg-primary text-primary-foreground' 
-                  : 'hover:bg-muted'
-              }`}
-              translate="no"
-            >
-              {option.config_value}
-            </button>
-          ))}
-        </div>
       </PopoverContent>
     </Popover>
   );
@@ -363,64 +368,75 @@ export default function JobsPage() {
           <p className="text-muted-foreground">按地区、方向、受众筛选海量海外岗位</p>
         </div>
 
-        {/* Filters */}
-        <Card className="mb-6 border-0 shadow-sm bg-gradient-to-r from-background to-muted/30">
-          <CardContent className="pt-5 pb-5">
-            <div className="flex flex-col gap-4">
-              {/* 搜索框 */}
-              <div className="relative max-w-md">
-                <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
-                <Input
-                  placeholder="搜索岗位名称或公司..."
-                  value={searchTerm}
-                  onChange={(e) => setSearchTerm(e.target.value)}
-                  className="pl-10 h-11 bg-background"
-                />
-              </div>
-              
-              {/* 筛选器组 */}
-              <div className="flex flex-wrap items-center gap-3">
-                <span className="text-sm text-muted-foreground mr-1">筛选</span>
-                <MultiSelectFilter
-                  label="地区"
-                  icon={MapPin}
-                  options={configs.region || []}
-                  selected={selectedRegions}
-                  onChange={setSelectedRegions}
-                />
-                <MultiSelectFilter
-                  label="方向"
-                  icon={Briefcase}
-                  options={configs.direction || []}
-                  selected={selectedDirections}
-                  onChange={setSelectedDirections}
-                />
-                <SingleSelectFilter
-                  label="受众"
-                  icon={Users}
-                  options={configs.audience || []}
-                  selected={selectedAudience}
-                  onChange={setSelectedAudience}
-                />
+        {/* Premium Filters */}
+        <div className="mb-8">
+          <div className="relative overflow-hidden rounded-2xl bg-gradient-to-br from-white via-gray-50/50 to-white border border-gray-200/60 shadow-xl shadow-gray-200/50">
+            {/* 装饰背景 */}
+            <div className="absolute inset-0 bg-gradient-to-r from-primary/5 via-transparent to-primary/5 pointer-events-none" />
+            
+            <div className="relative p-6">
+              {/* 搜索行 */}
+              <div className="flex flex-col md:flex-row gap-4 items-start md:items-center">
+                {/* 搜索框 */}
+                <div className="relative flex-1 max-w-lg">
+                  <div className="absolute left-4 top-1/2 -translate-y-1/2 text-gray-400">
+                    <Search className="h-5 w-5" />
+                  </div>
+                  <input
+                    type="text"
+                    placeholder="搜索岗位名称或公司..."
+                    value={searchTerm}
+                    onChange={(e) => setSearchTerm(e.target.value)}
+                    className="w-full h-12 pl-12 pr-4 rounded-xl border border-gray-200/80 bg-white/80 backdrop-blur-sm text-base placeholder:text-gray-400 focus:outline-none focus:ring-2 focus:ring-primary/20 focus:border-primary/30 transition-all"
+                  />
+                </div>
                 
-                {/* 清除筛选按钮 */}
-                {(selectedRegions.length > 0 || selectedDirections.length > 0 || selectedAudience !== '全部') && (
-                  <button
-                    onClick={() => {
-                      setSelectedRegions([]);
-                      setSelectedDirections([]);
-                      setSelectedAudience('全部');
-                    }}
-                    className="inline-flex items-center gap-1 px-2 py-1 text-xs text-muted-foreground hover:text-foreground transition-colors"
-                  >
-                    <X className="h-3 w-3" />
-                    清除全部
-                  </button>
-                )}
+                {/* 筛选器组 */}
+                <div className="flex flex-wrap items-center gap-3">
+                  <PremiumFilterChip
+                    label="地区"
+                    icon={MapPin}
+                    options={configs.region || []}
+                    selected={selectedRegions}
+                    onChange={(v) => setSelectedRegions(v as string[])}
+                    multi
+                  />
+                  <PremiumFilterChip
+                    label="方向"
+                    icon={Briefcase}
+                    options={configs.direction || []}
+                    selected={selectedDirections}
+                    onChange={(v) => setSelectedDirections(v as string[])}
+                    multi
+                  />
+                  <PremiumFilterChip
+                    label="受众"
+                    icon={Users}
+                    options={configs.audience || []}
+                    selected={selectedAudience}
+                    onChange={(v) => setSelectedAudience(v as string)}
+                    multi={false}
+                  />
+                  
+                  {/* 清除按钮 */}
+                  {(selectedRegions.length > 0 || selectedDirections.length > 0 || selectedAudience !== '全部') && (
+                    <button
+                      onClick={() => {
+                        setSelectedRegions([]);
+                        setSelectedDirections([]);
+                        setSelectedAudience('全部');
+                      }}
+                      className="inline-flex items-center gap-1.5 px-3 py-2 text-sm text-gray-500 hover:text-primary transition-colors group"
+                    >
+                      <X className="h-4 w-4 transition-transform group-hover:rotate-90" />
+                      <span>重置</span>
+                    </button>
+                  )}
+                </div>
               </div>
             </div>
-          </CardContent>
-        </Card>
+          </div>
+        </div>
 
         {/* Results */}
         <div className="space-y-4">
