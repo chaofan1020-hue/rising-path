@@ -165,7 +165,7 @@ export default function ResumePage() {
               上传简历
             </CardTitle>
             <CardDescription>
-              支持 PDF、Word、TXT 格式，推荐上传 TXT 文本格式以获得最佳解析效果
+              支持 PDF、Word (.docx)、TXT 格式，系统将自动解析提取关键信息
             </CardDescription>
           </CardHeader>
           <CardContent>
@@ -178,7 +178,7 @@ export default function ResumePage() {
                   disabled={uploading}
                 />
                 <p className="text-xs text-muted-foreground mt-1">
-                  支持 PDF、Word、TXT 格式，推荐上传 TXT 文本格式以获得最佳解析效果
+                  支持 PDF、Word (.docx)、TXT 格式，系统将自动提取姓名、联系方式、教育经历、工作经验、技能等信息
                 </p>
                 {selectedFile && (
                   <p className="text-sm text-muted-foreground mt-2">

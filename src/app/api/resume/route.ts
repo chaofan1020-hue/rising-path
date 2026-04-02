@@ -1,6 +1,8 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { getSupabaseClient } from '@/storage/database/supabase-client';
 import { S3Storage, LLMClient, Config } from 'coze-coding-dev-sdk';
+import PDFParser from 'pdf2json';
+import mammoth from 'mammoth';
 
 const storage = new S3Storage({
   endpointUrl: process.env.COZE_BUCKET_ENDPOINT_URL,
@@ -10,7 +12,47 @@ const storage = new S3Storage({
   region: 'cn-beijing',
 });
 
-// 解析简历内容的函数
+// 从PDF提取文本
+async function extractTextFromPDF(buffer: Buffer): Promise<string> {
+  return new Promise((resolve, reject) => {
+    const pdfParser = new (PDFParser as any)(null, 1);
+    
+    pdfParser.on('pdfParser_dataError', (errData: any) => {
+      console.error('PDF extraction error:', errData.parserError);
+      reject(new Error('PDF解析失败'));
+    });
+    
+    pdfParser.on('pdfParser_dataReady', (pdfData: any) => {
+      // 提取所有页面的文本
+      const text: string[] = [];
+      for (const page of pdfData.Pages || []) {
+        for (const textItem of page.Texts || []) {
+          // 解码URI编码的文本
+          const decodedText = decodeURIComponent(textItem.R[0].T);
+          text.push(decodedText);
+        }
+        text.push('\n'); // 页面之间添加换行
+      }
+      resolve(text.join(' '));
+    });
+    
+    // 解析Buffer
+    pdfParser.parseBuffer(buffer);
+  });
+}
+
+// 从Word文档提取文本
+async function extractTextFromWord(buffer: Buffer): Promise<string> {
+  try {
+    const result = await mammoth.extractRawText({ buffer });
+    return result.value;
+  } catch (error) {
+    console.error('Word extraction error:', error);
+    throw new Error('Word文档解析失败');
+  }
+}
+
+// 使用LLM解析简历内容
 async function parseResumeContent(content: string): Promise<{
   parsed_content: string;
   user_info: {
@@ -57,7 +99,6 @@ ${content}
     };
 
     try {
-      // 尝试解析JSON
       const jsonMatch = response.content.match(/\{[\s\S]*\}/);
       if (jsonMatch) {
         const parsed = JSON.parse(jsonMatch[0]);
@@ -146,7 +187,7 @@ export async function POST(request: NextRequest) {
       throw new Error(`创建简历记录失败: ${insertError.message}`);
     }
 
-    // 异步解析简历（不阻塞响应）
+    // 异步解析简历
     parseResumeInBackground(resumeData.id, buffer, file.type, file.name);
 
     return NextResponse.json({ resume: resumeData });
@@ -169,25 +210,34 @@ async function parseResumeInBackground(
   try {
     const client = getSupabaseClient();
     
-    // 提取文本内容
     let textContent = '';
     
-    if (contentType === 'text/plain' || fileName.endsWith('.txt')) {
-      // 直接读取文本文件
-      textContent = buffer.toString('utf-8');
-    } else if (contentType === 'application/pdf' || fileName.endsWith('.pdf')) {
-      // PDF文件 - 简化处理，提示需要文本格式
-      textContent = `[PDF文件: ${fileName}]\n\n提示：系统暂不支持PDF自动解析，请上传TXT格式的简历文本，或手动输入简历信息。`;
+    // 根据文件类型提取文本
+    if (contentType === 'application/pdf' || fileName.endsWith('.pdf')) {
+      console.log('Parsing PDF file:', fileName);
+      textContent = await extractTextFromPDF(buffer);
     } else if (
       contentType === 'application/vnd.openxmlformats-officedocument.wordprocessingml.document' ||
       fileName.endsWith('.docx')
     ) {
-      // Word文档
-      textContent = `[Word文档: ${fileName}]\n\n提示：系统暂不支持Word自动解析，请上传TXT格式的简历文本。`;
+      console.log('Parsing Word file:', fileName);
+      textContent = await extractTextFromWord(buffer);
+    } else if (contentType === 'application/msword' || fileName.endsWith('.doc')) {
+      // 旧版.doc格式
+      console.log('Parsing old Word file:', fileName);
+      textContent = await extractTextFromWord(buffer);
+    } else if (contentType === 'text/plain' || fileName.endsWith('.txt')) {
+      textContent = buffer.toString('utf-8');
     } else {
       // 尝试作为文本读取
-      textContent = buffer.toString('utf-8');
+      try {
+        textContent = buffer.toString('utf-8');
+      } catch {
+        textContent = `[不支持的文件格式: ${fileName}]`;
+      }
     }
+
+    console.log('Extracted text length:', textContent.length);
 
     // 使用LLM解析简历
     const parsed = await parseResumeContent(textContent);
@@ -204,8 +254,20 @@ async function parseResumeInBackground(
 
     if (updateError) {
       console.error('Failed to update parsed resume:', updateError);
+    } else {
+      console.log('Resume parsed successfully:', resumeId);
     }
   } catch (error) {
     console.error('Background parsing error:', error);
+    
+    // 更新错误状态
+    const client = getSupabaseClient();
+    await client
+      .from('resumes')
+      .update({
+        parsed_content: '简历解析失败，请检查文件格式是否正确',
+        updated_at: new Date().toISOString(),
+      })
+      .eq('id', resumeId);
   }
 }
