@@ -504,7 +504,7 @@ function OptimizeContent() {
 
       {/* Result Dialog */}
       <Dialog open={showResult} onOpenChange={setShowResult}>
-        <DialogContent className="w-[98vw] max-w-[1800px] max-h-[90vh] overflow-y-auto">
+        <DialogContent className="w-full max-w-none h-[95vh] max-h-[95vh] overflow-hidden flex flex-col">
           <DialogHeader>
             <DialogTitle className="flex items-center gap-2">
               <CheckCircle className="h-5 w-5 text-green-600" />
@@ -514,49 +514,47 @@ function OptimizeContent() {
               AI已根据目标岗位优化了您的简历内容，左侧为原简历，右侧为优化后简历
             </DialogDescription>
           </DialogHeader>
-          <div className="space-y-4">
-            <div className="flex justify-end gap-2">
-              <Button variant="outline" size="sm" onClick={handleCopy}>
-                <Copy className="mr-2 h-4 w-4" />
-                复制优化内容
-              </Button>
-              <Button size="sm">
-                <Download className="mr-2 h-4 w-4" />
-                下载简历
-              </Button>
-            </div>
-            
-            {/* 对比视图 */}
-            <div className="grid md:grid-cols-2 gap-6">
-              {/* 原简历 */}
-              <div>
-                <div className="flex items-center gap-2 mb-3">
-                  <FileText className="h-4 w-4 text-gray-500" />
-                  <h3 className="font-medium text-gray-600">原简历</h3>
-                </div>
-                <div className="bg-gray-100 p-4 rounded-lg max-h-[650px] overflow-y-auto">
-                  <div className="bg-white p-8 shadow rounded-lg text-sm text-gray-700 whitespace-pre-wrap leading-relaxed">
-                    {originalContent}
-                  </div>
+          <div className="flex justify-end gap-2 mb-2">
+            <Button variant="outline" size="sm" onClick={handleCopy}>
+              <Copy className="mr-2 h-4 w-4" />
+              复制优化内容
+            </Button>
+            <Button size="sm">
+              <Download className="mr-2 h-4 w-4" />
+              下载简历
+            </Button>
+          </div>
+          
+          {/* 对比视图 */}
+          <div className="grid grid-cols-2 gap-8 flex-1 min-h-0">
+            {/* 原简历 */}
+            <div className="flex flex-col min-h-0">
+              <div className="flex items-center gap-2 mb-2">
+                <FileText className="h-4 w-4 text-gray-500" />
+                <h3 className="font-medium text-gray-600">原简历</h3>
+              </div>
+              <div className="bg-gray-100 p-4 rounded-lg flex-1 overflow-y-auto">
+                <div className="bg-white p-8 shadow rounded-lg text-sm text-gray-700 whitespace-pre-wrap leading-relaxed">
+                  {originalContent}
                 </div>
               </div>
-              
-              {/* 优化后简历 */}
-              <div>
-                <div className="flex items-center gap-2 mb-3">
-                  <Sparkles className="h-4 w-4 text-green-600" />
-                  <h3 className="font-medium text-green-600">优化后简历</h3>
-                  <Badge variant="secondary" className="ml-1">ATS优化</Badge>
-                </div>
-                <div className="bg-gray-100 p-4 rounded-lg max-h-[650px] overflow-y-auto">
-                  {resumeData ? (
-                    <ResumePreview data={resumeData} />
-                  ) : (
-                    <div className="bg-white p-8 shadow rounded-lg text-sm text-gray-700 whitespace-pre-wrap leading-relaxed">
-                      {optimizedContent}
-                    </div>
-                  )}
-                </div>
+            </div>
+            
+            {/* 优化后简历 */}
+            <div className="flex flex-col min-h-0">
+              <div className="flex items-center gap-2 mb-2">
+                <Sparkles className="h-4 w-4 text-green-600" />
+                <h3 className="font-medium text-green-600">优化后简历</h3>
+                <Badge variant="secondary" className="ml-1">ATS优化</Badge>
+              </div>
+              <div className="bg-gray-100 p-4 rounded-lg flex-1 overflow-y-auto">
+                {resumeData ? (
+                  <ResumePreview data={resumeData} />
+                ) : (
+                  <div className="bg-white p-8 shadow rounded-lg text-sm text-gray-700 whitespace-pre-wrap leading-relaxed">
+                    {optimizedContent}
+                  </div>
+                )}
               </div>
             </div>
           </div>
