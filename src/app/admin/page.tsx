@@ -427,12 +427,13 @@ export default function AdminPage() {
     setBatchDeleting(true);
     try {
       const ids = Array.from(selectedJobIds);
-      console.log('Sending delete request with ids:', ids);
+      const payload = { ids };
+      console.log('Sending delete request with payload:', JSON.stringify(payload));
       
-      const response = await fetch('/api/jobs/batch', {
+      const response = await fetch('/api/jobs/batch?_=' + Date.now(), {
         method: 'DELETE',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ ids }),
+        body: JSON.stringify(payload),
       });
       
       console.log('Response status:', response.status);
