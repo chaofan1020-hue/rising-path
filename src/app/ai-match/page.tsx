@@ -301,27 +301,25 @@ function AIMatchContent() {
               </div>
 
               {/* 筛选条件 + 匹配按钮 */}
-              <div className="flex flex-col md:flex-row gap-3">
-                <div className="flex flex-wrap gap-2">
-                  <MultiSelectFilter
-                    label="地区"
-                    icon={MapPin}
-                    options={regions}
-                    selected={selectedRegions}
-                    onChange={setSelectedRegions}
-                  />
-                  <MultiSelectFilter
-                    label="方向"
-                    icon={Compass}
-                    options={directions}
-                    selected={selectedDirections}
-                    onChange={setSelectedDirections}
-                  />
-                </div>
+              <div className="flex flex-wrap items-center gap-2 md:gap-3">
+                <MultiSelectFilter
+                  label="地区"
+                  icon={MapPin}
+                  options={regions}
+                  selected={selectedRegions}
+                  onChange={setSelectedRegions}
+                />
+                <MultiSelectFilter
+                  label="方向"
+                  icon={Compass}
+                  options={directions}
+                  selected={selectedDirections}
+                  onChange={setSelectedDirections}
+                />
                 <Button
                   onClick={handleMatch}
                   disabled={!selectedResumeId || matching}
-                  className="bg-gradient-to-r from-purple-600 to-blue-600 hover:from-purple-700 hover:to-blue-700 w-full md:w-auto h-9 md:h-10"
+                  className="bg-gradient-to-r from-purple-600 to-blue-600 hover:from-purple-700 hover:to-blue-700 h-9 md:h-10"
                 >
                   {matching ? (
                     <>
