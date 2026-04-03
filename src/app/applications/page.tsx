@@ -31,6 +31,8 @@ import {
   MapPin,
   Building2,
   BarChart3,
+  FileX,
+  Users,
 } from 'lucide-react';
 import Link from 'next/link';
 import { AccessGuard, useAccessCode } from '@/components/access-guard';
@@ -58,8 +60,11 @@ const statusConfig: Record<string, { label: string; color: string; icon: typeof 
   pending: { label: '待投递', color: 'secondary', icon: Clock },
   submitted: { label: '已投递', color: 'default', icon: Send },
   interview: { label: '面试中', color: 'default', icon: Calendar },
-  rejected: { label: '已拒绝', color: 'destructive', icon: XCircle },
+  resume_rejected: { label: '简历被拒', color: 'destructive', icon: FileX },
+  interview_rejected: { label: '面试未通过', color: 'destructive', icon: XCircle },
   offer: { label: '已录用', color: 'default', icon: CheckCircle },
+  // 兼容旧数据
+  rejected: { label: '已拒绝', color: 'destructive', icon: XCircle },
 };
 
 // 内部组件
@@ -152,7 +157,8 @@ function ApplicationsContent() {
     pending: applications.filter(a => a.status === 'pending').length,
     submitted: applications.filter(a => a.status === 'submitted').length,
     interview: applications.filter(a => a.status === 'interview').length,
-    rejected: applications.filter(a => a.status === 'rejected').length,
+    resume_rejected: applications.filter(a => a.status === 'resume_rejected').length,
+    interview_rejected: applications.filter(a => a.status === 'interview_rejected').length,
     offer: applications.filter(a => a.status === 'offer').length,
   };
 
@@ -163,7 +169,8 @@ function ApplicationsContent() {
       { label: '待投递', count: stats.pending, color: 'bg-yellow-500', percent: stats.total > 0 ? (stats.pending / stats.total * 100).toFixed(0) : 0 },
       { label: '已投递', count: stats.submitted, color: 'bg-blue-500', percent: stats.total > 0 ? (stats.submitted / stats.total * 100).toFixed(0) : 0 },
       { label: '面试中', count: stats.interview, color: 'bg-purple-500', percent: stats.total > 0 ? (stats.interview / stats.total * 100).toFixed(0) : 0 },
-      { label: '已拒绝', count: stats.rejected, color: 'bg-red-500', percent: stats.total > 0 ? (stats.rejected / stats.total * 100).toFixed(0) : 0 },
+      { label: '简历被拒', count: stats.resume_rejected, color: 'bg-red-400', percent: stats.total > 0 ? (stats.resume_rejected / stats.total * 100).toFixed(0) : 0 },
+      { label: '面试未通过', count: stats.interview_rejected, color: 'bg-red-500', percent: stats.total > 0 ? (stats.interview_rejected / stats.total * 100).toFixed(0) : 0 },
       { label: '已录用', count: stats.offer, color: 'bg-green-500', percent: stats.total > 0 ? (stats.offer / stats.total * 100).toFixed(0) : 0 },
     ],
     // 地区分布
@@ -179,7 +186,7 @@ function ApplicationsContent() {
       return acc;
     }, {} as Record<string, number>),
     // 投递成功率（获得面试机会的比例）
-    successRate: stats.total > 0 ? ((stats.interview + stats.offer) / stats.total * 100).toFixed(1) : '0',
+    successRate: stats.total > 0 ? ((stats.interview + stats.offer + stats.interview_rejected) / stats.total * 100).toFixed(1) : '0',
     // 录用率
     offerRate: stats.total > 0 ? (stats.offer / stats.total * 100).toFixed(1) : '0',
   };
@@ -359,7 +366,7 @@ function ApplicationsContent() {
                 <CardContent className="pt-3 md:pt-4">
                   <div className="text-xs md:text-sm text-muted-foreground mb-1">成功获得面试</div>
                   <div className="text-lg md:text-2xl font-bold text-green-600">
-                    {stats.interview + stats.offer}
+                    {stats.interview + stats.interview_rejected + stats.offer}
                   </div>
                   <div className="text-xs text-muted-foreground mt-1">
                     占总申请 {analytics.successRate}%
@@ -373,7 +380,7 @@ function ApplicationsContent() {
                     {analytics.successRate}%
                   </div>
                   <div className="text-xs text-muted-foreground mt-1">
-                    (面试中+已录用) / 总申请
+                    (面试中+面试未通过+已录用) / 总申请
                   </div>
                 </CardContent>
               </Card>
@@ -417,7 +424,8 @@ function ApplicationsContent() {
                   <SelectItem value="pending">待投递</SelectItem>
                   <SelectItem value="submitted">已投递</SelectItem>
                   <SelectItem value="interview">面试中</SelectItem>
-                  <SelectItem value="rejected">已拒绝</SelectItem>
+                  <SelectItem value="resume_rejected">简历被拒</SelectItem>
+                  <SelectItem value="interview_rejected">面试未通过</SelectItem>
                   <SelectItem value="offer">已录用</SelectItem>
                 </SelectContent>
               </Select>
@@ -471,8 +479,11 @@ function ApplicationsContent() {
                               <DropdownMenuItem onClick={() => handleUpdateStatus(app.id, 'interview')}>
                                 <Calendar className="h-3 w-3 mr-2" /> 面试中
                               </DropdownMenuItem>
-                              <DropdownMenuItem onClick={() => handleUpdateStatus(app.id, 'rejected')}>
-                                <XCircle className="h-3 w-3 mr-2" /> 已拒绝
+                              <DropdownMenuItem onClick={() => handleUpdateStatus(app.id, 'resume_rejected')}>
+                                <FileX className="h-3 w-3 mr-2" /> 简历被拒
+                              </DropdownMenuItem>
+                              <DropdownMenuItem onClick={() => handleUpdateStatus(app.id, 'interview_rejected')}>
+                                <XCircle className="h-3 w-3 mr-2" /> 面试未通过
                               </DropdownMenuItem>
                               <DropdownMenuItem onClick={() => handleUpdateStatus(app.id, 'offer')}>
                                 <CheckCircle className="h-3 w-3 mr-2" /> 已录用
