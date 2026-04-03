@@ -35,8 +35,8 @@ import {
   Languages,
 } from 'lucide-react';
 import Link from 'next/link';
-import html2canvas from 'html2canvas';
-import jsPDF from 'jspdf';
+import { Document, Packer, Paragraph, TextRun, HeadingLevel, AlignmentType } from 'docx';
+import { saveAs } from 'file-saver';
 import { AccessGuard, useAccessCode } from '@/components/access-guard';
 
 interface Resume {
@@ -391,80 +391,223 @@ function OptimizeContent() {
   };
 
   const handleDownload = async () => {
-    if (!resumePreviewRef.current) return;
+    if (!resumeData) return;
     
     setDownloading(true);
     try {
-      const element = resumePreviewRef.current;
+      const children: Paragraph[] = [];
       
-      // 使用 html2canvas 将 DOM 转换为 canvas
-      const canvas = await html2canvas(element, {
-        scale: 2, // 提高清晰度
-        useCORS: true,
-        logging: false,
-        backgroundColor: '#ffffff',
-        onclone: (clonedDoc) => {
-          // 修复 html2canvas 不支持 lab() 颜色函数的问题
-          // 遍历所有元素，将 computedStyle 中的颜色转换为 hex
-          const allElements = clonedDoc.querySelectorAll('*');
-          allElements.forEach((el) => {
-            const htmlEl = el as HTMLElement;
-            const computedStyle = clonedDoc.defaultView?.getComputedStyle(htmlEl);
-            if (computedStyle) {
-              // 处理 color
-              const color = computedStyle.color;
-              if (color && color.includes('lab')) {
-                htmlEl.style.color = '#374151'; // gray-700
-              }
-              // 处理 background-color
-              const bgColor = computedStyle.backgroundColor;
-              if (bgColor && bgColor.includes('lab')) {
-                if (bgColor.includes('rgba(0, 0, 0, 0)') || bgColor === 'transparent') {
-                  htmlEl.style.backgroundColor = '#ffffff';
-                } else {
-                  htmlEl.style.backgroundColor = '#f3f4f6'; // gray-100
-                }
-              }
-              // 处理 border-color
-              const borderColor = computedStyle.borderColor;
-              if (borderColor && borderColor.includes('lab')) {
-                htmlEl.style.borderColor = '#d1d5db'; // gray-300
-              }
-            }
-          });
-        },
-      });
+      // 姓名 - 标题样式
+      children.push(
+        new Paragraph({
+          children: [
+            new TextRun({
+              text: resumeData.name || '姓名',
+              bold: true,
+              size: 48, // 24pt
+            }),
+          ],
+          alignment: AlignmentType.CENTER,
+          spacing: { after: 200 },
+        })
+      );
       
-      // 创建 PDF
-      const imgWidth = 210; // A4 宽度 (mm)
-      const pageHeight = 297; // A4 高度 (mm)
-      const imgHeight = (canvas.height * imgWidth) / canvas.width;
-      
-      const pdf = new jsPDF('p', 'mm', 'a4');
-      
-      // 如果内容超过一页，需要分页
-      let heightLeft = imgHeight;
-      let position = 0;
-      
-      // 添加图片到 PDF
-      const imgData = canvas.toDataURL('image/png');
-      pdf.addImage(imgData, 'PNG', 0, position, imgWidth, imgHeight);
-      heightLeft -= pageHeight;
-      
-      // 如果内容超过一页，添加更多页面
-      while (heightLeft > 0) {
-        position = heightLeft - imgHeight;
-        pdf.addPage();
-        pdf.addImage(imgData, 'PNG', 0, position, imgWidth, imgHeight);
-        heightLeft -= pageHeight;
+      // 联系方式
+      if (resumeData.contact) {
+        const contactParts = [
+          resumeData.contact.email,
+          resumeData.contact.phone,
+          resumeData.contact.location,
+          resumeData.contact.linkedin
+        ].filter(Boolean);
+        children.push(
+          new Paragraph({
+            children: [
+              new TextRun({
+                text: contactParts.join(' | '),
+                size: 20,
+                color: '666666',
+              }),
+            ],
+            alignment: AlignmentType.CENTER,
+            spacing: { after: 400 },
+          })
+        );
       }
       
-      // 下载 PDF
-      const fileName = `resume_${targetPosition || 'optimized'}_${new Date().toISOString().slice(0, 10)}.pdf`;
-      pdf.save(fileName);
+      // 个人简介
+      if (resumeData.summary) {
+        children.push(
+          new Paragraph({
+            text: '个人简介',
+            heading: HeadingLevel.HEADING_2,
+            spacing: { before: 300, after: 100 },
+          })
+        );
+        children.push(
+          new Paragraph({
+            children: [new TextRun({ text: resumeData.summary, size: 22 })],
+            spacing: { after: 200 },
+          })
+        );
+      }
+      
+      // 专业技能
+      if (resumeData.skills && resumeData.skills.length > 0) {
+        children.push(
+          new Paragraph({
+            text: '专业技能',
+            heading: HeadingLevel.HEADING_2,
+            spacing: { before: 300, after: 100 },
+          })
+        );
+        children.push(
+          new Paragraph({
+            children: [new TextRun({ text: resumeData.skills.join('、'), size: 22 })],
+            spacing: { after: 200 },
+          })
+        );
+      }
+      
+      // 工作经历
+      if (resumeData.experience && resumeData.experience.length > 0) {
+        children.push(
+          new Paragraph({
+            text: '工作经历',
+            heading: HeadingLevel.HEADING_2,
+            spacing: { before: 300, after: 100 },
+          })
+        );
+        resumeData.experience.forEach(exp => {
+          children.push(
+            new Paragraph({
+              children: [
+                new TextRun({ text: exp.title, bold: true, size: 24 }),
+                new TextRun({ text: ' | ', size: 22 }),
+                new TextRun({ text: exp.company, size: 22 }),
+                ...(exp.location ? [
+                  new TextRun({ text: ' · ', size: 22, color: '999999' }),
+                  new TextRun({ text: exp.location, size: 22, color: '666666' }),
+                ] : []),
+                new TextRun({ text: '  ', size: 22 }),
+                new TextRun({ text: exp.period, size: 20, color: '666666' }),
+              ],
+              spacing: { before: 150, after: 50 },
+            })
+          );
+          exp.highlights.forEach(h => {
+            children.push(
+              new Paragraph({
+                children: [new TextRun({ text: `• ${h}`, size: 22 })],
+                spacing: { after: 30 },
+                indent: { left: 360 },
+              })
+            );
+          });
+        });
+      }
+      
+      // 教育背景
+      if (resumeData.education && resumeData.education.length > 0) {
+        children.push(
+          new Paragraph({
+            text: '教育背景',
+            heading: HeadingLevel.HEADING_2,
+            spacing: { before: 300, after: 100 },
+          })
+        );
+        resumeData.education.forEach(edu => {
+          children.push(
+            new Paragraph({
+              children: [
+                new TextRun({ text: edu.degree, bold: true, size: 24 }),
+                ...(edu.major ? [new TextRun({ text: ` in ${edu.major}`, size: 22 })] : []),
+                new TextRun({ text: ' | ', size: 22 }),
+                new TextRun({ text: edu.school, size: 22 }),
+                ...(edu.gpa ? [new TextRun({ text: ` | GPA: ${edu.gpa}`, size: 20, color: '666666' })] : []),
+                new TextRun({ text: '  ', size: 22 }),
+                new TextRun({ text: edu.period, size: 20, color: '666666' }),
+              ],
+              spacing: { before: 100, after: 50 },
+            })
+          );
+        });
+      }
+      
+      // 项目经历
+      if (resumeData.projects && resumeData.projects.length > 0) {
+        children.push(
+          new Paragraph({
+            text: '项目经历',
+            heading: HeadingLevel.HEADING_2,
+            spacing: { before: 300, after: 100 },
+          })
+        );
+        resumeData.projects.forEach(proj => {
+          children.push(
+            new Paragraph({
+              children: [
+                new TextRun({ text: proj.name, bold: true, size: 24 }),
+                ...(proj.role ? [new TextRun({ text: ` | ${proj.role}`, size: 22 })] : []),
+                ...(proj.period ? [new TextRun({ text: `  ${proj.period}`, size: 20, color: '666666' })] : []),
+              ],
+              spacing: { before: 150, after: 50 },
+            })
+          );
+          if (proj.description) {
+            children.push(
+              new Paragraph({
+                children: [new TextRun({ text: proj.description, size: 22 })],
+                spacing: { after: 30 },
+              })
+            );
+          }
+          proj.highlights.forEach(h => {
+            children.push(
+              new Paragraph({
+                children: [new TextRun({ text: `• ${h}`, size: 22 })],
+                spacing: { after: 30 },
+                indent: { left: 360 },
+              })
+            );
+          });
+        });
+      }
+      
+      // 证书认证
+      if (resumeData.certifications && resumeData.certifications.length > 0) {
+        children.push(
+          new Paragraph({
+            text: '证书认证',
+            heading: HeadingLevel.HEADING_2,
+            spacing: { before: 300, after: 100 },
+          })
+        );
+        resumeData.certifications.forEach(cert => {
+          children.push(
+            new Paragraph({
+              children: [new TextRun({ text: `• ${cert}`, size: 22 })],
+              spacing: { after: 30 },
+            })
+          );
+        });
+      }
+      
+      // 创建文档
+      const doc = new Document({
+        sections: [{
+          properties: {},
+          children: children,
+        }],
+      });
+      
+      // 生成并下载
+      const blob = await Packer.toBlob(doc);
+      const fileName = `resume_${targetPosition || 'optimized'}_${new Date().toISOString().slice(0, 10)}.docx`;
+      saveAs(blob, fileName);
     } catch (error) {
-      console.error('Failed to generate PDF:', error);
-      alert('生成PDF失败，请重试');
+      console.error('Failed to generate Word document:', error);
+      alert('生成Word文档失败，请重试');
     } finally {
       setDownloading(false);
     }
