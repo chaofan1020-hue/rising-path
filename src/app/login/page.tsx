@@ -114,13 +114,6 @@ export default function LoginPage() {
             </div>
           </CardContent>
         </Card>
-
-        {/* Admin Link */}
-        <div className="text-center mt-6">
-          <Link href="/admin" className="text-sm text-muted-foreground hover:text-foreground transition-colors">
-            管理员入口 →
-          </Link>
-        </div>
       </div>
     </div>
   );
