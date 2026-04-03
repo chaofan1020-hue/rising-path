@@ -275,7 +275,7 @@ function ResumeContent() {
             </CardDescription>
           </CardHeader>
           <CardContent>
-            <div className="flex flex-col gap-3 md:gap-4">
+            <div className="flex flex-col md:flex-row gap-3 md:gap-4">
               <div className="flex-1">
                 <Input
                   type="file"
@@ -293,7 +293,7 @@ function ResumeContent() {
                   </p>
                 )}
               </div>
-              <Button onClick={handleUpload} disabled={!selectedFile || uploading} className="w-full md:w-auto">
+              <Button onClick={handleUpload} disabled={!selectedFile || uploading} className="w-full md:w-auto h-10 self-start mt-6">
                 {uploading ? (
                   <>
                     <Loader2 className="mr-2 h-4 w-4 animate-spin" />
