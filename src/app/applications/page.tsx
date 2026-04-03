@@ -20,10 +20,8 @@ import {
   XCircle,
   Loader2,
   Plus,
-  FileText,
   Calendar,
   Trash2,
-  TrendingUp,
   MapPin,
   Building2,
   BarChart3,
@@ -463,28 +461,6 @@ function ApplicationsContent() {
                 ))}
               </div>
             )}
-          </CardContent>
-        </Card>
-
-        {/* Auto-fill Feature Info */}
-        <Card className="mt-6 md:mt-8 border-cyan-200 bg-cyan-50 dark:bg-cyan-950/20">
-          <CardContent className="pt-4 md:pt-6">
-            <div className="flex flex-col sm:flex-row items-start gap-3 md:gap-4">
-              <div className="w-10 h-10 md:w-12 md:h-12 rounded-lg bg-cyan-100 dark:bg-cyan-900 flex items-center justify-center flex-shrink-0">
-                <FileText className="h-5 w-5 md:h-6 md:w-6 text-cyan-600" />
-              </div>
-              <div>
-                <h4 className="font-medium mb-1 md:mb-2 text-sm md:text-base">自动网申功能</h4>
-                <p className="text-xs md:text-sm text-muted-foreground mb-3 md:mb-4">
-                  系统将学习您的简历信息和填写习惯，自动填写企业网申表单。支持字段映射和智能填充，大幅提升投递效率。
-                </p>
-                <div className="flex flex-wrap gap-1.5 md:gap-2">
-                  <Badge variant="secondary" className="text-xs">字段学习</Badge>
-                  <Badge variant="secondary" className="text-xs">自动填充</Badge>
-                  <Badge variant="secondary" className="text-xs">批量投递</Badge>
-                </div>
-              </div>
-            </div>
           </CardContent>
         </Card>
       </main>
