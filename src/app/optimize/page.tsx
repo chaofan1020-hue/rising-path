@@ -1,12 +1,11 @@
 'use client';
 
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useRef } from 'react';
 import { useSearchParams } from 'next/navigation';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
 import { Progress } from '@/components/ui/progress';
-import { Textarea } from '@/components/ui/textarea';
 import { Input } from '@/components/ui/input';
 import {
   Select,
@@ -36,6 +35,8 @@ import {
   Languages,
 } from 'lucide-react';
 import Link from 'next/link';
+import html2canvas from 'html2canvas';
+import jsPDF from 'jspdf';
 import { AccessGuard, useAccessCode } from '@/components/access-guard';
 
 interface Resume {
@@ -80,13 +81,13 @@ interface ResumeData {
 }
 
 // 简历预览组件
-function ResumePreview({ data }: { data: ResumeData }) {
+const ResumePreview = ({ data, ref }: { data: ResumeData; ref?: React.RefObject<HTMLDivElement | null> }) => {
   return (
-    <div className="bg-white text-black p-8 shadow-lg rounded-lg">
+    <div ref={ref} className="bg-white text-black p-4 md:p-8 shadow-lg rounded-lg">
       {/* 头部：姓名和联系方式 */}
-      <div className="text-center border-b-2 border-gray-800 pb-4 mb-4">
-        <h1 className="text-2xl font-bold text-gray-900 mb-2">{data.name || '姓名'}</h1>
-        <div className="flex flex-wrap justify-center gap-4 text-sm text-gray-600">
+      <div className="text-center border-b-2 border-gray-800 pb-3 md:pb-4 mb-3 md:mb-4">
+        <h1 className="text-lg md:text-2xl font-bold text-gray-900 mb-1 md:mb-2">{data.name || '姓名'}</h1>
+        <div className="flex flex-wrap justify-center gap-2 md:gap-4 text-xs md:text-sm text-gray-600">
           {data.contact?.email && <span>{data.contact.email}</span>}
           {data.contact?.phone && <span>{data.contact.phone}</span>}
           {data.contact?.location && <span>{data.contact.location}</span>}
@@ -96,23 +97,23 @@ function ResumePreview({ data }: { data: ResumeData }) {
 
       {/* 个人简介 */}
       {data.summary && (
-        <div className="mb-4">
-          <h2 className="text-sm font-bold text-gray-800 uppercase tracking-wide border-b border-gray-300 pb-1 mb-2">
+        <div className="mb-3 md:mb-4">
+          <h2 className="text-xs md:text-sm font-bold text-gray-800 uppercase tracking-wide border-b border-gray-300 pb-1 mb-1.5 md:mb-2">
             个人简介
           </h2>
-          <p className="text-sm text-gray-700 leading-relaxed">{data.summary}</p>
+          <p className="text-xs md:text-sm text-gray-700 leading-relaxed">{data.summary}</p>
         </div>
       )}
 
       {/* 技能 */}
       {data.skills && data.skills.length > 0 && (
-        <div className="mb-4">
-          <h2 className="text-sm font-bold text-gray-800 uppercase tracking-wide border-b border-gray-300 pb-1 mb-2">
+        <div className="mb-3 md:mb-4">
+          <h2 className="text-xs md:text-sm font-bold text-gray-800 uppercase tracking-wide border-b border-gray-300 pb-1 mb-1.5 md:mb-2">
             专业技能
           </h2>
-          <div className="flex flex-wrap gap-2">
+          <div className="flex flex-wrap gap-1.5 md:gap-2">
             {data.skills.map((skill, index) => (
-              <span key={index} className="text-sm bg-gray-100 px-2 py-1 rounded text-gray-700">
+              <span key={index} className="text-xs md:text-sm bg-gray-100 px-1.5 md:px-2 py-0.5 md:py-1 rounded text-gray-700">
                 {skill}
               </span>
             ))}
@@ -122,28 +123,28 @@ function ResumePreview({ data }: { data: ResumeData }) {
 
       {/* 工作经历 */}
       {data.experience && data.experience.length > 0 && (
-        <div className="mb-4">
-          <h2 className="text-sm font-bold text-gray-800 uppercase tracking-wide border-b border-gray-300 pb-1 mb-2">
+        <div className="mb-3 md:mb-4">
+          <h2 className="text-xs md:text-sm font-bold text-gray-800 uppercase tracking-wide border-b border-gray-300 pb-1 mb-1.5 md:mb-2">
             工作经历
           </h2>
-          <div className="space-y-3">
+          <div className="space-y-2 md:space-y-3">
             {data.experience.map((exp, index) => (
               <div key={index}>
-                <div className="flex justify-between items-start mb-1">
+                <div className="flex flex-col sm:flex-row sm:justify-between sm:items-start mb-1 gap-0.5 sm:gap-0">
                   <div>
-                    <span className="font-semibold text-gray-900">{exp.title}</span>
-                    <span className="text-gray-600 mx-2">|</span>
-                    <span className="text-gray-700">{exp.company}</span>
+                    <span className="font-semibold text-gray-900 text-xs md:text-sm">{exp.title}</span>
+                    <span className="text-gray-600 mx-1 md:mx-2 text-xs md:text-sm">|</span>
+                    <span className="text-gray-700 text-xs md:text-sm">{exp.company}</span>
                     {exp.location && (
                       <>
-                        <span className="text-gray-400 mx-1">·</span>
-                        <span className="text-gray-500">{exp.location}</span>
+                        <span className="text-gray-400 mx-0.5 md:mx-1">·</span>
+                        <span className="text-gray-500 text-xs md:text-sm">{exp.location}</span>
                       </>
                     )}
                   </div>
-                  <span className="text-sm text-gray-500 whitespace-nowrap">{exp.period}</span>
+                  <span className="text-xs text-gray-500 whitespace-nowrap">{exp.period}</span>
                 </div>
-                <ul className="list-disc list-inside text-sm text-gray-700 space-y-1">
+                <ul className="list-disc list-inside text-xs md:text-sm text-gray-700 space-y-0.5 md:space-y-1 ml-2">
                   {exp.highlights.map((highlight, i) => (
                     <li key={i}>{highlight}</li>
                   ))}
@@ -156,21 +157,21 @@ function ResumePreview({ data }: { data: ResumeData }) {
 
       {/* 教育背景 */}
       {data.education && data.education.length > 0 && (
-        <div className="mb-4">
-          <h2 className="text-sm font-bold text-gray-800 uppercase tracking-wide border-b border-gray-300 pb-1 mb-2">
+        <div className="mb-3 md:mb-4">
+          <h2 className="text-xs md:text-sm font-bold text-gray-800 uppercase tracking-wide border-b border-gray-300 pb-1 mb-1.5 md:mb-2">
             教育背景
           </h2>
-          <div className="space-y-2">
+          <div className="space-y-1.5 md:space-y-2">
             {data.education.map((edu, index) => (
-              <div key={index} className="flex justify-between items-start">
-                <div>
+              <div key={index} className="flex flex-col sm:flex-row sm:justify-between sm:items-start gap-0.5 sm:gap-0">
+                <div className="text-xs md:text-sm">
                   <span className="font-semibold text-gray-900">{edu.degree}</span>
                   {edu.major && <span className="text-gray-600 mx-1">in {edu.major}</span>}
-                  <span className="text-gray-400 mx-2">|</span>
+                  <span className="text-gray-400 mx-1 md:mx-2">|</span>
                   <span className="text-gray-700">{edu.school}</span>
-                  {edu.gpa && <span className="text-gray-500 ml-2">GPA: {edu.gpa}</span>}
+                  {edu.gpa && <span className="text-gray-500 ml-1 md:ml-2">GPA: {edu.gpa}</span>}
                 </div>
-                <span className="text-sm text-gray-500 whitespace-nowrap">{edu.period}</span>
+                <span className="text-xs text-gray-500 whitespace-nowrap">{edu.period}</span>
               </div>
             ))}
           </div>
@@ -179,29 +180,29 @@ function ResumePreview({ data }: { data: ResumeData }) {
 
       {/* 项目经历 */}
       {data.projects && data.projects.length > 0 && (
-        <div className="mb-4">
-          <h2 className="text-sm font-bold text-gray-800 uppercase tracking-wide border-b border-gray-300 pb-1 mb-2">
+        <div className="mb-3 md:mb-4">
+          <h2 className="text-xs md:text-sm font-bold text-gray-800 uppercase tracking-wide border-b border-gray-300 pb-1 mb-1.5 md:mb-2">
             项目经历
           </h2>
-          <div className="space-y-3">
+          <div className="space-y-2 md:space-y-3">
             {data.projects.map((project, index) => (
               <div key={index}>
-                <div className="flex justify-between items-start mb-1">
-                  <div>
+                <div className="flex flex-col sm:flex-row sm:justify-between sm:items-start mb-1 gap-0.5 sm:gap-0">
+                  <div className="text-xs md:text-sm">
                     <span className="font-semibold text-gray-900">{project.name}</span>
                     {project.role && (
                       <>
-                        <span className="text-gray-400 mx-2">|</span>
+                        <span className="text-gray-400 mx-1 md:mx-2">|</span>
                         <span className="text-gray-700">{project.role}</span>
                       </>
                     )}
                   </div>
-                  {project.period && <span className="text-sm text-gray-500 whitespace-nowrap">{project.period}</span>}
+                  {project.period && <span className="text-xs text-gray-500 whitespace-nowrap">{project.period}</span>}
                 </div>
                 {project.description && (
-                  <p className="text-sm text-gray-600 mb-1">{project.description}</p>
+                  <p className="text-xs md:text-sm text-gray-600 mb-1">{project.description}</p>
                 )}
-                <ul className="list-disc list-inside text-sm text-gray-700 space-y-1">
+                <ul className="list-disc list-inside text-xs md:text-sm text-gray-700 space-y-0.5 md:space-y-1 ml-2">
                   {project.highlights.map((highlight, i) => (
                     <li key={i}>{highlight}</li>
                   ))}
@@ -214,13 +215,13 @@ function ResumePreview({ data }: { data: ResumeData }) {
 
       {/* 证书 */}
       {data.certifications && data.certifications.length > 0 && (
-        <div className="mb-4">
-          <h2 className="text-sm font-bold text-gray-800 uppercase tracking-wide border-b border-gray-300 pb-1 mb-2">
+        <div className="mb-3 md:mb-4">
+          <h2 className="text-xs md:text-sm font-bold text-gray-800 uppercase tracking-wide border-b border-gray-300 pb-1 mb-1.5 md:mb-2">
             证书资质
           </h2>
-          <div className="flex flex-wrap gap-x-4 gap-y-1">
+          <div className="flex flex-wrap gap-x-3 md:gap-x-4 gap-y-0.5 md:gap-y-1">
             {data.certifications.map((cert, index) => (
-              <span key={index} className="text-sm text-gray-700">
+              <span key={index} className="text-xs md:text-sm text-gray-700">
                 • {cert}
               </span>
             ))}
@@ -229,7 +230,7 @@ function ResumePreview({ data }: { data: ResumeData }) {
       )}
     </div>
   );
-}
+};
 
 // 内部组件
 function OptimizeContent() {
@@ -247,6 +248,8 @@ function OptimizeContent() {
   const [showResult, setShowResult] = useState(false);
   const [translating, setTranslating] = useState(false);
   const [isEnglishVersion, setIsEnglishVersion] = useState(false);
+  const [downloading, setDownloading] = useState(false);
+  const resumePreviewRef = useRef<HTMLDivElement>(null);
   const { accessCodeId } = useAccessCode();
 
   useEffect(() => {
@@ -328,104 +331,54 @@ function OptimizeContent() {
     navigator.clipboard.writeText(optimizedContent);
   };
 
-  const handleDownload = () => {
-    let content = '';
-    const fileName = `resume_${targetPosition || 'optimized'}_${new Date().toISOString().slice(0, 10)}.txt`;
+  const handleDownload = async () => {
+    if (!resumePreviewRef.current) return;
     
-    if (resumeData) {
-      // 从结构化数据生成文本
-      content = generateTextFromResumeData(resumeData);
-    } else {
-      content = optimizedContent;
-    }
-    
-    const blob = new Blob([content], { type: 'text/plain;charset=utf-8' });
-    const url = URL.createObjectURL(blob);
-    const a = document.createElement('a');
-    a.href = url;
-    a.download = fileName;
-    document.body.appendChild(a);
-    a.click();
-    document.body.removeChild(a);
-    URL.revokeObjectURL(url);
-  };
-
-  const generateTextFromResumeData = (data: ResumeData): string => {
-    const lines: string[] = [];
-    
-    // 姓名
-    lines.push(data.name || '姓名');
-    lines.push('');
-    
-    // 联系方式
-    const contact: string[] = [];
-    if (data.contact?.email) contact.push(data.contact.email);
-    if (data.contact?.phone) contact.push(data.contact.phone);
-    if (data.contact?.location) contact.push(data.contact.location);
-    if (data.contact?.linkedin) contact.push(data.contact.linkedin);
-    if (contact.length > 0) {
-      lines.push(contact.join(' | '));
-      lines.push('');
-    }
-    
-    // 个人简介
-    if (data.summary) {
-      lines.push('=== 个人简介 ===');
-      lines.push(data.summary);
-      lines.push('');
-    }
-    
-    // 专业技能
-    if (data.skills && data.skills.length > 0) {
-      lines.push('=== 专业技能 ===');
-      lines.push(data.skills.join(', '));
-      lines.push('');
-    }
-    
-    // 工作经历
-    if (data.experience && data.experience.length > 0) {
-      lines.push('=== 工作经历 ===');
-      data.experience.forEach(exp => {
-        lines.push(`\n${exp.title} | ${exp.company}${exp.location ? ' | ' + exp.location : ''}`);
-        lines.push(exp.period);
-        exp.highlights.forEach(h => lines.push(`• ${h}`));
+    setDownloading(true);
+    try {
+      const element = resumePreviewRef.current;
+      
+      // 使用 html2canvas 将 DOM 转换为 canvas
+      const canvas = await html2canvas(element, {
+        scale: 2, // 提高清晰度
+        useCORS: true,
+        logging: false,
+        backgroundColor: '#ffffff',
       });
-      lines.push('');
+      
+      // 创建 PDF
+      const imgWidth = 210; // A4 宽度 (mm)
+      const pageHeight = 297; // A4 高度 (mm)
+      const imgHeight = (canvas.height * imgWidth) / canvas.width;
+      
+      const pdf = new jsPDF('p', 'mm', 'a4');
+      
+      // 如果内容超过一页，需要分页
+      let heightLeft = imgHeight;
+      let position = 0;
+      
+      // 添加图片到 PDF
+      const imgData = canvas.toDataURL('image/png');
+      pdf.addImage(imgData, 'PNG', 0, position, imgWidth, imgHeight);
+      heightLeft -= pageHeight;
+      
+      // 如果内容超过一页，添加更多页面
+      while (heightLeft > 0) {
+        position = heightLeft - imgHeight;
+        pdf.addPage();
+        pdf.addImage(imgData, 'PNG', 0, position, imgWidth, imgHeight);
+        heightLeft -= pageHeight;
+      }
+      
+      // 下载 PDF
+      const fileName = `resume_${targetPosition || 'optimized'}_${new Date().toISOString().slice(0, 10)}.pdf`;
+      pdf.save(fileName);
+    } catch (error) {
+      console.error('Failed to generate PDF:', error);
+      alert('生成PDF失败，请重试');
+    } finally {
+      setDownloading(false);
     }
-    
-    // 教育背景
-    if (data.education && data.education.length > 0) {
-      lines.push('=== 教育背景 ===');
-      data.education.forEach(edu => {
-        let eduLine = `${edu.degree}`;
-        if (edu.major) eduLine += ` in ${edu.major}`;
-        eduLine += ` | ${edu.school}`;
-        if (edu.gpa) eduLine += ` | GPA: ${edu.gpa}`;
-        lines.push(eduLine);
-        lines.push(edu.period);
-      });
-      lines.push('');
-    }
-    
-    // 项目经历
-    if (data.projects && data.projects.length > 0) {
-      lines.push('=== 项目经历 ===');
-      data.projects.forEach(project => {
-        lines.push(`\n${project.name}${project.role ? ' | ' + project.role : ''}`);
-        if (project.period) lines.push(project.period);
-        if (project.description) lines.push(project.description);
-        project.highlights.forEach(h => lines.push(`• ${h}`));
-      });
-      lines.push('');
-    }
-    
-    // 证书资质
-    if (data.certifications && data.certifications.length > 0) {
-      lines.push('=== 证书资质 ===');
-      data.certifications.forEach(cert => lines.push(`• ${cert}`));
-    }
-    
-    return lines.join('\n');
   };
 
   const handleTranslate = async () => {
@@ -667,9 +620,18 @@ function OptimizeContent() {
                 )}
               </Button>
             )}
-            <Button size="sm" className="h-8 text-xs" onClick={handleDownload}>
-              <Download className="mr-1.5 h-3.5 w-3.5" />
-              下载
+            <Button size="sm" className="h-8 text-xs" onClick={handleDownload} disabled={downloading}>
+              {downloading ? (
+                <>
+                  <Loader2 className="mr-1.5 h-3.5 w-3.5 animate-spin" />
+                  生成中...
+                </>
+              ) : (
+                <>
+                  <Download className="mr-1.5 h-3.5 w-3.5" />
+                  下载PDF
+                </>
+              )}
             </Button>
           </div>
           
@@ -710,6 +672,13 @@ function OptimizeContent() {
           </div>
         </DialogContent>
       </Dialog>
+      
+      {/* 隐藏容器用于 PDF 生成 - 保持正常尺寸 */}
+      {resumeData && (
+        <div style={{ position: 'absolute', left: '-9999px', top: '0' }}>
+          <ResumePreview data={resumeData} ref={resumePreviewRef} />
+        </div>
+      )}
     </div>
   );
 }
