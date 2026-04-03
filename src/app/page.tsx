@@ -220,80 +220,39 @@ export default function Home() {
         </div>
       </section>
 
-      {/* Features Section - Split Layout */}
+      {/* Features Section - Minimal List */}
       <section className="container mx-auto px-6 py-24">
-        <div className="mb-16">
-          <h2 className="text-5xl md:text-6xl font-bold tracking-tight mb-4">
-            一站式求职
-            <span className="block text-neutral-400">从简历到Offer</span>
-          </h2>
-        </div>
-        
-        {/* Alternating Grid */}
-        <div className="space-y-4">
-          {/* Row 1: 2 cards */}
-          <div className="grid md:grid-cols-2 gap-4">
-            {features.slice(0, 2).map((feature) => (
-              <Link 
-                href={feature.href} 
-                key={feature.title}
-                className="group block"
-              >
-                <div className="relative p-10 rounded-[24px] bg-neutral-950 text-white overflow-hidden hover:-translate-y-2 transition-all duration-300 h-full min-h-[220px]">
-                  <div className={`absolute top-0 right-0 w-64 h-64 rounded-full blur-3xl opacity-20 ${feature.gradient === 'from-blue-600 via-blue-500 to-cyan-500' ? 'bg-blue-500' : 'bg-purple-500'}`} />
-                  <div className="relative z-10">
-                    <h3 className="text-2xl font-semibold mb-3">{feature.title}</h3>
-                    <p className="text-white/60 text-sm leading-relaxed max-w-xs">{feature.description}</p>
-                  </div>
-                  <div className="absolute bottom-8 right-8 opacity-30 group-hover:opacity-100 group-hover:translate-x-1 transition-all duration-300">
-                    <ArrowRight className="h-6 w-6" />
-                  </div>
-                </div>
-              </Link>
-            ))}
-          </div>
-          
-          {/* Row 2: 3 cards */}
-          <div className="grid md:grid-cols-3 gap-4">
-            {features.slice(2, 5).map((feature) => (
-              <Link 
-                href={feature.href} 
-                key={feature.title}
-                className="group block"
-              >
-                <div className="relative p-8 rounded-[24px] bg-neutral-100 hover:bg-neutral-950 hover:text-white transition-all duration-300 h-full min-h-[200px]">
-                  <div className="relative z-10">
-                    <div className={`w-8 h-8 rounded-lg mb-6 flex items-center justify-center ${feature.gradient === 'from-emerald-600 via-green-500 to-teal-500' ? 'bg-emerald-500' : feature.gradient === 'from-orange-600 via-amber-500 to-yellow-500' ? 'bg-orange-500' : 'bg-pink-500'}`}>
-                      <feature.icon className="h-4 w-4 text-white" />
-                    </div>
-                    <h3 className="text-lg font-semibold mb-2">{feature.title}</h3>
-                    <p className="text-neutral-500 group-hover:text-white/60 text-sm transition-colors">{feature.description}</p>
-                  </div>
-                  <div className="absolute bottom-6 right-6 opacity-0 group-hover:opacity-100 transition-all duration-300">
-                    <ArrowRight className="h-5 w-5" />
-                  </div>
-                </div>
-              </Link>
-            ))}
-          </div>
-          
-          {/* Row 3: 1 wide card */}
-          <Link 
-            href={features[5]?.href || '/extension'}
-            className="group block"
-          >
-            <div className="relative p-10 rounded-[24px] bg-gradient-to-r from-cyan-500 to-emerald-500 text-white overflow-hidden hover:-translate-y-2 transition-all duration-300">
-              <div className="relative z-10 flex items-center justify-between">
-                <div>
-                  <h3 className="text-2xl font-semibold mb-2">{features[5]?.title || '浏览器扩展'}</h3>
-                  <p className="text-white/80 text-sm">{features[5]?.description || '一键自动填充网申表单'}</p>
-                </div>
-                <div className="opacity-60 group-hover:opacity-100 group-hover:translate-x-2 transition-all duration-300">
-                  <ArrowRight className="h-8 w-8" />
-                </div>
+        <div className="max-w-4xl mx-auto">
+          {features.map((feature, index) => (
+            <Link 
+              href={feature.href} 
+              key={feature.title}
+              className="group flex items-start gap-8 py-10 border-b border-neutral-200 last:border-b-0 hover:bg-neutral-50 -mx-6 px-6 transition-colors duration-200"
+            >
+              {/* Number */}
+              <span className="text-sm font-medium text-neutral-300 w-12 flex-shrink-0">
+                {String(index + 1).padStart(2, '0')}
+              </span>
+              
+              {/* Content */}
+              <div className="flex-1">
+                <h3 className="text-xl font-semibold text-neutral-900 mb-2 group-hover:text-neutral-950">
+                  {feature.title}
+                </h3>
+                <p className="text-neutral-500 text-sm">
+                  {feature.description}
+                </p>
               </div>
-            </div>
-          </Link>
+              
+              {/* Icon */}
+              <div className={`w-12 h-12 rounded-full bg-gradient-to-br ${feature.gradient} flex items-center justify-center flex-shrink-0 opacity-80 group-hover:opacity-100 group-hover:scale-110 transition-all duration-300`}>
+                <feature.icon className="h-5 w-5 text-white" />
+              </div>
+              
+              {/* Arrow */}
+              <ArrowRight className="h-5 w-5 text-neutral-300 group-hover:text-neutral-900 group-hover:translate-x-2 transition-all duration-300 flex-shrink-0 mt-1" />
+            </Link>
+          ))}
         </div>
       </section>
 
