@@ -104,6 +104,28 @@ function ApplicationsContent() {
     }
   };
 
+  const handleUpdateStatus = async (id: number, newStatus: string) => {
+    try {
+      const response = await fetch(`/api/applications/${id}`, {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ status: newStatus }),
+      });
+      
+      if (response.ok) {
+        const data = await response.json();
+        setApplications(applications.map(app => 
+          app.id === id ? { ...app, status: newStatus, submitted_at: data.application?.submitted_at || app.submitted_at } : app
+        ));
+      } else {
+        alert('更新状态失败');
+      }
+    } catch (error) {
+      console.error('Update error:', error);
+      alert('更新状态失败');
+    }
+  };
+
   const filteredApplications = statusFilter === 'all' 
     ? applications 
     : applications.filter(app => app.status === statusFilter);
@@ -427,7 +449,21 @@ function ApplicationsContent() {
                         <h3 className="font-semibold text-sm md:text-base">{app.jobs?.title || '未知岗位'}</h3>
                         <p className="text-xs md:text-sm text-muted-foreground">{app.jobs?.company || '未知公司'}</p>
                         <div className="flex flex-wrap items-center gap-1.5 md:gap-2 mt-1.5 md:mt-2">
-                          {getStatusBadge(app.status)}
+                          <Select 
+                            value={app.status} 
+                            onValueChange={(value) => handleUpdateStatus(app.id, value)}
+                          >
+                            <SelectTrigger className="h-7 w-auto border-0 bg-transparent p-0 h-auto focus:ring-0">
+                              {getStatusBadge(app.status)}
+                            </SelectTrigger>
+                            <SelectContent>
+                              <SelectItem value="pending">待投递</SelectItem>
+                              <SelectItem value="submitted">已投递</SelectItem>
+                              <SelectItem value="interview">面试中</SelectItem>
+                              <SelectItem value="rejected">已拒绝</SelectItem>
+                              <SelectItem value="offer">已录用</SelectItem>
+                            </SelectContent>
+                          </Select>
                           <Badge variant="outline" className="text-xs">{app.jobs?.region}</Badge>
                         </div>
                       </div>
