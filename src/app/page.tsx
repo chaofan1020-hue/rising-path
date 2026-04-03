@@ -357,13 +357,13 @@ export default function Home() {
             </p>
             <div className="flex flex-col sm:flex-row gap-4 justify-center">
               <Link href="/resume">
-                <Button size="lg" className="h-14 px-12 text-lg bg-gradient-to-r from-primary to-primary/80 hover:opacity-90 shadow-2xl shadow-primary/20 rounded-2xl group">
+                <Button size="lg" className="h-14 px-12 bg-gradient-to-r from-primary to-primary/80 hover:opacity-90 shadow-2xl shadow-primary/20 rounded-2xl group">
                   免费开始
                   <ArrowRight className="ml-2 h-5 w-5 group-hover:translate-x-1 transition-transform" />
                 </Button>
               </Link>
               <Link href="/jobs">
-                <Button size="lg" variant="outline" className="h-14 px-10 rounded-2xl border-2">
+                <Button size="lg" variant="outline" className="h-14 px-12 rounded-2xl border-2">
                   浏览岗位
                 </Button>
               </Link>
