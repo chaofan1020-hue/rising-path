@@ -27,15 +27,44 @@ import {
   Calendar,
   Link as LinkIcon,
   Languages,
+  Sparkles,
+  Map,
 } from 'lucide-react';
 import Link from 'next/link';
 import { AccessGuard, useAccessCode } from '@/components/access-guard';
+
+interface ParsedFields {
+  name?: string;
+  email?: string;
+  phone?: string;
+  location?: string;
+  education?: Array<{
+    school: string;
+    degree: string;
+    major: string;
+    duration?: string;
+    gpa?: string;
+  }>;
+  experience?: Array<{
+    company: string;
+    title: string;
+    duration?: string;
+    highlights?: string[];
+  }>;
+  skills?: {
+    technical?: string[];
+    languages?: string[];
+    tools?: string[];
+  };
+  summary?: string;
+}
 
 interface Resume {
   id: number;
   file_key: string;
   file_name: string;
   parsed_content: string;
+  parsed_fields?: ParsedFields;
   user_info: {
     name?: string;
     email?: string;
@@ -56,7 +85,39 @@ function ResumeContent() {
   const [selectedFile, setSelectedFile] = useState<File | null>(null);
   const [selectedResume, setSelectedResume] = useState<Resume | null>(null);
   const [translatingId, setTranslatingId] = useState<number | null>(null);
+  const [extractingId, setExtractingId] = useState<number | null>(null);
   const { accessCodeId } = useAccessCode();
+
+  // 提取结构化字段
+  const extractFields = async (resume: Resume) => {
+    setExtractingId(resume.id);
+    try {
+      const response = await fetch('/api/resume/extract-fields', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          resume_id: resume.id,
+          access_code_id: accessCodeId,
+        }),
+      });
+
+      const data = await response.json();
+      if (data.success && data.parsed_fields) {
+        setResumes(resumes.map(r => 
+          r.id === resume.id ? { ...r, parsed_fields: data.parsed_fields } : r
+        ));
+        setSelectedResume(prev => prev?.id === resume.id ? { ...prev, parsed_fields: data.parsed_fields } : prev);
+        alert('字段提取成功！');
+      } else if (data.error) {
+        alert('提取失败: ' + data.error);
+      }
+    } catch (error) {
+      console.error('Extract failed:', error);
+      alert('提取失败，请重试');
+    } finally {
+      setExtractingId(null);
+    }
+  };
 
   const handleFileSelect = useCallback((e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
@@ -312,6 +373,31 @@ function ResumeContent() {
                       </div>
                     </div>
                     <div className="flex gap-2">
+                      {resume.parsed_content && !resume.parsed_content.includes('正在解析') && (
+                        <Button 
+                          variant="outline" 
+                          size="sm"
+                          onClick={() => extractFields(resume)}
+                          disabled={extractingId === resume.id}
+                        >
+                          {extractingId === resume.id ? (
+                            <>
+                              <Loader2 className="h-4 w-4 mr-1 animate-spin" />
+                              提取中...
+                            </>
+                          ) : resume.parsed_fields ? (
+                            <>
+                              <CheckCircle className="h-4 w-4 mr-1 text-green-600" />
+                              已提取
+                            </>
+                          ) : (
+                            <>
+                              <Sparkles className="h-4 w-4 mr-1" />
+                              提取字段
+                            </>
+                          )}
+                        </Button>
+                      )}
                       <Button 
                         variant="outline" 
                         size="sm"
@@ -330,6 +416,12 @@ function ResumeContent() {
                           </>
                         )}
                       </Button>
+                      <Link href="/field-mappings">
+                        <Button variant="outline" size="sm">
+                          <Map className="h-4 w-4 mr-1" />
+                          字段映射
+                        </Button>
+                      </Link>
                       <Dialog>
                         <DialogTrigger asChild>
                           <Button 
@@ -348,6 +440,93 @@ function ResumeContent() {
                             </DialogDescription>
                           </DialogHeader>
                           <div className="space-y-4">
+                            {/* 结构化字段 (AI提取) */}
+                            {resume.parsed_fields && (
+                              <div className="bg-gradient-to-r from-purple-50 to-pink-50 dark:from-purple-950/30 dark:to-pink-950/30 p-4 rounded-lg">
+                                <div className="flex items-center gap-2 mb-3">
+                                  <Sparkles className="h-4 w-4 text-purple-600" />
+                                  <h4 className="font-semibold">结构化字段</h4>
+                                  <Badge variant="secondary" className="text-xs">AI 提取</Badge>
+                                </div>
+                                
+                                <div className="grid grid-cols-2 gap-3 text-sm">
+                                  {resume.parsed_fields.name && (
+                                    <div>
+                                      <span className="text-muted-foreground">姓名:</span>
+                                      <p className="font-medium">{resume.parsed_fields.name}</p>
+                                    </div>
+                                  )}
+                                  {resume.parsed_fields.email && (
+                                    <div>
+                                      <span className="text-muted-foreground">邮箱:</span>
+                                      <p className="font-medium">{resume.parsed_fields.email}</p>
+                                    </div>
+                                  )}
+                                  {resume.parsed_fields.phone && (
+                                    <div>
+                                      <span className="text-muted-foreground">电话:</span>
+                                      <p className="font-medium">{resume.parsed_fields.phone}</p>
+                                    </div>
+                                  )}
+                                  {resume.parsed_fields.location && (
+                                    <div>
+                                      <span className="text-muted-foreground">地址:</span>
+                                      <p className="font-medium">{resume.parsed_fields.location}</p>
+                                    </div>
+                                  )}
+                                </div>
+
+                                {resume.parsed_fields.education && resume.parsed_fields.education.length > 0 && (
+                                  <div className="mt-3">
+                                    <span className="text-sm text-muted-foreground">教育背景:</span>
+                                    <ul className="mt-1 space-y-1">
+                                      {resume.parsed_fields.education.map((edu, i) => (
+                                        <li key={i} className="text-sm">
+                                          <strong>{edu.school}</strong> - {edu.degree} {edu.major}
+                                          {edu.duration && <span className="text-muted-foreground"> ({edu.duration})</span>}
+                                        </li>
+                                      ))}
+                                    </ul>
+                                  </div>
+                                )}
+
+                                {resume.parsed_fields.experience && resume.parsed_fields.experience.length > 0 && (
+                                  <div className="mt-3">
+                                    <span className="text-sm text-muted-foreground">工作经历:</span>
+                                    <ul className="mt-1 space-y-2">
+                                      {resume.parsed_fields.experience.map((exp, i) => (
+                                        <li key={i} className="text-sm">
+                                          <strong>{exp.company}</strong> - {exp.title}
+                                          {exp.duration && <span className="text-muted-foreground"> ({exp.duration})</span>}
+                                        </li>
+                                      ))}
+                                    </ul>
+                                  </div>
+                                )}
+
+                                {resume.parsed_fields.skills && (
+                                  <div className="mt-3 flex flex-wrap gap-2">
+                                    {resume.parsed_fields.skills.technical?.map((skill, i) => (
+                                      <Badge key={`tech-${i}`} variant="secondary">{skill}</Badge>
+                                    ))}
+                                    {resume.parsed_fields.skills.languages?.map((skill, i) => (
+                                      <Badge key={`lang-${i}`} variant="outline">{skill}</Badge>
+                                    ))}
+                                  </div>
+                                )}
+
+                                <div className="mt-3 pt-3 border-t">
+                                  <Link href="/field-mappings">
+                                    <Button variant="outline" size="sm" className="w-full">
+                                      <Map className="h-4 w-4 mr-2" />
+                                      配置字段映射
+                                    </Button>
+                                  </Link>
+                                </div>
+                              </div>
+                            )}
+
+                            {/* 原始解析信息 */}
                             {resume.user_info?.name && (
                               <div>
                                 <h4 className="font-semibold mb-2">基本信息</h4>
