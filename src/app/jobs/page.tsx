@@ -486,12 +486,12 @@ function JobsContent() {
           ) : (
             filteredJobs.map((job) => (
               <Card key={job.id} className="hover:shadow-lg transition-all duration-300 active:scale-[0.99] md:active:scale-100 md:hover:-translate-y-0.5">
-                <CardContent className="pt-3 pb-3 px-4">
-                  <div className="flex gap-3">
+                <CardContent className="pt-4 md:pt-6 pb-4">
+                  <div className="flex gap-3 md:gap-4">
                     {/* 左侧内容区 */}
-                    <div className="flex-1 min-w-0 flex flex-col gap-2">
+                    <div className="flex-1 min-w-0 flex flex-col gap-3 md:gap-4">
                       {/* 岗位信息 - 横向布局 */}
-                      <div className="flex items-start gap-2.5">
+                      <div className="flex items-start gap-3 md:gap-4">
                         <CompanyLogo company={job.company} logoUrl={job.logo_url} />
                         <div className="flex-1 min-w-0">
                           <h3 className="font-semibold text-base md:text-lg hover:text-primary cursor-pointer transition-colors line-clamp-1">
@@ -502,7 +502,7 @@ function JobsContent() {
                       </div>
                       
                       {/* 标签区 */}
-                      <div className="flex flex-wrap gap-1.5">
+                      <div className="flex flex-wrap gap-1.5 md:gap-2">
                         <Badge variant="secondary" className="rounded-md text-xs" translate="no">
                           <MapPin className="h-3 w-3 mr-1" />
                           {job.region}
@@ -533,18 +533,18 @@ function JobsContent() {
                       
                       {/* 描述 */}
                       {job.description && (
-                        <p className="text-xs text-muted-foreground line-clamp-2">
+                        <p className="text-xs md:text-sm text-muted-foreground line-clamp-2">
                           {job.description}
                         </p>
                       )}
                     </div>
                     
                     {/* 右侧按钮区 - 垂直排列 */}
-                    <div className="flex flex-col gap-1.5 flex-shrink-0">
+                    <div className="flex flex-col gap-2 flex-shrink-0">
                       {job.is_active !== false && (
                         <Button 
                           size="sm" 
-                          className="rounded-lg text-xs h-8 w-20 bg-green-600 hover:bg-green-700"
+                          className="rounded-lg text-xs md:text-sm h-9 w-20 md:w-24 bg-green-600 hover:bg-green-700"
                           onClick={() => handleAdd(job.id)}
                           disabled={applyingJobId === job.id || appliedJobIds.has(job.id)}
                         >
@@ -563,13 +563,13 @@ function JobsContent() {
                           )}
                         </Button>
                       )}
-                      <Button size="sm" variant="outline" asChild className="rounded-lg text-xs h-8 w-20">
+                      <Button size="sm" variant="outline" asChild className="rounded-lg text-xs md:text-sm h-9 w-20 md:w-24">
                         <Link href={`/jobs/${job.id}`}>
                           详情
                         </Link>
                       </Button>
                       {job.job_url && (
-                        <Button size="sm" variant="outline" asChild className="rounded-lg text-xs h-8 w-20">
+                        <Button size="sm" variant="outline" asChild className="rounded-lg text-xs md:text-sm h-9 w-20 md:w-24">
                           <a href={job.job_url} target="_blank" rel="noopener noreferrer">
                             <ExternalLink className="h-3.5 w-3.5 mr-1" />
                             原链接
