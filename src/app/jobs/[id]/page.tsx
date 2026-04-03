@@ -211,43 +211,43 @@ function JobDetailContent() {
         {/* Job Header */}
         <Card className="mb-4 md:mb-6">
           <CardContent className="pt-4 md:pt-6">
-            {/* 手机端：Logo + 标题区 纵向布局 */}
-            <div className="flex flex-col gap-4">
+            {/* 手机端：纵向布局，桌面端：横向布局 */}
+            <div className="flex flex-col md:flex-row md:items-start gap-4">
               {/* Logo + 基本信息 */}
-              <div className="flex items-start gap-3 md:gap-4">
+              <div className="flex items-start gap-3 md:gap-4 flex-1">
                 <CompanyLogo company={job.company} logoUrl={job.logo_url} />
                 <div className="flex-1 min-w-0">
                   <h1 className="text-xl md:text-2xl font-bold mb-1 md:mb-2 line-clamp-2">{job.title}</h1>
-                  <p className="text-base md:text-lg text-muted-foreground">{job.company}</p>
+                  <p className="text-base md:text-lg text-muted-foreground mb-2 md:mb-4">{job.company}</p>
+                  
+                  {/* 标签区 */}
+                  <div className="flex flex-wrap gap-2 md:gap-3">
+                    <Badge variant="secondary" className="rounded-md text-xs md:text-sm" translate="no">
+                      <MapPin className="h-3 w-3 mr-1" />
+                      {job.region}
+                    </Badge>
+                    <Badge variant="secondary" className="rounded-md text-xs md:text-sm" translate="no">
+                      <Briefcase className="h-3 w-3 mr-1" />
+                      {job.direction}
+                    </Badge>
+                    <Badge variant="secondary" className="rounded-md text-xs md:text-sm" translate="no">
+                      <Users className="h-3 w-3 mr-1" />
+                      {job.audience}
+                    </Badge>
+                    {job.salary_range && (
+                      <Badge variant="outline" className="text-green-600 border-green-600 rounded-md text-xs md:text-sm">
+                        <DollarSign className="h-3 w-3 mr-1" />
+                        {job.salary_range}
+                      </Badge>
+                    )}
+                  </div>
                 </div>
               </div>
               
-              {/* 标签区 */}
-              <div className="flex flex-wrap gap-2 md:gap-3">
-                <Badge variant="secondary" className="rounded-md text-xs md:text-sm" translate="no">
-                  <MapPin className="h-3 w-3 mr-1" />
-                  {job.region}
-                </Badge>
-                <Badge variant="secondary" className="rounded-md text-xs md:text-sm" translate="no">
-                  <Briefcase className="h-3 w-3 mr-1" />
-                  {job.direction}
-                </Badge>
-                <Badge variant="secondary" className="rounded-md text-xs md:text-sm" translate="no">
-                  <Users className="h-3 w-3 mr-1" />
-                  {job.audience}
-                </Badge>
-                {job.salary_range && (
-                  <Badge variant="outline" className="text-green-600 border-green-600 rounded-md text-xs md:text-sm">
-                    <DollarSign className="h-3 w-3 mr-1" />
-                    {job.salary_range}
-                  </Badge>
-                )}
-              </div>
-              
-              {/* 操作按钮区 - 手机端全宽横向，桌面端右对齐 */}
-              <div className="flex flex-col sm:flex-row gap-2 sm:justify-end">
+              {/* 操作按钮区 - 手机端全宽，桌面端右侧 */}
+              <div className="flex flex-col sm:flex-row md:flex-col gap-2 sm:justify-end">
                 <Button 
-                  className="bg-green-600 hover:bg-green-700 w-full sm:w-auto"
+                  className="bg-green-600 hover:bg-green-700 w-full sm:w-auto md:w-auto"
                   onClick={handleApply}
                   disabled={applying}
                 >
@@ -269,7 +269,7 @@ function JobDetailContent() {
                   )}
                 </Button>
                 {job.job_url && (
-                  <Button variant="outline" asChild className="w-full sm:w-auto">
+                  <Button variant="outline" asChild className="w-full sm:w-auto md:w-auto">
                     <a href={job.job_url} target="_blank" rel="noopener noreferrer">
                       <ExternalLink className="h-4 w-4 mr-2" />
                       原链接

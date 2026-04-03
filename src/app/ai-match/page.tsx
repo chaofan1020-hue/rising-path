@@ -412,13 +412,14 @@ function AIMatchContent() {
             {matchResults.map((result, index) => (
               <Card key={result.job_id} className="hover:shadow-lg transition-all">
                 <CardContent className="pt-4 md:pt-6">
-                  <div className="flex flex-col gap-4 md:gap-6">
-                    {/* Score - 手机端横向，桌面端可能保持横向或调整 */}
-                    <div className="flex items-center gap-4 md:flex-col md:items-center md:justify-center md:p-4 md:rounded-lg md:bg-gradient-to-br md:from-purple-50 md:to-blue-50 dark:md:from-purple-950 dark:md:to-blue-950">
+                  {/* 手机端：纵向布局，桌面端：横向布局 */}
+                  <div className="flex flex-col md:flex-row gap-4 md:gap-6">
+                    {/* Score - 手机端横向紧凑，桌面端纵向带背景 */}
+                    <div className="flex items-center gap-3 md:flex-col md:items-center md:justify-center md:p-4 md:rounded-lg md:bg-gradient-to-br md:from-purple-50 md:to-blue-50 dark:md:from-purple-950 dark:md:to-blue-950 flex-shrink-0">
                       <div className={`text-3xl md:text-4xl font-bold ${getScoreColor(result.match_score)}`}>
                         {result.match_score}
                       </div>
-                      <div className="flex flex-col gap-1 md:items-center">
+                      <div className="flex flex-col gap-0.5 md:gap-1 md:items-center">
                         <div className="text-xs md:text-sm text-muted-foreground">匹配分数</div>
                         <Badge className="hidden md:flex" variant={result.match_score >= 80 ? 'default' : 'secondary'}>
                           {getScoreLabel(result.match_score)}
