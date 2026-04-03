@@ -9,10 +9,11 @@ import {
   Brain,
   Upload,
   ChevronRight,
-  Globe,
+  MapPin,
   ArrowRight,
   Zap,
-  Target,
+  Crosshair,
+  Rocket,
   Layers,
   Wand2,
   Puzzle,
@@ -83,21 +84,21 @@ const features = [
 
 const advantages = [
   {
-    icon: Globe,
+    icon: MapPin,
     title: '全球岗位覆盖',
     description: '覆盖美国、英国、新加坡、香港等主流留学地区',
     iconBg: 'bg-blue-50',
     iconColor: 'text-blue-600',
   },
   {
-    icon: Target,
+    icon: Crosshair,
     title: '精准智能匹配',
     description: 'AI深度分析简历与岗位匹配度',
     iconBg: 'bg-purple-50',
     iconColor: 'text-purple-600',
   },
   {
-    icon: Zap,
+    icon: Rocket,
     title: '高效求职工具',
     description: '一站式完成简历优化、岗位筛选、网申投递',
     iconBg: 'bg-orange-50',
