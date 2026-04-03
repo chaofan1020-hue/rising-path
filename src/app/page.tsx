@@ -71,9 +71,9 @@ const features = [
 
   },
   {
-    title: '浏览器扩展',
-    description: '一键自动填充网申表单',
-    detail: '智能识别表单字段，快速完成申请',
+    title: '自动网申',
+    description: '智能填写企业网申表单',
+    detail: '浏览器扩展一键填充，高效完成投递',
     icon: Puzzle,
     href: '/extension',
     gradient: 'from-cyan-600 via-teal-500 to-emerald-500',
