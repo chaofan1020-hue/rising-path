@@ -87,22 +87,22 @@ const advantages = [
     icon: MapPin,
     title: '全球岗位覆盖',
     description: '覆盖美国、英国、新加坡、香港等主流留学地区',
-    iconBg: 'bg-blue-50',
-    iconColor: 'text-blue-600',
+    iconBg: 'bg-sky-100',
+    iconColor: 'text-sky-600',
   },
   {
     icon: Crosshair,
     title: '精准智能匹配',
     description: 'AI深度分析简历与岗位匹配度',
-    iconBg: 'bg-purple-50',
-    iconColor: 'text-purple-600',
+    iconBg: 'bg-violet-100',
+    iconColor: 'text-violet-600',
   },
   {
     icon: Rocket,
     title: '高效求职工具',
     description: '一站式完成简历优化、岗位筛选、网申投递',
-    iconBg: 'bg-orange-50',
-    iconColor: 'text-orange-600',
+    iconBg: 'bg-amber-100',
+    iconColor: 'text-amber-600',
   },
 ];
 
