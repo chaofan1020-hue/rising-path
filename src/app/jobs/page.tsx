@@ -11,7 +11,7 @@ import {
   PopoverContent,
   PopoverTrigger,
 } from '@/components/ui/popover';
-import { Search, MapPin, Briefcase, Users, ExternalLink, ChevronDown, X, Send, Loader2 } from 'lucide-react';
+import { Search, MapPin, Briefcase, Users, ExternalLink, ChevronDown, X, Send, Loader2, Plus } from 'lucide-react';
 import Link from 'next/link';
 import Image from 'next/image';
 import { AccessGuard, useAccessCode } from '@/components/access-guard';
@@ -556,8 +556,8 @@ function JobsContent() {
                             </>
                           ) : appliedJobIds.has(job.id) ? (
                             <>
-                              <Send className="h-3.5 w-3.5 mr-1" />
-                              已投递
+                              <Plus className="h-3.5 w-3.5 mr-1" />
+                              添加
                             </>
                           ) : (
                             <>
