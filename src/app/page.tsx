@@ -71,7 +71,7 @@ const features = [
 
   },
   {
-    title: '自动网申',
+    title: 'AutoFill',
     description: '智能填写企业网申表单',
     detail: '浏览器扩展一键填充，高效完成投递',
     icon: Puzzle,
