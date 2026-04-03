@@ -544,7 +544,7 @@ function JobsContent() {
                       {job.is_active !== false && (
                         <Button 
                           size="sm" 
-                          className="rounded-lg text-xs md:text-sm h-9 w-20 md:w-24 bg-green-600 hover:bg-green-700"
+                          className="rounded-lg text-xs md:text-sm h-9 w-24 md:w-28 bg-green-600 hover:bg-green-700"
                           onClick={() => handleAdd(job.id)}
                           disabled={applyingJobId === job.id || appliedJobIds.has(job.id)}
                         >
@@ -563,13 +563,13 @@ function JobsContent() {
                           )}
                         </Button>
                       )}
-                      <Button size="sm" variant="outline" asChild className="rounded-lg text-xs md:text-sm h-9 w-20 md:w-24">
+                      <Button size="sm" variant="outline" asChild className="rounded-lg text-xs md:text-sm h-9 w-24 md:w-28">
                         <Link href={`/jobs/${job.id}`}>
-                          详情
+                          查看详情
                         </Link>
                       </Button>
                       {job.job_url && (
-                        <Button size="sm" variant="outline" asChild className="rounded-lg text-xs md:text-sm h-9 w-20 md:w-24">
+                        <Button size="sm" variant="outline" asChild className="rounded-lg text-xs md:text-sm h-9 w-24 md:w-28">
                           <a href={job.job_url} target="_blank" rel="noopener noreferrer">
                             <ExternalLink className="h-3.5 w-3.5 mr-1" />
                             原链接
