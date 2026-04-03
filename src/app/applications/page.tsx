@@ -368,12 +368,12 @@ function ApplicationsContent() {
               </Card>
               <Card className="border-l-4 border-l-purple-500">
                 <CardContent className="pt-3 md:pt-4">
-                  <div className="text-xs md:text-sm text-muted-foreground mb-1">录用率</div>
+                  <div className="text-xs md:text-sm text-muted-foreground mb-1">面试转化率</div>
                   <div className="text-lg md:text-2xl font-bold text-purple-600">
-                    {analytics.offerRate}%
+                    {analytics.successRate}%
                   </div>
                   <div className="text-xs text-muted-foreground mt-1">
-                    已录用 / 总申请
+                    (面试中+已录用) / 总申请
                   </div>
                 </CardContent>
               </Card>
