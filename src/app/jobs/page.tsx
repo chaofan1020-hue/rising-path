@@ -148,18 +148,18 @@ function MultiSelectFilter({
   return (
     <Popover>
       <PopoverTrigger asChild>
-        <button className="inline-flex items-center gap-2 px-3 py-2 rounded-full border border-input bg-background hover:bg-accent hover:text-accent-foreground transition-colors text-sm">
-          <Icon className="h-4 w-4 text-muted-foreground" />
+        <button className="inline-flex items-center gap-1.5 md:gap-2 px-2.5 py-1.5 md:px-3 md:py-2 rounded-full border border-input bg-background hover:bg-accent hover:text-accent-foreground transition-colors text-xs md:text-sm">
+          <Icon className="h-3.5 w-3.5 md:h-4 md:w-4 text-muted-foreground" />
           <span className="font-medium">{label}</span>
           {selected.length > 0 && (
-            <Badge variant="secondary" className="ml-0.5 h-5 px-1.5 rounded-full">
+            <Badge variant="secondary" className="ml-0.5 h-4 md:h-5 px-1 md:px-1.5 rounded-full text-[10px] md:text-xs">
               {selected.length}
             </Badge>
           )}
-          <ChevronDown className="h-3.5 w-3.5 text-muted-foreground" />
+          <ChevronDown className="h-3 w-3 md:h-3.5 md:w-3.5 text-muted-foreground" />
         </button>
       </PopoverTrigger>
-      <PopoverContent className="w-48 p-2" align="start">
+      <PopoverContent className="w-44 md:w-48 p-2" align="start">
         <div className="max-h-60 overflow-y-auto space-y-1">
           {options.map((option) => (
             <label
@@ -217,18 +217,18 @@ function SingleSelectFilter({
   return (
     <Popover>
       <PopoverTrigger asChild>
-        <button className="inline-flex items-center gap-2 px-3 py-2 rounded-full border border-input bg-background hover:bg-accent hover:text-accent-foreground transition-colors text-sm">
-          <Icon className="h-4 w-4 text-muted-foreground" />
+        <button className="inline-flex items-center gap-1.5 md:gap-2 px-2.5 py-1.5 md:px-3 md:py-2 rounded-full border border-input bg-background hover:bg-accent hover:text-accent-foreground transition-colors text-xs md:text-sm">
+          <Icon className="h-3.5 w-3.5 md:h-4 md:w-4 text-muted-foreground" />
           <span className="font-medium">{label}</span>
           {displayValue && (
-            <Badge variant="secondary" className="ml-0.5 h-5 px-1.5 rounded-full text-xs">
+            <Badge variant="secondary" className="ml-0.5 h-4 md:h-5 px-1 md:px-1.5 rounded-full text-[10px] md:text-xs">
               {displayValue}
             </Badge>
           )}
-          <ChevronDown className="h-3.5 w-3.5 text-muted-foreground" />
+          <ChevronDown className="h-3 w-3 md:h-3.5 md:w-3.5 text-muted-foreground" />
         </button>
       </PopoverTrigger>
-      <PopoverContent className="w-40 p-1" align="start">
+      <PopoverContent className="w-36 md:w-40 p-1" align="start">
         <div className="space-y-0.5">
           <button
             onClick={() => onChange('全部')}
@@ -394,45 +394,45 @@ function JobsContent() {
       <header className="border-b bg-background/95 backdrop-blur supports-[backdrop-filter]:bg-background/60 sticky top-0 z-50">
         <div className="container mx-auto px-4 h-16 flex items-center justify-between">
           <Link href="/" className="flex items-center gap-2">
-            <Briefcase className="h-6 w-6 text-primary" />
-            <span className="font-bold text-xl">PathUp</span>
+            <Briefcase className="h-5 w-5 md:h-6 md:w-6 text-primary" />
+            <span className="font-bold text-lg md:text-xl">PathUp</span>
           </Link>
-          <nav className="flex items-center gap-4">
+          <nav className="flex items-center gap-2 md:gap-4">
             <Link href="/resume">
-              <Button variant="ghost" size="sm">简历管理</Button>
+              <Button variant="ghost" size="sm" className="text-xs md:text-sm">简历管理</Button>
             </Link>
             <Link href="/ai-match">
-              <Button size="sm">AI选岗</Button>
+              <Button size="sm" className="text-xs md:text-sm">AI选岗</Button>
             </Link>
           </nav>
         </div>
       </header>
 
-      <main className="container mx-auto px-4 py-8">
+      <main className="container mx-auto px-4 py-4 md:py-8">
         {/* Page Title */}
-        <div className="mb-8">
-          <h1 className="text-3xl font-bold mb-2">岗位查询</h1>
-          <p className="text-muted-foreground">按地区、方向、受众筛选海量海外岗位</p>
+        <div className="mb-4 md:mb-8">
+          <h1 className="text-2xl md:text-3xl font-bold mb-1 md:mb-2">岗位查询</h1>
+          <p className="text-sm md:text-base text-muted-foreground">按地区、方向、受众筛选海量海外岗位</p>
         </div>
 
         {/* Filters */}
-        <Card className="mb-6 border-0 shadow-sm bg-gradient-to-r from-background to-muted/30">
-          <CardContent className="pt-5 pb-5">
-            <div className="flex flex-col gap-4">
+        <Card className="mb-4 md:mb-6 border-0 shadow-sm bg-gradient-to-r from-background to-muted/30">
+          <CardContent className="pt-4 pb-4 md:pt-5 md:pb-5">
+            <div className="flex flex-col gap-3 md:gap-4">
               {/* 搜索框 */}
-              <div className="relative max-w-md">
+              <div className="relative w-full md:max-w-md">
                 <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
                 <Input
                   placeholder="搜索岗位名称或公司..."
                   value={searchTerm}
                   onChange={(e) => setSearchTerm(e.target.value)}
-                  className="pl-10 h-11 bg-background"
+                  className="pl-10 h-10 md:h-11 bg-background text-sm"
                 />
               </div>
               
               {/* 筛选器组 */}
-              <div className="flex flex-wrap items-center gap-3">
-                <span className="text-sm text-muted-foreground mr-1">筛选</span>
+              <div className="flex flex-wrap items-center gap-2 md:gap-3">
+                <span className="text-xs md:text-sm text-muted-foreground">筛选</span>
                 <MultiSelectFilter
                   label="地区"
                   icon={MapPin}
@@ -475,9 +475,12 @@ function JobsContent() {
         </Card>
 
         {/* Results */}
-        <div className="space-y-4">
+        <div className="space-y-3 md:space-y-4">
           {loading ? (
-            <div className="text-center py-12 text-muted-foreground">加载中...</div>
+            <div className="text-center py-12 text-muted-foreground">
+              <Loader2 className="h-8 w-8 animate-spin mx-auto mb-2" />
+              加载中...
+            </div>
           ) : filteredJobs.length === 0 ? (
             <Card>
               <CardContent className="py-12 text-center text-muted-foreground">
@@ -486,88 +489,93 @@ function JobsContent() {
             </Card>
           ) : (
             filteredJobs.map((job) => (
-              <Card key={job.id} className="hover:shadow-lg transition-all duration-300 hover:-translate-y-0.5">
-                <CardContent className="pt-6">
-                  <div className="flex flex-col md:flex-row md:items-start justify-between gap-4">
-                    <div className="flex-1">
-                      <div className="flex items-start gap-4">
-                        <CompanyLogo company={job.company} logoUrl={job.logo_url} />
-                        <div className="flex-1 min-w-0">
-                          <h3 className="font-semibold text-lg hover:text-primary cursor-pointer transition-colors">
-                            {job.title}
-                          </h3>
-                          <p className="text-muted-foreground">{job.company}</p>
-                        </div>
+              <Card key={job.id} className="hover:shadow-lg transition-all duration-300 active:scale-[0.99] md:active:scale-100 md:hover:-translate-y-0.5">
+                <CardContent className="pt-4 md:pt-6 pb-4">
+                  <div className="flex flex-col gap-4">
+                    {/* 岗位信息 - 横向布局 */}
+                    <div className="flex items-start gap-3 md:gap-4">
+                      <CompanyLogo company={job.company} logoUrl={job.logo_url} />
+                      <div className="flex-1 min-w-0">
+                        <h3 className="font-semibold text-base md:text-lg hover:text-primary cursor-pointer transition-colors line-clamp-1">
+                          {job.title}
+                        </h3>
+                        <p className="text-sm text-muted-foreground truncate">{job.company}</p>
                       </div>
-                      <div className="flex flex-wrap gap-2 mt-4">
-                        <Badge variant="secondary" className="rounded-md" translate="no">
-                          <MapPin className="h-3 w-3 mr-1" />
-                          {job.region}
+                    </div>
+                    
+                    {/* 标签区 */}
+                    <div className="flex flex-wrap gap-1.5 md:gap-2">
+                      <Badge variant="secondary" className="rounded-md text-xs" translate="no">
+                        <MapPin className="h-3 w-3 mr-1" />
+                        {job.region}
+                      </Badge>
+                      <Badge variant="secondary" className="rounded-md text-xs" translate="no">
+                        <Briefcase className="h-3 w-3 mr-1" />
+                        {job.direction}
+                      </Badge>
+                      <Badge variant="secondary" className="rounded-md text-xs" translate="no">
+                        <Users className="h-3 w-3 mr-1" />
+                        {job.audience}
+                      </Badge>
+                      {job.salary_range && (
+                        <Badge variant="outline" className="text-green-600 border-green-600 rounded-md text-xs">
+                          {job.salary_range}
                         </Badge>
-                        <Badge variant="secondary" className="rounded-md" translate="no">
-                          <Briefcase className="h-3 w-3 mr-1" />
-                          {job.direction}
+                      )}
+                      {job.is_active === false ? (
+                        <Badge variant="secondary" className="bg-gray-100 text-gray-600 rounded-md text-xs">
+                          不可投递
                         </Badge>
-                        <Badge variant="secondary" className="rounded-md" translate="no">
-                          <Users className="h-3 w-3 mr-1" />
-                          {job.audience}
+                      ) : (
+                        <Badge variant="default" className="bg-green-600 rounded-md text-xs">
+                          可投递
                         </Badge>
-                        {job.salary_range && (
-                          <Badge variant="outline" className="text-green-600 border-green-600 rounded-md">
-                            {job.salary_range}
-                          </Badge>
-                        )}
-                        {job.is_active === false ? (
-                          <Badge variant="secondary" className="bg-gray-100 text-gray-600 rounded-md">
-                            不可投递
-                          </Badge>
-                        ) : (
-                          <Badge variant="default" className="bg-green-600 rounded-md">
-                            可投递
-                          </Badge>
-                        )}
-                      </div>
-                      {job.description && (
-                        <p className="text-sm text-muted-foreground mt-3 line-clamp-2">
-                          {job.description}
-                        </p>
                       )}
                     </div>
-                    <div className="flex md:flex-col gap-2">
+                    
+                    {/* 描述 */}
+                    {job.description && (
+                      <p className="text-xs md:text-sm text-muted-foreground line-clamp-2">
+                        {job.description}
+                      </p>
+                    )}
+                    
+                    {/* 操作按钮 - 手机端横向平铺 */}
+                    <div className="flex flex-wrap gap-2 pt-1">
                       {job.is_active !== false && (
                         <Button 
                           size="sm" 
-                          className="rounded-lg bg-green-600 hover:bg-green-700"
+                          className="flex-1 md:flex-none rounded-lg bg-green-600 hover:bg-green-700 text-xs md:text-sm h-9"
                           onClick={() => handleApply(job.id)}
                           disabled={applyingJobId === job.id || appliedJobIds.has(job.id)}
                         >
                           {applyingJobId === job.id ? (
                             <>
-                              <Loader2 className="h-4 w-4 mr-1 animate-spin" />
-                              投递中...
+                              <Loader2 className="h-3.5 w-3.5 mr-1 animate-spin" />
+                              投递中
                             </>
                           ) : appliedJobIds.has(job.id) ? (
                             <>
-                              <Send className="h-4 w-4 mr-1" />
+                              <Send className="h-3.5 w-3.5 mr-1" />
                               已投递
                             </>
                           ) : (
                             <>
-                              <Send className="h-4 w-4 mr-1" />
+                              <Send className="h-3.5 w-3.5 mr-1" />
                               立即投递
                             </>
                           )}
                         </Button>
                       )}
-                      <Button size="sm" variant="outline" asChild className="rounded-lg">
+                      <Button size="sm" variant="outline" asChild className="rounded-lg text-xs md:text-sm h-9">
                         <Link href={`/jobs/${job.id}`}>
                           查看详情
                         </Link>
                       </Button>
                       {job.job_url && (
-                        <Button size="sm" variant="outline" asChild className="rounded-lg">
+                        <Button size="sm" variant="outline" asChild className="rounded-lg text-xs md:text-sm h-9 hidden sm:flex">
                           <a href={job.job_url} target="_blank" rel="noopener noreferrer">
-                            <ExternalLink className="h-4 w-4 mr-1" />
+                            <ExternalLink className="h-3.5 w-3.5 mr-1" />
                             原链接
                           </a>
                         </Button>
@@ -582,7 +590,7 @@ function JobsContent() {
 
         {/* Results count */}
         {!loading && filteredJobs.length > 0 && (
-          <div className="mt-6 text-center text-sm text-muted-foreground">
+          <div className="mt-4 md:mt-6 text-center text-xs md:text-sm text-muted-foreground">
             共找到 {filteredJobs.length} 个岗位
           </div>
         )}
