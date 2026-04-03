@@ -15,6 +15,7 @@ import {
   Target,
   Layers,
   Wand2,
+  Puzzle,
 } from 'lucide-react';
 
 const features = [
@@ -68,6 +69,16 @@ const features = [
     pattern: 'dots',
     size: 'normal',
   },
+  {
+    title: '浏览器扩展',
+    description: '一键自动填充网申表单',
+    detail: '智能识别表单字段，快速完成申请',
+    icon: Puzzle,
+    href: '/extension',
+    gradient: 'from-cyan-600 via-teal-500 to-emerald-500',
+    pattern: 'grid',
+    size: 'normal',
+  },
 ];
 
 const advantages = [
@@ -119,6 +130,12 @@ export default function Home() {
             <Link href="/resume">
               <Button variant="ghost" size="sm" className="text-muted-foreground hover:text-foreground">
                 简历管理
+              </Button>
+            </Link>
+            <Link href="/extension">
+              <Button variant="ghost" size="sm" className="text-muted-foreground hover:text-foreground">
+                <Puzzle className="h-4 w-4 mr-1" />
+                浏览器扩展
               </Button>
             </Link>
             <Link href="/login">
