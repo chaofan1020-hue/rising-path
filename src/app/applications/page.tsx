@@ -180,8 +180,8 @@ function ApplicationsContent() {
     }, {} as Record<string, number>),
     // 投递成功率
     successRate: stats.total > 0 ? ((stats.interview + stats.offer) / stats.total * 100).toFixed(1) : '0',
-    // 面试转化率
-    interviewRate: stats.submitted > 0 ? (stats.interview / stats.submitted * 100).toFixed(1) : '0',
+    // 面试转化率（已投递中获得面试或offer的比例）
+    interviewRate: stats.submitted > 0 ? ((stats.interview + stats.offer) / stats.submitted * 100).toFixed(1) : '0',
   };
 
   // 获取地区分布前5
