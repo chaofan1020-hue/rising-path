@@ -299,12 +299,12 @@ export default function Home() {
           
           <div className="relative">
             <div className="text-center mb-14">
-              <div className="inline-flex items-center gap-2 px-3 py-1.5 rounded-full bg-primary/5 border border-primary/10 mb-6">
-                <Zap className="h-4 w-4 text-primary" />
-                <span className="text-sm font-medium">简单三步</span>
+              <div className="inline-flex items-center gap-2 px-4 py-2 rounded-full bg-primary/5 border border-primary/10 mb-8">
+                <Zap className="h-5 w-5 text-primary" />
+                <span className="text-base font-medium">简单三步</span>
               </div>
-              <h2 className="text-4xl font-bold mb-4">开启求职之旅</h2>
-              <p className="text-muted-foreground text-lg">让AI帮你找到理想工作</p>
+              <h2 className="text-5xl md:text-6xl font-bold mb-6">开启求职之旅</h2>
+              <p className="text-muted-foreground text-xl">让AI帮你找到理想工作</p>
             </div>
             
             <div className="grid md:grid-cols-3 gap-10">
