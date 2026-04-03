@@ -328,7 +328,66 @@ function OptimizeContent() {
   };
 
   const handleCopy = () => {
-    navigator.clipboard.writeText(optimizedContent);
+    // 生成纯文本格式的简历内容
+    if (resumeData) {
+      let text = '';
+      text += `${resumeData.name || '姓名'}\n`;
+      if (resumeData.contact) {
+        const contactParts = [
+          resumeData.contact.email,
+          resumeData.contact.phone,
+          resumeData.contact.location,
+          resumeData.contact.linkedin
+        ].filter(Boolean);
+        text += `${contactParts.join(' | ')}\n`;
+      }
+      text += '\n';
+      
+      if (resumeData.summary) {
+        text += `个人简介\n${resumeData.summary}\n\n`;
+      }
+      
+      if (resumeData.skills && resumeData.skills.length > 0) {
+        text += `专业技能\n${resumeData.skills.join('、')}\n\n`;
+      }
+      
+      if (resumeData.experience && resumeData.experience.length > 0) {
+        text += `工作经历\n`;
+        resumeData.experience.forEach(exp => {
+          text += `${exp.title} | ${exp.company}${exp.location ? ` · ${exp.location}` : ''} | ${exp.period}\n`;
+          exp.highlights.forEach(h => text += `• ${h}\n`);
+          text += '\n';
+        });
+      }
+      
+      if (resumeData.education && resumeData.education.length > 0) {
+        text += `教育背景\n`;
+        resumeData.education.forEach(edu => {
+          text += `${edu.degree}${edu.major ? ` in ${edu.major}` : ''} | ${edu.school} | ${edu.period}`;
+          if (edu.gpa) text += ` | GPA: ${edu.gpa}`;
+          text += '\n';
+        });
+        text += '\n';
+      }
+      
+      if (resumeData.projects && resumeData.projects.length > 0) {
+        text += `项目经历\n`;
+        resumeData.projects.forEach(proj => {
+          text += `${proj.name}${proj.role ? ` | ${proj.role}` : ''}${proj.period ? ` | ${proj.period}` : ''}\n`;
+          if (proj.description) text += `${proj.description}\n`;
+          proj.highlights.forEach(h => text += `• ${h}\n`);
+          text += '\n';
+        });
+      }
+      
+      if (resumeData.certifications && resumeData.certifications.length > 0) {
+        text += `证书认证\n${resumeData.certifications.join('\n')}\n`;
+      }
+      
+      navigator.clipboard.writeText(text.trim());
+    } else {
+      navigator.clipboard.writeText(optimizedContent);
+    }
   };
 
   const handleDownload = async () => {
@@ -601,12 +660,12 @@ function OptimizeContent() {
           
           {/* 操作按钮 */}
           <div className="flex flex-wrap justify-end gap-2 mb-2 flex-shrink-0">
-            <Button variant="outline" size="sm" onClick={handleCopy} className="h-8 text-xs">
+            <Button variant="outline" size="sm" onClick={handleCopy} className="h-9 text-xs items-center">
               <Copy className="mr-1.5 h-3.5 w-3.5" />
               复制
             </Button>
             {resumeData && (
-              <Button variant="outline" size="sm" onClick={handleTranslate} disabled={translating} className="h-8 text-xs">
+              <Button variant="outline" size="sm" onClick={handleTranslate} disabled={translating} className="h-9 text-xs items-center">
                 {translating ? (
                   <>
                     <Loader2 className="mr-1.5 h-3.5 w-3.5 animate-spin" />
@@ -620,7 +679,7 @@ function OptimizeContent() {
                 )}
               </Button>
             )}
-            <Button size="sm" className="h-8 text-xs" onClick={handleDownload} disabled={downloading}>
+            <Button size="sm" className="h-9 text-xs items-center" onClick={handleDownload} disabled={downloading}>
               {downloading ? (
                 <>
                   <Loader2 className="mr-1.5 h-3.5 w-3.5 animate-spin" />
@@ -629,7 +688,7 @@ function OptimizeContent() {
               ) : (
                 <>
                   <Download className="mr-1.5 h-3.5 w-3.5" />
-                  下载PDF
+                  下载简历
                 </>
               )}
             </Button>
@@ -673,10 +732,12 @@ function OptimizeContent() {
         </DialogContent>
       </Dialog>
       
-      {/* 隐藏容器用于 PDF 生成 - 保持正常尺寸 */}
+      {/* 隐藏容器用于 PDF 生成 - 使用 opacity:0 确保在视口内 */}
       {resumeData && (
-        <div style={{ position: 'absolute', left: '-9999px', top: '0' }}>
-          <ResumePreview data={resumeData} ref={resumePreviewRef} />
+        <div style={{ position: 'fixed', left: '0', top: '0', zIndex: -9999, opacity: 0, pointerEvents: 'none' }}>
+          <div style={{ width: '800px' }}>
+            <ResumePreview data={resumeData} ref={resumePreviewRef} />
+          </div>
         </div>
       )}
     </div>
