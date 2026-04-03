@@ -69,6 +69,17 @@ async function parseResumeContent(content: string): Promise<{
     education?: string[];
     experience?: string[];
     skills?: string[];
+    // 新增：用户画像字段
+    region?: string;       // 留学地区/目标求职地区
+    school?: string;       // 学校名称
+    degree?: string;       // 学历（本科/硕士/博士）
+    major?: string;        // 专业
+    universities?: Array<{  // 结构化教育经历
+      school: string;
+      degree: string;
+      major: string;
+      region?: string;
+    }>;
   };
 }> {
   try {
@@ -86,13 +97,25 @@ ${content}
   "phone": "电话号码",
   "education": ["教育经历1", "教育经历2"],
   "experience": ["工作经历1", "工作经历2"],
-  "skills": ["技能1", "技能2", "技能3"]
+  "skills": ["技能1", "技能2", "技能3"],
+  "region": "留学地区或求职目标地区（如：美国、英国、新加坡、香港等）",
+  "school": "最高学历所在学校名称",
+  "degree": "最高学历（本科/硕士/博士）",
+  "major": "专业名称",
+  "universities": [
+    {
+      "school": "学校名称",
+      "degree": "学历",
+      "major": "专业",
+      "region": "学校所在地区"
+    }
+  ]
 }
 
-只返回JSON，不要其他说明文字。如果某项信息不存在，返回null或空数组。`;
+只返回JSON，不要其他说明文字。如果某项信息不存在，返回null或空数组。对于地区，优先提取留学目的地或求职意向地区。`;
 
     const response = await llmClient.invoke([
-      { role: 'system', content: '你是一个专业的简历解析助手，擅长从简历中提取结构化信息。' },
+      { role: 'system', content: '你是一个专业的简历解析助手，擅长从简历中提取结构化信息，特别是教育背景相关的地区、学校、学历等信息。' },
       { role: 'user', content: prompt },
     ], { temperature: 0.3 });
 
@@ -103,6 +126,11 @@ ${content}
       education: [] as string[],
       experience: [] as string[],
       skills: [] as string[],
+      region: undefined as string | undefined,
+      school: undefined as string | undefined,
+      degree: undefined as string | undefined,
+      major: undefined as string | undefined,
+      universities: [] as Array<{ school: string; degree: string; major: string; region?: string }>,
     };
 
     try {
@@ -116,6 +144,11 @@ ${content}
           education: parsed.education || [],
           experience: parsed.experience || [],
           skills: parsed.skills || [],
+          region: parsed.region || undefined,
+          school: parsed.school || undefined,
+          degree: parsed.degree || undefined,
+          major: parsed.major || undefined,
+          universities: parsed.universities || [],
         };
       }
     } catch (e) {

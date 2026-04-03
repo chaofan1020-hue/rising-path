@@ -35,13 +35,50 @@ export async function GET(request: NextRequest) {
     const activeAccessCodes = accessCodes?.filter(c => c.is_active && (!c.expires_at || new Date(c.expires_at) > now)).length || 0;
     const expiredAccessCodes = accessCodes?.filter(c => c.expires_at && new Date(c.expires_at) <= now).length || 0;
 
-    // 2. 简历统计
+    // 2. 简历统计（包含用户画像数据）
     const { data: resumes } = await client
       .from('resumes')
-      .select('created_at, access_code_id');
+      .select('created_at, access_code_id, user_info');
 
     const totalResumes = resumes?.length || 0;
     const recentResumes = resumes?.filter(r => new Date(r.created_at) >= startDate).length || 0;
+
+    // 简历用户画像统计
+    const resumesByRegion: Record<string, number> = {};
+    const resumesBySchool: Record<string, number> = {};
+    const resumesByDegree: Record<string, number> = {};
+
+    resumes?.forEach(r => {
+      const userInfo = r.user_info as Record<string, unknown> | null;
+      if (userInfo) {
+        // 统计地区
+        if (userInfo.region && typeof userInfo.region === 'string') {
+          resumesByRegion[userInfo.region] = (resumesByRegion[userInfo.region] || 0) + 1;
+        }
+        // 统计学校
+        if (userInfo.school && typeof userInfo.school === 'string') {
+          resumesBySchool[userInfo.school] = (resumesBySchool[userInfo.school] || 0) + 1;
+        }
+        // 统计学历
+        if (userInfo.degree && typeof userInfo.degree === 'string') {
+          resumesByDegree[userInfo.degree] = (resumesByDegree[userInfo.degree] || 0) + 1;
+        }
+        // 如果有结构化的教育经历，也统计其中的信息
+        if (Array.isArray(userInfo.universities)) {
+          userInfo.universities.forEach((uni: { school?: string; degree?: string; region?: string }) => {
+            if (uni.region) {
+              resumesByRegion[uni.region] = (resumesByRegion[uni.region] || 0) + 1;
+            }
+            if (uni.school) {
+              resumesBySchool[uni.school] = (resumesBySchool[uni.school] || 0) + 1;
+            }
+            if (uni.degree) {
+              resumesByDegree[uni.degree] = (resumesByDegree[uni.degree] || 0) + 1;
+            }
+          });
+        }
+      }
+    });
 
     // 3. 岗位统计
     const { data: jobs } = await client
@@ -140,6 +177,10 @@ export async function GET(request: NextRequest) {
         jobsByDirection,
         applicationsByStatus,
         dailyStats,
+        // 新增：简历用户画像统计
+        resumesByRegion,
+        resumesBySchool,
+        resumesByDegree,
       },
       userActivity: Object.entries(userActivity).map(([id, stats]) => ({
         accessCodeId: parseInt(id),

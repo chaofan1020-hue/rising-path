@@ -132,6 +132,10 @@ interface AnalyticsData {
     jobsByDirection: Record<string, number>;
     applicationsByStatus: Record<string, number>;
     dailyStats: { date: string; resumes: number; applications: number; aiMatches: number }[];
+    // 用户画像统计
+    resumesByRegion: Record<string, number>;
+    resumesBySchool: Record<string, number>;
+    resumesByDegree: Record<string, number>;
   };
   userActivity: { accessCodeId: number; accessCodeName: string; resumes: number; applications: number; aiMatches: number }[];
 }
@@ -1265,6 +1269,136 @@ export default function AdminPage() {
                         </CardContent>
                       </Card>
                     </div>
+
+                    {/* User Profile Analysis - 简历用户画像分析 */}
+                    {(Object.keys(analytics.charts.resumesByRegion).length > 0 || 
+                      Object.keys(analytics.charts.resumesBySchool).length > 0 || 
+                      Object.keys(analytics.charts.resumesByDegree).length > 0) && (
+                      <div className="space-y-4">
+                        <h3 className="text-lg font-semibold flex items-center gap-2">
+                          <GraduationCap className="h-5 w-5" />
+                          简历用户画像分析
+                        </h3>
+                        <div className="grid grid-cols-1 md:grid-cols-3 gap-4 md:gap-6">
+                          {/* Resumes by Region - 留学地区 */}
+                          {Object.keys(analytics.charts.resumesByRegion).length > 0 && (
+                            <Card>
+                              <CardHeader className="pb-2">
+                                <CardTitle className="text-base flex items-center gap-2">
+                                  <Globe className="h-4 w-4 text-blue-500" />
+                                  留学地区分布
+                                </CardTitle>
+                              </CardHeader>
+                              <CardContent>
+                                <div className="space-y-2">
+                                  {Object.entries(analytics.charts.resumesByRegion)
+                                    .sort(([, a], [, b]) => b - a)
+                                    .slice(0, 8)
+                                    .map(([region, count]) => {
+                                      const max = Math.max(...Object.values(analytics.charts.resumesByRegion));
+                                      const percentage = Math.round((count / max) * 100);
+                                      return (
+                                        <div key={region} className="space-y-1">
+                                          <div className="flex justify-between text-sm">
+                                            <span className="truncate pr-2">{region}</span>
+                                            <span className="text-muted-foreground flex-shrink-0">{count}人</span>
+                                          </div>
+                                          <div className="h-2 bg-muted rounded-full overflow-hidden">
+                                            <div 
+                                              className="h-full bg-gradient-to-r from-blue-400 to-blue-600 rounded-full transition-all"
+                                              style={{ width: `${percentage}%` }}
+                                            />
+                                          </div>
+                                        </div>
+                                      );
+                                    })}
+                                </div>
+                              </CardContent>
+                            </Card>
+                          )}
+
+                          {/* Resumes by School - 学校分布 */}
+                          {Object.keys(analytics.charts.resumesBySchool).length > 0 && (
+                            <Card>
+                              <CardHeader className="pb-2">
+                                <CardTitle className="text-base flex items-center gap-2">
+                                  <GraduationCap className="h-4 w-4 text-purple-500" />
+                                  学校分布
+                                </CardTitle>
+                              </CardHeader>
+                              <CardContent>
+                                <div className="space-y-2">
+                                  {Object.entries(analytics.charts.resumesBySchool)
+                                    .sort(([, a], [, b]) => b - a)
+                                    .slice(0, 8)
+                                    .map(([school, count]) => {
+                                      const max = Math.max(...Object.values(analytics.charts.resumesBySchool));
+                                      const percentage = Math.round((count / max) * 100);
+                                      return (
+                                        <div key={school} className="space-y-1">
+                                          <div className="flex justify-between text-sm">
+                                            <span className="truncate pr-2">{school}</span>
+                                            <span className="text-muted-foreground flex-shrink-0">{count}人</span>
+                                          </div>
+                                          <div className="h-2 bg-muted rounded-full overflow-hidden">
+                                            <div 
+                                              className="h-full bg-gradient-to-r from-purple-400 to-purple-600 rounded-full transition-all"
+                                              style={{ width: `${percentage}%` }}
+                                            />
+                                          </div>
+                                        </div>
+                                      );
+                                    })}
+                                </div>
+                              </CardContent>
+                            </Card>
+                          )}
+
+                          {/* Resumes by Degree - 学历分布 */}
+                          {Object.keys(analytics.charts.resumesByDegree).length > 0 && (
+                            <Card>
+                              <CardHeader className="pb-2">
+                                <CardTitle className="text-base flex items-center gap-2">
+                                  <BarChart3 className="h-4 w-4 text-green-500" />
+                                  学历分布
+                                </CardTitle>
+                              </CardHeader>
+                              <CardContent>
+                                <div className="space-y-2">
+                                  {Object.entries(analytics.charts.resumesByDegree)
+                                    .sort(([, a], [, b]) => b - a)
+                                    .slice(0, 8)
+                                    .map(([degree, count]) => {
+                                      const max = Math.max(...Object.values(analytics.charts.resumesByDegree));
+                                      const percentage = Math.round((count / max) * 100);
+                                      const degreeColors: Record<string, string> = {
+                                        '本科': 'from-green-400 to-green-600',
+                                        '硕士': 'from-blue-400 to-blue-600',
+                                        '博士': 'from-purple-400 to-purple-600',
+                                        '大专': 'from-gray-400 to-gray-600',
+                                      };
+                                      return (
+                                        <div key={degree} className="space-y-1">
+                                          <div className="flex justify-between text-sm">
+                                            <span>{degree}</span>
+                                            <span className="text-muted-foreground">{count}人</span>
+                                          </div>
+                                          <div className="h-2 bg-muted rounded-full overflow-hidden">
+                                            <div 
+                                              className={`h-full bg-gradient-to-r ${degreeColors[degree] || 'from-gray-400 to-gray-600'} rounded-full transition-all`}
+                                              style={{ width: `${percentage}%` }}
+                                            />
+                                          </div>
+                                        </div>
+                                      );
+                                    })}
+                                </div>
+                              </CardContent>
+                            </Card>
+                          )}
+                        </div>
+                      </div>
+                    )}
 
                     {/* Daily Trend */}
                     <Card>
