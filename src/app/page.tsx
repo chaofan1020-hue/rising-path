@@ -189,22 +189,24 @@ export default function Home() {
         </div>
       </section>
 
-      {/* Advantages Section - Vibrant Style */}
+      {/* Advantages Section - Modern Cards */}
       <section className="container mx-auto px-6 py-16">
-        <div className="grid md:grid-cols-3 gap-6">
+        <div className="grid md:grid-cols-3 gap-5">
           {advantages.map((item) => (
             <div
               key={item.title}
-              className="group"
+              className="group relative overflow-hidden"
             >
-              <div className="p-8 rounded-3xl bg-gradient-to-br from-white to-gray-50 border border-gray-100 shadow-lg shadow-gray-200/50 hover:shadow-xl hover:-translate-y-2 transition-all duration-300">
-                {/* Gradient Icon */}
-                <div className={`w-14 h-14 rounded-2xl bg-gradient-to-br ${item.iconColor === 'text-sky-600' ? 'from-sky-400 to-blue-500' : item.iconColor === 'text-violet-600' ? 'from-violet-400 to-purple-500' : 'from-amber-400 to-orange-500'} flex items-center justify-center mb-6 shadow-lg group-hover:scale-110 transition-transform duration-300`}>
-                  <item.icon className="h-7 w-7 text-white" />
+              <div className={`p-8 rounded-[28px] ${item.iconColor === 'text-sky-600' ? 'bg-gradient-to-br from-blue-500 to-cyan-400' : item.iconColor === 'text-violet-600' ? 'bg-gradient-to-br from-purple-500 to-pink-400' : 'bg-gradient-to-br from-orange-500 to-yellow-400'} shadow-xl hover:shadow-2xl hover:-translate-y-2 hover:scale-[1.02] transition-all duration-300`}>
+                {/* Icon */}
+                <div className="w-12 h-12 rounded-xl bg-white/20 backdrop-blur-sm flex items-center justify-center mb-6">
+                  <item.icon className="h-6 w-6 text-white" />
                 </div>
                 {/* Text */}
-                <h3 className="font-bold text-xl mb-3 text-gray-900">{item.title}</h3>
-                <p className="text-gray-500 text-sm leading-relaxed">{item.description}</p>
+                <h3 className="font-bold text-xl mb-2 text-white">{item.title}</h3>
+                <p className="text-white/80 text-sm leading-relaxed">{item.description}</p>
+                {/* Decorative Circle */}
+                <div className="absolute -right-8 -bottom-8 w-32 h-32 rounded-full bg-white/10" />
               </div>
             </div>
           ))}
