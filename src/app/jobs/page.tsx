@@ -486,10 +486,10 @@ function JobsContent() {
           ) : (
             filteredJobs.map((job) => (
               <Card key={job.id} className="hover:shadow-lg transition-all duration-300 active:scale-[0.99] md:active:scale-100 md:hover:-translate-y-0.5">
-                <CardContent className="pt-4 md:pt-6 pb-4">
+                <CardContent className="pt-3 md:pt-4 pb-3">
                   <div className="flex gap-3 md:gap-4">
                     {/* 左侧内容区 */}
-                    <div className="flex-1 min-w-0 flex flex-col gap-3 md:gap-4">
+                    <div className="flex-1 min-w-0 flex flex-col gap-2 md:gap-3">
                       {/* 岗位信息 - 横向布局 */}
                       <div className="flex items-start gap-3 md:gap-4">
                         <CompanyLogo company={job.company} logoUrl={job.logo_url} />
