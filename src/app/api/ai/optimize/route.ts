@@ -113,10 +113,18 @@ ${resumeContent}${suggestionsSection}
       const jsonMatch = optimizedContent.match(/\{[\s\S]*\}/);
       if (jsonMatch) {
         const parsed = JSON.parse(jsonMatch[0]);
+        
+        // 检测语言：检查内容中是否主要是英文字符
+        const textToCheck = `${parsed.name || ''} ${parsed.summary || ''} ${(parsed.skills || []).join(' ')}`;
+        const englishCharCount = (textToCheck.match(/[a-zA-Z]/g) || []).length;
+        const chineseCharCount = (textToCheck.match(/[\u4e00-\u9fa5]/g) || []).length;
+        const isEnglish = englishCharCount > chineseCharCount;
+        
         return NextResponse.json({ 
           optimized_content: optimizedContent,
           resume_data: parsed,
-          original_content: resumeContent 
+          original_content: resumeContent,
+          is_english: isEnglish
         });
       }
     } catch (e) {

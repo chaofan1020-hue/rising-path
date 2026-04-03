@@ -320,6 +320,7 @@ function OptimizeContent() {
       setOptimizedContent(data.optimized_content || '');
       setResumeData(data.resume_data || null);
       setOriginalContent(data.original_content || '');
+      setIsEnglishVersion(data.is_english || false);
       setShowResult(true);
 
       setTimeout(() => {
