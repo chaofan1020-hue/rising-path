@@ -59,6 +59,10 @@ import {
   Settings,
   Upload,
   X,
+  BarChart3,
+  TrendingUp,
+  Activity,
+  PieChart,
 } from 'lucide-react';
 import Link from 'next/link';
 
@@ -108,6 +112,30 @@ interface JobConfig {
   is_active: boolean;
 }
 
+// Analytics types
+interface AnalyticsData {
+  overview: {
+    totalAccessCodes: number;
+    activeAccessCodes: number;
+    expiredAccessCodes: number;
+    totalResumes: number;
+    recentResumes: number;
+    totalJobs: number;
+    recentJobs: number;
+    totalApplications: number;
+    recentApplications: number;
+    totalAiMatches: number;
+    recentAiMatches: number;
+  };
+  charts: {
+    jobsByRegion: Record<string, number>;
+    jobsByDirection: Record<string, number>;
+    applicationsByStatus: Record<string, number>;
+    dailyStats: { date: string; resumes: number; applications: number; aiMatches: number }[];
+  };
+  userActivity: { accessCodeId: number; accessCodeName: string; resumes: number; applications: number; aiMatches: number }[];
+}
+
 const statusOptions = ['pending', 'submitted', 'interview', 'rejected', 'offer'];
 
 const statusLabels: Record<string, string> = {
@@ -123,6 +151,11 @@ export default function AdminPage() {
   const [resumes, setResumes] = useState<Resume[]>([]);
   const [applications, setApplications] = useState<Application[]>([]);
   const [loading, setLoading] = useState(true);
+  
+  // Analytics state
+  const [analytics, setAnalytics] = useState<AnalyticsData | null>(null);
+  const [analyticsLoading, setAnalyticsLoading] = useState(false);
+  const [analyticsRange, setAnalyticsRange] = useState<'7d' | '30d' | '90d' | 'all'>('7d');
 
   // Config state
   const [configs, setConfigs] = useState<Record<string, JobConfig[]>>({
@@ -234,6 +267,24 @@ export default function AdminPage() {
       setLoading(false);
     }
   };
+
+  // Fetch analytics data
+  const fetchAnalytics = async () => {
+    setAnalyticsLoading(true);
+    try {
+      const response = await fetch(`/api/analytics?range=${analyticsRange}`);
+      const data = await response.json();
+      setAnalytics(data);
+    } catch (error) {
+      console.error('Failed to fetch analytics:', error);
+    } finally {
+      setAnalyticsLoading(false);
+    }
+  };
+
+  useEffect(() => {
+    fetchAnalytics();
+  }, [analyticsRange]);
 
   // Logo upload
   const handleLogoUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
@@ -698,10 +749,14 @@ export default function AdminPage() {
           </div>
         ) : (
           <Tabs defaultValue="overview" className="space-y-6">
-            <TabsList className="grid w-full grid-cols-6 lg:w-auto lg:inline-grid">
+            <TabsList className="grid w-full grid-cols-7 lg:w-auto lg:inline-grid">
               <TabsTrigger value="overview">
                 <LayoutDashboard className="h-4 w-4 mr-2" />
                 概览
+              </TabsTrigger>
+              <TabsTrigger value="analytics">
+                <BarChart3 className="h-4 w-4 mr-2" />
+                数据分析
               </TabsTrigger>
               <TabsTrigger value="jobs">
                 <Briefcase className="h-4 w-4 mr-2" />
@@ -852,6 +907,343 @@ export default function AdminPage() {
                     </CardContent>
                   </Card>
                 </div>
+              </div>
+            </TabsContent>
+
+            {/* Analytics Tab */}
+            <TabsContent value="analytics">
+              <div className="space-y-6">
+                {/* Time Range Selector */}
+                <div className="flex items-center gap-2">
+                  <span className="text-sm text-muted-foreground">时间范围：</span>
+                  <div className="flex gap-1">
+                    {(['7d', '30d', '90d', 'all'] as const).map((range) => (
+                      <Button
+                        key={range}
+                        variant={analyticsRange === range ? 'default' : 'outline'}
+                        size="sm"
+                        onClick={() => setAnalyticsRange(range)}
+                      >
+                        {range === '7d' ? '近7天' : range === '30d' ? '近30天' : range === '90d' ? '近90天' : '全部'}
+                      </Button>
+                    ))}
+                  </div>
+                </div>
+
+                {analyticsLoading ? (
+                  <div className="text-center py-12">
+                    <Loader2 className="h-8 w-8 animate-spin mx-auto text-primary" />
+                    <p className="mt-2 text-muted-foreground">加载分析数据...</p>
+                  </div>
+                ) : analytics ? (
+                  <>
+                    {/* Overview Stats */}
+                    <div className="grid grid-cols-2 md:grid-cols-4 lg:grid-cols-6 gap-4">
+                      <Card>
+                        <CardContent className="pt-6">
+                          <div className="flex items-center gap-2">
+                            <Users className="h-5 w-5 text-blue-600" />
+                            <div>
+                              <span className="text-2xl font-bold">{analytics.overview.activeAccessCodes}</span>
+                              <span className="text-sm text-muted-foreground">/{analytics.overview.totalAccessCodes}</span>
+                            </div>
+                          </div>
+                          <p className="text-sm text-muted-foreground mt-1">活跃/总访问码</p>
+                        </CardContent>
+                      </Card>
+                      <Card>
+                        <CardContent className="pt-6">
+                          <div className="flex items-center gap-2">
+                            <Briefcase className="h-5 w-5 text-green-600" />
+                            <div>
+                              <span className="text-2xl font-bold">{analytics.overview.recentJobs}</span>
+                              <span className="text-sm text-muted-foreground">/{analytics.overview.totalJobs}</span>
+                            </div>
+                          </div>
+                          <p className="text-sm text-muted-foreground mt-1">新增/总岗位</p>
+                        </CardContent>
+                      </Card>
+                      <Card>
+                        <CardContent className="pt-6">
+                          <div className="flex items-center gap-2">
+                            <FileText className="h-5 w-5 text-purple-600" />
+                            <div>
+                              <span className="text-2xl font-bold">{analytics.overview.recentResumes}</span>
+                              <span className="text-sm text-muted-foreground">/{analytics.overview.totalResumes}</span>
+                            </div>
+                          </div>
+                          <p className="text-sm text-muted-foreground mt-1">新增/总简历</p>
+                        </CardContent>
+                      </Card>
+                      <Card>
+                        <CardContent className="pt-6">
+                          <div className="flex items-center gap-2">
+                            <Send className="h-5 w-5 text-orange-600" />
+                            <div>
+                              <span className="text-2xl font-bold">{analytics.overview.recentApplications}</span>
+                              <span className="text-sm text-muted-foreground">/{analytics.overview.totalApplications}</span>
+                            </div>
+                          </div>
+                          <p className="text-sm text-muted-foreground mt-1">新增/总网申</p>
+                        </CardContent>
+                      </Card>
+                      <Card>
+                        <CardContent className="pt-6">
+                          <div className="flex items-center gap-2">
+                            <Activity className="h-5 w-5 text-cyan-600" />
+                            <span className="text-2xl font-bold">{analytics.overview.recentAiMatches}</span>
+                          </div>
+                          <p className="text-sm text-muted-foreground mt-1">AI选岗次数</p>
+                        </CardContent>
+                      </Card>
+                      <Card>
+                        <CardContent className="pt-6">
+                          <div className="flex items-center gap-2">
+                            <TrendingUp className="h-5 w-5 text-emerald-600" />
+                            <span className="text-2xl font-bold">
+                              {analytics.userActivity.length > 0 
+                                ? Math.round(analytics.userActivity.reduce((sum, u) => sum + u.resumes + u.applications + u.aiMatches, 0) / analytics.userActivity.length)
+                                : 0}
+                            </span>
+                          </div>
+                          <p className="text-sm text-muted-foreground mt-1">平均活跃度</p>
+                        </CardContent>
+                      </Card>
+                    </div>
+
+                    {/* Charts Row */}
+                    <div className="grid md:grid-cols-2 lg:grid-cols-3 gap-6">
+                      {/* Jobs by Region */}
+                      <Card>
+                        <CardHeader>
+                          <CardTitle className="text-lg flex items-center gap-2">
+                            <Globe className="h-5 w-5" />
+                            岗位地区分布
+                          </CardTitle>
+                        </CardHeader>
+                        <CardContent>
+                          <div className="space-y-3">
+                            {Object.entries(analytics.charts.jobsByRegion)
+                              .sort(([, a], [, b]) => b - a)
+                              .slice(0, 6)
+                              .map(([region, count]) => {
+                                const max = Math.max(...Object.values(analytics.charts.jobsByRegion));
+                                const percentage = Math.round((count / max) * 100);
+                                return (
+                                  <div key={region} className="space-y-1">
+                                    <div className="flex justify-between text-sm">
+                                      <span>{region}</span>
+                                      <span className="text-muted-foreground">{count}</span>
+                                    </div>
+                                    <div className="h-2 bg-muted rounded-full overflow-hidden">
+                                      <div 
+                                        className="h-full bg-blue-500 rounded-full transition-all"
+                                        style={{ width: `${percentage}%` }}
+                                      />
+                                    </div>
+                                  </div>
+                                );
+                              })}
+                          </div>
+                        </CardContent>
+                      </Card>
+
+                      {/* Jobs by Direction */}
+                      <Card>
+                        <CardHeader>
+                          <CardTitle className="text-lg flex items-center gap-2">
+                            <PieChart className="h-5 w-5" />
+                            岗位方向分布
+                          </CardTitle>
+                        </CardHeader>
+                        <CardContent>
+                          <div className="space-y-3">
+                            {Object.entries(analytics.charts.jobsByDirection)
+                              .sort(([, a], [, b]) => b - a)
+                              .slice(0, 6)
+                              .map(([direction, count]) => {
+                                const max = Math.max(...Object.values(analytics.charts.jobsByDirection));
+                                const percentage = Math.round((count / max) * 100);
+                                return (
+                                  <div key={direction} className="space-y-1">
+                                    <div className="flex justify-between text-sm">
+                                      <span>{direction}</span>
+                                      <span className="text-muted-foreground">{count}</span>
+                                    </div>
+                                    <div className="h-2 bg-muted rounded-full overflow-hidden">
+                                      <div 
+                                        className="h-full bg-purple-500 rounded-full transition-all"
+                                        style={{ width: `${percentage}%` }}
+                                      />
+                                    </div>
+                                  </div>
+                                );
+                              })}
+                          </div>
+                        </CardContent>
+                      </Card>
+
+                      {/* Applications by Status */}
+                      <Card>
+                        <CardHeader>
+                          <CardTitle className="text-lg flex items-center gap-2">
+                            <Activity className="h-5 w-5" />
+                            网申状态分布
+                          </CardTitle>
+                        </CardHeader>
+                        <CardContent>
+                          <div className="space-y-3">
+                            {Object.entries(analytics.charts.applicationsByStatus)
+                              .map(([status, count]) => {
+                                const max = Math.max(...Object.values(analytics.charts.applicationsByStatus));
+                                const percentage = Math.round((count / max) * 100);
+                                const statusColors: Record<string, string> = {
+                                  pending: 'bg-yellow-500',
+                                  submitted: 'bg-blue-500',
+                                  interview: 'bg-purple-500',
+                                  rejected: 'bg-red-500',
+                                  offer: 'bg-green-500',
+                                };
+                                return (
+                                  <div key={status} className="space-y-1">
+                                    <div className="flex justify-between text-sm">
+                                      <span>{statusLabels[status] || status}</span>
+                                      <span className="text-muted-foreground">{count}</span>
+                                    </div>
+                                    <div className="h-2 bg-muted rounded-full overflow-hidden">
+                                      <div 
+                                        className={`h-full ${statusColors[status] || 'bg-gray-500'} rounded-full transition-all`}
+                                        style={{ width: `${percentage}%` }}
+                                      />
+                                    </div>
+                                  </div>
+                                );
+                              })}
+                          </div>
+                        </CardContent>
+                      </Card>
+                    </div>
+
+                    {/* Daily Trend */}
+                    <Card>
+                      <CardHeader>
+                        <CardTitle className="text-lg flex items-center gap-2">
+                          <TrendingUp className="h-5 w-5" />
+                          近7天活跃趋势
+                        </CardTitle>
+                      </CardHeader>
+                      <CardContent>
+                        <div className="flex items-end gap-2 h-40">
+                          {analytics.charts.dailyStats.map((day) => {
+                            const max = Math.max(
+                              ...analytics.charts.dailyStats.map(d => Math.max(d.resumes, d.applications, d.aiMatches))
+                            ) || 1;
+                            return (
+                              <div key={day.date} className="flex-1 flex flex-col items-center gap-1">
+                                <div className="flex-1 w-full flex items-end gap-0.5 justify-center">
+                                  <div 
+                                    className="w-3 bg-green-500 rounded-t transition-all"
+                                    style={{ height: `${(day.resumes / max) * 100}%`, minHeight: day.resumes > 0 ? '4px' : '0' }}
+                                    title={`简历: ${day.resumes}`}
+                                  />
+                                  <div 
+                                    className="w-3 bg-blue-500 rounded-t transition-all"
+                                    style={{ height: `${(day.applications / max) * 100}%`, minHeight: day.applications > 0 ? '4px' : '0' }}
+                                    title={`网申: ${day.applications}`}
+                                  />
+                                  <div 
+                                    className="w-3 bg-purple-500 rounded-t transition-all"
+                                    style={{ height: `${(day.aiMatches / max) * 100}%`, minHeight: day.aiMatches > 0 ? '4px' : '0' }}
+                                    title={`AI选岗: ${day.aiMatches}`}
+                                  />
+                                </div>
+                                <span className="text-xs text-muted-foreground">
+                                  {new Date(day.date).toLocaleDateString('zh-CN', { month: 'numeric', day: 'numeric' })}
+                                </span>
+                              </div>
+                            );
+                          })}
+                        </div>
+                        <div className="flex justify-center gap-4 mt-4 text-xs text-muted-foreground">
+                          <div className="flex items-center gap-1">
+                            <div className="w-3 h-3 bg-green-500 rounded" />
+                            简历
+                          </div>
+                          <div className="flex items-center gap-1">
+                            <div className="w-3 h-3 bg-blue-500 rounded" />
+                            网申
+                          </div>
+                          <div className="flex items-center gap-1">
+                            <div className="w-3 h-3 bg-purple-500 rounded" />
+                            AI选岗
+                          </div>
+                        </div>
+                      </CardContent>
+                    </Card>
+
+                    {/* User Activity Table */}
+                    <Card>
+                      <CardHeader>
+                        <CardTitle className="text-lg flex items-center gap-2">
+                          <Users className="h-5 w-5" />
+                          用户活跃度排行
+                        </CardTitle>
+                      </CardHeader>
+                      <CardContent>
+                        <div className="overflow-x-auto">
+                          <table className="w-full text-sm">
+                            <thead>
+                              <tr className="border-b">
+                                <th className="text-left py-3 px-2">用户</th>
+                                <th className="text-center py-3 px-2">简历数</th>
+                                <th className="text-center py-3 px-2">网申数</th>
+                                <th className="text-center py-3 px-2">AI选岗</th>
+                                <th className="text-center py-3 px-2">总活跃度</th>
+                              </tr>
+                            </thead>
+                            <tbody>
+                              {analytics.userActivity.slice(0, 10).map((user, index) => (
+                                <tr key={user.accessCodeId} className="border-b last:border-0">
+                                  <td className="py-3 px-2">
+                                    <div className="flex items-center gap-2">
+                                      {index < 3 && (
+                                        <span className={`w-5 h-5 rounded-full flex items-center justify-center text-xs text-white ${
+                                          index === 0 ? 'bg-yellow-500' : index === 1 ? 'bg-gray-400' : 'bg-amber-600'
+                                        }`}>
+                                          {index + 1}
+                                        </span>
+                                      )}
+                                      <span>{user.accessCodeName}</span>
+                                    </div>
+                                  </td>
+                                  <td className="text-center py-3 px-2">{user.resumes}</td>
+                                  <td className="text-center py-3 px-2">{user.applications}</td>
+                                  <td className="text-center py-3 px-2">{user.aiMatches}</td>
+                                  <td className="text-center py-3 px-2">
+                                    <Badge variant="secondary">
+                                      {user.resumes + user.applications + user.aiMatches}
+                                    </Badge>
+                                  </td>
+                                </tr>
+                              ))}
+                              {analytics.userActivity.length === 0 && (
+                                <tr>
+                                  <td colSpan={5} className="text-center py-8 text-muted-foreground">
+                                    暂无用户活动数据
+                                  </td>
+                                </tr>
+                              )}
+                            </tbody>
+                          </table>
+                        </div>
+                      </CardContent>
+                    </Card>
+                  </>
+                ) : (
+                  <div className="text-center py-12 text-muted-foreground">
+                    暂无分析数据
+                  </div>
+                )}
               </div>
             </TabsContent>
 
