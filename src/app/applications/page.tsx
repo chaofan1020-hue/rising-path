@@ -233,34 +233,34 @@ function ApplicationsContent() {
           </p>
         </div>
 
-        {/* Stats */}
-        <div className="grid grid-cols-3 md:grid-cols-5 gap-2 md:gap-4 mb-6 md:mb-8">
-          <Card>
-            <CardContent className="pt-3 pb-3 md:pt-4 md:pb-4">
+        {/* Stats - 手机端横向滚动，桌面端网格 */}
+        <div className="flex gap-3 overflow-x-auto pb-2 md:grid md:grid-cols-5 md:gap-4 md:overflow-visible md:pb-0 mb-6 md:mb-8">
+          <Card className="flex-shrink-0 w-24 md:w-auto">
+            <CardContent className="pt-3 pb-3 md:pt-4 md:pb-4 text-center">
               <div className="text-lg md:text-2xl font-bold">{stats.total}</div>
               <div className="text-xs md:text-sm text-muted-foreground">总申请</div>
             </CardContent>
           </Card>
-          <Card>
-            <CardContent className="pt-3 pb-3 md:pt-4 md:pb-4">
+          <Card className="flex-shrink-0 w-24 md:w-auto">
+            <CardContent className="pt-3 pb-3 md:pt-4 md:pb-4 text-center">
               <div className="text-lg md:text-2xl font-bold text-yellow-600">{stats.pending}</div>
               <div className="text-xs md:text-sm text-muted-foreground">待投递</div>
             </CardContent>
           </Card>
-          <Card>
-            <CardContent className="pt-3 pb-3 md:pt-4 md:pb-4">
+          <Card className="flex-shrink-0 w-24 md:w-auto">
+            <CardContent className="pt-3 pb-3 md:pt-4 md:pb-4 text-center">
               <div className="text-lg md:text-2xl font-bold text-blue-600">{stats.submitted}</div>
               <div className="text-xs md:text-sm text-muted-foreground">已投递</div>
             </CardContent>
           </Card>
-          <Card>
-            <CardContent className="pt-3 pb-3 md:pt-4 md:pb-4">
+          <Card className="flex-shrink-0 w-24 md:w-auto">
+            <CardContent className="pt-3 pb-3 md:pt-4 md:pb-4 text-center">
               <div className="text-lg md:text-2xl font-bold text-purple-600">{stats.interview}</div>
               <div className="text-xs md:text-sm text-muted-foreground">面试中</div>
             </CardContent>
           </Card>
-          <Card>
-            <CardContent className="pt-3 pb-3 md:pt-4 md:pb-4">
+          <Card className="flex-shrink-0 w-24 md:w-auto">
+            <CardContent className="pt-3 pb-3 md:pt-4 md:pb-4 text-center">
               <div className="text-lg md:text-2xl font-bold text-green-600">{stats.offer}</div>
               <div className="text-xs md:text-sm text-muted-foreground">已录用</div>
             </CardContent>
