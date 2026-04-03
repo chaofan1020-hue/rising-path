@@ -773,17 +773,17 @@ export default function AdminPage() {
       <div className="min-h-screen bg-muted/30">
         {/* Header */}
         <header className="border-b bg-background sticky top-0 z-50">
-          <div className="container mx-auto px-4 h-16 flex items-center justify-between">
-            <div className="flex items-center gap-3">
-              <LayoutDashboard className="h-6 w-6 text-primary" />
-              <span className="font-bold text-xl">管理后台</span>
+          <div className="container mx-auto px-4 h-14 md:h-16 flex items-center justify-between">
+            <div className="flex items-center gap-2 md:gap-3">
+              <LayoutDashboard className="h-5 w-5 md:h-6 md:w-6 text-primary" />
+              <span className="font-bold text-lg md:text-xl">管理后台</span>
             </div>
-            <div className="flex items-center gap-2">
+            <div className="flex items-center gap-1 md:gap-2">
               <Dialog open={passwordDialogOpen} onOpenChange={setPasswordDialogOpen}>
                 <DialogTrigger asChild>
-                  <Button variant="ghost" size="sm">
-                    <Settings className="h-4 w-4 mr-1" />
-                    修改密码
+                  <Button variant="ghost" size="sm" className="h-8 w-8 md:w-auto md:px-3">
+                    <Settings className="h-4 w-4 md:mr-1" />
+                    <span className="hidden md:inline">修改密码</span>
                   </Button>
                 </DialogTrigger>
                 <DialogContent>
@@ -859,136 +859,140 @@ export default function AdminPage() {
                 </DialogContent>
               </Dialog>
               <Link href="/">
-                <Button variant="outline" size="sm">
-                  返回首页
+                <Button variant="outline" size="sm" className="h-8 w-8 md:w-auto md:px-3">
+                  <ExternalLink className="h-4 w-4 md:mr-1" />
+                  <span className="hidden md:inline">返回首页</span>
                 </Button>
               </Link>
               <Button 
                 variant="ghost" 
                 size="sm"
+                className="h-8 w-8 md:w-auto md:px-3"
                 onClick={() => {
                   localStorage.removeItem('admin_auth');
                   window.location.reload();
                 }}
               >
-                <LogOut className="h-4 w-4 mr-1" />
-                退出登录
+                <LogOut className="h-4 w-4 md:mr-1" />
+                <span className="hidden md:inline">退出</span>
               </Button>
             </div>
           </div>
         </header>
 
-        <main className="container mx-auto px-4 py-8">
+        <main className="container mx-auto px-4 py-4 md:py-8">
         {loading ? (
           <div className="text-center py-12">
             <Loader2 className="h-8 w-8 animate-spin mx-auto text-primary" />
             <p className="mt-2 text-muted-foreground">加载中...</p>
           </div>
         ) : (
-          <Tabs defaultValue="overview" className="space-y-6">
-            <TabsList className="grid w-full grid-cols-7 lg:w-auto lg:inline-grid">
-              <TabsTrigger value="overview">
-                <LayoutDashboard className="h-4 w-4 mr-2" />
-                概览
-              </TabsTrigger>
-              <TabsTrigger value="analytics">
-                <BarChart3 className="h-4 w-4 mr-2" />
-                数据分析
-              </TabsTrigger>
-              <TabsTrigger value="jobs">
-                <Briefcase className="h-4 w-4 mr-2" />
-                岗位管理
-              </TabsTrigger>
-              <TabsTrigger value="resumes">
-                <FileText className="h-4 w-4 mr-2" />
-                简历管理
-              </TabsTrigger>
-              <TabsTrigger value="applications">
-                <Send className="h-4 w-4 mr-2" />
-                网申管理
-              </TabsTrigger>
-              <TabsTrigger value="access-codes">
-                <Users className="h-4 w-4 mr-2" />
-                访问码
-              </TabsTrigger>
-              <TabsTrigger value="configs">
-                <Settings className="h-4 w-4 mr-2" />
-                配置管理
-              </TabsTrigger>
-            </TabsList>
+          <Tabs defaultValue="overview" className="space-y-4 md:space-y-6">
+            <div className="overflow-x-auto -mx-4 px-4 md:mx-0 md:px-0">
+              <TabsList className="grid w-max md:w-full grid-cols-7 gap-1 md:gap-0 md:inline-flex">
+                <TabsTrigger value="overview" className="px-3 md:px-4">
+                  <LayoutDashboard className="h-4 w-4 md:mr-2" />
+                  <span className="hidden md:inline">概览</span>
+                </TabsTrigger>
+                <TabsTrigger value="analytics" className="px-3 md:px-4">
+                  <BarChart3 className="h-4 w-4 md:mr-2" />
+                  <span className="hidden md:inline">数据分析</span>
+                </TabsTrigger>
+                <TabsTrigger value="jobs" className="px-3 md:px-4">
+                  <Briefcase className="h-4 w-4 md:mr-2" />
+                  <span className="hidden md:inline">岗位管理</span>
+                </TabsTrigger>
+                <TabsTrigger value="resumes" className="px-3 md:px-4">
+                  <FileText className="h-4 w-4 md:mr-2" />
+                  <span className="hidden md:inline">简历管理</span>
+                </TabsTrigger>
+                <TabsTrigger value="applications" className="px-3 md:px-4">
+                  <Send className="h-4 w-4 md:mr-2" />
+                  <span className="hidden md:inline">网申管理</span>
+                </TabsTrigger>
+                <TabsTrigger value="access-codes" className="px-3 md:px-4">
+                  <Users className="h-4 w-4 md:mr-2" />
+                  <span className="hidden md:inline">访问码</span>
+                </TabsTrigger>
+                <TabsTrigger value="configs" className="px-3 md:px-4">
+                  <Settings className="h-4 w-4 md:mr-2" />
+                  <span className="hidden md:inline">配置管理</span>
+                </TabsTrigger>
+              </TabsList>
+            </div>
 
             {/* Overview Tab */}
             <TabsContent value="overview">
-              <div className="grid gap-6">
-                {/* Stats Cards */}
-                <div className="grid grid-cols-2 md:grid-cols-4 lg:grid-cols-7 gap-4">
-                  <Card>
-                    <CardContent className="pt-6">
-                      <div className="flex items-center gap-2">
-                        <Briefcase className="h-5 w-5 text-blue-600" />
-                        <span className="text-2xl font-bold">{stats.totalJobs}</span>
+              <div className="grid gap-4 md:gap-6">
+                {/* Stats Cards - 手机端横向滚动 */}
+                <div className="flex gap-3 overflow-x-auto pb-2 -mx-4 px-4 md:mx-0 md:px-0 md:grid md:grid-cols-4 lg:grid-cols-7 md:gap-4 md:overflow-visible">
+                  <Card className="flex-shrink-0 w-28 md:w-auto">
+                    <CardContent className="pt-4 md:pt-6 pb-3 md:pb-6 text-center">
+                      <div className="flex items-center justify-center gap-1 md:gap-2">
+                        <Briefcase className="h-4 w-4 md:h-5 md:w-5 text-blue-600" />
+                        <span className="text-xl md:text-2xl font-bold">{stats.totalJobs}</span>
                       </div>
-                      <p className="text-sm text-muted-foreground mt-1">岗位总数</p>
+                      <p className="text-xs md:text-sm text-muted-foreground mt-1">岗位总数</p>
                     </CardContent>
                   </Card>
-                  <Card>
-                    <CardContent className="pt-6">
-                      <div className="flex items-center gap-2">
-                        <FileText className="h-5 w-5 text-green-600" />
-                        <span className="text-2xl font-bold">{stats.totalResumes}</span>
+                  <Card className="flex-shrink-0 w-28 md:w-auto">
+                    <CardContent className="pt-4 md:pt-6 pb-3 md:pb-6 text-center">
+                      <div className="flex items-center justify-center gap-1 md:gap-2">
+                        <FileText className="h-4 w-4 md:h-5 md:w-5 text-green-600" />
+                        <span className="text-xl md:text-2xl font-bold">{stats.totalResumes}</span>
                       </div>
-                      <p className="text-sm text-muted-foreground mt-1">简历总数</p>
+                      <p className="text-xs md:text-sm text-muted-foreground mt-1">简历总数</p>
                     </CardContent>
                   </Card>
-                  <Card>
-                    <CardContent className="pt-6">
-                      <div className="flex items-center gap-2">
-                        <Send className="h-5 w-5 text-purple-600" />
-                        <span className="text-2xl font-bold">{stats.totalApplications}</span>
+                  <Card className="flex-shrink-0 w-28 md:w-auto">
+                    <CardContent className="pt-4 md:pt-6 pb-3 md:pb-6 text-center">
+                      <div className="flex items-center justify-center gap-1 md:gap-2">
+                        <Send className="h-4 w-4 md:h-5 md:w-5 text-purple-600" />
+                        <span className="text-xl md:text-2xl font-bold">{stats.totalApplications}</span>
                       </div>
-                      <p className="text-sm text-muted-foreground mt-1">网申总数</p>
+                      <p className="text-xs md:text-sm text-muted-foreground mt-1">网申总数</p>
                     </CardContent>
                   </Card>
-                  <Card>
-                    <CardContent className="pt-6">
-                      <div className="flex items-center gap-2">
-                        <Clock className="h-5 w-5 text-yellow-600" />
-                        <span className="text-2xl font-bold">{stats.pendingApps}</span>
+                  <Card className="flex-shrink-0 w-28 md:w-auto">
+                    <CardContent className="pt-4 md:pt-6 pb-3 md:pb-6 text-center">
+                      <div className="flex items-center justify-center gap-1 md:gap-2">
+                        <Clock className="h-4 w-4 md:h-5 md:w-5 text-yellow-600" />
+                        <span className="text-xl md:text-2xl font-bold">{stats.pendingApps}</span>
                       </div>
-                      <p className="text-sm text-muted-foreground mt-1">待投递</p>
+                      <p className="text-xs md:text-sm text-muted-foreground mt-1">待投递</p>
                     </CardContent>
                   </Card>
-                  <Card>
-                    <CardContent className="pt-6">
-                      <div className="flex items-center gap-2">
-                        <CheckCircle className="h-5 w-5 text-blue-600" />
-                        <span className="text-2xl font-bold">{stats.submittedApps}</span>
+                  <Card className="flex-shrink-0 w-28 md:w-auto">
+                    <CardContent className="pt-4 md:pt-6 pb-3 md:pb-6 text-center">
+                      <div className="flex items-center justify-center gap-1 md:gap-2">
+                        <CheckCircle className="h-4 w-4 md:h-5 md:w-5 text-blue-600" />
+                        <span className="text-xl md:text-2xl font-bold">{stats.submittedApps}</span>
                       </div>
-                      <p className="text-sm text-muted-foreground mt-1">已投递</p>
+                      <p className="text-xs md:text-sm text-muted-foreground mt-1">已投递</p>
                     </CardContent>
                   </Card>
-                  <Card>
-                    <CardContent className="pt-6">
-                      <div className="flex items-center gap-2">
-                        <Calendar className="h-5 w-5 text-purple-600" />
-                        <span className="text-2xl font-bold">{stats.interviewApps}</span>
+                  <Card className="flex-shrink-0 w-28 md:w-auto">
+                    <CardContent className="pt-4 md:pt-6 pb-3 md:pb-6 text-center">
+                      <div className="flex items-center justify-center gap-1 md:gap-2">
+                        <Calendar className="h-4 w-4 md:h-5 md:w-5 text-purple-600" />
+                        <span className="text-xl md:text-2xl font-bold">{stats.interviewApps}</span>
                       </div>
-                      <p className="text-sm text-muted-foreground mt-1">面试中</p>
+                      <p className="text-xs md:text-sm text-muted-foreground mt-1">面试中</p>
                     </CardContent>
                   </Card>
-                  <Card>
-                    <CardContent className="pt-6">
-                      <div className="flex items-center gap-2">
-                        <CheckCircle className="h-5 w-5 text-green-600" />
-                        <span className="text-2xl font-bold">{stats.offerApps}</span>
+                  <Card className="flex-shrink-0 w-28 md:w-auto">
+                    <CardContent className="pt-4 md:pt-6 pb-3 md:pb-6 text-center">
+                      <div className="flex items-center justify-center gap-1 md:gap-2">
+                        <CheckCircle className="h-4 w-4 md:h-5 md:w-5 text-green-600" />
+                        <span className="text-xl md:text-2xl font-bold">{stats.offerApps}</span>
                       </div>
-                      <p className="text-sm text-muted-foreground mt-1">已录用</p>
+                      <p className="text-xs md:text-sm text-muted-foreground mt-1">已录用</p>
                     </CardContent>
                   </Card>
                 </div>
 
                 {/* Quick Actions */}
-                <div className="grid md:grid-cols-3 gap-6">
+                <div className="grid grid-cols-1 md:grid-cols-3 gap-4 md:gap-6">
                   <Card>
                     <CardHeader>
                       <CardTitle className="text-lg">岗位分布</CardTitle>
@@ -1051,14 +1055,15 @@ export default function AdminPage() {
             <TabsContent value="analytics">
               <div className="space-y-6">
                 {/* Time Range Selector */}
-                <div className="flex items-center gap-2">
-                  <span className="text-sm text-muted-foreground">时间范围：</span>
+                <div className="flex items-center gap-2 overflow-x-auto pb-1">
+                  <span className="text-sm text-muted-foreground flex-shrink-0">时间范围：</span>
                   <div className="flex gap-1">
                     {(['7d', '30d', '90d', 'all'] as const).map((range) => (
                       <Button
                         key={range}
                         variant={analyticsRange === range ? 'default' : 'outline'}
                         size="sm"
+                        className="h-8 px-2 md:px-3 text-xs"
                         onClick={() => setAnalyticsRange(range)}
                       >
                         {range === '7d' ? '近7天' : range === '30d' ? '近30天' : range === '90d' ? '近90天' : '全部'}
@@ -1075,81 +1080,81 @@ export default function AdminPage() {
                 ) : analytics ? (
                   <>
                     {/* Overview Stats */}
-                    <div className="grid grid-cols-2 md:grid-cols-4 lg:grid-cols-6 gap-4">
-                      <Card>
-                        <CardContent className="pt-6">
-                          <div className="flex items-center gap-2">
-                            <Users className="h-5 w-5 text-blue-600" />
+                    <div className="flex gap-3 overflow-x-auto pb-2 -mx-4 px-4 md:mx-0 md:px-0 md:grid md:grid-cols-4 lg:grid-cols-6 md:gap-4 md:overflow-visible">
+                      <Card className="flex-shrink-0 w-32 md:w-auto">
+                        <CardContent className="pt-4 md:pt-6 pb-3 md:pb-6">
+                          <div className="flex items-center gap-1 md:gap-2">
+                            <Users className="h-4 w-4 md:h-5 md:w-5 text-blue-600" />
                             <div>
-                              <span className="text-2xl font-bold">{analytics.overview.activeAccessCodes}</span>
-                              <span className="text-sm text-muted-foreground">/{analytics.overview.totalAccessCodes}</span>
+                              <span className="text-lg md:text-2xl font-bold">{analytics.overview.activeAccessCodes}</span>
+                              <span className="text-xs md:text-sm text-muted-foreground">/{analytics.overview.totalAccessCodes}</span>
                             </div>
                           </div>
-                          <p className="text-sm text-muted-foreground mt-1">活跃/总访问码</p>
+                          <p className="text-xs md:text-sm text-muted-foreground mt-1">活跃/总访问码</p>
                         </CardContent>
                       </Card>
-                      <Card>
-                        <CardContent className="pt-6">
-                          <div className="flex items-center gap-2">
-                            <Briefcase className="h-5 w-5 text-green-600" />
+                      <Card className="flex-shrink-0 w-32 md:w-auto">
+                        <CardContent className="pt-4 md:pt-6 pb-3 md:pb-6">
+                          <div className="flex items-center gap-1 md:gap-2">
+                            <Briefcase className="h-4 w-4 md:h-5 md:w-5 text-green-600" />
                             <div>
-                              <span className="text-2xl font-bold">{analytics.overview.recentJobs}</span>
-                              <span className="text-sm text-muted-foreground">/{analytics.overview.totalJobs}</span>
+                              <span className="text-lg md:text-2xl font-bold">{analytics.overview.recentJobs}</span>
+                              <span className="text-xs md:text-sm text-muted-foreground">/{analytics.overview.totalJobs}</span>
                             </div>
                           </div>
-                          <p className="text-sm text-muted-foreground mt-1">新增/总岗位</p>
+                          <p className="text-xs md:text-sm text-muted-foreground mt-1">新增/总岗位</p>
                         </CardContent>
                       </Card>
-                      <Card>
-                        <CardContent className="pt-6">
-                          <div className="flex items-center gap-2">
-                            <FileText className="h-5 w-5 text-purple-600" />
+                      <Card className="flex-shrink-0 w-32 md:w-auto">
+                        <CardContent className="pt-4 md:pt-6 pb-3 md:pb-6">
+                          <div className="flex items-center gap-1 md:gap-2">
+                            <FileText className="h-4 w-4 md:h-5 md:w-5 text-purple-600" />
                             <div>
-                              <span className="text-2xl font-bold">{analytics.overview.recentResumes}</span>
-                              <span className="text-sm text-muted-foreground">/{analytics.overview.totalResumes}</span>
+                              <span className="text-lg md:text-2xl font-bold">{analytics.overview.recentResumes}</span>
+                              <span className="text-xs md:text-sm text-muted-foreground">/{analytics.overview.totalResumes}</span>
                             </div>
                           </div>
-                          <p className="text-sm text-muted-foreground mt-1">新增/总简历</p>
+                          <p className="text-xs md:text-sm text-muted-foreground mt-1">新增/总简历</p>
                         </CardContent>
                       </Card>
-                      <Card>
-                        <CardContent className="pt-6">
-                          <div className="flex items-center gap-2">
-                            <Send className="h-5 w-5 text-orange-600" />
+                      <Card className="flex-shrink-0 w-32 md:w-auto">
+                        <CardContent className="pt-4 md:pt-6 pb-3 md:pb-6">
+                          <div className="flex items-center gap-1 md:gap-2">
+                            <Send className="h-4 w-4 md:h-5 md:w-5 text-orange-600" />
                             <div>
-                              <span className="text-2xl font-bold">{analytics.overview.recentApplications}</span>
-                              <span className="text-sm text-muted-foreground">/{analytics.overview.totalApplications}</span>
+                              <span className="text-lg md:text-2xl font-bold">{analytics.overview.recentApplications}</span>
+                              <span className="text-xs md:text-sm text-muted-foreground">/{analytics.overview.totalApplications}</span>
                             </div>
                           </div>
-                          <p className="text-sm text-muted-foreground mt-1">新增/总网申</p>
+                          <p className="text-xs md:text-sm text-muted-foreground mt-1">新增/总网申</p>
                         </CardContent>
                       </Card>
-                      <Card>
-                        <CardContent className="pt-6">
-                          <div className="flex items-center gap-2">
-                            <Activity className="h-5 w-5 text-cyan-600" />
-                            <span className="text-2xl font-bold">{analytics.overview.recentAiMatches}</span>
+                      <Card className="flex-shrink-0 w-32 md:w-auto">
+                        <CardContent className="pt-4 md:pt-6 pb-3 md:pb-6">
+                          <div className="flex items-center gap-1 md:gap-2">
+                            <Activity className="h-4 w-4 md:h-5 md:w-5 text-cyan-600" />
+                            <span className="text-lg md:text-2xl font-bold">{analytics.overview.recentAiMatches}</span>
                           </div>
-                          <p className="text-sm text-muted-foreground mt-1">AI选岗次数</p>
+                          <p className="text-xs md:text-sm text-muted-foreground mt-1">AI选岗次数</p>
                         </CardContent>
                       </Card>
-                      <Card>
-                        <CardContent className="pt-6">
-                          <div className="flex items-center gap-2">
-                            <TrendingUp className="h-5 w-5 text-emerald-600" />
-                            <span className="text-2xl font-bold">
+                      <Card className="flex-shrink-0 w-32 md:w-auto">
+                        <CardContent className="pt-4 md:pt-6 pb-3 md:pb-6">
+                          <div className="flex items-center gap-1 md:gap-2">
+                            <TrendingUp className="h-4 w-4 md:h-5 md:w-5 text-emerald-600" />
+                            <span className="text-lg md:text-2xl font-bold">
                               {analytics.userActivity.length > 0 
                                 ? Math.round(analytics.userActivity.reduce((sum, u) => sum + u.resumes + u.applications + u.aiMatches, 0) / analytics.userActivity.length)
                                 : 0}
                             </span>
                           </div>
-                          <p className="text-sm text-muted-foreground mt-1">平均活跃度</p>
+                          <p className="text-xs md:text-sm text-muted-foreground mt-1">平均活跃度</p>
                         </CardContent>
                       </Card>
                     </div>
 
                     {/* Charts Row */}
-                    <div className="grid md:grid-cols-2 lg:grid-cols-3 gap-6">
+                    <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4 md:gap-6">
                       {/* Jobs by Region */}
                       <Card>
                         <CardHeader>
@@ -1387,23 +1392,26 @@ export default function AdminPage() {
             {/* Jobs Tab */}
             <TabsContent value="jobs">
               <Card>
-                <CardHeader>
-                  <div className="flex items-center justify-between">
+                <CardHeader className="pb-3 md:pb-6">
+                  <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
                     <div>
-                      <CardTitle>岗位管理</CardTitle>
-                      <CardDescription>添加、编辑和删除岗位信息</CardDescription>
+                      <CardTitle className="text-base md:text-lg">岗位管理</CardTitle>
+                      <CardDescription className="text-xs md:text-sm">添加、编辑和删除岗位信息</CardDescription>
                     </div>
                     <div className="flex gap-2">
                       <Button 
                         variant="outline"
+                        size="sm"
+                        className="h-8 text-xs md:text-sm"
                         onClick={() => {
                           setBatchResult(null);
                           setBatchText('');
                           setBatchImportOpen(true);
                         }}
                       >
-                        <Upload className="h-4 w-4 mr-2" />
-                        批量导入
+                        <Upload className="h-4 w-4 md:mr-2" />
+                        <span className="hidden md:inline">批量导入</span>
+                        <span className="md:hidden">导入</span>
                       </Button>
                       <Dialog open={jobDialogOpen} onOpenChange={(open) => {
                         setJobDialogOpen(open);
@@ -1413,44 +1421,47 @@ export default function AdminPage() {
                         }
                       }}>
                         <DialogTrigger asChild>
-                          <Button>
-                            <Plus className="h-4 w-4 mr-2" />
-                            添加岗位
+                          <Button size="sm" className="h-8 text-xs md:text-sm">
+                            <Plus className="h-4 w-4 md:mr-2" />
+                            <span className="hidden md:inline">添加岗位</span>
+                            <span className="md:hidden">添加</span>
                           </Button>
                         </DialogTrigger>
-                      <DialogContent className="max-w-2xl">
+                      <DialogContent className="max-w-2xl max-h-[90vh] overflow-y-auto">
                         <DialogHeader>
-                          <DialogTitle>{editingJob ? '编辑岗位' : '添加新岗位'}</DialogTitle>
-                          <DialogDescription>
+                          <DialogTitle className="text-base md:text-lg">{editingJob ? '编辑岗位' : '添加新岗位'}</DialogTitle>
+                          <DialogDescription className="text-xs md:text-sm">
                             填写岗位信息，带 * 的为必填项
                           </DialogDescription>
                         </DialogHeader>
-                        <div className="grid gap-4 py-4">
-                          <div className="grid grid-cols-2 gap-4">
+                        <div className="grid gap-3 md:gap-4 py-4">
+                          <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 md:gap-4">
                             <div>
-                              <Label htmlFor="title">岗位名称 *</Label>
+                              <Label htmlFor="title" className="text-xs md:text-sm">岗位名称 *</Label>
                               <Input
                                 id="title"
                                 value={jobForm.title}
                                 onChange={(e) => setJobForm({ ...jobForm, title: e.target.value })}
                                 placeholder="如：Software Engineer"
+                                className="h-9 md:h-10"
                               />
                             </div>
                             <div>
-                              <Label htmlFor="company">公司名称 *</Label>
+                              <Label htmlFor="company" className="text-xs md:text-sm">公司名称 *</Label>
                               <Input
                                 id="company"
                                 value={jobForm.company}
                                 onChange={(e) => setJobForm({ ...jobForm, company: e.target.value })}
                                 placeholder="如：Google"
+                                className="h-9 md:h-10"
                               />
                             </div>
                           </div>
-                          <div className="grid grid-cols-3 gap-4">
+                          <div className="grid grid-cols-1 sm:grid-cols-3 gap-3 md:gap-4">
                             <div>
-                              <Label>地区 *</Label>
+                              <Label className="text-xs md:text-sm">地区 *</Label>
                               <Select value={jobForm.region} onValueChange={(v) => setJobForm({ ...jobForm, region: v })}>
-                                <SelectTrigger>
+                                <SelectTrigger className="h-9 md:h-10">
                                   <SelectValue placeholder="选择地区" />
                                 </SelectTrigger>
                                 <SelectContent>
@@ -1461,9 +1472,9 @@ export default function AdminPage() {
                               </Select>
                             </div>
                             <div>
-                              <Label>方向 *</Label>
+                              <Label className="text-xs md:text-sm">方向 *</Label>
                               <Select value={jobForm.direction} onValueChange={(v) => setJobForm({ ...jobForm, direction: v })}>
-                                <SelectTrigger>
+                                <SelectTrigger className="h-9 md:h-10">
                                   <SelectValue placeholder="选择方向" />
                                 </SelectTrigger>
                                 <SelectContent>
@@ -1474,9 +1485,9 @@ export default function AdminPage() {
                               </Select>
                             </div>
                             <div>
-                              <Label>受众 *</Label>
+                              <Label className="text-xs md:text-sm">受众 *</Label>
                               <Select value={jobForm.audience} onValueChange={(v) => setJobForm({ ...jobForm, audience: v })}>
-                                <SelectTrigger>
+                                <SelectTrigger className="h-9 md:h-10">
                                   <SelectValue placeholder="选择受众" />
                                 </SelectTrigger>
                                 <SelectContent>
@@ -1487,35 +1498,38 @@ export default function AdminPage() {
                               </Select>
                             </div>
                           </div>
-                          <div className="grid grid-cols-2 gap-4">
+                          <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 md:gap-4">
                             <div>
-                              <Label htmlFor="salary">薪资范围</Label>
+                              <Label htmlFor="salary" className="text-xs md:text-sm">薪资范围</Label>
                               <Input
                                 id="salary"
                                 value={jobForm.salary_range}
                                 onChange={(e) => setJobForm({ ...jobForm, salary_range: e.target.value })}
                                 placeholder="如：$120K - $180K"
+                                className="h-9 md:h-10"
                               />
                             </div>
                             <div>
-                              <Label htmlFor="url">岗位链接</Label>
+                              <Label htmlFor="url" className="text-xs md:text-sm">岗位链接</Label>
                               <Input
                                 id="url"
                                 value={jobForm.job_url}
                                 onChange={(e) => setJobForm({ ...jobForm, job_url: e.target.value })}
                                 placeholder="https://..."
+                                className="h-9 md:h-10"
                               />
                             </div>
                           </div>
                           <div>
-                            <Label>公司Logo</Label>
-                            <div className="flex gap-4 items-start">
-                              <div className="flex-1">
+                            <Label className="text-xs md:text-sm">公司Logo</Label>
+                            <div className="flex flex-col sm:flex-row gap-3 sm:gap-4 items-start">
+                              <div className="flex-1 w-full">
                                 <Input
                                   id="logo"
                                   value={jobForm.logo_url}
                                   onChange={(e) => setJobForm({ ...jobForm, logo_url: e.target.value })}
                                   placeholder="输入Logo URL或上传图片"
+                                  className="h-9 md:h-10"
                                 />
                                 <p className="text-xs text-muted-foreground mt-1">
                                   支持 PNG、JPG、SVG、WebP 格式，最大 2MB
@@ -1615,24 +1629,25 @@ export default function AdminPage() {
                 </CardHeader>
                 <CardContent>
                   {/* Search and Batch Actions */}
-                  <div className="mb-4 flex items-center gap-4">
+                  <div className="mb-4 flex flex-col sm:flex-row sm:items-center gap-3 sm:gap-4">
                     <div className="relative flex-1">
                       <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
                       <Input
                         placeholder="搜索岗位名称或公司..."
                         value={jobSearch}
                         onChange={(e) => setJobSearch(e.target.value)}
-                        className="pl-10"
+                        className="pl-10 h-9 md:h-10"
                       />
                     </div>
                     {selectedJobIds.size > 0 && (
-                      <div className="flex items-center gap-2">
-                        <Badge variant="secondary" className="px-3 py-1">
+                      <div className="flex items-center gap-2 flex-wrap">
+                        <Badge variant="secondary" className="px-3 py-1 text-xs">
                           已选择 {selectedJobIds.size} 项
                         </Badge>
                         <Button
                           variant="destructive"
                           size="sm"
+                          className="h-8 text-xs"
                           onClick={() => setBatchDeleteConfirmOpen(true)}
                         >
                           <Trash2 className="h-4 w-4 mr-1" />
@@ -1641,21 +1656,22 @@ export default function AdminPage() {
                         <Button
                           variant="outline"
                           size="sm"
+                          className="h-8 text-xs"
                           onClick={() => setSelectedJobIds(new Set())}
                         >
-                          取消选择
+                          取消
                         </Button>
                       </div>
                     )}
                   </div>
 
-                  {/* Jobs Table */}
+                  {/* Jobs Table - 手机端隐藏部分列 */}
                   <div className="border rounded-lg overflow-hidden">
                     <div className="overflow-x-auto">
-                      <table className="w-full">
+                      <table className="w-full min-w-[600px]">
                         <thead className="bg-muted/50">
                           <tr>
-                            <th className="px-4 py-3 w-12">
+                            <th className="px-3 md:px-4 py-2 md:py-3 w-10 md:w-12">
                               <input
                                 type="checkbox"
                                 checked={filteredJobs.length > 0 && selectedJobIds.size === filteredJobs.length}
@@ -1663,20 +1679,20 @@ export default function AdminPage() {
                                 className="h-4 w-4 rounded border-gray-300"
                               />
                             </th>
-                            <th className="px-4 py-3 text-left text-sm font-medium">岗位</th>
-                            <th className="px-4 py-3 text-left text-sm font-medium">公司</th>
-                            <th className="px-4 py-3 text-left text-sm font-medium">地区</th>
-                            <th className="px-4 py-3 text-left text-sm font-medium">方向</th>
-                            <th className="px-4 py-3 text-left text-sm font-medium">受众</th>
-                            <th className="px-4 py-3 text-left text-sm font-medium">薪资</th>
-                            <th className="px-4 py-3 text-left text-sm font-medium">状态</th>
-                            <th className="px-4 py-3 text-right text-sm font-medium">操作</th>
+                            <th className="px-3 md:px-4 py-2 md:py-3 text-left text-xs md:text-sm font-medium">岗位</th>
+                            <th className="px-3 md:px-4 py-2 md:py-3 text-left text-xs md:text-sm font-medium">公司</th>
+                            <th className="px-3 md:px-4 py-2 md:py-3 text-left text-xs md:text-sm font-medium hidden md:table-cell">地区</th>
+                            <th className="px-3 md:px-4 py-2 md:py-3 text-left text-xs md:text-sm font-medium hidden md:table-cell">方向</th>
+                            <th className="px-3 md:px-4 py-2 md:py-3 text-left text-xs md:text-sm font-medium hidden lg:table-cell">受众</th>
+                            <th className="px-3 md:px-4 py-2 md:py-3 text-left text-xs md:text-sm font-medium hidden lg:table-cell">薪资</th>
+                            <th className="px-3 md:px-4 py-2 md:py-3 text-left text-xs md:text-sm font-medium">状态</th>
+                            <th className="px-3 md:px-4 py-2 md:py-3 text-right text-xs md:text-sm font-medium">操作</th>
                           </tr>
                         </thead>
                         <tbody className="divide-y">
                           {filteredJobs.map((job) => (
                             <tr key={job.id} className={`hover:bg-muted/30 ${selectedJobIds.has(job.id) ? 'bg-primary/5' : ''}`}>
-                              <td className="px-4 py-3">
+                              <td className="px-3 md:px-4 py-2 md:py-3">
                                 <input
                                   type="checkbox"
                                   checked={selectedJobIds.has(job.id)}
@@ -1684,23 +1700,23 @@ export default function AdminPage() {
                                   className="h-4 w-4 rounded border-gray-300"
                                 />
                               </td>
-                              <td className="px-4 py-3 text-sm font-medium">{job.title}</td>
-                              <td className="px-4 py-3 text-sm">{job.company}</td>
-                              <td className="px-4 py-3 text-sm">
-                                <Badge variant="outline">{job.region}</Badge>
+                              <td className="px-3 md:px-4 py-2 md:py-3 text-xs md:text-sm font-medium">{job.title}</td>
+                              <td className="px-3 md:px-4 py-2 md:py-3 text-xs md:text-sm">{job.company}</td>
+                              <td className="px-3 md:px-4 py-2 md:py-3 text-xs md:text-sm hidden md:table-cell">
+                                <Badge variant="outline" className="text-xs">{job.region}</Badge>
                               </td>
-                              <td className="px-4 py-3 text-sm">{job.direction}</td>
-                              <td className="px-4 py-3 text-sm">{job.audience}</td>
-                              <td className="px-4 py-3 text-sm text-green-600">{job.salary_range}</td>
-                              <td className="px-4 py-3 text-sm">
+                              <td className="px-3 md:px-4 py-2 md:py-3 text-xs md:text-sm hidden md:table-cell">{job.direction}</td>
+                              <td className="px-3 md:px-4 py-2 md:py-3 text-xs md:text-sm hidden lg:table-cell">{job.audience}</td>
+                              <td className="px-3 md:px-4 py-2 md:py-3 text-xs md:text-sm text-green-600 hidden lg:table-cell">{job.salary_range}</td>
+                              <td className="px-3 md:px-4 py-2 md:py-3 text-xs md:text-sm">
                                 {job.is_active === false ? (
-                                  <Badge variant="secondary" className="bg-gray-100 text-gray-600">不可投递</Badge>
+                                  <Badge variant="secondary" className="bg-gray-100 text-gray-600 text-xs">不可投递</Badge>
                                 ) : (
-                                  <Badge variant="default" className="bg-green-600">可投递</Badge>
+                                  <Badge variant="default" className="bg-green-600 text-xs">可投递</Badge>
                                 )}
                               </td>
-                              <td className="px-4 py-3 text-right">
-                                <div className="flex justify-end gap-2">
+                              <td className="px-3 md:px-4 py-2 md:py-3 text-right">
+                                <div className="flex justify-end gap-1 md:gap-2">
                                   {job.job_url && (
                                     <Button size="sm" variant="ghost" asChild>
                                       <a href={job.job_url} target="_blank" rel="noopener noreferrer">
@@ -1739,44 +1755,44 @@ export default function AdminPage() {
             {/* Resumes Tab */}
             <TabsContent value="resumes">
               <Card>
-                <CardHeader>
-                  <CardTitle>简历管理</CardTitle>
-                  <CardDescription>查看和管理已上传的简历</CardDescription>
+                <CardHeader className="pb-3 md:pb-6">
+                  <CardTitle className="text-base md:text-lg">简历管理</CardTitle>
+                  <CardDescription className="text-xs md:text-sm">查看和管理已上传的简历</CardDescription>
                 </CardHeader>
                 <CardContent>
                   <div className="border rounded-lg overflow-hidden">
                     <div className="overflow-x-auto">
-                      <table className="w-full">
+                      <table className="w-full min-w-[500px]">
                         <thead className="bg-muted/50">
                           <tr>
-                            <th className="px-4 py-3 text-left text-sm font-medium">文件名</th>
-                            <th className="px-4 py-3 text-left text-sm font-medium">上传时间</th>
-                            <th className="px-4 py-3 text-left text-sm font-medium">解析状态</th>
-                            <th className="px-4 py-3 text-right text-sm font-medium">操作</th>
+                            <th className="px-3 md:px-4 py-2 md:py-3 text-left text-xs md:text-sm font-medium">文件名</th>
+                            <th className="px-3 md:px-4 py-2 md:py-3 text-left text-xs md:text-sm font-medium hidden sm:table-cell">上传时间</th>
+                            <th className="px-3 md:px-4 py-2 md:py-3 text-left text-xs md:text-sm font-medium">解析状态</th>
+                            <th className="px-3 md:px-4 py-2 md:py-3 text-right text-xs md:text-sm font-medium">操作</th>
                           </tr>
                         </thead>
                         <tbody className="divide-y">
                           {resumes.map((resume) => (
                             <tr key={resume.id} className="hover:bg-muted/30">
-                              <td className="px-4 py-3">
+                              <td className="px-3 md:px-4 py-2 md:py-3">
                                 <div className="flex items-center gap-2">
-                                  <FileText className="h-4 w-4 text-muted-foreground" />
-                                  <span className="text-sm font-medium">{resume.file_name}</span>
+                                  <FileText className="h-4 w-4 text-muted-foreground flex-shrink-0" />
+                                  <span className="text-xs md:text-sm font-medium truncate max-w-[120px] md:max-w-none">{resume.file_name}</span>
                                 </div>
                               </td>
-                              <td className="px-4 py-3 text-sm text-muted-foreground">
-                                {new Date(resume.created_at).toLocaleString()}
+                              <td className="px-3 md:px-4 py-2 md:py-3 text-xs md:text-sm text-muted-foreground hidden sm:table-cell">
+                                {new Date(resume.created_at).toLocaleDateString()}
                               </td>
-                              <td className="px-4 py-3">
-                                <Badge variant={resume.parsed_content ? 'default' : 'secondary'}>
+                              <td className="px-3 md:px-4 py-2 md:py-3">
+                                <Badge variant={resume.parsed_content ? 'default' : 'secondary'} className="text-xs">
                                   {resume.parsed_content ? '已解析' : '待解析'}
                                 </Badge>
                               </td>
-                              <td className="px-4 py-3 text-right">
+                              <td className="px-3 md:px-4 py-2 md:py-3 text-right">
                                 <Button 
                                   size="sm" 
                                   variant="ghost" 
-                                  className="text-destructive"
+                                  className="h-8 w-8 md:w-auto text-destructive"
                                   onClick={() => handleDeleteResume(resume.id)}
                                 >
                                   <Trash2 className="h-4 w-4" />
@@ -1788,7 +1804,7 @@ export default function AdminPage() {
                       </table>
                     </div>
                     {resumes.length === 0 && (
-                      <div className="text-center py-8 text-muted-foreground">
+                      <div className="text-center py-8 text-muted-foreground text-sm">
                         暂无简历数据
                       </div>
                     )}
@@ -1800,48 +1816,49 @@ export default function AdminPage() {
             {/* Applications Tab */}
             <TabsContent value="applications">
               <Card>
-                <CardHeader>
-                  <CardTitle>网申管理</CardTitle>
-                  <CardDescription>查看和管理网申记录</CardDescription>
+                <CardHeader className="pb-3 md:pb-6">
+                  <CardTitle className="text-base md:text-lg">网申管理</CardTitle>
+                  <CardDescription className="text-xs md:text-sm">查看和管理网申记录</CardDescription>
                 </CardHeader>
                 <CardContent>
                   <div className="border rounded-lg overflow-hidden">
                     <div className="overflow-x-auto">
-                      <table className="w-full">
+                      <table className="w-full min-w-[500px]">
                         <thead className="bg-muted/50">
                           <tr>
-                            <th className="px-4 py-3 text-left text-sm font-medium">岗位</th>
-                            <th className="px-4 py-3 text-left text-sm font-medium">公司</th>
-                            <th className="px-4 py-3 text-left text-sm font-medium">状态</th>
-                            <th className="px-4 py-3 text-left text-sm font-medium">创建时间</th>
-                            <th className="px-4 py-3 text-left text-sm font-medium">备注</th>
-                            <th className="px-4 py-3 text-right text-sm font-medium">操作</th>
+                            <th className="px-3 md:px-4 py-2 md:py-3 text-left text-xs md:text-sm font-medium">岗位</th>
+                            <th className="px-3 md:px-4 py-2 md:py-3 text-left text-xs md:text-sm font-medium hidden sm:table-cell">公司</th>
+                            <th className="px-3 md:px-4 py-2 md:py-3 text-left text-xs md:text-sm font-medium">状态</th>
+                            <th className="px-3 md:px-4 py-2 md:py-3 text-left text-xs md:text-sm font-medium hidden md:table-cell">创建时间</th>
+                            <th className="px-3 md:px-4 py-2 md:py-3 text-left text-xs md:text-sm font-medium hidden lg:table-cell">备注</th>
+                            <th className="px-3 md:px-4 py-2 md:py-3 text-right text-xs md:text-sm font-medium">操作</th>
                           </tr>
                         </thead>
                         <tbody className="divide-y">
                           {applications.map((app) => (
                             <tr key={app.id} className="hover:bg-muted/30">
-                              <td className="px-4 py-3 text-sm font-medium">
+                              <td className="px-3 md:px-4 py-2 md:py-3 text-xs md:text-sm font-medium truncate max-w-[100px] md:max-w-none">
                                 {app.jobs?.title || '未知岗位'}
                               </td>
-                              <td className="px-4 py-3 text-sm">
+                              <td className="px-3 md:px-4 py-2 md:py-3 text-xs md:text-sm hidden sm:table-cell">
                                 {app.jobs?.company || '未知公司'}
                               </td>
-                              <td className="px-4 py-3">
-                                <Badge variant={app.status === 'offer' ? 'default' : app.status === 'rejected' ? 'destructive' : 'secondary'}>
+                              <td className="px-3 md:px-4 py-2 md:py-3">
+                                <Badge variant={app.status === 'offer' ? 'default' : app.status === 'rejected' ? 'destructive' : 'secondary'} className="text-xs">
                                   {statusLabels[app.status] || app.status}
                                 </Badge>
                               </td>
-                              <td className="px-4 py-3 text-sm text-muted-foreground">
+                              <td className="px-3 md:px-4 py-2 md:py-3 text-xs md:text-sm text-muted-foreground hidden md:table-cell">
                                 {new Date(app.created_at).toLocaleDateString()}
                               </td>
-                              <td className="px-4 py-3 text-sm text-muted-foreground max-w-48 truncate">
+                              <td className="px-3 md:px-4 py-2 md:py-3 text-xs md:text-sm text-muted-foreground max-w-48 truncate hidden lg:table-cell">
                                 {app.notes || '-'}
                               </td>
-                              <td className="px-4 py-3 text-right">
+                              <td className="px-3 md:px-4 py-2 md:py-3 text-right">
                                 <Button 
                                   size="sm" 
                                   variant="ghost"
+                                  className="h-8 w-8 md:w-auto"
                                   onClick={() => {
                                     setEditingApp(app);
                                     setAppDialogOpen(true);
@@ -1867,17 +1884,18 @@ export default function AdminPage() {
 
             {/* Configs Tab */}
             <TabsContent value="configs">
-              <div className="grid md:grid-cols-3 gap-6">
+              <div className="grid grid-cols-1 md:grid-cols-3 gap-4 md:gap-6">
                 {/* Region Config */}
                 <Card>
-                  <CardHeader>
+                  <CardHeader className="pb-3 md:pb-4">
                     <div className="flex items-center justify-between">
                       <div>
-                        <CardTitle className="text-lg">地区配置</CardTitle>
-                        <CardDescription>管理岗位地区选项</CardDescription>
+                        <CardTitle className="text-base md:text-lg">地区配置</CardTitle>
+                        <CardDescription className="text-xs md:text-sm">管理岗位地区选项</CardDescription>
                       </div>
                       <Button
                         size="sm"
+                        className="h-8 w-8 md:w-auto"
                         onClick={() => {
                           setConfigForm({ type: 'region', value: '' });
                           setConfigDialogOpen(true);
@@ -1891,11 +1909,11 @@ export default function AdminPage() {
                     <div className="space-y-2">
                       {configs.region?.map((config) => (
                         <div key={config.id} className="flex items-center justify-between p-2 rounded-lg bg-muted/50">
-                          <span className="text-sm" translate="no">{config.config_value}</span>
+                          <span className="text-xs md:text-sm" translate="no">{config.config_value}</span>
                           <Button
                             size="sm"
                             variant="ghost"
-                            className="text-destructive h-8 w-8 p-0"
+                            className="text-destructive h-7 w-7 p-0"
                             onClick={() => handleDeleteConfig(config.id, 'region')}
                           >
                             <Trash2 className="h-4 w-4" />
@@ -1903,7 +1921,7 @@ export default function AdminPage() {
                         </div>
                       ))}
                       {configs.region?.length === 0 && (
-                        <p className="text-sm text-muted-foreground text-center py-4">暂无配置</p>
+                        <p className="text-xs md:text-sm text-muted-foreground text-center py-4">暂无配置</p>
                       )}
                     </div>
                   </CardContent>
@@ -1911,14 +1929,15 @@ export default function AdminPage() {
 
                 {/* Direction Config */}
                 <Card>
-                  <CardHeader>
+                  <CardHeader className="pb-3 md:pb-4">
                     <div className="flex items-center justify-between">
                       <div>
-                        <CardTitle className="text-lg">方向配置</CardTitle>
-                        <CardDescription>管理岗位方向选项</CardDescription>
+                        <CardTitle className="text-base md:text-lg">方向配置</CardTitle>
+                        <CardDescription className="text-xs md:text-sm">管理岗位方向选项</CardDescription>
                       </div>
                       <Button
                         size="sm"
+                        className="h-8 w-8 md:w-auto"
                         onClick={() => {
                           setConfigForm({ type: 'direction', value: '' });
                           setConfigDialogOpen(true);
@@ -1932,11 +1951,11 @@ export default function AdminPage() {
                     <div className="space-y-2">
                       {configs.direction?.map((config) => (
                         <div key={config.id} className="flex items-center justify-between p-2 rounded-lg bg-muted/50">
-                          <span className="text-sm" translate="no">{config.config_value}</span>
+                          <span className="text-xs md:text-sm" translate="no">{config.config_value}</span>
                           <Button
                             size="sm"
                             variant="ghost"
-                            className="text-destructive h-8 w-8 p-0"
+                            className="text-destructive h-7 w-7 p-0"
                             onClick={() => handleDeleteConfig(config.id, 'direction')}
                           >
                             <Trash2 className="h-4 w-4" />
@@ -1944,7 +1963,7 @@ export default function AdminPage() {
                         </div>
                       ))}
                       {configs.direction?.length === 0 && (
-                        <p className="text-sm text-muted-foreground text-center py-4">暂无配置</p>
+                        <p className="text-xs md:text-sm text-muted-foreground text-center py-4">暂无配置</p>
                       )}
                     </div>
                   </CardContent>
@@ -1952,14 +1971,15 @@ export default function AdminPage() {
 
                 {/* Audience Config */}
                 <Card>
-                  <CardHeader>
+                  <CardHeader className="pb-3 md:pb-4">
                     <div className="flex items-center justify-between">
                       <div>
-                        <CardTitle className="text-lg">受众配置</CardTitle>
-                        <CardDescription>管理岗位受众选项</CardDescription>
+                        <CardTitle className="text-base md:text-lg">受众配置</CardTitle>
+                        <CardDescription className="text-xs md:text-sm">管理岗位受众选项</CardDescription>
                       </div>
                       <Button
                         size="sm"
+                        className="h-8 w-8 md:w-auto"
                         onClick={() => {
                           setConfigForm({ type: 'audience', value: '' });
                           setConfigDialogOpen(true);
@@ -1973,11 +1993,11 @@ export default function AdminPage() {
                     <div className="space-y-2">
                       {configs.audience?.map((config) => (
                         <div key={config.id} className="flex items-center justify-between p-2 rounded-lg bg-muted/50">
-                          <span className="text-sm" translate="no">{config.config_value}</span>
+                          <span className="text-xs md:text-sm" translate="no">{config.config_value}</span>
                           <Button
                             size="sm"
                             variant="ghost"
-                            className="text-destructive h-8 w-8 p-0"
+                            className="text-destructive h-7 w-7 p-0"
                             onClick={() => handleDeleteConfig(config.id, 'audience')}
                           >
                             <Trash2 className="h-4 w-4" />
@@ -1985,7 +2005,7 @@ export default function AdminPage() {
                         </div>
                       ))}
                       {configs.audience?.length === 0 && (
-                        <p className="text-sm text-muted-foreground text-center py-4">暂无配置</p>
+                        <p className="text-xs md:text-sm text-muted-foreground text-center py-4">暂无配置</p>
                       )}
                     </div>
                   </CardContent>
@@ -1996,31 +2016,32 @@ export default function AdminPage() {
             {/* Access Codes Tab */}
             <TabsContent value="access-codes">
               <Card>
-                <CardHeader>
-                  <div className="flex items-center justify-between">
+                <CardHeader className="pb-3 md:pb-6">
+                  <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
                     <div>
-                      <CardTitle>访问码管理</CardTitle>
-                      <CardDescription>生成和管理用户访问码，控制平台访问权限</CardDescription>
+                      <CardTitle className="text-base md:text-lg">访问码管理</CardTitle>
+                      <CardDescription className="text-xs md:text-sm">生成和管理用户访问码</CardDescription>
                     </div>
-                    <Button onClick={handleCreateAccessCode}>
-                      <Plus className="h-4 w-4 mr-2" />
-                      生成访问码
+                    <Button size="sm" className="h-8 text-xs md:text-sm" onClick={handleCreateAccessCode}>
+                      <Plus className="h-4 w-4 md:mr-2" />
+                      <span className="hidden md:inline">生成访问码</span>
+                      <span className="md:hidden">生成</span>
                     </Button>
                   </div>
                 </CardHeader>
                 <CardContent>
                   <div className="border rounded-lg overflow-hidden">
                     <div className="overflow-x-auto">
-                      <table className="w-full">
+                      <table className="w-full min-w-[600px]">
                         <thead className="bg-muted/50">
                           <tr>
-                            <th className="px-4 py-3 text-left text-sm font-medium">访问码</th>
-                            <th className="px-4 py-3 text-left text-sm font-medium">名称</th>
-                            <th className="px-4 py-3 text-left text-sm font-medium">有效期</th>
-                            <th className="px-4 py-3 text-left text-sm font-medium">过期时间</th>
-                            <th className="px-4 py-3 text-left text-sm font-medium">状态</th>
-                            <th className="px-4 py-3 text-left text-sm font-medium">最后使用</th>
-                            <th className="px-4 py-3 text-right text-sm font-medium">操作</th>
+                            <th className="px-3 md:px-4 py-2 md:py-3 text-left text-xs md:text-sm font-medium">访问码</th>
+                            <th className="px-3 md:px-4 py-2 md:py-3 text-left text-xs md:text-sm font-medium hidden sm:table-cell">名称</th>
+                            <th className="px-3 md:px-4 py-2 md:py-3 text-left text-xs md:text-sm font-medium hidden md:table-cell">有效期</th>
+                            <th className="px-3 md:px-4 py-2 md:py-3 text-left text-xs md:text-sm font-medium">过期时间</th>
+                            <th className="px-3 md:px-4 py-2 md:py-3 text-left text-xs md:text-sm font-medium">状态</th>
+                            <th className="px-3 md:px-4 py-2 md:py-3 text-left text-xs md:text-sm font-medium hidden lg:table-cell">最后使用</th>
+                            <th className="px-3 md:px-4 py-2 md:py-3 text-right text-xs md:text-sm font-medium">操作</th>
                           </tr>
                         </thead>
                         <tbody className="divide-y">
@@ -2028,35 +2049,36 @@ export default function AdminPage() {
                             const isExpired = new Date(code.expires_at) < new Date();
                             return (
                               <tr key={code.id} className="hover:bg-muted/30">
-                                <td className="px-4 py-3">
-                                  <code className="bg-muted px-2 py-1 rounded text-sm font-mono">
+                                <td className="px-3 md:px-4 py-2 md:py-3">
+                                  <code className="bg-muted px-2 py-1 rounded text-xs md:text-sm font-mono">
                                     {code.code}
                                   </code>
                                 </td>
-                                <td className="px-4 py-3 text-sm">{code.name}</td>
-                                <td className="px-4 py-3 text-sm">{code.duration_days} 天</td>
-                                <td className="px-4 py-3 text-sm">
+                                <td className="px-3 md:px-4 py-2 md:py-3 text-xs md:text-sm hidden sm:table-cell">{code.name}</td>
+                                <td className="px-3 md:px-4 py-2 md:py-3 text-xs md:text-sm hidden md:table-cell">{code.duration_days} 天</td>
+                                <td className="px-3 md:px-4 py-2 md:py-3 text-xs md:text-sm">
                                   {new Date(code.expires_at).toLocaleDateString('zh-CN')}
                                 </td>
-                                <td className="px-4 py-3">
+                                <td className="px-3 md:px-4 py-2 md:py-3">
                                   {isExpired ? (
-                                    <Badge variant="secondary" className="bg-red-100 text-red-700">已过期</Badge>
+                                    <Badge variant="secondary" className="bg-red-100 text-red-700 text-xs">已过期</Badge>
                                   ) : code.is_active ? (
-                                    <Badge variant="default" className="bg-green-600">有效</Badge>
+                                    <Badge variant="default" className="bg-green-600 text-xs">有效</Badge>
                                   ) : (
-                                    <Badge variant="secondary" className="bg-gray-100 text-gray-600">已禁用</Badge>
+                                    <Badge variant="secondary" className="bg-gray-100 text-gray-600 text-xs">已禁用</Badge>
                                   )}
                                 </td>
-                                <td className="px-4 py-3 text-sm text-muted-foreground">
+                                <td className="px-3 md:px-4 py-2 md:py-3 text-xs md:text-sm text-muted-foreground hidden lg:table-cell">
                                   {code.last_used_at 
                                     ? new Date(code.last_used_at).toLocaleDateString('zh-CN')
                                     : '未使用'}
                                 </td>
-                                <td className="px-4 py-3 text-right">
-                                  <div className="flex justify-end gap-2">
+                                <td className="px-3 md:px-4 py-2 md:py-3 text-right">
+                                  <div className="flex justify-end gap-1 md:gap-2">
                                     <Button
                                       size="sm"
                                       variant="ghost"
+                                      className="h-7 text-xs hidden sm:flex"
                                       onClick={() => handleToggleAccessCode(code.id, code.is_active)}
                                     >
                                       {code.is_active ? '禁用' : '启用'}
@@ -2064,7 +2086,7 @@ export default function AdminPage() {
                                     <Button
                                       size="sm"
                                       variant="ghost"
-                                      className="text-destructive"
+                                      className="text-destructive h-7 w-7 p-0"
                                       onClick={() => handleDeleteAccessCode(code.id)}
                                     >
                                       <Trash2 className="h-4 w-4" />
