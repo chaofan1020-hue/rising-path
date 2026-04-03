@@ -297,7 +297,7 @@ export default function Home() {
               准备好开始求职了吗？
             </h2>
             <p className="text-white/80 text-lg max-w-xl mx-auto mb-10">
-              加入 thousands of 海归留学生，让求职之路更加顺畅
+              加入数千名海归留学生，让求职之路更加顺畅
             </p>
             <Link href="/login">
               <Button size="lg" className="h-14 px-12 bg-white text-primary hover:bg-white/90 rounded-2xl shadow-2xl font-semibold">
