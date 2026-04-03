@@ -87,18 +87,18 @@ function MultiSelectFilter({
   return (
     <Popover>
       <PopoverTrigger asChild>
-        <button className="inline-flex items-center gap-2 px-3 py-2 rounded-full border border-input bg-background hover:bg-accent hover:text-accent-foreground transition-colors text-sm">
-          <Icon className="h-4 w-4 text-muted-foreground" />
+        <button className="inline-flex items-center gap-1.5 md:gap-2 px-2.5 py-1.5 md:px-3 md:py-2 rounded-full border border-input bg-background hover:bg-accent hover:text-accent-foreground transition-colors text-xs md:text-sm">
+          <Icon className="h-3.5 w-3.5 md:h-4 md:w-4 text-muted-foreground" />
           <span className="font-medium">{label}</span>
           {selected.length > 0 && (
-            <Badge variant="secondary" className="ml-0.5 h-5 px-1.5 rounded-full">
+            <Badge variant="secondary" className="ml-0.5 h-4 md:h-5 px-1 md:px-1.5 rounded-full text-[10px] md:text-xs">
               {selected.length}
             </Badge>
           )}
-          <ChevronDown className="h-3.5 w-3.5 text-muted-foreground" />
+          <ChevronDown className="h-3 w-3 md:h-3.5 md:w-3.5 text-muted-foreground" />
         </button>
       </PopoverTrigger>
-      <PopoverContent className="w-48 p-2" align="start">
+      <PopoverContent className="w-44 md:w-48 p-2" align="start">
         <div className="max-h-60 overflow-y-auto space-y-1">
           {options.map((option) => (
             <label
@@ -301,7 +301,7 @@ function AIMatchContent() {
               </div>
 
               {/* 筛选条件 + 匹配按钮 */}
-              <div className="flex flex-col sm:flex-row gap-3">
+              <div className="flex flex-col md:flex-row gap-3">
                 <div className="flex flex-wrap gap-2">
                   <MultiSelectFilter
                     label="地区"
@@ -318,10 +318,10 @@ function AIMatchContent() {
                     onChange={setSelectedDirections}
                   />
                 </div>
-                <Button 
-                  onClick={handleMatch} 
+                <Button
+                  onClick={handleMatch}
                   disabled={!selectedResumeId || matching}
-                  className="bg-gradient-to-r from-purple-600 to-blue-600 hover:from-purple-700 hover:to-blue-700 w-full sm:w-auto h-9 md:h-10"
+                  className="bg-gradient-to-r from-purple-600 to-blue-600 hover:from-purple-700 hover:to-blue-700 w-full md:w-auto h-9 md:h-10"
                 >
                   {matching ? (
                     <>
