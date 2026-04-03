@@ -253,13 +253,13 @@ function ApplicationsContent() {
               <div className="text-xs md:text-sm text-muted-foreground">已投递</div>
             </CardContent>
           </Card>
-          <Card className="hidden md:block">
+          <Card>
             <CardContent className="pt-3 pb-3 md:pt-4 md:pb-4">
               <div className="text-lg md:text-2xl font-bold text-purple-600">{stats.interview}</div>
               <div className="text-xs md:text-sm text-muted-foreground">面试中</div>
             </CardContent>
           </Card>
-          <Card className="hidden md:block">
+          <Card>
             <CardContent className="pt-3 pb-3 md:pt-4 md:pb-4">
               <div className="text-lg md:text-2xl font-bold text-green-600">{stats.offer}</div>
               <div className="text-xs md:text-sm text-muted-foreground">已录用</div>
