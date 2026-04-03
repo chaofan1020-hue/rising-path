@@ -127,28 +127,37 @@ document.addEventListener('DOMContentLoaded', async () => {
     syncBtn.textContent = '同步中...';
     
     try {
-      // 获取字段映射
-      const mappingsRes = await fetch(`${platformUrl}/api/field-mappings?access_code_id=1`);
-      const mappingsData = await mappingsRes.json();
+      // 使用简化的同步 API
+      const syncRes = await fetch(`${platformUrl}/api/extension/sync?code=demo`);
       
-      // 获取简历列表
-      const resumesRes = await fetch(`${platformUrl}/api/resume?access_code_id=1`);
-      const resumesData = await resumesRes.json();
+      if (!syncRes.ok) {
+        throw new Error('服务器响应错误');
+      }
       
-      // 查找最新且有 parsed_fields 的简历
+      const syncData = await syncRes.json();
+      
+      if (!syncData.success) {
+        throw new Error(syncData.message || '同步失败');
+      }
+      
+      // 解析简历字段
       let parsedFields = {};
-      if (resumesData.resumes && resumesData.resumes.length > 0) {
-        const latestResume = resumesData.resumes.find(r => r.parsed_fields) || resumesData.resumes[0];
-        if (latestResume.parsed_fields) {
-          parsedFields = latestResume.parsed_fields;
+      if (syncData.resume && syncData.resume.parsed_fields) {
+        try {
+          parsedFields = typeof syncData.resume.parsed_fields === 'string' 
+            ? JSON.parse(syncData.resume.parsed_fields) 
+            : syncData.resume.parsed_fields;
+        } catch (e) {
+          parsedFields = { raw: syncData.resume.parsed_fields };
         }
       }
       
       // 保存到本地存储
       await chrome.storage.local.set({
-        fieldMappings: mappingsData.mappings || [],
+        fieldMappings: syncData.mappings || [],
         parsedFields: parsedFields,
-        lastSync: new Date().toISOString()
+        lastSync: new Date().toISOString(),
+        accessCodeId: syncData.accessCodeId
       });
       
       updateStatus(true);
@@ -160,11 +169,11 @@ document.addEventListener('DOMContentLoaded', async () => {
         chrome.tabs.sendMessage(tab.id, { action: 'refreshConfig' });
       }
       
-      alert('同步成功！');
+      alert('同步成功！简历数据已准备好。');
       
     } catch (error) {
       console.error('Sync error:', error);
-      alert('同步失败: ' + error.message);
+      alert('同步失败: ' + error.message + '\n\n请确保平台地址正确，如：https://xxx.dev.coze.site');
     } finally {
       syncBtn.disabled = false;
       syncBtn.textContent = '同步简历数据';
