@@ -275,37 +275,37 @@ function ResumeContent() {
             </CardDescription>
           </CardHeader>
           <CardContent>
-            <div className="flex flex-col md:flex-row md:items-end gap-3 md:gap-4">
-              <div className="flex-1">
+            <div className="space-y-2">
+              <div className="flex flex-col md:flex-row gap-3">
                 <Input
                   type="file"
                   accept=".pdf,.doc,.docx,.txt"
                   onChange={handleFileSelect}
                   disabled={uploading}
-                  className="text-sm h-10"
+                  className="text-sm h-10 flex-1"
                 />
-                <p className="text-xs text-muted-foreground mt-1 hidden md:block">
-                  支持 PDF、Word (.docx)、TXT 格式，系统将自动提取姓名、联系方式、教育经历、工作经验、技能等信息
-                </p>
-                {selectedFile && (
-                  <p className="text-xs md:text-sm text-muted-foreground mt-2">
-                    已选择: {selectedFile.name}
-                  </p>
-                )}
+                <Button onClick={handleUpload} disabled={!selectedFile || uploading} className="w-full md:w-auto h-10">
+                  {uploading ? (
+                    <>
+                      <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                      上传中...
+                    </>
+                  ) : (
+                    <>
+                      <Upload className="mr-2 h-4 w-4" />
+                      上传简历
+                    </>
+                  )}
+                </Button>
               </div>
-              <Button onClick={handleUpload} disabled={!selectedFile || uploading} className="w-full md:w-auto h-10">
-                {uploading ? (
-                  <>
-                    <Loader2 className="mr-2 h-4 w-4 animate-spin" />
-                    上传中...
-                  </>
-                ) : (
-                  <>
-                    <Upload className="mr-2 h-4 w-4" />
-                    上传简历
-                  </>
-                )}
-              </Button>
+              <p className="text-xs text-muted-foreground hidden md:block">
+                支持 PDF、Word (.docx)、TXT 格式，系统将自动提取姓名、联系方式、教育经历、工作经验、技能等信息
+              </p>
+              {selectedFile && (
+                <p className="text-xs md:text-sm text-muted-foreground">
+                  已选择: {selectedFile.name}
+                </p>
+              )}
             </div>
             {uploading && (
               <div className="mt-4">
