@@ -358,51 +358,51 @@ function OptimizeContent() {
     <div className="min-h-screen bg-background">
       {/* Header */}
       <header className="border-b sticky top-0 bg-background/95 backdrop-blur z-50">
-        <div className="container mx-auto px-4 h-16 flex items-center justify-between">
+        <div className="container mx-auto px-4 h-14 md:h-16 flex items-center justify-between">
           <Link href="/" className="flex items-center gap-2">
-            <Briefcase className="h-6 w-6 text-primary" />
-            <span className="font-bold text-xl">PathUp</span>
+            <Briefcase className="h-5 w-5 md:h-6 md:w-6 text-primary" />
+            <span className="font-bold text-lg md:text-xl">PathUp</span>
           </Link>
-          <nav className="flex items-center gap-4">
+          <nav className="flex items-center gap-2 md:gap-4">
             <Link href="/jobs">
-              <Button variant="ghost" size="sm">岗位查询</Button>
+              <Button variant="ghost" size="sm" className="text-xs md:text-sm">岗位查询</Button>
             </Link>
             <Link href="/ai-match">
-              <Button size="sm">AI选岗</Button>
+              <Button size="sm" className="text-xs md:text-sm">AI选岗</Button>
             </Link>
           </nav>
         </div>
       </header>
 
-      <main className="container mx-auto px-4 py-8">
+      <main className="container mx-auto px-4 py-4 md:py-8">
         {/* Page Title */}
-        <div className="mb-8">
-          <h1 className="text-3xl font-bold mb-2 flex items-center gap-3">
-            <Wand2 className="h-8 w-8 text-orange-600" />
+        <div className="mb-6 md:mb-8">
+          <h1 className="text-2xl md:text-3xl font-bold mb-1 md:mb-2 flex items-center gap-2 md:gap-3">
+            <Wand2 className="h-6 w-6 md:h-8 md:w-8 text-orange-600" />
             ATS简历优化
           </h1>
-          <p className="text-muted-foreground">
+          <p className="text-sm md:text-base text-muted-foreground">
             针对ATS系统优化简历，提高简历通过率和曝光率
           </p>
         </div>
 
         {/* Optimization Form */}
-        <Card className="mb-8">
-          <CardHeader>
-            <CardTitle className="flex items-center gap-2">
-              <Target className="h-5 w-5" />
+        <Card className="mb-6 md:mb-8">
+          <CardHeader className="pb-2 md:pb-4">
+            <CardTitle className="flex items-center gap-2 text-base md:text-lg">
+              <Target className="h-4 w-4 md:h-5 md:w-5" />
               优化设置
             </CardTitle>
-            <CardDescription>
+            <CardDescription className="text-xs md:text-sm">
               选择简历并设置目标岗位，AI将针对性优化简历内容
             </CardDescription>
           </CardHeader>
-          <CardContent className="space-y-4">
-            <div className="grid md:grid-cols-3 gap-4">
+          <CardContent className="space-y-3 md:space-y-4">
+            <div className="grid grid-cols-1 md:grid-cols-3 gap-3 md:gap-4">
               <div>
-                <label className="text-sm font-medium mb-2 block">选择简历</label>
+                <label className="text-xs md:text-sm font-medium mb-1.5 md:mb-2 block">选择简历</label>
                 <Select value={selectedResumeId} onValueChange={setSelectedResumeId}>
-                  <SelectTrigger>
+                  <SelectTrigger className="h-9 md:h-10">
                     <SelectValue placeholder="选择要优化的简历" />
                   </SelectTrigger>
                   <SelectContent>
@@ -415,28 +415,30 @@ function OptimizeContent() {
                 </Select>
               </div>
               <div>
-                <label className="text-sm font-medium mb-2 block">目标公司（可选）</label>
+                <label className="text-xs md:text-sm font-medium mb-1.5 md:mb-2 block">目标公司（可选）</label>
                 <Input
                   placeholder="如：Google, Apple..."
                   value={targetCompany}
                   onChange={(e) => setTargetCompany(e.target.value)}
+                  className="h-9 md:h-10"
                 />
               </div>
               <div>
-                <label className="text-sm font-medium mb-2 block">目标岗位</label>
+                <label className="text-xs md:text-sm font-medium mb-1.5 md:mb-2 block">目标岗位</label>
                 <Input
                   placeholder="如：软件工程师..."
                   value={targetPosition}
                   onChange={(e) => setTargetPosition(e.target.value)}
+                  className="h-9 md:h-10"
                 />
               </div>
             </div>
 
-            <div className="flex gap-4">
+            <div className="flex gap-3 md:gap-4">
               <Button 
                 onClick={handleOptimize}
                 disabled={!selectedResumeId || !targetPosition || optimizing}
-                className="bg-gradient-to-r from-orange-600 to-red-600 hover:from-orange-700 hover:to-red-700"
+                className="bg-gradient-to-r from-orange-600 to-red-600 hover:from-orange-700 hover:to-red-700 h-9 md:h-10"
               >
                 {optimizing ? (
                   <>
@@ -454,14 +456,14 @@ function OptimizeContent() {
 
             {/* AI匹配优化建议 */}
             {suggestions && (
-              <div className="mt-4 p-4 rounded-lg bg-purple-50 dark:bg-purple-950/30 border border-purple-200 dark:border-purple-800">
-                <div className="flex items-start gap-3">
-                  <Sparkles className="h-5 w-5 text-purple-600 mt-0.5 flex-shrink-0" />
+              <div className="mt-3 md:mt-4 p-3 md:p-4 rounded-lg bg-purple-50 dark:bg-purple-950/30 border border-purple-200 dark:border-purple-800">
+                <div className="flex items-start gap-2 md:gap-3">
+                  <Sparkles className="h-4 w-4 md:h-5 md:w-5 text-purple-600 mt-0.5 flex-shrink-0" />
                   <div className="flex-1">
-                    <h4 className="font-medium text-purple-700 dark:text-purple-300 mb-2">
+                    <h4 className="font-medium text-purple-700 dark:text-purple-300 mb-1.5 md:mb-2 text-sm md:text-base">
                       来自AI智能选岗的优化建议
                     </h4>
-                    <p className="text-sm text-purple-600 dark:text-purple-400 whitespace-pre-wrap">
+                    <p className="text-xs md:text-sm text-purple-600 dark:text-purple-400 whitespace-pre-wrap">
                       {suggestions}
                     </p>
                   </div>
@@ -470,42 +472,42 @@ function OptimizeContent() {
             )}
 
             {optimizing && (
-              <div className="mt-4">
+              <div className="mt-3 md:mt-4">
                 <div className="flex items-center justify-between mb-2">
-                  <span className="text-sm text-muted-foreground">AI正在优化简历...</span>
-                  <span className="text-sm font-medium">{optimizeProgress}%</span>
+                  <span className="text-xs md:text-sm text-muted-foreground">AI正在优化简历...</span>
+                  <span className="text-xs md:text-sm font-medium">{optimizeProgress}%</span>
                 </div>
-                <Progress value={optimizeProgress} className="h-2" />
+                <Progress value={optimizeProgress} className="h-1.5 md:h-2" />
               </div>
             )}
           </CardContent>
         </Card>
 
         {/* Features */}
-        <div className="grid md:grid-cols-3 gap-6 mb-8">
+        <div className="grid grid-cols-1 md:grid-cols-3 gap-4 md:gap-6 mb-6 md:mb-8">
           <Card>
-            <CardContent className="pt-6">
-              <CheckCircle className="h-10 w-10 text-green-600 mb-4" />
-              <h3 className="font-semibold mb-2">关键词优化</h3>
-              <p className="text-sm text-muted-foreground">
+            <CardContent className="pt-4 md:pt-6">
+              <CheckCircle className="h-8 w-8 md:h-10 md:w-10 text-green-600 mb-3 md:mb-4" />
+              <h3 className="font-semibold mb-1.5 md:mb-2 text-sm md:text-base">关键词优化</h3>
+              <p className="text-xs md:text-sm text-muted-foreground">
                 自动分析岗位要求，添加关键技能词汇
               </p>
             </CardContent>
           </Card>
           <Card>
-            <CardContent className="pt-6">
-              <Target className="h-10 w-10 text-blue-600 mb-4" />
-              <h3 className="font-semibold mb-2">ATS友好格式</h3>
-              <p className="text-sm text-muted-foreground">
+            <CardContent className="pt-4 md:pt-6">
+              <Target className="h-8 w-8 md:h-10 md:w-10 text-blue-600 mb-3 md:mb-4" />
+              <h3 className="font-semibold mb-1.5 md:mb-2 text-sm md:text-base">ATS友好格式</h3>
+              <p className="text-xs md:text-sm text-muted-foreground">
                 优化简历格式，确保ATS系统正确解析
               </p>
             </CardContent>
           </Card>
           <Card>
-            <CardContent className="pt-6">
-              <Sparkles className="h-10 w-10 text-purple-600 mb-4" />
-              <h3 className="font-semibold mb-2">内容增强</h3>
-              <p className="text-sm text-muted-foreground">
+            <CardContent className="pt-4 md:pt-6">
+              <Sparkles className="h-8 w-8 md:h-10 md:w-10 text-purple-600 mb-3 md:mb-4" />
+              <h3 className="font-semibold mb-1.5 md:mb-2 text-sm md:text-base">内容增强</h3>
+              <p className="text-xs md:text-sm text-muted-foreground">
                 使用专业术语增强简历描述
               </p>
             </CardContent>
@@ -514,12 +516,12 @@ function OptimizeContent() {
 
         {/* Tips */}
         <Card className="border-amber-200 bg-amber-50 dark:bg-amber-950/20">
-          <CardContent className="pt-6">
-            <div className="flex items-start gap-3">
-              <AlertCircle className="h-5 w-5 text-amber-600 mt-0.5" />
+          <CardContent className="pt-4 md:pt-6">
+            <div className="flex items-start gap-2 md:gap-3">
+              <AlertCircle className="h-4 w-4 md:h-5 md:w-5 text-amber-600 mt-0.5" />
               <div>
-                <h4 className="font-medium mb-2">ATS优化建议</h4>
-                <ul className="text-sm text-muted-foreground space-y-1">
+                <h4 className="font-medium mb-1.5 md:mb-2 text-sm md:text-base">ATS优化建议</h4>
+                <ul className="text-xs md:text-sm text-muted-foreground space-y-0.5 md:space-y-1">
                   <li>• 使用标准格式：避免复杂的表格和图片</li>
                   <li>• 关键词匹配：研究目标岗位的JD，使用相同术语</li>
                   <li>• 量化成果：用具体数字展示成就</li>

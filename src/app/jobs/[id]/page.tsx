@@ -201,47 +201,53 @@ function JobDetailContent() {
 
   return (
     <div className="min-h-screen bg-muted/30">
-      <div className="container mx-auto px-4 py-8 max-w-4xl">
+      <div className="container mx-auto px-4 py-4 md:py-8 max-w-4xl">
         {/* Back Button */}
-        <Button variant="ghost" className="mb-6" onClick={() => router.back()}>
-          <ArrowLeft className="h-4 w-4 mr-2" />
+        <Button variant="ghost" className="mb-4 md:mb-6 h-9 text-sm md:text-base" onClick={() => router.back()}>
+          <ArrowLeft className="h-4 w-4 mr-1 md:mr-2" />
           返回岗位列表
         </Button>
 
         {/* Job Header */}
-        <Card className="mb-6">
-          <CardContent className="pt-6">
-            <div className="flex items-start gap-4">
-              <CompanyLogo company={job.company} logoUrl={job.logo_url} />
-              <div className="flex-1 min-w-0">
-                <h1 className="text-2xl font-bold mb-2">{job.title}</h1>
-                <p className="text-lg text-muted-foreground mb-4">{job.company}</p>
-                
-                <div className="flex flex-wrap gap-3">
-                  <Badge variant="secondary" className="rounded-md" translate="no">
-                    <MapPin className="h-3 w-3 mr-1" />
-                    {job.region}
-                  </Badge>
-                  <Badge variant="secondary" className="rounded-md" translate="no">
-                    <Briefcase className="h-3 w-3 mr-1" />
-                    {job.direction}
-                  </Badge>
-                  <Badge variant="secondary" className="rounded-md" translate="no">
-                    <Users className="h-3 w-3 mr-1" />
-                    {job.audience}
-                  </Badge>
-                  {job.salary_range && (
-                    <Badge variant="outline" className="text-green-600 border-green-600 rounded-md">
-                      <DollarSign className="h-3 w-3 mr-1" />
-                      {job.salary_range}
-                    </Badge>
-                  )}
+        <Card className="mb-4 md:mb-6">
+          <CardContent className="pt-4 md:pt-6">
+            {/* 手机端：Logo + 标题区 纵向布局 */}
+            <div className="flex flex-col gap-4">
+              {/* Logo + 基本信息 */}
+              <div className="flex items-start gap-3 md:gap-4">
+                <CompanyLogo company={job.company} logoUrl={job.logo_url} />
+                <div className="flex-1 min-w-0">
+                  <h1 className="text-xl md:text-2xl font-bold mb-1 md:mb-2 line-clamp-2">{job.title}</h1>
+                  <p className="text-base md:text-lg text-muted-foreground">{job.company}</p>
                 </div>
               </div>
               
-              <div className="flex flex-col gap-2">
+              {/* 标签区 */}
+              <div className="flex flex-wrap gap-2 md:gap-3">
+                <Badge variant="secondary" className="rounded-md text-xs md:text-sm" translate="no">
+                  <MapPin className="h-3 w-3 mr-1" />
+                  {job.region}
+                </Badge>
+                <Badge variant="secondary" className="rounded-md text-xs md:text-sm" translate="no">
+                  <Briefcase className="h-3 w-3 mr-1" />
+                  {job.direction}
+                </Badge>
+                <Badge variant="secondary" className="rounded-md text-xs md:text-sm" translate="no">
+                  <Users className="h-3 w-3 mr-1" />
+                  {job.audience}
+                </Badge>
+                {job.salary_range && (
+                  <Badge variant="outline" className="text-green-600 border-green-600 rounded-md text-xs md:text-sm">
+                    <DollarSign className="h-3 w-3 mr-1" />
+                    {job.salary_range}
+                  </Badge>
+                )}
+              </div>
+              
+              {/* 操作按钮区 - 手机端全宽横向，桌面端右对齐 */}
+              <div className="flex flex-col sm:flex-row gap-2 sm:justify-end">
                 <Button 
-                  className="bg-green-600 hover:bg-green-700"
+                  className="bg-green-600 hover:bg-green-700 w-full sm:w-auto"
                   onClick={handleApply}
                   disabled={applying}
                 >
@@ -263,7 +269,7 @@ function JobDetailContent() {
                   )}
                 </Button>
                 {job.job_url && (
-                  <Button variant="outline" asChild>
+                  <Button variant="outline" asChild className="w-full sm:w-auto">
                     <a href={job.job_url} target="_blank" rel="noopener noreferrer">
                       <ExternalLink className="h-4 w-4 mr-2" />
                       原链接
@@ -277,15 +283,15 @@ function JobDetailContent() {
 
         {/* Job Description */}
         {job.description && (
-          <Card className="mb-6">
-            <CardHeader>
-              <CardTitle className="flex items-center gap-2">
-                <FileText className="h-5 w-5" />
+          <Card className="mb-4 md:mb-6">
+            <CardHeader className="pb-2 md:pb-4">
+              <CardTitle className="flex items-center gap-2 text-base md:text-lg">
+                <FileText className="h-4 w-4 md:h-5 md:w-5" />
                 岗位描述
               </CardTitle>
             </CardHeader>
             <CardContent>
-              <div className="whitespace-pre-wrap text-muted-foreground">
+              <div className="whitespace-pre-wrap text-muted-foreground text-sm md:text-base">
                 {job.description}
               </div>
             </CardContent>
@@ -294,15 +300,15 @@ function JobDetailContent() {
 
         {/* Job Requirements */}
         {job.requirements && (
-          <Card className="mb-6">
-            <CardHeader>
-              <CardTitle className="flex items-center gap-2">
-                <Briefcase className="h-5 w-5" />
+          <Card className="mb-4 md:mb-6">
+            <CardHeader className="pb-2 md:pb-4">
+              <CardTitle className="flex items-center gap-2 text-base md:text-lg">
+                <Briefcase className="h-4 w-4 md:h-5 md:w-5" />
                 岗位要求
               </CardTitle>
             </CardHeader>
             <CardContent>
-              <div className="whitespace-pre-wrap text-muted-foreground">
+              <div className="whitespace-pre-wrap text-muted-foreground text-sm md:text-base">
                 {job.requirements}
               </div>
             </CardContent>
@@ -311,10 +317,10 @@ function JobDetailContent() {
 
         {/* Meta Info */}
         <Card>
-          <CardContent className="pt-6">
-            <div className="flex items-center gap-4 text-sm text-muted-foreground">
+          <CardContent className="pt-4 md:pt-6">
+            <div className="flex items-center gap-4 text-xs md:text-sm text-muted-foreground">
               <div className="flex items-center gap-1">
-                <Clock className="h-4 w-4" />
+                <Clock className="h-3 w-3 md:h-4 md:w-4" />
                 发布时间：{new Date(job.created_at).toLocaleDateString('zh-CN')}
               </div>
             </div>
