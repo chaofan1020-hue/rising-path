@@ -180,6 +180,55 @@ export default function AdminPage() {
   }
   const [accessCodes, setAccessCodes] = useState<AccessCode[]>([]);
 
+  // Change password
+  const handleChangePassword = async () => {
+    setPasswordError('');
+    setPasswordSuccess('');
+
+    if (!oldPassword || !newPassword || !confirmPassword) {
+      setPasswordError('请填写所有字段');
+      return;
+    }
+
+    if (newPassword.length < 6) {
+      setPasswordError('新密码至少6位');
+      return;
+    }
+
+    if (newPassword !== confirmPassword) {
+      setPasswordError('两次输入的新密码不一致');
+      return;
+    }
+
+    setPasswordSaving(true);
+    try {
+      const response = await fetch('/api/admin/password', {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ oldPassword, newPassword }),
+      });
+
+      const data = await response.json();
+
+      if (response.ok && data.success) {
+        setPasswordSuccess('密码修改成功！');
+        setOldPassword('');
+        setNewPassword('');
+        setConfirmPassword('');
+        setTimeout(() => {
+          setPasswordDialogOpen(false);
+          setPasswordSuccess('');
+        }, 1500);
+      } else {
+        setPasswordError(data.error || '修改失败');
+      }
+    } catch {
+      setPasswordError('修改失败，请稍后重试');
+    } finally {
+      setPasswordSaving(false);
+    }
+  };
+
   // Logo upload state
   const [logoUploading, setLogoUploading] = useState(false);
   const fileInputRef = useRef<HTMLInputElement>(null);
@@ -225,6 +274,15 @@ export default function AdminPage() {
   const [selectedJobIds, setSelectedJobIds] = useState<Set<number>>(new Set());
   const [batchDeleteConfirmOpen, setBatchDeleteConfirmOpen] = useState(false);
   const [batchDeleting, setBatchDeleting] = useState(false);
+
+  // Password change state
+  const [passwordDialogOpen, setPasswordDialogOpen] = useState(false);
+  const [oldPassword, setOldPassword] = useState('');
+  const [newPassword, setNewPassword] = useState('');
+  const [confirmPassword, setConfirmPassword] = useState('');
+  const [passwordError, setPasswordError] = useState('');
+  const [passwordSuccess, setPasswordSuccess] = useState('');
+  const [passwordSaving, setPasswordSaving] = useState(false);
 
   useEffect(() => {
     fetchData();
@@ -721,6 +779,85 @@ export default function AdminPage() {
               <span className="font-bold text-xl">管理后台</span>
             </div>
             <div className="flex items-center gap-2">
+              <Dialog open={passwordDialogOpen} onOpenChange={setPasswordDialogOpen}>
+                <DialogTrigger asChild>
+                  <Button variant="ghost" size="sm">
+                    <Settings className="h-4 w-4 mr-1" />
+                    修改密码
+                  </Button>
+                </DialogTrigger>
+                <DialogContent>
+                  <DialogHeader>
+                    <DialogTitle>修改管理密码</DialogTitle>
+                    <DialogDescription>
+                      请输入原密码和新密码
+                    </DialogDescription>
+                  </DialogHeader>
+                  <div className="space-y-4 py-4">
+                    <div>
+                      <Label>原密码</Label>
+                      <Input
+                        type="password"
+                        value={oldPassword}
+                        onChange={(e) => setOldPassword(e.target.value)}
+                        placeholder="请输入原密码"
+                      />
+                    </div>
+                    <div>
+                      <Label>新密码</Label>
+                      <Input
+                        type="password"
+                        value={newPassword}
+                        onChange={(e) => setNewPassword(e.target.value)}
+                        placeholder="请输入新密码（至少6位）"
+                      />
+                    </div>
+                    <div>
+                      <Label>确认新密码</Label>
+                      <Input
+                        type="password"
+                        value={confirmPassword}
+                        onChange={(e) => setConfirmPassword(e.target.value)}
+                        placeholder="请再次输入新密码"
+                      />
+                    </div>
+                    {passwordError && (
+                      <p className="text-sm text-red-500">{passwordError}</p>
+                    )}
+                    {passwordSuccess && (
+                      <p className="text-sm text-green-500">{passwordSuccess}</p>
+                    )}
+                  </div>
+                  <DialogFooter>
+                    <Button 
+                      variant="outline" 
+                      onClick={() => {
+                        setPasswordDialogOpen(false);
+                        setOldPassword('');
+                        setNewPassword('');
+                        setConfirmPassword('');
+                        setPasswordError('');
+                        setPasswordSuccess('');
+                      }}
+                    >
+                      取消
+                    </Button>
+                    <Button 
+                      onClick={handleChangePassword}
+                      disabled={passwordSaving}
+                    >
+                      {passwordSaving ? (
+                        <>
+                          <Loader2 className="h-4 w-4 mr-1 animate-spin" />
+                          保存中...
+                        </>
+                      ) : (
+                        '保存'
+                      )}
+                    </Button>
+                  </DialogFooter>
+                </DialogContent>
+              </Dialog>
               <Link href="/">
                 <Button variant="outline" size="sm">
                   返回首页

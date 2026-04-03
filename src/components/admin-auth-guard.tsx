@@ -11,9 +11,6 @@ interface AdminAuthGuardProps {
   children: React.ReactNode;
 }
 
-// 简单的管理密码（生产环境应该使用更安全的方式）
-const ADMIN_PASSWORD = 'pathup2024';
-
 export function AdminAuthGuard({ children }: AdminAuthGuardProps) {
   const [isAuthenticated, setIsAuthenticated] = useState(false);
   const [password, setPassword] = useState('');
@@ -35,15 +32,26 @@ export function AdminAuthGuard({ children }: AdminAuthGuardProps) {
     setLoading(true);
     setError('');
 
-    // 模拟延迟
-    await new Promise(resolve => setTimeout(resolve, 500));
+    try {
+      // 调用API验证密码
+      const response = await fetch('/api/admin/password', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ password }),
+      });
 
-    if (password === ADMIN_PASSWORD) {
-      localStorage.setItem('admin_auth', 'authenticated');
-      setIsAuthenticated(true);
-    } else {
-      setError('密码错误，请重试');
+      const data = await response.json();
+
+      if (data.valid) {
+        localStorage.setItem('admin_auth', 'authenticated');
+        setIsAuthenticated(true);
+      } else {
+        setError('密码错误，请重试');
+      }
+    } catch {
+      setError('验证失败，请稍后重试');
     }
+    
     setLoading(false);
   };
 
