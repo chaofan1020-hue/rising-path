@@ -86,19 +86,22 @@ const advantages = [
     icon: Globe,
     title: '全球岗位覆盖',
     description: '覆盖美国、英国、新加坡、香港等主流留学地区',
-    gradient: 'from-blue-500 to-indigo-600',
+    iconBg: 'bg-blue-50',
+    iconColor: 'text-blue-600',
   },
   {
     icon: Target,
     title: '精准智能匹配',
     description: 'AI深度分析简历与岗位匹配度',
-    gradient: 'from-purple-500 to-pink-600',
+    iconBg: 'bg-purple-50',
+    iconColor: 'text-purple-600',
   },
   {
     icon: Zap,
     title: '高效求职工具',
     description: '一站式完成简历优化、岗位筛选、网申投递',
-    gradient: 'from-amber-500 to-orange-600',
+    iconBg: 'bg-orange-50',
+    iconColor: 'text-orange-600',
   },
 ];
 
@@ -195,8 +198,8 @@ export default function Home() {
             >
               <div className="p-8 rounded-3xl bg-white/80 backdrop-blur-sm border border-gray-200/50 shadow-sm hover:shadow-md hover:-translate-y-1 transition-all duration-300">
                 {/* Icon - Apple Style */}
-                <div className={`w-16 h-16 rounded-2xl bg-gradient-to-br ${item.gradient} flex items-center justify-center mx-auto mb-5 shadow-lg`}>
-                  <item.icon className="h-8 w-8 text-white" />
+                <div className={`w-16 h-16 rounded-2xl ${item.iconBg} flex items-center justify-center mx-auto mb-5`}>
+                  <item.icon className={`h-8 w-8 ${item.iconColor}`} />
                 </div>
                 {/* Text */}
                 <h3 className="font-semibold text-xl mb-3 text-gray-900">{item.title}</h3>
