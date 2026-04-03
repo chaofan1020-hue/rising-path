@@ -487,73 +487,69 @@ function JobsContent() {
             filteredJobs.map((job) => (
               <Card key={job.id} className="hover:shadow-lg transition-all duration-300 active:scale-[0.99] md:active:scale-100 md:hover:-translate-y-0.5">
                 <CardContent className="pt-4 md:pt-6 pb-4">
-                  <div className="flex flex-col gap-4">
-                    {/* 岗位信息 - 横向布局 */}
-                    <div className="flex items-start gap-3 md:gap-4">
-                      <CompanyLogo company={job.company} logoUrl={job.logo_url} />
-                      <div className="flex-1 min-w-0">
-                        <h3 className="font-semibold text-base md:text-lg hover:text-primary cursor-pointer transition-colors line-clamp-1">
-                          {job.title}
-                        </h3>
-                        <p className="text-sm text-muted-foreground truncate">{job.company}</p>
+                  <div className="flex gap-3 md:gap-4">
+                    {/* 左侧内容区 */}
+                    <div className="flex-1 min-w-0 flex flex-col gap-3 md:gap-4">
+                      {/* 岗位信息 - 横向布局 */}
+                      <div className="flex items-start gap-3 md:gap-4">
+                        <CompanyLogo company={job.company} logoUrl={job.logo_url} />
+                        <div className="flex-1 min-w-0">
+                          <h3 className="font-semibold text-base md:text-lg hover:text-primary cursor-pointer transition-colors line-clamp-1">
+                            {job.title}
+                          </h3>
+                          <p className="text-sm text-muted-foreground truncate">{job.company}</p>
+                        </div>
                       </div>
+                      
+                      {/* 标签区 */}
+                      <div className="flex flex-wrap gap-1.5 md:gap-2">
+                        <Badge variant="secondary" className="rounded-md text-xs" translate="no">
+                          <MapPin className="h-3 w-3 mr-1" />
+                          {job.region}
+                        </Badge>
+                        <Badge variant="secondary" className="rounded-md text-xs" translate="no">
+                          <Briefcase className="h-3 w-3 mr-1" />
+                          {job.direction}
+                        </Badge>
+                        <Badge variant="secondary" className="rounded-md text-xs" translate="no">
+                          <Users className="h-3 w-3 mr-1" />
+                          {job.audience}
+                        </Badge>
+                        {job.salary_range && (
+                          <Badge variant="outline" className="text-green-600 border-green-600 rounded-md text-xs">
+                            {job.salary_range}
+                          </Badge>
+                        )}
+                        {job.is_active === false ? (
+                          <Badge variant="secondary" className="bg-gray-100 text-gray-600 rounded-md text-xs">
+                            不可投递
+                          </Badge>
+                        ) : (
+                          <Badge variant="default" className="bg-green-600 rounded-md text-xs">
+                            可投递
+                          </Badge>
+                        )}
+                      </div>
+                      
+                      {/* 描述 */}
+                      {job.description && (
+                        <p className="text-xs md:text-sm text-muted-foreground line-clamp-2">
+                          {job.description}
+                        </p>
+                      )}
                     </div>
                     
-                    {/* 标签区 */}
-                    <div className="flex flex-wrap gap-1.5 md:gap-2">
-                      <Badge variant="secondary" className="rounded-md text-xs" translate="no">
-                        <MapPin className="h-3 w-3 mr-1" />
-                        {job.region}
-                      </Badge>
-                      <Badge variant="secondary" className="rounded-md text-xs" translate="no">
-                        <Briefcase className="h-3 w-3 mr-1" />
-                        {job.direction}
-                      </Badge>
-                      <Badge variant="secondary" className="rounded-md text-xs" translate="no">
-                        <Users className="h-3 w-3 mr-1" />
-                        {job.audience}
-                      </Badge>
-                      {job.salary_range && (
-                        <Badge variant="outline" className="text-green-600 border-green-600 rounded-md text-xs">
-                          {job.salary_range}
-                        </Badge>
-                      )}
-                      {job.is_active === false ? (
-                        <Badge variant="secondary" className="bg-gray-100 text-gray-600 rounded-md text-xs">
-                          不可投递
-                        </Badge>
-                      ) : (
-                        <Badge variant="default" className="bg-green-600 rounded-md text-xs">
-                          可投递
-                        </Badge>
-                      )}
-                    </div>
-                    
-                    {/* 描述 */}
-                    {job.description && (
-                      <p className="text-xs md:text-sm text-muted-foreground line-clamp-2">
-                        {job.description}
-                      </p>
-                    )}
-                    
-                    {/* 操作按钮 - 手机端横向平铺 */}
-                    <div className="flex flex-wrap gap-2 pt-1">
+                    {/* 右侧按钮区 - 垂直排列 */}
+                    <div className="flex flex-col gap-2 flex-shrink-0">
                       {job.is_active !== false && (
                         <Button 
                           size="sm" 
-                          className={`flex-1 md:flex-none rounded-lg text-xs md:text-sm h-9 ${
-                            appliedJobIds.has(job.id) 
-                              ? 'bg-green-600 hover:bg-green-700' 
-                              : 'bg-green-600 hover:bg-green-700'
-                          }`}
+                          className="rounded-lg text-xs md:text-sm h-9 w-20 md:w-24 bg-green-600 hover:bg-green-700"
                           onClick={() => handleAdd(job.id)}
                           disabled={applyingJobId === job.id || appliedJobIds.has(job.id)}
                         >
                           {applyingJobId === job.id ? (
-                            <>
-                              <Loader2 className="h-3.5 w-3.5 mr-1 animate-spin" />
-                              添加中
-                            </>
+                            <Loader2 className="h-3.5 w-3.5 animate-spin" />
                           ) : appliedJobIds.has(job.id) ? (
                             <>
                               <Check className="h-3.5 w-3.5 mr-1" />
@@ -567,13 +563,13 @@ function JobsContent() {
                           )}
                         </Button>
                       )}
-                      <Button size="sm" variant="outline" asChild className="rounded-lg text-xs md:text-sm h-9">
+                      <Button size="sm" variant="outline" asChild className="rounded-lg text-xs md:text-sm h-9 w-20 md:w-24">
                         <Link href={`/jobs/${job.id}`}>
-                          查看详情
+                          详情
                         </Link>
                       </Button>
                       {job.job_url && (
-                        <Button size="sm" variant="outline" asChild className="rounded-lg text-xs md:text-sm h-9 hidden sm:flex">
+                        <Button size="sm" variant="outline" asChild className="rounded-lg text-xs md:text-sm h-9 w-20 md:w-24">
                           <a href={job.job_url} target="_blank" rel="noopener noreferrer">
                             <ExternalLink className="h-3.5 w-3.5 mr-1" />
                             原链接
