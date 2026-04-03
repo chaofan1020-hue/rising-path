@@ -21,6 +21,12 @@ import {
   DialogHeader,
   DialogTitle,
 } from '@/components/ui/dialog';
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuTrigger,
+} from '@/components/ui/dropdown-menu';
 import { 
   Sparkles, 
   FileText, 
@@ -612,8 +618,14 @@ function OptimizeContent() {
     }
   };
 
-  const handleTranslate = async () => {
+  const handleTranslate = async (targetLanguage: 'chinese' | 'english') => {
     if (!resumeData) return;
+    
+    // 如果已经是目标语言，不需要转换
+    if ((targetLanguage === 'english' && isEnglishVersion) || 
+        (targetLanguage === 'chinese' && !isEnglishVersion)) {
+      return;
+    }
     
     setTranslating(true);
     try {
@@ -622,14 +634,14 @@ function OptimizeContent() {
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
           resumeData,
-          targetLanguage: isEnglishVersion ? 'chinese' : 'english',
+          targetLanguage,
         }),
       });
 
       const data = await response.json();
       if (data.resume_data) {
         setResumeData(data.resume_data);
-        setIsEnglishVersion(!isEnglishVersion);
+        setIsEnglishVersion(targetLanguage === 'english');
       }
     } catch (error) {
       console.error('Translation failed:', error);
@@ -837,19 +849,41 @@ function OptimizeContent() {
               复制
             </Button>
             {resumeData && (
-              <Button variant="outline" size="sm" onClick={handleTranslate} disabled={translating} className="h-9 text-xs items-center">
-                {translating ? (
-                  <>
-                    <Loader2 className="mr-1.5 h-3.5 w-3.5 animate-spin" />
-                    转换中...
-                  </>
-                ) : (
-                  <>
-                    <Languages className="mr-1.5 h-3.5 w-3.5" />
-                    {isEnglishVersion ? '中文' : '英文'}
-                  </>
-                )}
-              </Button>
+              <DropdownMenu>
+                <DropdownMenuTrigger asChild>
+                  <Button variant="outline" size="sm" disabled={translating} className="h-9 text-xs items-center">
+                    {translating ? (
+                      <>
+                        <Loader2 className="mr-1.5 h-3.5 w-3.5 animate-spin" />
+                        转换中...
+                      </>
+                    ) : (
+                      <>
+                        <Languages className="mr-1.5 h-3.5 w-3.5" />
+                        中英文转换
+                      </>
+                    )}
+                  </Button>
+                </DropdownMenuTrigger>
+                <DropdownMenuContent align="end">
+                  <DropdownMenuItem 
+                    onClick={() => handleTranslate('chinese')}
+                    disabled={!isEnglishVersion}
+                    className={!isEnglishVersion ? 'opacity-50 cursor-not-allowed' : ''}
+                  >
+                    转为中文
+                    {!isEnglishVersion && <Badge variant="secondary" className="ml-2 text-[10px]">当前</Badge>}
+                  </DropdownMenuItem>
+                  <DropdownMenuItem 
+                    onClick={() => handleTranslate('english')}
+                    disabled={isEnglishVersion}
+                    className={isEnglishVersion ? 'opacity-50 cursor-not-allowed' : ''}
+                  >
+                    转为英文
+                    {isEnglishVersion && <Badge variant="secondary" className="ml-2 text-[10px]">当前</Badge>}
+                  </DropdownMenuItem>
+                </DropdownMenuContent>
+              </DropdownMenu>
             )}
             <Button size="sm" className="h-9 text-xs items-center" onClick={handleDownload} disabled={downloading}>
               {downloading ? (
