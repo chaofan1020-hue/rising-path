@@ -281,12 +281,12 @@ function AIMatchContent() {
             </CardDescription>
           </CardHeader>
           <CardContent>
-            <div className="flex flex-col gap-4">
+            <div className="flex flex-wrap items-end gap-3">
               {/* 简历选择 */}
-              <div className="w-full md:max-w-md">
-                <label className="text-xs md:text-sm font-medium mb-1.5 md:mb-2 block">选择简历</label>
+              <div className="w-full md:w-auto">
+                <label className="text-xs md:text-sm font-medium mb-1.5 block">选择简历</label>
                 <Select value={selectedResumeId} onValueChange={setSelectedResumeId}>
-                  <SelectTrigger className="h-9 md:h-10">
+                  <SelectTrigger className="h-10 w-full md:w-48">
                     <SelectValue placeholder="选择要匹配的简历" />
                   </SelectTrigger>
                   <SelectContent>
@@ -300,40 +300,40 @@ function AIMatchContent() {
                 </Select>
               </div>
 
-              {/* 筛选条件 + 匹配按钮 */}
-              <div className="flex flex-wrap items-center gap-2 md:gap-3">
-                <MultiSelectFilter
-                  label="地区"
-                  icon={MapPin}
-                  options={regions}
-                  selected={selectedRegions}
-                  onChange={setSelectedRegions}
-                />
-                <MultiSelectFilter
-                  label="方向"
-                  icon={Compass}
-                  options={directions}
-                  selected={selectedDirections}
-                  onChange={setSelectedDirections}
-                />
-                <Button
-                  onClick={handleMatch}
-                  disabled={!selectedResumeId || matching}
-                  className="bg-gradient-to-r from-purple-600 to-blue-600 hover:from-purple-700 hover:to-blue-700 h-9 md:h-10"
-                >
-                  {matching ? (
-                    <>
-                      <Loader2 className="mr-2 h-4 w-4 animate-spin" />
-                      匹配中...
-                    </>
-                  ) : (
-                    <>
-                      <Sparkles className="mr-2 h-4 w-4" />
-                      开始AI匹配
-                    </>
-                  )}
-                </Button>
-              </div>
+              {/* 筛选器 */}
+              <MultiSelectFilter
+                label="地区"
+                icon={MapPin}
+                options={regions}
+                selected={selectedRegions}
+                onChange={setSelectedRegions}
+              />
+              <MultiSelectFilter
+                label="方向"
+                icon={Compass}
+                options={directions}
+                selected={selectedDirections}
+                onChange={setSelectedDirections}
+              />
+
+              {/* 匹配按钮 */}
+              <Button
+                onClick={handleMatch}
+                disabled={!selectedResumeId || matching}
+                className="bg-gradient-to-r from-purple-600 to-blue-600 hover:from-purple-700 hover:to-blue-700 h-10"
+              >
+                {matching ? (
+                  <>
+                    <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                    匹配中...
+                  </>
+                ) : (
+                  <>
+                    <Sparkles className="mr-2 h-4 w-4" />
+                    开始AI匹配
+                  </>
+                )}
+              </Button>
             </div>
 
             {/* 已选择的筛选条件显示 */}
