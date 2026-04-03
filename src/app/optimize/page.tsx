@@ -403,6 +403,36 @@ function OptimizeContent() {
         useCORS: true,
         logging: false,
         backgroundColor: '#ffffff',
+        onclone: (clonedDoc) => {
+          // 修复 html2canvas 不支持 lab() 颜色函数的问题
+          // 遍历所有元素，将 computedStyle 中的颜色转换为 hex
+          const allElements = clonedDoc.querySelectorAll('*');
+          allElements.forEach((el) => {
+            const htmlEl = el as HTMLElement;
+            const computedStyle = clonedDoc.defaultView?.getComputedStyle(htmlEl);
+            if (computedStyle) {
+              // 处理 color
+              const color = computedStyle.color;
+              if (color && color.includes('lab')) {
+                htmlEl.style.color = '#374151'; // gray-700
+              }
+              // 处理 background-color
+              const bgColor = computedStyle.backgroundColor;
+              if (bgColor && bgColor.includes('lab')) {
+                if (bgColor.includes('rgba(0, 0, 0, 0)') || bgColor === 'transparent') {
+                  htmlEl.style.backgroundColor = '#ffffff';
+                } else {
+                  htmlEl.style.backgroundColor = '#f3f4f6'; // gray-100
+                }
+              }
+              // 处理 border-color
+              const borderColor = computedStyle.borderColor;
+              if (borderColor && borderColor.includes('lab')) {
+                htmlEl.style.borderColor = '#d1d5db'; // gray-300
+              }
+            }
+          });
+        },
       });
       
       // 创建 PDF
