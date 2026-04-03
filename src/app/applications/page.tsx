@@ -444,7 +444,7 @@ function ApplicationsContent() {
                 <Link href="/jobs">
                   <Button className="mt-4 h-9 text-sm">
                     <Plus className="mr-2 h-4 w-4" />
-                    去投递岗位
+                    去添加岗位
                   </Button>
                 </Link>
               </div>

@@ -11,7 +11,7 @@ import {
   PopoverContent,
   PopoverTrigger,
 } from '@/components/ui/popover';
-import { Search, MapPin, Briefcase, Users, ExternalLink, ChevronDown, X, Send, Loader2 } from 'lucide-react';
+import { Search, MapPin, Briefcase, Users, ExternalLink, ChevronDown, X, Plus, Check, Loader2 } from 'lucide-react';
 import Link from 'next/link';
 import Image from 'next/image';
 import { AccessGuard, useAccessCode } from '@/components/access-guard';
@@ -328,16 +328,14 @@ function JobsContent() {
     fetchAppliedJobIds();
   }, [fetchJobs, fetchAppliedJobIds]);
 
-  // 投递岗位
-  const handleApply = async (jobId: number) => {
+  // 添加到网申管理
+  const handleAdd = async (jobId: number) => {
     if (!accessCodeId) {
       alert('请先登录');
       return;
     }
     
     if (appliedJobIds.has(jobId)) {
-      // 已有投递记录，跳转到网申详情页
-      window.location.href = '/applications';
       return;
     }
 
@@ -358,14 +356,12 @@ function JobsContent() {
       
       if (data.application) {
         setAppliedJobIds(new Set([...appliedJobIds, jobId]));
-        // 跳转到网申详情页
-        window.location.href = '/applications';
       } else if (data.error) {
-        alert('投递失败: ' + data.error);
+        alert('添加失败: ' + data.error);
       }
     } catch (error) {
-      console.error('Failed to apply:', error);
-      alert('投递失败，请重试');
+      console.error('Failed to add:', error);
+      alert('添加失败，请重试');
     } finally {
       setApplyingJobId(null);
     }
@@ -545,24 +541,28 @@ function JobsContent() {
                       {job.is_active !== false && (
                         <Button 
                           size="sm" 
-                          className="flex-1 md:flex-none rounded-lg bg-green-600 hover:bg-green-700 text-xs md:text-sm h-9"
-                          onClick={() => handleApply(job.id)}
+                          className={`flex-1 md:flex-none rounded-lg text-xs md:text-sm h-9 ${
+                            appliedJobIds.has(job.id) 
+                              ? 'bg-green-600 hover:bg-green-700' 
+                              : 'bg-green-600 hover:bg-green-700'
+                          }`}
+                          onClick={() => handleAdd(job.id)}
                           disabled={applyingJobId === job.id || appliedJobIds.has(job.id)}
                         >
                           {applyingJobId === job.id ? (
                             <>
                               <Loader2 className="h-3.5 w-3.5 mr-1 animate-spin" />
-                              投递中
+                              添加中
                             </>
                           ) : appliedJobIds.has(job.id) ? (
                             <>
-                              <Send className="h-3.5 w-3.5 mr-1" />
-                              已投递
+                              <Check className="h-3.5 w-3.5 mr-1" />
+                              已添加
                             </>
                           ) : (
                             <>
-                              <Send className="h-3.5 w-3.5 mr-1" />
-                              立即投递
+                              <Plus className="h-3.5 w-3.5 mr-1" />
+                              添加
                             </>
                           )}
                         </Button>
