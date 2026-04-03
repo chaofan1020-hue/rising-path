@@ -189,18 +189,20 @@ export default function Home() {
         </div>
       </section>
 
-      {/* Advantages Section - Apple Style */}
+      {/* Advantages Section - Minimal Style */}
       <section className="container mx-auto px-6 py-16">
-        <div className="grid md:grid-cols-3 gap-6">
-          {advantages.map((item) => (
+        <div className="grid md:grid-cols-3 gap-8">
+          {advantages.map((item, index) => (
             <div
               key={item.title}
               className="group text-center"
             >
-              <div className="p-8 rounded-3xl bg-white/80 backdrop-blur-sm border border-gray-200/50 shadow-sm hover:shadow-md hover:-translate-y-1 transition-all duration-300">
-                {/* Icon - Apple Style */}
-                <div className={`w-16 h-16 rounded-2xl ${item.iconBg} flex items-center justify-center mx-auto mb-5`}>
-                  <item.icon className={`h-8 w-8 ${item.iconColor}`} />
+              <div className="p-10 rounded-3xl bg-white border border-gray-100 shadow-sm hover:shadow-lg hover:-translate-y-2 transition-all duration-300">
+                {/* Number Badge */}
+                <div className="w-12 h-12 rounded-full border-2 border-gray-200 flex items-center justify-center mx-auto mb-6 group-hover:border-gray-900 group-hover:bg-gray-900 transition-all duration-300">
+                  <span className="text-lg font-semibold text-gray-400 group-hover:text-white transition-colors">
+                    {String(index + 1).padStart(2, '0')}
+                  </span>
                 </div>
                 {/* Text */}
                 <h3 className="font-semibold text-xl mb-3 text-gray-900">{item.title}</h3>
