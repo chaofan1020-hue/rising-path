@@ -139,7 +139,7 @@ export default function Home() {
             <Link href="/extension">
               <Button variant="ghost" size="sm" className="text-muted-foreground hover:text-foreground">
                 <Puzzle className="h-4 w-4 mr-1" />
-                浏览器扩展
+                AutoFill
               </Button>
             </Link>
             <Link href="/login">
