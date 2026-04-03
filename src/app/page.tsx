@@ -189,7 +189,7 @@ export default function Home() {
         </div>
       </section>
 
-      {/* Advantages Section - Premium Style */}
+      {/* Advantages Section - Premium Light Style */}
       <section className="container mx-auto px-6 py-20">
         <div className="grid md:grid-cols-3 gap-8">
           {advantages.map((item) => (
@@ -197,23 +197,23 @@ export default function Home() {
               key={item.title}
               className="group"
             >
-              <div className="relative p-10 rounded-[32px] bg-neutral-950 text-white overflow-hidden hover:-translate-y-3 transition-all duration-500">
+              <div className="relative p-10 rounded-[32px] bg-zinc-100 text-zinc-900 overflow-hidden hover:-translate-y-3 transition-all duration-500">
                 {/* Subtle gradient overlay */}
-                <div className={`absolute inset-0 opacity-0 group-hover:opacity-100 transition-opacity duration-500 ${item.iconColor === 'text-sky-600' ? 'bg-gradient-to-br from-blue-600/20 to-transparent' : item.iconColor === 'text-violet-600' ? 'bg-gradient-to-br from-purple-600/20 to-transparent' : 'bg-gradient-to-br from-orange-600/20 to-transparent'}`} />
+                <div className={`absolute inset-0 opacity-0 group-hover:opacity-100 transition-opacity duration-500 ${item.iconColor === 'text-sky-600' ? 'bg-gradient-to-br from-blue-500/10 to-transparent' : item.iconColor === 'text-violet-600' ? 'bg-gradient-to-br from-purple-500/10 to-transparent' : 'bg-gradient-to-br from-orange-500/10 to-transparent'}`} />
                 
                 {/* Icon */}
                 <div className="relative mb-8">
-                  <div className="w-10 h-10 rounded-full border border-white/20 flex items-center justify-center group-hover:border-white/40 transition-colors duration-300">
-                    <item.icon className="h-5 w-5 text-white/80" />
+                  <div className={`w-10 h-10 rounded-full flex items-center justify-center ${item.iconColor === 'text-sky-600' ? 'bg-blue-100' : item.iconColor === 'text-violet-600' ? 'bg-purple-100' : 'bg-orange-100'}`}>
+                    <item.icon className={`h-5 w-5 ${item.iconColor === 'text-sky-600' ? 'text-blue-600' : item.iconColor === 'text-violet-600' ? 'text-purple-600' : 'text-orange-600'}`} />
                   </div>
                 </div>
                 
                 {/* Text */}
-                <h3 className="relative font-medium text-lg mb-3 tracking-tight">{item.title}</h3>
-                <p className="relative text-white/50 text-sm leading-relaxed font-light">{item.description}</p>
+                <h3 className="relative font-semibold text-lg mb-3 tracking-tight">{item.title}</h3>
+                <p className="relative text-zinc-500 text-sm leading-relaxed">{item.description}</p>
                 
                 {/* Bottom line accent */}
-                <div className={`absolute bottom-0 left-0 right-0 h-px ${item.iconColor === 'text-sky-600' ? 'bg-gradient-to-r from-transparent via-blue-400 to-transparent' : item.iconColor === 'text-violet-600' ? 'bg-gradient-to-r from-transparent via-purple-400 to-transparent' : 'bg-gradient-to-r from-transparent via-orange-400 to-transparent'} opacity-50`} />
+                <div className={`absolute bottom-0 left-0 right-0 h-0.5 ${item.iconColor === 'text-sky-600' ? 'bg-gradient-to-r from-transparent via-blue-400 to-transparent' : item.iconColor === 'text-violet-600' ? 'bg-gradient-to-r from-transparent via-purple-400 to-transparent' : 'bg-gradient-to-r from-transparent via-orange-400 to-transparent'} opacity-60`} />
               </div>
             </div>
           ))}
