@@ -189,23 +189,21 @@ export default function Home() {
         </div>
       </section>
 
-      {/* Advantages Section - Minimal Style */}
+      {/* Advantages Section - Vibrant Style */}
       <section className="container mx-auto px-6 py-16">
-        <div className="grid md:grid-cols-3 gap-8">
-          {advantages.map((item, index) => (
+        <div className="grid md:grid-cols-3 gap-6">
+          {advantages.map((item) => (
             <div
               key={item.title}
-              className="group text-center"
+              className="group"
             >
-              <div className="p-10 rounded-3xl bg-white border border-gray-100 shadow-sm hover:shadow-lg hover:-translate-y-2 transition-all duration-300">
-                {/* Number Badge */}
-                <div className="w-12 h-12 rounded-full border-2 border-gray-200 flex items-center justify-center mx-auto mb-6 group-hover:border-gray-900 group-hover:bg-gray-900 transition-all duration-300">
-                  <span className="text-lg font-semibold text-gray-400 group-hover:text-white transition-colors">
-                    {String(index + 1).padStart(2, '0')}
-                  </span>
+              <div className="p-8 rounded-3xl bg-gradient-to-br from-white to-gray-50 border border-gray-100 shadow-lg shadow-gray-200/50 hover:shadow-xl hover:-translate-y-2 transition-all duration-300">
+                {/* Gradient Icon */}
+                <div className={`w-14 h-14 rounded-2xl bg-gradient-to-br ${item.iconColor === 'text-sky-600' ? 'from-sky-400 to-blue-500' : item.iconColor === 'text-violet-600' ? 'from-violet-400 to-purple-500' : 'from-amber-400 to-orange-500'} flex items-center justify-center mb-6 shadow-lg group-hover:scale-110 transition-transform duration-300`}>
+                  <item.icon className="h-7 w-7 text-white" />
                 </div>
                 {/* Text */}
-                <h3 className="font-semibold text-xl mb-3 text-gray-900">{item.title}</h3>
+                <h3 className="font-bold text-xl mb-3 text-gray-900">{item.title}</h3>
                 <p className="text-gray-500 text-sm leading-relaxed">{item.description}</p>
               </div>
             </div>
