@@ -4,7 +4,7 @@ import './globals.css';
 
 export const metadata: Metadata = {
   title: {
-    default: '留学生求职平台',
+    default: 'PathUp求职平台',
     template: '%s | PathUp',
   },
   description:
