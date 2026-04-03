@@ -1,6 +1,5 @@
 'use client';
 
-import { useState } from 'react';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
@@ -13,18 +12,11 @@ import {
   Shield,
   Zap,
   CheckCircle,
-  ExternalLink,
 } from 'lucide-react';
 import Link from 'next/link';
 import { AccessGuard } from '@/components/access-guard';
 
 function ExtensionContent() {
-  const [copied, setCopied] = useState(false);
-  
-  const extensionUrl = typeof window !== 'undefined' 
-    ? `${window.location.origin}/extension/`
-    : '';
-
   const features = [
     {
       icon: Zap,
@@ -56,12 +48,6 @@ function ExtensionContent() {
     '技能 (skills)',
   ];
 
-  const copyToClipboard = () => {
-    navigator.clipboard.writeText(extensionUrl);
-    setCopied(true);
-    setTimeout(() => setCopied(false), 2000);
-  };
-
   return (
     <div className="min-h-screen bg-gradient-to-b from-slate-50 to-white">
       {/* Hero Section */}
@@ -78,21 +64,13 @@ function ExtensionContent() {
             </p>
             <div className="flex flex-wrap justify-center gap-4">
               <a 
-                href="/extension/"
-                download
+                href="/extension.tar.gz"
+                download="PathUp-AutoFill.tar.gz"
                 className="inline-flex items-center gap-2 bg-white text-purple-600 px-6 py-3 rounded-lg font-semibold hover:bg-white/90 transition-colors"
               >
                 <Download className="h-5 w-5" />
-                下载扩展
+                下载扩展压缩包
               </a>
-              <Button 
-                variant="outline" 
-                className="bg-transparent border-white text-white hover:bg-white/20"
-                onClick={copyToClipboard}
-              >
-                {copied ? <CheckCircle className="h-5 w-5 mr-2" /> : null}
-                {copied ? '已复制!' : '复制下载链接'}
-              </Button>
             </div>
           </div>
         </div>
@@ -120,13 +98,10 @@ function ExtensionContent() {
                     1
                   </div>
                   <div>
-                    <h4 className="font-semibold mb-1">下载扩展文件</h4>
+                    <h4 className="font-semibold mb-1">下载扩展压缩包</h4>
                     <p className="text-sm text-muted-foreground mb-2">
-                      点击上方「下载扩展」按钮，或复制以下链接下载：
+                      点击上方「下载扩展压缩包」按钮下载 <code className="bg-muted px-1 rounded">PathUp-AutoFill.tar.gz</code>
                     </p>
-                    <code className="block bg-muted p-2 rounded text-sm break-all">
-                      {extensionUrl}
-                    </code>
                   </div>
                 </div>
 
@@ -135,9 +110,9 @@ function ExtensionContent() {
                     2
                   </div>
                   <div>
-                    <h4 className="font-semibold mb-1">打开 Chrome 扩展页面</h4>
+                    <h4 className="font-semibold mb-1">解压文件</h4>
                     <p className="text-sm text-muted-foreground">
-                      在 Chrome 地址栏输入：<code className="bg-muted px-1 rounded">chrome://extensions/</code>
+                      使用解压工具（如 WinRAR、7-Zip）解压 <code className="bg-muted px-1 rounded">extension.tar.gz</code>，得到 <code className="bg-muted px-1 rounded">extension</code> 文件夹
                     </p>
                   </div>
                 </div>
@@ -145,6 +120,18 @@ function ExtensionContent() {
                 <div className="flex gap-4">
                   <div className="w-8 h-8 rounded-full bg-purple-100 text-purple-600 flex items-center justify-center font-bold flex-shrink-0">
                     3
+                  </div>
+                  <div>
+                    <h4 className="font-semibold mb-1">打开扩展管理页面</h4>
+                    <p className="text-sm text-muted-foreground">
+                      在 Chrome/Edge 地址栏输入：<code className="bg-muted px-1 rounded">chrome://extensions/</code> 或 <code className="bg-muted px-1 rounded">edge://extensions/</code>
+                    </p>
+                  </div>
+                </div>
+
+                <div className="flex gap-4">
+                  <div className="w-8 h-8 rounded-full bg-purple-100 text-purple-600 flex items-center justify-center font-bold flex-shrink-0">
+                    4
                   </div>
                   <div>
                     <h4 className="font-semibold mb-1">开启开发者模式</h4>
@@ -156,19 +143,19 @@ function ExtensionContent() {
 
                 <div className="flex gap-4">
                   <div className="w-8 h-8 rounded-full bg-purple-100 text-purple-600 flex items-center justify-center font-bold flex-shrink-0">
-                    4
+                    5
                   </div>
                   <div>
                     <h4 className="font-semibold mb-1">加载扩展</h4>
                     <p className="text-sm text-muted-foreground">
-                      点击「加载已解压的扩展程序」按钮，选择下载的 <code className="bg-muted px-1 rounded">extension</code> 文件夹
+                      点击「加载已解压的扩展程序」按钮，选择解压后的 <code className="bg-muted px-1 rounded">extension</code> 文件夹
                     </p>
                   </div>
                 </div>
 
                 <div className="flex gap-4">
                   <div className="w-8 h-8 rounded-full bg-purple-100 text-purple-600 flex items-center justify-center font-bold flex-shrink-0">
-                    5
+                    6
                   </div>
                   <div>
                     <h4 className="font-semibold mb-1">配置并使用</h4>
