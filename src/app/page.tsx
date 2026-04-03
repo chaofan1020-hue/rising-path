@@ -308,47 +308,57 @@ export default function Home() {
       </section>
 
       {/* How it works */}
-      <section className="container mx-auto px-6 py-20">
-        <div className="relative rounded-3xl bg-gradient-to-br from-muted/60 via-muted/30 to-muted/10 border border-muted/30 p-12 md:p-16 overflow-hidden">
+      <section className="container mx-auto px-4 md:px-6 py-8 md:py-20">
+        <div className="relative rounded-2xl md:rounded-3xl bg-gradient-to-br from-muted/60 via-muted/30 to-muted/10 border border-muted/30 p-6 md:p-12 lg:p-16 overflow-hidden">
           {/* Decorative elements */}
-          <div className="absolute top-0 right-0 w-80 h-80 bg-gradient-to-br from-primary/5 to-transparent rounded-full blur-3xl" />
-          <div className="absolute bottom-0 left-0 w-60 h-60 bg-gradient-to-tr from-purple-500/5 to-transparent rounded-full blur-3xl" />
+          <div className="absolute top-0 right-0 w-60 md:w-80 h-60 md:h-80 bg-gradient-to-br from-primary/5 to-transparent rounded-full blur-3xl" />
+          <div className="absolute bottom-0 left-0 w-40 md:w-60 h-40 md:h-60 bg-gradient-to-tr from-purple-500/5 to-transparent rounded-full blur-3xl" />
           
           <div className="relative">
-            <div className="text-center mb-14">
-              <div className="inline-flex items-center gap-2 px-4 py-2 rounded-full bg-primary/5 border border-primary/10 mb-8">
-                <Zap className="h-5 w-5 text-primary" />
-                <span className="text-base font-medium">简单三步</span>
+            <div className="text-center mb-8 md:mb-14">
+              <div className="inline-flex items-center gap-2 px-3 py-1.5 md:px-4 md:py-2 rounded-full bg-primary/5 border border-primary/10 mb-4 md:mb-8">
+                <Zap className="h-4 w-4 md:h-5 md:w-5 text-primary" />
+                <span className="text-sm md:text-base font-medium">简单三步</span>
               </div>
-              <h2 className="text-5xl md:text-6xl font-bold mb-6">开启求职之旅</h2>
-              <p className="text-muted-foreground text-xl">让AI帮你找到理想工作</p>
+              <h2 className="text-2xl md:text-5xl lg:text-6xl font-bold mb-2 md:mb-6">开启求职之旅</h2>
+              <p className="text-muted-foreground text-sm md:text-xl">让AI帮你找到理想工作</p>
             </div>
             
-            <div className="grid md:grid-cols-3 gap-10">
+            {/* Mobile: Vertical Timeline / Desktop: Horizontal Cards */}
+            <div className="flex flex-col md:grid md:grid-cols-3 gap-4 md:gap-10">
               {[
-                { step: '01', title: '上传简历', desc: '上传 PDF 或 Word 简历\n系统自动解析关键信息', icon: Upload },
-                { step: '02', title: '智能匹配', desc: 'AI 分析简历内容\n精准推荐匹配岗位', icon: Brain },
-                { step: '03', title: '一键投递', desc: '优化简历并自动填写\n高效完成网申投递', icon: Send },
+                { step: '01', title: '上传简历', desc: '上传 PDF 或 Word 简历，系统自动解析关键信息', icon: Upload },
+                { step: '02', title: '智能匹配', desc: 'AI 分析简历内容，精准推荐匹配岗位', icon: Brain },
+                { step: '03', title: '一键投递', desc: '优化简历并自动填写，高效完成网申投递', icon: Send },
               ].map((item, index) => (
                 <div key={item.step} className="relative group">
-                  {/* Connector line */}
+                  {/* Mobile: Vertical connector line */}
+                  {index < 2 && (
+                    <div className="md:hidden absolute left-[27px] top-[68px] w-[2px] h-[calc(100%-20px)] bg-gradient-to-b from-primary/40 to-transparent" />
+                  )}
+                  
+                  {/* Desktop: Horizontal connector line */}
                   {index < 2 && (
                     <div className="hidden md:block absolute top-10 left-[60%] w-[80%] h-[2px] bg-gradient-to-r from-primary/30 to-transparent" />
                   )}
                   
-                  <div className="flex flex-col items-center text-center">
+                  {/* Mobile: Horizontal card layout */}
+                  <div className="flex md:flex-col items-start md:items-center gap-4 md:gap-0 p-3 md:p-0 rounded-xl md:rounded-none bg-muted/30 md:bg-transparent">
                     {/* Step number with icon */}
-                    <div className="relative mb-6">
-                      <div className="w-20 h-20 rounded-2xl bg-gradient-to-br from-primary to-primary/70 flex items-center justify-center shadow-2xl shadow-primary/20 group-hover:scale-105 transition-transform duration-300">
-                        <item.icon className="h-8 w-8 text-primary-foreground" />
+                    <div className="relative flex-shrink-0 md:mb-6">
+                      <div className="w-14 h-14 md:w-20 md:h-20 rounded-xl md:rounded-2xl bg-gradient-to-br from-primary to-primary/70 flex items-center justify-center shadow-lg md:shadow-2xl shadow-primary/20 group-hover:scale-105 transition-transform duration-300">
+                        <item.icon className="h-6 w-6 md:h-8 md:w-8 text-primary-foreground" />
                       </div>
-                      <div className="absolute -top-2 -right-2 w-7 h-7 rounded-full bg-background border-2 border-primary flex items-center justify-center text-xs font-bold text-primary">
+                      <div className="absolute -top-1 -right-1 md:-top-2 md:-right-2 w-6 h-6 md:w-7 md:h-7 rounded-full bg-background border-2 border-primary flex items-center justify-center text-[10px] md:text-xs font-bold text-primary">
                         {item.step}
                       </div>
                     </div>
                     
-                    <h3 className="font-semibold text-xl mb-3">{item.title}</h3>
-                    <p className="text-muted-foreground text-sm leading-relaxed whitespace-pre-line">{item.desc}</p>
+                    {/* Text */}
+                    <div className="flex-1 md:text-center">
+                      <h3 className="font-semibold text-base md:text-xl mb-1 md:mb-3">{item.title}</h3>
+                      <p className="text-muted-foreground text-xs md:text-sm leading-relaxed">{item.desc}</p>
+                    </div>
                   </div>
                 </div>
               ))}
