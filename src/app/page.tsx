@@ -189,7 +189,7 @@ export default function Home() {
         </div>
       </section>
 
-      {/* Advantages Section - Premium Gradient Style */}
+      {/* Advantages Section - Premium Style */}
       <section className="container mx-auto px-6 py-20">
         <div className="grid md:grid-cols-3 gap-8">
           {advantages.map((item) => (
@@ -197,47 +197,23 @@ export default function Home() {
               key={item.title}
               className="group"
             >
-              <div className={`relative p-10 rounded-[32px] overflow-hidden hover:-translate-y-3 transition-all duration-500 ${
-                item.iconColor === 'text-sky-600' 
-                  ? 'bg-gradient-to-br from-slate-900 via-blue-900 to-slate-900' 
-                  : item.iconColor === 'text-violet-600' 
-                  ? 'bg-gradient-to-br from-slate-900 via-purple-900 to-slate-900' 
-                  : 'bg-gradient-to-br from-slate-900 via-orange-900/50 to-slate-900'
-              }`}>
-                {/* Gradient glow */}
-                <div className={`absolute top-0 right-0 w-40 h-40 rounded-full blur-3xl opacity-30 group-hover:opacity-50 transition-opacity duration-500 ${
-                  item.iconColor === 'text-sky-600' 
-                    ? 'bg-blue-400' 
-                    : item.iconColor === 'text-violet-600' 
-                    ? 'bg-purple-400' 
-                    : 'bg-orange-400'
-                }`} />
+              <div className="relative p-10 rounded-[32px] bg-neutral-950 text-white overflow-hidden hover:-translate-y-3 transition-all duration-500">
+                {/* Subtle gradient overlay */}
+                <div className={`absolute inset-0 opacity-0 group-hover:opacity-100 transition-opacity duration-500 ${item.iconColor === 'text-sky-600' ? 'bg-gradient-to-br from-blue-600/20 to-transparent' : item.iconColor === 'text-violet-600' ? 'bg-gradient-to-br from-purple-600/20 to-transparent' : 'bg-gradient-to-br from-orange-600/20 to-transparent'}`} />
                 
-                {/* Icon with gradient */}
+                {/* Icon */}
                 <div className="relative mb-8">
-                  <div className={`w-12 h-12 rounded-xl bg-gradient-to-br ${
-                    item.iconColor === 'text-sky-600' 
-                      ? 'from-blue-400 to-cyan-300' 
-                      : item.iconColor === 'text-violet-600' 
-                      ? 'from-purple-400 to-pink-300' 
-                      : 'from-orange-400 to-yellow-300'
-                  } flex items-center justify-center shadow-lg`}>
-                    <item.icon className="h-6 w-6 text-white" />
+                  <div className="w-10 h-10 rounded-full border border-white/20 flex items-center justify-center group-hover:border-white/40 transition-colors duration-300">
+                    <item.icon className="h-5 w-5 text-white/80" />
                   </div>
                 </div>
                 
                 {/* Text */}
-                <h3 className="relative font-semibold text-xl mb-3 text-white">{item.title}</h3>
-                <p className="relative text-white/60 text-sm leading-relaxed">{item.description}</p>
+                <h3 className="relative font-medium text-lg mb-3 tracking-tight">{item.title}</h3>
+                <p className="relative text-white/50 text-sm leading-relaxed font-light">{item.description}</p>
                 
-                {/* Bottom gradient line */}
-                <div className={`absolute bottom-0 left-0 right-0 h-1 bg-gradient-to-r ${
-                  item.iconColor === 'text-sky-600' 
-                    ? 'from-blue-500 via-cyan-400 to-blue-500' 
-                    : item.iconColor === 'text-violet-600' 
-                    ? 'from-purple-500 via-pink-400 to-purple-500' 
-                    : 'from-orange-500 via-yellow-400 to-orange-500'
-                }`} />
+                {/* Bottom line accent */}
+                <div className={`absolute bottom-0 left-0 right-0 h-px ${item.iconColor === 'text-sky-600' ? 'bg-gradient-to-r from-transparent via-blue-400 to-transparent' : item.iconColor === 'text-violet-600' ? 'bg-gradient-to-r from-transparent via-purple-400 to-transparent' : 'bg-gradient-to-r from-transparent via-orange-400 to-transparent'} opacity-50`} />
               </div>
             </div>
           ))}
