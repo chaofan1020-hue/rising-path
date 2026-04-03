@@ -23,6 +23,7 @@ import {
   Plus,
   FileText,
   Calendar,
+  Trash2,
 } from 'lucide-react';
 import Link from 'next/link';
 import { AccessGuard, useAccessCode } from '@/components/access-guard';
@@ -80,6 +81,25 @@ function ApplicationsContent() {
       console.error('Failed to fetch applications:', error);
     } finally {
       setLoading(false);
+    }
+  };
+
+  const handleDelete = async (id: number) => {
+    if (!confirm('确定要删除这条网申记录吗？')) return;
+    
+    try {
+      const response = await fetch(`/api/applications/${id}`, {
+        method: 'DELETE',
+      });
+      
+      if (response.ok) {
+        setApplications(applications.filter(app => app.id !== id));
+      } else {
+        alert('删除失败');
+      }
+    } catch (error) {
+      console.error('Delete error:', error);
+      alert('删除失败');
     }
   };
 
@@ -229,7 +249,7 @@ function ApplicationsContent() {
                         </div>
                       </div>
                     </div>
-                    <div className="flex items-center gap-4">
+                    <div className="flex items-center gap-3">
                       <div className="text-right text-sm">
                         <p className="text-muted-foreground">
                           创建于 {new Date(app.created_at).toLocaleDateString()}
@@ -244,6 +264,14 @@ function ApplicationsContent() {
                         <Link href={`/jobs/${app.job_id}`}>
                           查看详情
                         </Link>
+                      </Button>
+                      <Button 
+                        size="sm" 
+                        variant="ghost" 
+                        className="text-destructive hover:text-destructive hover:bg-destructive/10"
+                        onClick={() => handleDelete(app.id)}
+                      >
+                        <Trash2 className="h-4 w-4" />
                       </Button>
                     </div>
                   </div>
