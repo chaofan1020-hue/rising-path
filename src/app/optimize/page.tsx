@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, useEffect, useRef } from 'react';
+import { useState, useEffect } from 'react';
 import { useSearchParams } from 'next/navigation';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
@@ -81,9 +81,9 @@ interface ResumeData {
 }
 
 // 简历预览组件
-const ResumePreview = ({ data, ref }: { data: ResumeData; ref?: React.RefObject<HTMLDivElement | null> }) => {
+const ResumePreview = ({ data }: { data: ResumeData }) => {
   return (
-    <div ref={ref} className="bg-white text-black p-4 md:p-8 shadow-lg rounded-lg">
+    <div className="bg-white text-black p-4 md:p-8 shadow-lg rounded-lg">
       {/* 头部：姓名和联系方式 */}
       <div className="text-center border-b-2 border-gray-800 pb-3 md:pb-4 mb-3 md:mb-4">
         <h1 className="text-lg md:text-2xl font-bold text-gray-900 mb-1 md:mb-2">{data.name || '姓名'}</h1>
@@ -249,7 +249,6 @@ function OptimizeContent() {
   const [translating, setTranslating] = useState(false);
   const [isEnglishVersion, setIsEnglishVersion] = useState(false);
   const [downloading, setDownloading] = useState(false);
-  const resumePreviewRef = useRef<HTMLDivElement>(null);
   const { accessCodeId } = useAccessCode();
 
   useEffect(() => {
@@ -891,7 +890,7 @@ function OptimizeContent() {
               </div>
               <div className="bg-gray-100 p-2 md:p-3 rounded-lg flex-1 overflow-y-auto min-h-[200px] md:min-h-0">
                 {resumeData ? (
-                  <div className="transform scale-[0.85] md:scale-100 origin-top-left w-[117%] md:w-auto">
+                  <div className="md:scale-100 w-full">
                     <ResumePreview data={resumeData} />
                   </div>
                 ) : (
@@ -904,15 +903,6 @@ function OptimizeContent() {
           </div>
         </DialogContent>
       </Dialog>
-      
-      {/* 隐藏容器用于 PDF 生成 - 使用 opacity:0 确保在视口内 */}
-      {resumeData && (
-        <div style={{ position: 'fixed', left: '0', top: '0', zIndex: -9999, opacity: 0, pointerEvents: 'none' }}>
-          <div style={{ width: '800px' }}>
-            <ResumePreview data={resumeData} ref={resumePreviewRef} />
-          </div>
-        </div>
-      )}
     </div>
   );
 }
