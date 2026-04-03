@@ -32,6 +32,7 @@ import {
 } from 'lucide-react';
 import Link from 'next/link';
 import { AccessGuard, useAccessCode } from '@/components/access-guard';
+import { SiteHeader } from '@/components/site-header';
 
 interface ParsedFields {
   name?: string;
@@ -238,23 +239,7 @@ function ResumeContent() {
 
   return (
     <div className="min-h-screen bg-background">
-      {/* Header */}
-      <header className="border-b sticky top-0 bg-background/95 backdrop-blur z-50">
-        <div className="container mx-auto px-4 h-16 flex items-center justify-between">
-          <Link href="/" className="flex items-center gap-2">
-            <Briefcase className="h-5 w-5 md:h-6 md:w-6 text-primary" />
-            <span className="font-bold text-lg md:text-xl">PathUp</span>
-          </Link>
-          <nav className="flex items-center gap-2 md:gap-4">
-            <Link href="/jobs">
-              <Button variant="ghost" size="sm" className="text-xs md:text-sm">岗位查询</Button>
-            </Link>
-            <Link href="/ai-match">
-              <Button size="sm" className="text-xs md:text-sm">AI选岗</Button>
-            </Link>
-          </nav>
-        </div>
-      </header>
+      <SiteHeader />
 
       <main className="container mx-auto px-4 py-4 md:py-8">
         {/* Page Title */}

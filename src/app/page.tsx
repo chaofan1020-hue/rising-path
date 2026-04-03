@@ -1,4 +1,7 @@
+'use client';
+
 import Link from 'next/link';
+import { useState, useEffect } from 'react';
 import { Button } from '@/components/ui/button';
 import {
   Briefcase,
@@ -107,6 +110,17 @@ const advantages = [
 ];
 
 export default function Home() {
+  const [isMobile, setIsMobile] = useState(false);
+
+  useEffect(() => {
+    const checkMobile = () => {
+      setIsMobile(window.innerWidth < 768);
+    };
+    checkMobile();
+    window.addEventListener('resize', checkMobile);
+    return () => window.removeEventListener('resize', checkMobile);
+  }, []);
+
   return (
     <div className="min-h-screen bg-background relative overflow-hidden">
       {/* Background Decoration */}
@@ -127,43 +141,47 @@ export default function Home() {
           </Link>
           
           {/* Desktop Nav */}
-          <div className="hidden md:flex items-center gap-2">
-            <Link href="/jobs">
-              <Button variant="ghost" size="sm" className="text-muted-foreground hover:text-foreground">
-                岗位开放
-              </Button>
-            </Link>
-            <Link href="/resume">
-              <Button variant="ghost" size="sm" className="text-muted-foreground hover:text-foreground">
-                简历管理
-              </Button>
-            </Link>
-            <Link href="/extension">
-              <Button variant="ghost" size="sm" className="text-muted-foreground hover:text-foreground">
-                <Puzzle className="h-4 w-4 mr-1" />
-                AutoFill
-              </Button>
-            </Link>
-            <Link href="/login">
-              <Button size="sm" className="bg-gradient-to-r from-primary to-primary/80 hover:opacity-90 shadow-lg shadow-primary/20">
-                登录使用
-              </Button>
-            </Link>
-          </div>
+          {!isMobile && (
+            <div className="flex items-center gap-2">
+              <Link href="/jobs">
+                <Button variant="ghost" size="sm" className="text-muted-foreground hover:text-foreground">
+                  岗位开放
+                </Button>
+              </Link>
+              <Link href="/resume">
+                <Button variant="ghost" size="sm" className="text-muted-foreground hover:text-foreground">
+                  简历管理
+                </Button>
+              </Link>
+              <Link href="/extension">
+                <Button variant="ghost" size="sm" className="text-muted-foreground hover:text-foreground">
+                  <Puzzle className="h-4 w-4 mr-1" />
+                  AutoFill
+                </Button>
+              </Link>
+              <Link href="/login">
+                <Button size="sm" className="bg-gradient-to-r from-primary to-primary/80 hover:opacity-90 shadow-lg shadow-primary/20">
+                  登录使用
+                </Button>
+              </Link>
+            </div>
+          )}
           
-          {/* Mobile Nav - Simplified */}
-          <div className="flex md:hidden items-center gap-2">
-            <Link href="/jobs">
-              <Button variant="ghost" size="sm" className="text-muted-foreground hover:text-foreground px-2">
-                岗位
-              </Button>
-            </Link>
-            <Link href="/login">
-              <Button size="sm" className="bg-gradient-to-r from-primary to-primary/80 hover:opacity-90">
-                登录
-              </Button>
-            </Link>
-          </div>
+          {/* Mobile Nav */}
+          {isMobile && (
+            <div className="flex items-center gap-2">
+              <Link href="/jobs">
+                <Button variant="ghost" size="sm" className="text-muted-foreground hover:text-foreground px-2">
+                  岗位
+                </Button>
+              </Link>
+              <Link href="/login">
+                <Button size="sm" className="bg-gradient-to-r from-primary to-primary/80 hover:opacity-90">
+                  登录
+                </Button>
+              </Link>
+            </div>
+          )}
         </div>
       </nav>
 
