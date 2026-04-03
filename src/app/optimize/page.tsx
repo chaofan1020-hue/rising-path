@@ -535,69 +535,73 @@ function OptimizeContent() {
 
       {/* Result Dialog */}
       <Dialog open={showResult} onOpenChange={setShowResult}>
-        <DialogContent className="!max-w-none w-[98vw] h-[95vh] overflow-hidden flex flex-col p-4">
-          <DialogHeader>
-            <DialogTitle className="flex items-center gap-2">
-              <CheckCircle className="h-5 w-5 text-green-600" />
+        <DialogContent className="!max-w-none w-[95vw] md:w-[90vw] max-h-[90vh] md:h-[85vh] overflow-hidden flex flex-col p-3 md:p-4">
+          <DialogHeader className="flex-shrink-0">
+            <DialogTitle className="flex items-center gap-2 text-base md:text-lg">
+              <CheckCircle className="h-4 w-4 md:h-5 md:w-5 text-green-600" />
               简历优化完成
             </DialogTitle>
-            <DialogDescription>
-              AI已根据目标岗位优化了您的简历内容，左侧为原简历，右侧为优化后简历
+            <DialogDescription className="text-xs md:text-sm">
+              AI已根据目标岗位优化了您的简历内容
             </DialogDescription>
           </DialogHeader>
-          <div className="flex justify-end gap-2 mb-2">
-            <Button variant="outline" size="sm" onClick={handleCopy}>
-              <Copy className="mr-2 h-4 w-4" />
-              复制优化内容
+          
+          {/* 操作按钮 */}
+          <div className="flex flex-wrap justify-end gap-2 mb-2 flex-shrink-0">
+            <Button variant="outline" size="sm" onClick={handleCopy} className="h-8 text-xs">
+              <Copy className="mr-1.5 h-3.5 w-3.5" />
+              复制
             </Button>
             {resumeData && (
-              <Button variant="outline" size="sm" onClick={handleTranslate} disabled={translating}>
+              <Button variant="outline" size="sm" onClick={handleTranslate} disabled={translating} className="h-8 text-xs">
                 {translating ? (
                   <>
-                    <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                    <Loader2 className="mr-1.5 h-3.5 w-3.5 animate-spin" />
                     转换中...
                   </>
                 ) : (
                   <>
-                    <Languages className="mr-2 h-4 w-4" />
-                    {isEnglishVersion ? '转为中文' : '转为英文'}
+                    <Languages className="mr-1.5 h-3.5 w-3.5" />
+                    {isEnglishVersion ? '中文' : '英文'}
                   </>
                 )}
               </Button>
             )}
-            <Button size="sm">
-              <Download className="mr-2 h-4 w-4" />
-              下载简历
+            <Button size="sm" className="h-8 text-xs">
+              <Download className="mr-1.5 h-3.5 w-3.5" />
+              下载
             </Button>
           </div>
           
-          {/* 对比视图 */}
-          <div className="grid grid-cols-2 gap-6 flex-1 min-h-0">
+          {/* 对比视图 - 手机端上下布局，桌面端左右布局 */}
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-3 md:gap-4 flex-1 min-h-0 overflow-hidden">
             {/* 原简历 */}
-            <div className="flex flex-col min-h-0">
-              <div className="flex items-center gap-2 mb-2">
-                <FileText className="h-4 w-4 text-gray-500" />
-                <h3 className="font-medium text-gray-600">原简历</h3>
+            <div className="flex flex-col min-h-0 overflow-hidden">
+              <div className="flex items-center gap-1.5 md:gap-2 mb-1.5 md:mb-2 flex-shrink-0">
+                <FileText className="h-3.5 w-3.5 md:h-4 md:w-4 text-gray-500" />
+                <h3 className="font-medium text-gray-600 text-xs md:text-sm">原简历</h3>
               </div>
-              <div className="bg-gray-100 p-3 rounded-lg flex-1 overflow-y-auto">
-                <div className="bg-white p-6 shadow rounded-lg text-sm text-gray-700 whitespace-pre-wrap leading-relaxed">
+              <div className="bg-gray-100 p-2 md:p-3 rounded-lg flex-1 overflow-y-auto min-h-[150px] md:min-h-0">
+                <div className="bg-white p-3 md:p-6 shadow rounded-lg text-xs md:text-sm text-gray-700 whitespace-pre-wrap leading-relaxed">
                   {originalContent}
                 </div>
               </div>
             </div>
             
             {/* 优化后简历 */}
-            <div className="flex flex-col min-h-0">
-              <div className="flex items-center gap-2 mb-2">
-                <Sparkles className="h-4 w-4 text-green-600" />
-                <h3 className="font-medium text-green-600">优化后简历</h3>
-                <Badge variant="secondary" className="ml-1">ATS优化</Badge>
+            <div className="flex flex-col min-h-0 overflow-hidden">
+              <div className="flex items-center gap-1.5 md:gap-2 mb-1.5 md:mb-2 flex-shrink-0">
+                <Sparkles className="h-3.5 w-3.5 md:h-4 md:w-4 text-green-600" />
+                <h3 className="font-medium text-green-600 text-xs md:text-sm">优化后简历</h3>
+                <Badge variant="secondary" className="ml-0.5 text-[10px] md:text-xs h-4 md:h-5">ATS优化</Badge>
               </div>
-              <div className="bg-gray-100 p-3 rounded-lg flex-1 overflow-y-auto">
+              <div className="bg-gray-100 p-2 md:p-3 rounded-lg flex-1 overflow-y-auto min-h-[200px] md:min-h-0">
                 {resumeData ? (
-                  <ResumePreview data={resumeData} />
+                  <div className="transform scale-[0.85] md:scale-100 origin-top-left w-[117%] md:w-auto">
+                    <ResumePreview data={resumeData} />
+                  </div>
                 ) : (
-                  <div className="bg-white p-6 shadow rounded-lg text-sm text-gray-700 whitespace-pre-wrap leading-relaxed">
+                  <div className="bg-white p-3 md:p-6 shadow rounded-lg text-xs md:text-sm text-gray-700 whitespace-pre-wrap leading-relaxed">
                     {optimizedContent}
                   </div>
                 )}
