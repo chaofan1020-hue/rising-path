@@ -26,8 +26,6 @@ const features = [
     icon: Search,
     href: '/jobs',
     gradient: 'from-blue-600 via-blue-500 to-cyan-500',
-    pattern: 'dots',
-
   },
   {
     title: 'AI智能选岗',
@@ -36,8 +34,6 @@ const features = [
     icon: Brain,
     href: '/ai-match',
     gradient: 'from-violet-600 via-purple-500 to-fuchsia-500',
-    pattern: 'grid',
-
   },
   {
     title: '简历管理',
@@ -46,8 +42,6 @@ const features = [
     icon: FileText,
     href: '/resume',
     gradient: 'from-emerald-600 via-green-500 to-teal-500',
-    pattern: 'dots',
-
   },
   {
     title: 'ATS简历优化',
@@ -56,8 +50,6 @@ const features = [
     icon: Wand2,
     href: '/optimize',
     gradient: 'from-orange-600 via-amber-500 to-yellow-500',
-    pattern: 'grid',
-
   },
   {
     title: '自动网申',
@@ -66,8 +58,6 @@ const features = [
     icon: Send,
     href: '/applications',
     gradient: 'from-pink-600 via-rose-500 to-red-500',
-    pattern: 'dots',
-
   },
   {
     title: '浏览器扩展',
@@ -76,8 +66,6 @@ const features = [
     icon: Puzzle,
     href: '/extension',
     gradient: 'from-cyan-600 via-teal-500 to-emerald-500',
-    pattern: 'grid',
-
   },
 ];
 
@@ -205,10 +193,10 @@ export default function Home() {
         </div>
       </section>
 
-      {/* Features Section - Bento Grid Style */}
+      {/* Features Section - Modern Cards */}
       <section className="container mx-auto px-6 py-20">
         <div className="text-center mb-16">
-          <div className="inline-flex items-center gap-2 px-3 py-1.5 rounded-full bg-muted/50 border border-muted/50 mb-6">
+          <div className="inline-flex items-center gap-2 px-3 py-1.5 rounded-full bg-primary/10 border border-primary/20 mb-6">
             <Layers className="h-4 w-4 text-primary" />
             <span className="text-sm font-medium">五大核心能力</span>
           </div>
@@ -221,53 +209,43 @@ export default function Home() {
           </p>
         </div>
         
-        {/* Bento Grid */}
-        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-5">
-          {features.map((feature) => (
+        {/* Modern Grid */}
+        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-6">
+          {features.map((feature, index) => (
             <Link 
               href={feature.href} 
               key={feature.title}
-              className="group relative overflow-hidden rounded-3xl transition-all duration-500 hover:-translate-y-1"
+              className="group relative"
             >
-              {/* Background */}
-              <div className="absolute inset-0 bg-gradient-to-br from-muted/30 to-muted/10" />
-              
-              {/* Pattern */}
-              <div className="absolute inset-0 opacity-30">
-                {feature.pattern === 'dots' && (
-                  <div className="w-full h-full bg-[radial-gradient(circle,_hsl(var(--muted-foreground))_1px,_transparent_1px)] bg-[size:16px_16px]" />
-                )}
-                {feature.pattern === 'grid' && (
-                  <div className="w-full h-full bg-[linear-gradient(to_right,_hsl(var(--muted-foreground))_1px,_transparent_1px),linear-gradient(to_bottom,_hsl(var(--muted-foreground))_1px,_transparent_1px)] bg-[size:24px_24px]" />
-                )}
-              </div>
-              
-              {/* Gradient overlay on hover */}
-              <div className={`absolute inset-0 bg-gradient-to-br ${feature.gradient} opacity-0 group-hover:opacity-5 transition-opacity duration-500`} />
-              
-              {/* Content */}
-              <div className="relative h-full p-7 flex flex-col min-h-[200px]">
+              {/* Card */}
+              <div className="relative h-full p-6 rounded-2xl bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 shadow-sm hover:shadow-xl transition-all duration-300 hover:-translate-y-2 overflow-hidden">
+                {/* Gradient accent */}
+                <div className={`absolute top-0 left-0 right-0 h-1 bg-gradient-to-r ${feature.gradient}`} />
+                
                 {/* Icon */}
-                <div className={`w-14 h-14 rounded-2xl bg-gradient-to-br ${feature.gradient} flex items-center justify-center mb-auto shadow-xl group-hover:scale-110 group-hover:rotate-3 transition-all duration-500`}>
-                  <feature.icon className="h-7 w-7 text-white" />
+                <div className={`w-12 h-12 rounded-xl bg-gradient-to-br ${feature.gradient} flex items-center justify-center mb-5 shadow-lg group-hover:scale-110 group-hover:rotate-3 transition-all duration-300`}>
+                  <feature.icon className="h-6 w-6 text-white" />
+                </div>
+                
+                {/* Number badge */}
+                <div className="absolute top-4 right-4 w-8 h-8 rounded-full bg-slate-100 dark:bg-slate-800 flex items-center justify-center">
+                  <span className="text-sm font-bold text-slate-400">{index + 1}</span>
                 </div>
                 
                 {/* Text */}
-                <div>
-                  <h3 className="font-bold text-xl mb-2 group-hover:text-primary transition-colors">
-                    {feature.title}
-                  </h3>
-                  <p className="text-muted-foreground text-sm leading-relaxed mb-1">
-                    {feature.description}
-                  </p>
-                  <p className="text-muted-foreground/70 text-sm">
-                    {feature.detail}
-                  </p>
-                </div>
+                <h3 className="font-bold text-lg mb-2 group-hover:text-primary transition-colors">
+                  {feature.title}
+                </h3>
+                <p className="text-slate-500 dark:text-slate-400 text-sm leading-relaxed mb-3">
+                  {feature.description}
+                </p>
+                <p className="text-slate-400 dark:text-slate-500 text-sm">
+                  {feature.detail}
+                </p>
                 
                 {/* Arrow */}
-                <div className="absolute bottom-7 right-7 w-10 h-10 rounded-xl bg-muted/50 flex items-center justify-center opacity-0 group-hover:opacity-100 transition-all duration-300 group-hover:translate-x-1">
-                  <ArrowRight className="h-5 w-5 text-primary" />
+                <div className="absolute bottom-4 right-4 w-8 h-8 rounded-lg bg-slate-100 dark:bg-slate-800 flex items-center justify-center opacity-0 group-hover:opacity-100 transition-all duration-300 group-hover:translate-x-1">
+                  <ArrowRight className="h-4 w-4 text-primary" />
                 </div>
               </div>
             </Link>
