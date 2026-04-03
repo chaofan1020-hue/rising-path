@@ -180,8 +180,8 @@ function ApplicationsContent() {
     }, {} as Record<string, number>),
     // 投递成功率
     successRate: stats.total > 0 ? ((stats.interview + stats.offer) / stats.total * 100).toFixed(1) : '0',
-    // 面试转化率（已投递中获得面试或offer的比例）
-    interviewRate: stats.submitted > 0 ? ((stats.interview + stats.offer) / stats.submitted * 100).toFixed(1) : '0',
+    // 面试转化率（已录用占总申请的比例）
+    interviewRate: stats.total > 0 ? (stats.offer / stats.total * 100).toFixed(1) : '0',
   };
 
   // 获取地区分布前5
@@ -368,12 +368,12 @@ function ApplicationsContent() {
               </Card>
               <Card className="border-l-4 border-l-purple-500">
                 <CardContent className="pt-3 md:pt-4">
-                  <div className="text-xs md:text-sm text-muted-foreground mb-1">面试转化率</div>
+                  <div className="text-xs md:text-sm text-muted-foreground mb-1">录用率</div>
                   <div className="text-lg md:text-2xl font-bold text-purple-600">
                     {analytics.interviewRate}%
                   </div>
                   <div className="text-xs text-muted-foreground mt-1">
-                    已投递 → 面试
+                    已录用 / 总申请
                   </div>
                 </CardContent>
               </Card>
