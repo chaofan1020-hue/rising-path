@@ -195,11 +195,22 @@ function ResumeContent() {
   };
 
   const deleteResume = async (id: number) => {
+    if (!confirm('确定要删除这份简历吗？此操作不可撤销。')) {
+      return;
+    }
+    
     try {
-      await fetch(`/api/resume/${id}`, { method: 'DELETE' });
-      setResumes(resumes.filter((r) => r.id !== id));
+      const response = await fetch(`/api/resume/${id}`, { method: 'DELETE' });
+      const data = await response.json();
+      
+      if (response.ok && data.success) {
+        setResumes(resumes.filter((r) => r.id !== id));
+      } else {
+        alert('删除失败: ' + (data.error || '未知错误'));
+      }
     } catch (error) {
       console.error('Failed to delete resume:', error);
+      alert('删除失败，请重试');
     }
   };
 

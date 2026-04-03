@@ -9,7 +9,27 @@ export async function DELETE(
     const client = getSupabaseClient();
     const { id } = await params;
 
-    // Delete from database (文件内容存储在数据库中，无需单独删除)
+    // 先删除关联的 ai_matches 记录
+    const { error: matchError } = await client
+      .from('ai_matches')
+      .delete()
+      .eq('resume_id', id);
+
+    if (matchError) {
+      console.error('Error deleting ai_matches:', matchError);
+    }
+
+    // 删除关联的 applications 记录
+    const { error: appError } = await client
+      .from('applications')
+      .delete()
+      .eq('resume_id', id);
+
+    if (appError) {
+      console.error('Error deleting applications:', appError);
+    }
+
+    // 最后删除简历本身
     const { error } = await client
       .from('resumes')
       .delete()
