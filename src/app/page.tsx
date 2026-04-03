@@ -27,7 +27,7 @@ const features = [
     href: '/jobs',
     gradient: 'from-blue-600 via-blue-500 to-cyan-500',
     pattern: 'dots',
-    size: 'normal',
+
   },
   {
     title: 'AI智能选岗',
@@ -37,7 +37,7 @@ const features = [
     href: '/ai-match',
     gradient: 'from-violet-600 via-purple-500 to-fuchsia-500',
     pattern: 'grid',
-    size: 'large',
+
   },
   {
     title: '简历管理',
@@ -47,7 +47,7 @@ const features = [
     href: '/resume',
     gradient: 'from-emerald-600 via-green-500 to-teal-500',
     pattern: 'dots',
-    size: 'normal',
+
   },
   {
     title: 'ATS简历优化',
@@ -57,7 +57,7 @@ const features = [
     href: '/optimize',
     gradient: 'from-orange-600 via-amber-500 to-yellow-500',
     pattern: 'grid',
-    size: 'normal',
+
   },
   {
     title: '自动网申',
@@ -67,7 +67,7 @@ const features = [
     href: '/applications',
     gradient: 'from-pink-600 via-rose-500 to-red-500',
     pattern: 'dots',
-    size: 'normal',
+
   },
   {
     title: '浏览器扩展',
@@ -77,7 +77,7 @@ const features = [
     href: '/extension',
     gradient: 'from-cyan-600 via-teal-500 to-emerald-500',
     pattern: 'grid',
-    size: 'normal',
+
   },
 ];
 
@@ -222,14 +222,12 @@ export default function Home() {
         </div>
         
         {/* Bento Grid */}
-        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-5 auto-rows-[200px]">
+        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-5">
           {features.map((feature) => (
             <Link 
               href={feature.href} 
               key={feature.title}
-              className={`group relative overflow-hidden rounded-3xl transition-all duration-500 hover:-translate-y-1 ${
-                feature.size === 'large' ? 'md:col-span-2 lg:col-span-1 lg:row-span-2' : ''
-              }`}
+              className="group relative overflow-hidden rounded-3xl transition-all duration-500 hover:-translate-y-1"
             >
               {/* Background */}
               <div className="absolute inset-0 bg-gradient-to-br from-muted/30 to-muted/10" />
@@ -248,7 +246,7 @@ export default function Home() {
               <div className={`absolute inset-0 bg-gradient-to-br ${feature.gradient} opacity-0 group-hover:opacity-5 transition-opacity duration-500`} />
               
               {/* Content */}
-              <div className="relative h-full p-7 flex flex-col">
+              <div className="relative h-full p-7 flex flex-col min-h-[200px]">
                 {/* Icon */}
                 <div className={`w-14 h-14 rounded-2xl bg-gradient-to-br ${feature.gradient} flex items-center justify-center mb-auto shadow-xl group-hover:scale-110 group-hover:rotate-3 transition-all duration-500`}>
                   <feature.icon className="h-7 w-7 text-white" />
@@ -262,11 +260,9 @@ export default function Home() {
                   <p className="text-muted-foreground text-sm leading-relaxed mb-1">
                     {feature.description}
                   </p>
-                  {feature.size === 'large' && (
-                    <p className="text-muted-foreground/70 text-sm">
-                      {feature.detail}
-                    </p>
-                  )}
+                  <p className="text-muted-foreground/70 text-sm">
+                    {feature.detail}
+                  </p>
                 </div>
                 
                 {/* Arrow */}
