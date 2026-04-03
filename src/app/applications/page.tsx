@@ -178,10 +178,10 @@ function ApplicationsContent() {
       acc[direction] = (acc[direction] || 0) + 1;
       return acc;
     }, {} as Record<string, number>),
-    // 投递成功率
+    // 投递成功率（获得面试机会的比例）
     successRate: stats.total > 0 ? ((stats.interview + stats.offer) / stats.total * 100).toFixed(1) : '0',
-    // 面试转化率（已录用占总申请的比例）
-    interviewRate: stats.total > 0 ? (stats.offer / stats.total * 100).toFixed(1) : '0',
+    // 录用率
+    offerRate: stats.total > 0 ? (stats.offer / stats.total * 100).toFixed(1) : '0',
   };
 
   // 获取地区分布前5
@@ -370,7 +370,7 @@ function ApplicationsContent() {
                 <CardContent className="pt-3 md:pt-4">
                   <div className="text-xs md:text-sm text-muted-foreground mb-1">录用率</div>
                   <div className="text-lg md:text-2xl font-bold text-purple-600">
-                    {analytics.interviewRate}%
+                    {analytics.offerRate}%
                   </div>
                   <div className="text-xs text-muted-foreground mt-1">
                     已录用 / 总申请
