@@ -12,6 +12,12 @@ import {
   SelectTrigger,
   SelectValue,
 } from '@/components/ui/select';
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuTrigger,
+} from '@/components/ui/dropdown-menu';
 import { 
   Send, 
   Briefcase, 
@@ -449,21 +455,30 @@ function ApplicationsContent() {
                         <h3 className="font-semibold text-sm md:text-base">{app.jobs?.title || '未知岗位'}</h3>
                         <p className="text-xs md:text-sm text-muted-foreground">{app.jobs?.company || '未知公司'}</p>
                         <div className="flex flex-wrap items-center gap-1.5 md:gap-2 mt-1.5 md:mt-2">
-                          <Select 
-                            value={app.status} 
-                            onValueChange={(value) => handleUpdateStatus(app.id, value)}
-                          >
-                            <SelectTrigger className="h-7 w-auto border-0 bg-transparent p-0 h-auto focus:ring-0">
-                              {getStatusBadge(app.status)}
-                            </SelectTrigger>
-                            <SelectContent>
-                              <SelectItem value="pending">待投递</SelectItem>
-                              <SelectItem value="submitted">已投递</SelectItem>
-                              <SelectItem value="interview">面试中</SelectItem>
-                              <SelectItem value="rejected">已拒绝</SelectItem>
-                              <SelectItem value="offer">已录用</SelectItem>
-                            </SelectContent>
-                          </Select>
+                          <DropdownMenu>
+                            <DropdownMenuTrigger asChild>
+                              <button className="cursor-pointer">
+                                {getStatusBadge(app.status)}
+                              </button>
+                            </DropdownMenuTrigger>
+                            <DropdownMenuContent align="start">
+                              <DropdownMenuItem onClick={() => handleUpdateStatus(app.id, 'pending')}>
+                                <Clock className="h-3 w-3 mr-2" /> 待投递
+                              </DropdownMenuItem>
+                              <DropdownMenuItem onClick={() => handleUpdateStatus(app.id, 'submitted')}>
+                                <Send className="h-3 w-3 mr-2" /> 已投递
+                              </DropdownMenuItem>
+                              <DropdownMenuItem onClick={() => handleUpdateStatus(app.id, 'interview')}>
+                                <Calendar className="h-3 w-3 mr-2" /> 面试中
+                              </DropdownMenuItem>
+                              <DropdownMenuItem onClick={() => handleUpdateStatus(app.id, 'rejected')}>
+                                <XCircle className="h-3 w-3 mr-2" /> 已拒绝
+                              </DropdownMenuItem>
+                              <DropdownMenuItem onClick={() => handleUpdateStatus(app.id, 'offer')}>
+                                <CheckCircle className="h-3 w-3 mr-2" /> 已录用
+                              </DropdownMenuItem>
+                            </DropdownMenuContent>
+                          </DropdownMenu>
                           <Badge variant="outline" className="text-xs">{app.jobs?.region}</Badge>
                         </div>
                       </div>
