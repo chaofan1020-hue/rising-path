@@ -221,23 +221,23 @@ export default function Home() {
       </section>
 
       {/* Features Section - Bento Grid Style */}
-      <section className="container mx-auto px-6 py-20">
-        <div className="text-center mb-16">
-          <div className="inline-flex items-center gap-2 px-3 py-1.5 rounded-full bg-muted/50 border border-muted/50 mb-6">
-            <Layers className="h-4 w-4 text-primary" />
-            <span className="text-sm font-medium">五大核心能力</span>
+      <section className="container mx-auto px-6 py-24">
+        <div className="text-center mb-20">
+          <div className="inline-flex items-center gap-2 px-4 py-2 rounded-full bg-muted/50 border border-muted/50 mb-8">
+            <Layers className="h-5 w-5 text-primary" />
+            <span className="text-base font-medium">五大核心能力</span>
           </div>
-          <h2 className="text-4xl md:text-5xl font-bold mb-4">
+          <h2 className="text-5xl md:text-6xl font-bold mb-6">
             为求职而生的
-            <span className="bg-gradient-to-r from-primary to-primary/60 bg-clip-text text-transparent ml-2">超级工具</span>
+            <span className="bg-gradient-to-r from-primary to-primary/60 bg-clip-text text-transparent ml-3">超级工具</span>
           </h2>
-          <p className="text-muted-foreground text-lg max-w-xl mx-auto">
+          <p className="text-muted-foreground text-xl max-w-xl mx-auto">
             每一个功能都经过精心设计，让求职之路更加顺畅
           </p>
         </div>
         
         {/* Bento Grid */}
-        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-5">
+        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-6">
           {features.map((feature) => (
             <Link 
               href={feature.href} 
@@ -261,18 +261,18 @@ export default function Home() {
               <div className={`absolute inset-0 bg-gradient-to-br ${feature.gradient} opacity-0 group-hover:opacity-5 transition-opacity duration-500`} />
               
               {/* Content */}
-              <div className="relative h-full p-7 flex flex-col min-h-[200px]">
+              <div className="relative h-full p-9 flex flex-col min-h-[260px]">
                 {/* Icon */}
-                <div className={`w-14 h-14 rounded-2xl bg-gradient-to-br ${feature.gradient} flex items-center justify-center mb-auto shadow-xl group-hover:scale-110 group-hover:rotate-3 transition-all duration-500`}>
-                  <feature.icon className="h-7 w-7 text-white" />
+                <div className={`w-16 h-16 rounded-2xl bg-gradient-to-br ${feature.gradient} flex items-center justify-center mb-auto shadow-xl group-hover:scale-110 group-hover:rotate-3 transition-all duration-500`}>
+                  <feature.icon className="h-8 w-8 text-white" />
                 </div>
                 
                 {/* Text */}
                 <div>
-                  <h3 className="font-bold text-xl mb-2 group-hover:text-primary transition-colors">
+                  <h3 className="font-bold text-2xl mb-3 group-hover:text-primary transition-colors">
                     {feature.title}
                   </h3>
-                  <p className="text-muted-foreground text-sm leading-relaxed mb-1">
+                  <p className="text-muted-foreground text-base leading-relaxed mb-2">
                     {feature.description}
                   </p>
                   <p className="text-muted-foreground/70 text-sm">
@@ -281,8 +281,8 @@ export default function Home() {
                 </div>
                 
                 {/* Arrow */}
-                <div className="absolute bottom-7 right-7 w-10 h-10 rounded-xl bg-muted/50 flex items-center justify-center opacity-0 group-hover:opacity-100 transition-all duration-300 group-hover:translate-x-1">
-                  <ArrowRight className="h-5 w-5 text-primary" />
+                <div className="absolute bottom-9 right-9 w-12 h-12 rounded-xl bg-muted/50 flex items-center justify-center opacity-0 group-hover:opacity-100 transition-all duration-300 group-hover:translate-x-1">
+                  <ArrowRight className="h-6 w-6 text-primary" />
                 </div>
               </div>
             </Link>
