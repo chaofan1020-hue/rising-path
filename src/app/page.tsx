@@ -185,20 +185,22 @@ export default function Home() {
         </div>
       </section>
 
-      {/* Advantages Section */}
+      {/* Advantages Section - Apple Style */}
       <section className="container mx-auto px-6 py-16">
-        <div className="grid md:grid-cols-3 gap-5">
+        <div className="grid md:grid-cols-3 gap-6">
           {advantages.map((item) => (
             <div
               key={item.title}
-              className="group relative"
+              className="group text-center"
             >
-              <div className="p-7 rounded-2xl bg-gradient-to-br from-muted/40 to-muted/20 border border-muted/30 hover:border-muted/60 transition-all duration-500 hover:-translate-y-1">
-                <div className={`w-11 h-11 rounded-xl bg-gradient-to-br ${item.gradient} flex items-center justify-center mb-4 shadow-lg group-hover:scale-105 transition-transform duration-300`}>
-                  <item.icon className="h-5 w-5 text-white" />
+              <div className="p-8 rounded-3xl bg-white/80 backdrop-blur-sm border border-gray-200/50 shadow-sm hover:shadow-md hover:-translate-y-1 transition-all duration-300">
+                {/* Icon - Apple Style */}
+                <div className={`w-16 h-16 rounded-2xl bg-gradient-to-br ${item.gradient} flex items-center justify-center mx-auto mb-5 shadow-lg`}>
+                  <item.icon className="h-8 w-8 text-white" />
                 </div>
-                <h3 className="font-semibold text-lg mb-2">{item.title}</h3>
-                <p className="text-muted-foreground text-sm leading-relaxed">{item.description}</p>
+                {/* Text */}
+                <h3 className="font-semibold text-xl mb-3 text-gray-900">{item.title}</h3>
+                <p className="text-gray-500 text-sm leading-relaxed">{item.description}</p>
               </div>
             </div>
           ))}
