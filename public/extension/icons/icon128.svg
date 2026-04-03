@@ -1,13 +1,6 @@
 <svg width="128" height="128" viewBox="0 0 128 128" fill="none" xmlns="http://www.w3.org/2000/svg">
-  <rect width="128" height="128" rx="24" fill="url(#gradient128)"/>
-  <path d="M32 44L64 64L96 44" stroke="white" stroke-width="6" stroke-linecap="round" stroke-linejoin="round"/>
-  <path d="M32 56L64 76L96 56" stroke="white" stroke-width="6" stroke-linecap="round" stroke-linejoin="round"/>
-  <path d="M32 68L64 88L96 68" stroke="white" stroke-width="6" stroke-linecap="round" stroke-linejoin="round"/>
-  <circle cx="64" cy="28" r="8" fill="white"/>
-  <defs>
-    <linearGradient id="gradient128" x1="0" y1="0" x2="128" y2="128" gradientUnits="userSpaceOnUse">
-      <stop stop-color="#667eea"/>
-      <stop offset="1" stop-color="#764ba2"/>
-    </linearGradient>
-  </defs>
+  <rect width="128" height="128" rx="20" fill="#0f0f0f"/>
+  <rect x="16" y="36" width="80" height="56" rx="8" stroke="white" stroke-width="4" fill="none"/>
+  <path d="M96 36L112 20M112 20V36M112 20H96" stroke="white" stroke-width="4" stroke-linecap="round" stroke-linejoin="round"/>
+  <text x="56" y="72" font-family="Arial, sans-serif" font-size="24" font-weight="bold" fill="white" text-anchor="middle">PathUp</text>
 </svg>
