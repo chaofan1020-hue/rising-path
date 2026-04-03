@@ -64,8 +64,8 @@ function ExtensionContent() {
             </p>
             <div className="flex flex-wrap justify-center gap-4">
               <a 
-                href="/extension.tar.gz"
-                download="PathUp-AutoFill.tar.gz"
+                href="/PathUp-AutoFill.tgz"
+                download="PathUp-AutoFill.tgz"
                 className="inline-flex items-center gap-2 bg-white text-purple-600 px-6 py-3 rounded-lg font-semibold hover:bg-white/90 transition-colors"
               >
                 <Download className="h-5 w-5" />
@@ -100,7 +100,7 @@ function ExtensionContent() {
                   <div>
                     <h4 className="font-semibold mb-1">下载扩展压缩包</h4>
                     <p className="text-sm text-muted-foreground mb-2">
-                      点击上方「下载扩展压缩包」按钮下载 <code className="bg-muted px-1 rounded">PathUp-AutoFill.tar.gz</code>
+                      点击上方「下载扩展压缩包」按钮下载 <code className="bg-muted px-1 rounded">PathUp-AutoFill.tgz</code>
                     </p>
                   </div>
                 </div>
@@ -112,7 +112,7 @@ function ExtensionContent() {
                   <div>
                     <h4 className="font-semibold mb-1">解压文件</h4>
                     <p className="text-sm text-muted-foreground">
-                      使用解压工具（如 WinRAR、7-Zip）解压 <code className="bg-muted px-1 rounded">extension.tar.gz</code>，得到 <code className="bg-muted px-1 rounded">extension</code> 文件夹
+                      使用解压工具（如 WinRAR、7-Zip）解压 <code className="bg-muted px-1 rounded">PathUp-AutoFill.tgz</code>，会得到一个 <code className="bg-muted px-1 rounded">extension</code> 文件夹
                     </p>
                   </div>
                 </div>
@@ -148,7 +148,7 @@ function ExtensionContent() {
                   <div>
                     <h4 className="font-semibold mb-1">加载扩展</h4>
                     <p className="text-sm text-muted-foreground">
-                      点击「加载已解压的扩展程序」按钮，选择解压后的 <code className="bg-muted px-1 rounded">extension</code> 文件夹
+                      点击「加载已解压的扩展程序」按钮，<strong>直接选择解压出来的 <code className="bg-muted px-1 rounded">extension</code> 文件夹</strong>（不要选择上级目录）
                     </p>
                   </div>
                 </div>
