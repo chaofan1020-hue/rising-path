@@ -21,6 +21,10 @@ export const metadata: Metadata = {
   ],
   authors: [{ name: 'PathUp Team' }],
   generator: 'Coze Code',
+  icons: {
+    icon: '/favicon.png',
+    apple: '/favicon.png',
+  },
 };
 
 export default function RootLayout({
