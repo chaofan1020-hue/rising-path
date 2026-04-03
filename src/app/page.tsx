@@ -239,33 +239,33 @@ export default function Home() {
 
       {/* Features Section - Bento Grid Style */}
       <section className="container mx-auto px-4 md:px-6 py-12 md:py-24">
-        <div className="text-center mb-8 md:mb-20">
-          <div className="inline-flex items-center gap-2 px-3 py-1.5 md:px-4 md:py-2 rounded-full bg-muted/50 border border-muted/50 mb-4 md:mb-8">
+        <div className="text-center mb-6 md:mb-20">
+          <div className="inline-flex items-center gap-2 px-3 py-1.5 md:px-4 md:py-2 rounded-full bg-muted/50 border border-muted/50 mb-3 md:mb-8">
             <Layers className="h-4 w-4 md:h-5 md:w-5 text-primary" />
             <span className="text-sm md:text-base font-medium">六大核心能力</span>
           </div>
-          <h2 className="text-2xl sm:text-3xl md:text-6xl font-bold mb-3 md:mb-6">
+          <h2 className="text-2xl sm:text-3xl md:text-6xl font-bold mb-2 md:mb-6">
             为求职而生的
             <span className="bg-gradient-to-r from-primary to-primary/60 bg-clip-text text-transparent ml-1 md:ml-3">超级工具</span>
           </h2>
-          <p className="text-muted-foreground text-base md:text-xl max-w-xl mx-auto">
+          <p className="text-muted-foreground text-sm md:text-xl max-w-xl mx-auto hidden md:block">
             每一个功能都经过精心设计，让求职之路更加顺畅
           </p>
         </div>
         
-        {/* Bento Grid */}
-        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4 md:gap-6">
+        {/* Mobile: Horizontal Card Layout / Desktop: Bento Grid */}
+        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3 md:gap-6">
           {features.map((feature) => (
             <Link 
               href={feature.href} 
               key={feature.title}
-              className="group relative overflow-hidden rounded-2xl md:rounded-3xl transition-all duration-500 hover:-translate-y-1"
+              className="group relative overflow-hidden rounded-2xl md:rounded-3xl transition-all duration-300 md:duration-500 hover:-translate-y-1 active:scale-[0.98] md:active:scale-100"
             >
               {/* Background */}
               <div className="absolute inset-0 bg-gradient-to-br from-muted/30 to-muted/10" />
               
-              {/* Pattern */}
-              <div className="absolute inset-0 opacity-30">
+              {/* Pattern - Desktop only */}
+              <div className="absolute inset-0 opacity-30 hidden md:block">
                 {feature.pattern === 'dots' && (
                   <div className="w-full h-full bg-[radial-gradient(circle,_hsl(var(--muted-foreground))_1px,_transparent_1px)] bg-[size:16px_16px]" />
                 )}
@@ -277,28 +277,28 @@ export default function Home() {
               {/* Gradient overlay on hover */}
               <div className={`absolute inset-0 bg-gradient-to-br ${feature.gradient} opacity-0 group-hover:opacity-5 transition-opacity duration-500`} />
               
-              {/* Content */}
-              <div className="relative h-full p-5 md:p-9 flex flex-col min-h-[180px] md:min-h-[260px]">
+              {/* Mobile: Horizontal Layout / Desktop: Vertical Layout */}
+              <div className="relative h-full p-4 md:p-9 flex flex-row md:flex-col items-center gap-4 md:gap-0 min-h-[auto] md:min-h-[260px]">
                 {/* Icon */}
-                <div className={`w-12 h-12 md:w-16 md:h-16 rounded-xl md:rounded-2xl bg-gradient-to-br ${feature.gradient} flex items-center justify-center mb-auto shadow-xl group-hover:scale-110 group-hover:rotate-3 transition-all duration-500`}>
-                  <feature.icon className="h-6 w-6 md:h-8 md:w-8 text-white" />
+                <div className={`w-14 h-14 md:w-16 md:h-16 rounded-2xl bg-gradient-to-br ${feature.gradient} flex items-center justify-center md:mb-auto shadow-lg md:shadow-xl group-hover:scale-110 md:group-hover:rotate-3 transition-all duration-300 md:duration-500 flex-shrink-0`}>
+                  <feature.icon className="h-7 w-7 md:h-8 md:w-8 text-white" />
                 </div>
                 
                 {/* Text */}
-                <div>
-                  <h3 className="font-bold text-lg md:text-2xl mb-2 md:mb-3 group-hover:text-primary transition-colors">
+                <div className="flex-1 text-left md:text-center">
+                  <h3 className="font-bold text-base md:text-2xl mb-1 md:mb-3 group-hover:text-primary transition-colors">
                     {feature.title}
                   </h3>
-                  <p className="text-muted-foreground text-sm md:text-base leading-relaxed mb-1 md:mb-2">
+                  <p className="text-muted-foreground text-xs md:text-base leading-relaxed line-clamp-2 md:line-clamp-none">
                     {feature.description}
-                  </p>
-                  <p className="text-muted-foreground/70 text-xs md:text-sm hidden sm:block">
-                    {feature.detail}
                   </p>
                 </div>
                 
-                {/* Arrow */}
-                <div className="absolute bottom-9 right-9 w-12 h-12 rounded-xl bg-muted/50 flex items-center justify-center opacity-0 group-hover:opacity-100 transition-all duration-300 group-hover:translate-x-1">
+                {/* Arrow - Mobile */}
+                <ChevronRight className="h-5 w-5 text-muted-foreground md:hidden flex-shrink-0" />
+                
+                {/* Arrow - Desktop */}
+                <div className="hidden md:flex absolute bottom-9 right-9 w-12 h-12 rounded-xl bg-muted/50 items-center justify-center opacity-0 group-hover:opacity-100 transition-all duration-300 group-hover:translate-x-1">
                   <ArrowRight className="h-6 w-6 text-primary" />
                 </div>
               </div>
