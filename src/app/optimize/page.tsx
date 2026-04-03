@@ -328,6 +328,106 @@ function OptimizeContent() {
     navigator.clipboard.writeText(optimizedContent);
   };
 
+  const handleDownload = () => {
+    let content = '';
+    const fileName = `resume_${targetPosition || 'optimized'}_${new Date().toISOString().slice(0, 10)}.txt`;
+    
+    if (resumeData) {
+      // 从结构化数据生成文本
+      content = generateTextFromResumeData(resumeData);
+    } else {
+      content = optimizedContent;
+    }
+    
+    const blob = new Blob([content], { type: 'text/plain;charset=utf-8' });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = fileName;
+    document.body.appendChild(a);
+    a.click();
+    document.body.removeChild(a);
+    URL.revokeObjectURL(url);
+  };
+
+  const generateTextFromResumeData = (data: ResumeData): string => {
+    const lines: string[] = [];
+    
+    // 姓名
+    lines.push(data.name || '姓名');
+    lines.push('');
+    
+    // 联系方式
+    const contact: string[] = [];
+    if (data.contact?.email) contact.push(data.contact.email);
+    if (data.contact?.phone) contact.push(data.contact.phone);
+    if (data.contact?.location) contact.push(data.contact.location);
+    if (data.contact?.linkedin) contact.push(data.contact.linkedin);
+    if (contact.length > 0) {
+      lines.push(contact.join(' | '));
+      lines.push('');
+    }
+    
+    // 个人简介
+    if (data.summary) {
+      lines.push('=== 个人简介 ===');
+      lines.push(data.summary);
+      lines.push('');
+    }
+    
+    // 专业技能
+    if (data.skills && data.skills.length > 0) {
+      lines.push('=== 专业技能 ===');
+      lines.push(data.skills.join(', '));
+      lines.push('');
+    }
+    
+    // 工作经历
+    if (data.experience && data.experience.length > 0) {
+      lines.push('=== 工作经历 ===');
+      data.experience.forEach(exp => {
+        lines.push(`\n${exp.title} | ${exp.company}${exp.location ? ' | ' + exp.location : ''}`);
+        lines.push(exp.period);
+        exp.highlights.forEach(h => lines.push(`• ${h}`));
+      });
+      lines.push('');
+    }
+    
+    // 教育背景
+    if (data.education && data.education.length > 0) {
+      lines.push('=== 教育背景 ===');
+      data.education.forEach(edu => {
+        let eduLine = `${edu.degree}`;
+        if (edu.major) eduLine += ` in ${edu.major}`;
+        eduLine += ` | ${edu.school}`;
+        if (edu.gpa) eduLine += ` | GPA: ${edu.gpa}`;
+        lines.push(eduLine);
+        lines.push(edu.period);
+      });
+      lines.push('');
+    }
+    
+    // 项目经历
+    if (data.projects && data.projects.length > 0) {
+      lines.push('=== 项目经历 ===');
+      data.projects.forEach(project => {
+        lines.push(`\n${project.name}${project.role ? ' | ' + project.role : ''}`);
+        if (project.period) lines.push(project.period);
+        if (project.description) lines.push(project.description);
+        project.highlights.forEach(h => lines.push(`• ${h}`));
+      });
+      lines.push('');
+    }
+    
+    // 证书资质
+    if (data.certifications && data.certifications.length > 0) {
+      lines.push('=== 证书资质 ===');
+      data.certifications.forEach(cert => lines.push(`• ${cert}`));
+    }
+    
+    return lines.join('\n');
+  };
+
   const handleTranslate = async () => {
     if (!resumeData) return;
     
@@ -567,7 +667,7 @@ function OptimizeContent() {
                 )}
               </Button>
             )}
-            <Button size="sm" className="h-8 text-xs">
+            <Button size="sm" className="h-8 text-xs" onClick={handleDownload}>
               <Download className="mr-1.5 h-3.5 w-3.5" />
               下载
             </Button>
