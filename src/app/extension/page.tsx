@@ -64,8 +64,8 @@ function ExtensionContent() {
             </p>
             <div className="flex flex-wrap justify-center gap-4">
               <a 
-                href="/PathUp-AutoFill.tgz"
-                download="PathUp-AutoFill.tgz"
+                href="/PathUp-AutoFill.zip"
+                download="PathUp-AutoFill.zip"
                 className="inline-flex items-center gap-2 bg-white text-purple-600 px-6 py-3 rounded-lg font-semibold hover:bg-white/90 transition-colors"
               >
                 <Download className="h-5 w-5" />
@@ -100,7 +100,7 @@ function ExtensionContent() {
                   <div>
                     <h4 className="font-semibold mb-1">下载扩展压缩包</h4>
                     <p className="text-sm text-muted-foreground mb-2">
-                      点击上方「下载扩展压缩包」按钮下载 <code className="bg-muted px-1 rounded">PathUp-AutoFill.tgz</code>
+                      点击上方「下载扩展压缩包」按钮下载 <code className="bg-muted px-1 rounded">PathUp-AutoFill.zip</code>
                     </p>
                   </div>
                 </div>
