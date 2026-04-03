@@ -118,14 +118,16 @@ export default function Home() {
 
       {/* Navigation */}
       <nav className="border-b/40 bg-background/80 backdrop-blur-xl sticky top-0 z-50">
-        <div className="container mx-auto px-6 h-16 flex items-center justify-between">
-          <Link href="/" className="flex items-center gap-3 group">
-            <div className="w-9 h-9 rounded-xl bg-gradient-to-br from-primary to-primary/70 flex items-center justify-center shadow-lg shadow-primary/20">
-              <Briefcase className="h-5 w-5 text-primary-foreground" />
+        <div className="container mx-auto px-4 md:px-6 h-16 flex items-center justify-between">
+          <Link href="/" className="flex items-center gap-2 md:gap-3 group">
+            <div className="w-8 h-8 md:w-9 md:h-9 rounded-xl bg-gradient-to-br from-primary to-primary/70 flex items-center justify-center shadow-lg shadow-primary/20">
+              <Briefcase className="h-4 w-4 md:h-5 md:w-5 text-primary-foreground" />
             </div>
-            <span className="font-bold text-xl">PathUp</span>
+            <span className="font-bold text-lg md:text-xl">PathUp</span>
           </Link>
-          <div className="flex items-center gap-2">
+          
+          {/* Desktop Nav */}
+          <div className="hidden md:flex items-center gap-2">
             <Link href="/jobs">
               <Button variant="ghost" size="sm" className="text-muted-foreground hover:text-foreground">
                 岗位开放
@@ -148,40 +150,55 @@ export default function Home() {
               </Button>
             </Link>
           </div>
+          
+          {/* Mobile Nav - Simplified */}
+          <div className="flex md:hidden items-center gap-2">
+            <Link href="/jobs">
+              <Button variant="ghost" size="sm" className="text-muted-foreground hover:text-foreground px-2">
+                岗位
+              </Button>
+            </Link>
+            <Link href="/login">
+              <Button size="sm" className="bg-gradient-to-r from-primary to-primary/80 hover:opacity-90">
+                登录
+              </Button>
+            </Link>
+          </div>
         </div>
       </nav>
 
       {/* Hero Section */}
-      <section className="container mx-auto px-6 pt-28 pb-24">
+      <section className="container mx-auto px-4 md:px-6 pt-16 pb-16 md:pt-28 md:pb-24">
         <div className="max-w-4xl mx-auto text-center">
-          <div className="inline-flex items-center gap-2 px-4 py-2 rounded-full bg-primary/5 border border-primary/10 mb-10">
+          <div className="inline-flex items-center gap-2 px-3 py-1.5 md:px-4 md:py-2 rounded-full bg-primary/5 border border-primary/10 mb-6 md:mb-10">
             <div className="w-2 h-2 rounded-full bg-primary animate-pulse" />
-            <span className="text-sm font-medium text-primary">专为海外留学生打造的智能求职平台</span>
+            <span className="text-xs md:text-sm font-medium text-primary">专为海外留学生打造的智能求职平台</span>
           </div>
           
-          <h1 className="text-5xl md:text-7xl font-bold tracking-tight mb-8 leading-[1.1]">
-            <span className="block mb-2">智能求职</span>
+          <h1 className="text-3xl sm:text-4xl md:text-7xl font-bold tracking-tight mb-4 md:mb-8 leading-[1.1]">
+            <span className="block mb-1 md:mb-2">智能求职</span>
             <span className="bg-gradient-to-r from-primary via-primary/80 to-primary/60 bg-clip-text text-transparent">
               一步到位
             </span>
           </h1>
           
-          <p className="text-lg md:text-xl text-muted-foreground max-w-2xl mx-auto mb-12 leading-relaxed">
-            AI驱动的求职助手，从简历优化到岗位匹配<br className="hidden md:block" />
+          <p className="text-base md:text-xl text-muted-foreground max-w-2xl mx-auto mb-8 md:mb-12 leading-relaxed">
+            AI驱动的求职助手，从简历优化到岗位匹配
+            <br className="hidden sm:block" />
             让每一步都更精准、更高效
           </p>
           
-          <div className="flex flex-col sm:flex-row gap-4 justify-center">
-            <Link href="/login">
-              <Button size="lg" className="h-16 px-12 text-lg bg-gradient-to-r from-primary to-primary/80 hover:opacity-90 shadow-2xl shadow-primary/20 rounded-2xl group">
-                <Search className="mr-2 h-5 w-5" />
+          <div className="flex flex-col sm:flex-row gap-3 md:gap-4 justify-center">
+            <Link href="/login" className="w-full sm:w-auto">
+              <Button size="lg" className="w-full sm:w-auto h-12 md:h-16 px-8 md:px-12 text-base md:text-lg bg-gradient-to-r from-primary to-primary/80 hover:opacity-90 shadow-2xl shadow-primary/20 rounded-2xl group">
+                <Search className="mr-2 h-4 w-4 md:h-5 md:w-5" />
                 开始使用
-                <ArrowRight className="ml-2 h-5 w-5 group-hover:translate-x-1 transition-transform" />
+                <ArrowRight className="ml-2 h-4 w-4 md:h-5 md:w-5 group-hover:translate-x-1 transition-transform" />
               </Button>
             </Link>
-            <Link href="/resume">
-              <Button size="lg" variant="outline" className="h-16 px-12 text-lg rounded-2xl border-2 hover:bg-muted/50">
-                <Upload className="mr-2 h-5 w-5" />
+            <Link href="/resume" className="w-full sm:w-auto">
+              <Button size="lg" variant="outline" className="w-full sm:w-auto h-12 md:h-16 px-8 md:px-12 text-base md:text-lg rounded-2xl border-2 hover:bg-muted/50">
+                <Upload className="mr-2 h-4 w-4 md:h-5 md:w-5" />
                 上传简历
               </Button>
             </Link>
@@ -190,27 +207,27 @@ export default function Home() {
       </section>
 
       {/* Advantages Section - Premium Style */}
-      <section className="container mx-auto px-6 py-20">
-        <div className="grid md:grid-cols-3 gap-8">
+      <section className="container mx-auto px-4 md:px-6 py-12 md:py-20">
+        <div className="grid grid-cols-1 md:grid-cols-3 gap-4 md:gap-8">
           {advantages.map((item) => (
             <div
               key={item.title}
               className="group"
             >
-              <div className="relative p-12 rounded-[32px] bg-neutral-950 text-white overflow-hidden hover:-translate-y-3 transition-all duration-500">
+              <div className="relative p-6 md:p-12 rounded-2xl md:rounded-[32px] bg-neutral-950 text-white overflow-hidden hover:-translate-y-1 md:hover:-translate-y-3 transition-all duration-500">
                 {/* Gradient overlay - more visible */}
                 <div className={`absolute inset-0 opacity-0 group-hover:opacity-100 transition-opacity duration-500 ${item.iconColor === 'text-sky-600' ? 'bg-gradient-to-br from-blue-500/30 via-blue-600/10 to-transparent' : item.iconColor === 'text-violet-600' ? 'bg-gradient-to-br from-purple-500/30 via-purple-600/10 to-transparent' : 'bg-gradient-to-br from-orange-500/30 via-orange-600/10 to-transparent'}`} />
                 
                 {/* Icon */}
-                <div className="relative mb-10">
-                  <div className="w-14 h-14 rounded-full border border-white/20 flex items-center justify-center group-hover:border-white/60 group-hover:bg-white/10 transition-all duration-300">
-                    <item.icon className="h-7 w-7 text-white/80 group-hover:text-white transition-colors" />
+                <div className="relative mb-4 md:mb-10">
+                  <div className="w-10 h-10 md:w-14 md:h-14 rounded-full border border-white/20 flex items-center justify-center group-hover:border-white/60 group-hover:bg-white/10 transition-all duration-300">
+                    <item.icon className="h-5 w-5 md:h-7 md:w-7 text-white/80 group-hover:text-white transition-colors" />
                   </div>
                 </div>
                 
                 {/* Text */}
-                <h3 className="relative font-semibold text-2xl mb-4 tracking-tight">{item.title}</h3>
-                <p className="relative text-white/50 text-base leading-relaxed font-light">{item.description}</p>
+                <h3 className="relative font-semibold text-lg md:text-2xl mb-2 md:mb-4 tracking-tight">{item.title}</h3>
+                <p className="relative text-white/50 text-sm md:text-base leading-relaxed font-light">{item.description}</p>
                 
                 {/* Bottom line accent - brighter on hover */}
                 <div className={`absolute bottom-0 left-0 right-0 h-px ${item.iconColor === 'text-sky-600' ? 'bg-gradient-to-r from-transparent via-blue-400 to-transparent' : item.iconColor === 'text-violet-600' ? 'bg-gradient-to-r from-transparent via-purple-400 to-transparent' : 'bg-gradient-to-r from-transparent via-orange-400 to-transparent'} opacity-50 group-hover:opacity-100 transition-opacity duration-300`} />
@@ -221,28 +238,28 @@ export default function Home() {
       </section>
 
       {/* Features Section - Bento Grid Style */}
-      <section className="container mx-auto px-6 py-24">
-        <div className="text-center mb-20">
-          <div className="inline-flex items-center gap-2 px-4 py-2 rounded-full bg-muted/50 border border-muted/50 mb-8">
-            <Layers className="h-5 w-5 text-primary" />
-            <span className="text-base font-medium">六大核心能力</span>
+      <section className="container mx-auto px-4 md:px-6 py-12 md:py-24">
+        <div className="text-center mb-8 md:mb-20">
+          <div className="inline-flex items-center gap-2 px-3 py-1.5 md:px-4 md:py-2 rounded-full bg-muted/50 border border-muted/50 mb-4 md:mb-8">
+            <Layers className="h-4 w-4 md:h-5 md:w-5 text-primary" />
+            <span className="text-sm md:text-base font-medium">六大核心能力</span>
           </div>
-          <h2 className="text-5xl md:text-6xl font-bold mb-6">
+          <h2 className="text-2xl sm:text-3xl md:text-6xl font-bold mb-3 md:mb-6">
             为求职而生的
-            <span className="bg-gradient-to-r from-primary to-primary/60 bg-clip-text text-transparent ml-3">超级工具</span>
+            <span className="bg-gradient-to-r from-primary to-primary/60 bg-clip-text text-transparent ml-1 md:ml-3">超级工具</span>
           </h2>
-          <p className="text-muted-foreground text-xl max-w-xl mx-auto">
+          <p className="text-muted-foreground text-base md:text-xl max-w-xl mx-auto">
             每一个功能都经过精心设计，让求职之路更加顺畅
           </p>
         </div>
         
         {/* Bento Grid */}
-        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-6">
+        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4 md:gap-6">
           {features.map((feature) => (
             <Link 
               href={feature.href} 
               key={feature.title}
-              className="group relative overflow-hidden rounded-3xl transition-all duration-500 hover:-translate-y-1"
+              className="group relative overflow-hidden rounded-2xl md:rounded-3xl transition-all duration-500 hover:-translate-y-1"
             >
               {/* Background */}
               <div className="absolute inset-0 bg-gradient-to-br from-muted/30 to-muted/10" />
@@ -261,21 +278,21 @@ export default function Home() {
               <div className={`absolute inset-0 bg-gradient-to-br ${feature.gradient} opacity-0 group-hover:opacity-5 transition-opacity duration-500`} />
               
               {/* Content */}
-              <div className="relative h-full p-9 flex flex-col min-h-[260px]">
+              <div className="relative h-full p-5 md:p-9 flex flex-col min-h-[180px] md:min-h-[260px]">
                 {/* Icon */}
-                <div className={`w-16 h-16 rounded-2xl bg-gradient-to-br ${feature.gradient} flex items-center justify-center mb-auto shadow-xl group-hover:scale-110 group-hover:rotate-3 transition-all duration-500`}>
-                  <feature.icon className="h-8 w-8 text-white" />
+                <div className={`w-12 h-12 md:w-16 md:h-16 rounded-xl md:rounded-2xl bg-gradient-to-br ${feature.gradient} flex items-center justify-center mb-auto shadow-xl group-hover:scale-110 group-hover:rotate-3 transition-all duration-500`}>
+                  <feature.icon className="h-6 w-6 md:h-8 md:w-8 text-white" />
                 </div>
                 
                 {/* Text */}
                 <div>
-                  <h3 className="font-bold text-2xl mb-3 group-hover:text-primary transition-colors">
+                  <h3 className="font-bold text-lg md:text-2xl mb-2 md:mb-3 group-hover:text-primary transition-colors">
                     {feature.title}
                   </h3>
-                  <p className="text-muted-foreground text-base leading-relaxed mb-2">
+                  <p className="text-muted-foreground text-sm md:text-base leading-relaxed mb-1 md:mb-2">
                     {feature.description}
                   </p>
-                  <p className="text-muted-foreground/70 text-sm">
+                  <p className="text-muted-foreground/70 text-xs md:text-sm hidden sm:block">
                     {feature.detail}
                   </p>
                 </div>
