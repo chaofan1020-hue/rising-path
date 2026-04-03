@@ -81,13 +81,13 @@ function CompanyLogo({ company, logoUrl }: { company: string; logoUrl?: string }
   // 如果有logo_url且图片加载成功
   if (logoUrl && !imgError) {
     return (
-      <div className="w-9 h-9 rounded-lg overflow-hidden bg-white border border-muted/50 flex-shrink-0 shadow-sm">
+      <div className="w-12 h-12 rounded-xl overflow-hidden bg-white border border-muted/50 flex-shrink-0 shadow-sm">
         <Image
           src={logoUrl}
           alt={company}
-          width={36}
-          height={36}
-          className="w-full h-full object-contain p-0.5"
+          width={48}
+          height={48}
+          className="w-full h-full object-contain p-1"
           onError={() => setImgError(true)}
         />
       </div>
@@ -99,13 +99,13 @@ function CompanyLogo({ company, logoUrl }: { company: string; logoUrl?: string }
   
   if (!imgError) {
     return (
-      <div className="w-9 h-9 rounded-lg overflow-hidden bg-white border border-muted/50 flex-shrink-0 shadow-sm">
+      <div className="w-12 h-12 rounded-xl overflow-hidden bg-white border border-muted/50 flex-shrink-0 shadow-sm">
         <Image
           src={clearbitUrl}
           alt={company}
-          width={36}
-          height={36}
-          className="w-full h-full object-contain p-1"
+          width={48}
+          height={48}
+          className="w-full h-full object-contain p-1.5"
           onError={() => setImgError(true)}
           unoptimized
         />
@@ -115,8 +115,8 @@ function CompanyLogo({ company, logoUrl }: { company: string; logoUrl?: string }
   
   // 使用首字母占位符
   return (
-    <div className={`w-9 h-9 rounded-lg bg-gradient-to-br ${getCompanyGradient(company)} flex items-center justify-center flex-shrink-0 shadow-sm`}>
-      <span className="text-white font-bold text-sm">
+    <div className={`w-12 h-12 rounded-xl bg-gradient-to-br ${getCompanyGradient(company)} flex items-center justify-center flex-shrink-0 shadow-sm`}>
+      <span className="text-white font-bold text-lg">
         {getCompanyInitial(company)}
       </span>
     </div>
@@ -486,46 +486,46 @@ function JobsContent() {
           ) : (
             filteredJobs.map((job) => (
               <Card key={job.id} className="hover:shadow-lg transition-all duration-300 active:scale-[0.99] md:active:scale-100 md:hover:-translate-y-0.5">
-                <CardContent className="pt-3 pb-3 px-4">
-                  <div className="flex gap-3">
+                <CardContent className="pt-4 md:pt-6 pb-4">
+                  <div className="flex gap-3 md:gap-4">
                     {/* 左侧内容区 */}
-                    <div className="flex-1 min-w-0 flex flex-col gap-2">
+                    <div className="flex-1 min-w-0 flex flex-col gap-3 md:gap-4">
                       {/* 岗位信息 - 横向布局 */}
-                      <div className="flex items-start gap-2.5">
+                      <div className="flex items-start gap-3 md:gap-4">
                         <CompanyLogo company={job.company} logoUrl={job.logo_url} />
                         <div className="flex-1 min-w-0">
-                          <h3 className="font-semibold text-sm md:text-base hover:text-primary cursor-pointer transition-colors line-clamp-1">
+                          <h3 className="font-semibold text-base md:text-lg hover:text-primary cursor-pointer transition-colors line-clamp-1">
                             {job.title}
                           </h3>
-                          <p className="text-xs text-muted-foreground truncate">{job.company}</p>
+                          <p className="text-sm text-muted-foreground truncate">{job.company}</p>
                         </div>
                       </div>
                       
                       {/* 标签区 */}
-                      <div className="flex flex-wrap gap-1">
-                        <Badge variant="secondary" className="rounded-md text-[10px] px-1.5 py-0 h-5" translate="no">
-                          <MapPin className="h-2.5 w-2.5 mr-0.5" />
+                      <div className="flex flex-wrap gap-1.5 md:gap-2">
+                        <Badge variant="secondary" className="rounded-md text-xs" translate="no">
+                          <MapPin className="h-3 w-3 mr-1" />
                           {job.region}
                         </Badge>
-                        <Badge variant="secondary" className="rounded-md text-[10px] px-1.5 py-0 h-5" translate="no">
-                          <Briefcase className="h-2.5 w-2.5 mr-0.5" />
+                        <Badge variant="secondary" className="rounded-md text-xs" translate="no">
+                          <Briefcase className="h-3 w-3 mr-1" />
                           {job.direction}
                         </Badge>
-                        <Badge variant="secondary" className="rounded-md text-[10px] px-1.5 py-0 h-5" translate="no">
-                          <Users className="h-2.5 w-2.5 mr-0.5" />
+                        <Badge variant="secondary" className="rounded-md text-xs" translate="no">
+                          <Users className="h-3 w-3 mr-1" />
                           {job.audience}
                         </Badge>
                         {job.salary_range && (
-                          <Badge variant="outline" className="text-green-600 border-green-600 rounded-md text-[10px] px-1.5 py-0 h-5">
+                          <Badge variant="outline" className="text-green-600 border-green-600 rounded-md text-xs">
                             {job.salary_range}
                           </Badge>
                         )}
                         {job.is_active === false ? (
-                          <Badge variant="secondary" className="bg-gray-100 text-gray-600 rounded-md text-[10px] px-1.5 py-0 h-5">
+                          <Badge variant="secondary" className="bg-gray-100 text-gray-600 rounded-md text-xs">
                             不可投递
                           </Badge>
                         ) : (
-                          <Badge variant="default" className="bg-green-600 rounded-md text-[10px] px-1.5 py-0 h-5">
+                          <Badge variant="default" className="bg-green-600 rounded-md text-xs">
                             可投递
                           </Badge>
                         )}
@@ -533,45 +533,45 @@ function JobsContent() {
                       
                       {/* 描述 */}
                       {job.description && (
-                        <p className="text-xs text-muted-foreground line-clamp-1">
+                        <p className="text-xs md:text-sm text-muted-foreground line-clamp-2">
                           {job.description}
                         </p>
                       )}
                     </div>
                     
                     {/* 右侧按钮区 - 垂直排列 */}
-                    <div className="flex flex-col gap-1.5 flex-shrink-0">
+                    <div className="flex flex-col gap-2 flex-shrink-0">
                       {job.is_active !== false && (
                         <Button 
                           size="sm" 
-                          className="rounded-lg text-xs h-7 w-16 bg-green-600 hover:bg-green-700"
+                          className="rounded-lg text-xs md:text-sm h-9 w-20 md:w-24 bg-green-600 hover:bg-green-700"
                           onClick={() => handleAdd(job.id)}
                           disabled={applyingJobId === job.id || appliedJobIds.has(job.id)}
                         >
                           {applyingJobId === job.id ? (
-                            <Loader2 className="h-3 w-3 animate-spin" />
+                            <Loader2 className="h-3.5 w-3.5 animate-spin" />
                           ) : appliedJobIds.has(job.id) ? (
                             <>
-                              <Check className="h-3 w-3 mr-0.5" />
+                              <Check className="h-3.5 w-3.5 mr-1" />
                               已添加
                             </>
                           ) : (
                             <>
-                              <Plus className="h-3 w-3 mr-0.5" />
+                              <Plus className="h-3.5 w-3.5 mr-1" />
                               添加
                             </>
                           )}
                         </Button>
                       )}
-                      <Button size="sm" variant="outline" asChild className="rounded-lg text-xs h-7 w-16">
+                      <Button size="sm" variant="outline" asChild className="rounded-lg text-xs md:text-sm h-9 w-20 md:w-24">
                         <Link href={`/jobs/${job.id}`}>
                           详情
                         </Link>
                       </Button>
                       {job.job_url && (
-                        <Button size="sm" variant="outline" asChild className="rounded-lg text-xs h-7 w-16">
+                        <Button size="sm" variant="outline" asChild className="rounded-lg text-xs md:text-sm h-9 w-20 md:w-24">
                           <a href={job.job_url} target="_blank" rel="noopener noreferrer">
-                            <ExternalLink className="h-3 w-3 mr-0.5" />
+                            <ExternalLink className="h-3.5 w-3.5 mr-1" />
                             原链接
                           </a>
                         </Button>
