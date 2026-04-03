@@ -19,7 +19,7 @@ import {
 
 const features = [
   {
-    title: '岗位查询',
+    title: '岗位开放',
     description: '按地区、方向、受众筛选海量海外岗位',
     detail: '支持多维度筛选，一键收藏心仪机会',
     icon: Search,
@@ -113,7 +113,7 @@ export default function Home() {
           <div className="flex items-center gap-2">
             <Link href="/jobs">
               <Button variant="ghost" size="sm" className="text-muted-foreground hover:text-foreground">
-                岗位查询
+                岗位开放
               </Button>
             </Link>
             <Link href="/resume">
