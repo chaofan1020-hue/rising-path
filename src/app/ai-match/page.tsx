@@ -300,40 +300,40 @@ function AIMatchContent() {
                 </Select>
               </div>
 
-              {/* 筛选器 */}
-              <MultiSelectFilter
-                label="地区"
-                icon={MapPin}
-                options={regions}
-                selected={selectedRegions}
-                onChange={setSelectedRegions}
-              />
-              <MultiSelectFilter
-                label="方向"
-                icon={Compass}
-                options={directions}
-                selected={selectedDirections}
-                onChange={setSelectedDirections}
-              />
-
-              {/* 匹配按钮 */}
-              <Button
-                onClick={handleMatch}
-                disabled={!selectedResumeId || matching}
-                className="bg-gradient-to-r from-purple-600 to-blue-600 hover:from-purple-700 hover:to-blue-700 h-10"
-              >
-                {matching ? (
-                  <>
-                    <Loader2 className="mr-2 h-4 w-4 animate-spin" />
-                    匹配中...
-                  </>
-                ) : (
-                  <>
-                    <Sparkles className="mr-2 h-4 w-4" />
-                    开始AI匹配
-                  </>
-                )}
-              </Button>
+              {/* 筛选器 - 推到右边 */}
+              <div className="flex items-center gap-3 md:ml-auto">
+                <MultiSelectFilter
+                  label="地区"
+                  icon={MapPin}
+                  options={regions}
+                  selected={selectedRegions}
+                  onChange={setSelectedRegions}
+                />
+                <MultiSelectFilter
+                  label="方向"
+                  icon={Compass}
+                  options={directions}
+                  selected={selectedDirections}
+                  onChange={setSelectedDirections}
+                />
+                <Button
+                  onClick={handleMatch}
+                  disabled={!selectedResumeId || matching}
+                  className="bg-gradient-to-r from-purple-600 to-blue-600 hover:from-purple-700 hover:to-blue-700 h-10"
+                >
+                  {matching ? (
+                    <>
+                      <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                      匹配中...
+                    </>
+                  ) : (
+                    <>
+                      <Sparkles className="mr-2 h-4 w-4" />
+                      开始AI匹配
+                    </>
+                  )}
+                </Button>
+              </div>
             </div>
 
             {/* 已选择的筛选条件显示 */}
