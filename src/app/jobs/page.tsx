@@ -1,27 +1,20 @@
 'use client';
 
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useCallback } from 'react';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent } from '@/components/ui/card';
 import { Input } from '@/components/ui/input';
 import { Badge } from '@/components/ui/badge';
 import { Checkbox } from '@/components/ui/checkbox';
 import {
-  Select,
-  SelectContent,
-  SelectItem,
-  SelectTrigger,
-  SelectValue,
-} from '@/components/ui/select';
-import {
   Popover,
   PopoverContent,
   PopoverTrigger,
 } from '@/components/ui/popover';
-import { Search, MapPin, Briefcase, Users, ExternalLink, Building, ChevronDown, X } from 'lucide-react';
+import { Search, MapPin, Briefcase, Users, ExternalLink, ChevronDown, X, Send, Loader2 } from 'lucide-react';
 import Link from 'next/link';
 import Image from 'next/image';
-import { AccessGuard } from '@/components/access-guard';
+import { AccessGuard, useAccessCode } from '@/components/access-guard';
 
 interface Job {
   id: number;
@@ -267,13 +260,16 @@ function SingleSelectFilter({
   );
 }
 
-export default function JobsPage() {
+// 内部组件 - 在 AccessGuard 内部使用 useAccessCode
+function JobsContent() {
   const [jobs, setJobs] = useState<Job[]>([]);
   const [loading, setLoading] = useState(true);
   const [searchTerm, setSearchTerm] = useState('');
   const [selectedRegions, setSelectedRegions] = useState<string[]>([]);
   const [selectedDirections, setSelectedDirections] = useState<string[]>([]);
   const [selectedAudience, setSelectedAudience] = useState('全部');
+  const [applyingJobId, setApplyingJobId] = useState<number | null>(null);
+  const [appliedJobIds, setAppliedJobIds] = useState<Set<number>>(new Set());
   
   // 动态配置
   const [configs, setConfigs] = useState<{
@@ -282,23 +278,9 @@ export default function JobsPage() {
     audience: JobConfig[];
   }>({ region: [], direction: [], audience: [] });
 
-  useEffect(() => {
-    // 获取配置
-    fetch('/api/configs')
-      .then(res => res.json())
-      .then(data => {
-        setConfigs(data.configs || {});
-      })
-      .catch(console.error);
-    
-    fetchJobs();
-  }, []);
+  const { accessCodeId } = useAccessCode();
 
-  useEffect(() => {
-    fetchJobs();
-  }, [selectedRegions, selectedDirections, selectedAudience]);
-
-  const fetchJobs = async () => {
+  const fetchJobs = useCallback(async () => {
     setLoading(true);
     try {
       const params = new URLSearchParams();
@@ -317,6 +299,75 @@ export default function JobsPage() {
       console.error('Failed to fetch jobs:', error);
     } finally {
       setLoading(false);
+    }
+  }, [selectedRegions, selectedDirections, selectedAudience]);
+
+  // 获取已投递的岗位ID列表
+  const fetchAppliedJobIds = useCallback(async () => {
+    if (!accessCodeId) return;
+    try {
+      const response = await fetch(`/api/applications?access_code_id=${accessCodeId}`);
+      const data = await response.json();
+      const ids = new Set<number>((data.applications || []).map((app: { job_id: number }) => app.job_id));
+      setAppliedJobIds(ids);
+    } catch (error) {
+      console.error('Failed to fetch applied job ids:', error);
+    }
+  }, [accessCodeId]);
+
+  useEffect(() => {
+    // 获取配置
+    fetch('/api/configs')
+      .then(res => res.json())
+      .then(data => {
+        setConfigs(data.configs || {});
+      })
+      .catch(console.error);
+    
+    fetchJobs();
+    fetchAppliedJobIds();
+  }, [fetchJobs, fetchAppliedJobIds]);
+
+  // 投递岗位
+  const handleApply = async (jobId: number) => {
+    if (!accessCodeId) {
+      alert('请先登录');
+      return;
+    }
+    
+    if (appliedJobIds.has(jobId)) {
+      // 已有投递记录，跳转到网申详情页
+      window.location.href = '/applications';
+      return;
+    }
+
+    setApplyingJobId(jobId);
+    try {
+      const response = await fetch('/api/applications', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          job_id: jobId,
+          access_code_id: accessCodeId,
+          status: 'pending',
+          notes: '',
+        }),
+      });
+      
+      const data = await response.json();
+      
+      if (data.application) {
+        setAppliedJobIds(new Set([...appliedJobIds, jobId]));
+        // 跳转到网申详情页
+        window.location.href = '/applications';
+      } else if (data.error) {
+        alert('投递失败: ' + data.error);
+      }
+    } catch (error) {
+      console.error('Failed to apply:', error);
+      alert('投递失败，请重试');
+    } finally {
+      setApplyingJobId(null);
     }
   };
 
@@ -338,27 +389,26 @@ export default function JobsPage() {
     });
 
   return (
-    <AccessGuard>
-      <div className="min-h-screen bg-background">
-        {/* Header */}
-        <header className="border-b bg-background/95 backdrop-blur supports-[backdrop-filter]:bg-background/60 sticky top-0 z-50">
-          <div className="container mx-auto px-4 h-16 flex items-center justify-between">
-            <Link href="/" className="flex items-center gap-2">
-              <Briefcase className="h-6 w-6 text-primary" />
-              <span className="font-bold text-xl">PathUp</span>
+    <div className="min-h-screen bg-background">
+      {/* Header */}
+      <header className="border-b bg-background/95 backdrop-blur supports-[backdrop-filter]:bg-background/60 sticky top-0 z-50">
+        <div className="container mx-auto px-4 h-16 flex items-center justify-between">
+          <Link href="/" className="flex items-center gap-2">
+            <Briefcase className="h-6 w-6 text-primary" />
+            <span className="font-bold text-xl">PathUp</span>
+          </Link>
+          <nav className="flex items-center gap-4">
+            <Link href="/resume">
+              <Button variant="ghost" size="sm">简历管理</Button>
             </Link>
-            <nav className="flex items-center gap-4">
-              <Link href="/resume">
-                <Button variant="ghost" size="sm">简历管理</Button>
-              </Link>
-              <Link href="/ai-match">
-                <Button size="sm">AI选岗</Button>
-              </Link>
-            </nav>
-          </div>
-        </header>
+            <Link href="/ai-match">
+              <Button size="sm">AI选岗</Button>
+            </Link>
+          </nav>
+        </div>
+      </header>
 
-        <main className="container mx-auto px-4 py-8">
+      <main className="container mx-auto px-4 py-8">
         {/* Page Title */}
         <div className="mb-8">
           <h1 className="text-3xl font-bold mb-2">岗位查询</h1>
@@ -484,7 +534,32 @@ export default function JobsPage() {
                       )}
                     </div>
                     <div className="flex md:flex-col gap-2">
-                      <Button size="sm" asChild className="rounded-lg">
+                      {job.is_active !== false && (
+                        <Button 
+                          size="sm" 
+                          className="rounded-lg bg-green-600 hover:bg-green-700"
+                          onClick={() => handleApply(job.id)}
+                          disabled={applyingJobId === job.id || appliedJobIds.has(job.id)}
+                        >
+                          {applyingJobId === job.id ? (
+                            <>
+                              <Loader2 className="h-4 w-4 mr-1 animate-spin" />
+                              投递中...
+                            </>
+                          ) : appliedJobIds.has(job.id) ? (
+                            <>
+                              <Send className="h-4 w-4 mr-1" />
+                              已投递
+                            </>
+                          ) : (
+                            <>
+                              <Send className="h-4 w-4 mr-1" />
+                              立即投递
+                            </>
+                          )}
+                        </Button>
+                      )}
+                      <Button size="sm" variant="outline" asChild className="rounded-lg">
                         <Link href={`/jobs/${job.id}`}>
                           查看详情
                         </Link>
@@ -513,6 +588,14 @@ export default function JobsPage() {
         )}
       </main>
     </div>
+  );
+}
+
+// 导出默认函数
+export default function JobsPage() {
+  return (
+    <AccessGuard>
+      <JobsContent />
     </AccessGuard>
   );
 }

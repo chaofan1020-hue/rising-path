@@ -16,10 +16,12 @@ import {
   Clock,
   DollarSign,
   FileText,
-  Loader2
+  Loader2,
+  Send
 } from 'lucide-react';
 import Link from 'next/link';
 import Image from 'next/image';
+import { AccessGuard, useAccessCode } from '@/components/access-guard';
 
 interface Job {
   id: number;
@@ -89,12 +91,17 @@ function CompanyLogo({ company, logoUrl }: { company: string; logoUrl?: string }
   );
 }
 
-export default function JobDetailPage() {
+// 内部组件 - 在 AccessGuard 内部使用 useAccessCode
+function JobDetailContent() {
   const params = useParams();
   const router = useRouter();
   const [job, setJob] = useState<Job | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+  const [applying, setApplying] = useState(false);
+  const [applied, setApplied] = useState(false);
+  
+  const { accessCodeId } = useAccessCode();
 
   useEffect(() => {
     const fetchJob = async () => {
@@ -114,8 +121,63 @@ export default function JobDetailPage() {
 
     if (params.id) {
       fetchJob();
+      checkIfApplied();
     }
   }, [params.id]);
+
+  // 检查是否已投递
+  const checkIfApplied = async () => {
+    if (!accessCodeId || !params.id) return;
+    try {
+      const response = await fetch(`/api/applications?access_code_id=${accessCodeId}`);
+      const data = await response.json();
+      const hasApplied = (data.applications || []).some((app: { job_id: number }) => app.job_id === Number(params.id));
+      setApplied(hasApplied);
+    } catch (error) {
+      console.error('Failed to check application status:', error);
+    }
+  };
+
+  // 投递岗位
+  const handleApply = async () => {
+    if (!accessCodeId) {
+      alert('请先登录');
+      return;
+    }
+
+    if (applied) {
+      router.push('/applications');
+      return;
+    }
+
+    setApplying(true);
+    try {
+      const response = await fetch('/api/applications', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          job_id: Number(params.id),
+          access_code_id: accessCodeId,
+          status: 'pending',
+          notes: '',
+        }),
+      });
+      
+      const data = await response.json();
+      
+      if (data.application) {
+        setApplied(true);
+        router.push('/applications');
+      } else if (data.error) {
+        alert('投递失败: ' + data.error);
+      }
+    } catch (error) {
+      console.error('Failed to apply:', error);
+      alert('投递失败，请重试');
+    } finally {
+      setApplying(false);
+    }
+  };
 
   if (loading) {
     return (
@@ -177,14 +239,38 @@ export default function JobDetailPage() {
                 </div>
               </div>
               
-              {job.job_url && (
-                <Button asChild>
-                  <a href={job.job_url} target="_blank" rel="noopener noreferrer">
-                    <ExternalLink className="h-4 w-4 mr-2" />
-                    申请岗位
-                  </a>
+              <div className="flex flex-col gap-2">
+                <Button 
+                  className="bg-green-600 hover:bg-green-700"
+                  onClick={handleApply}
+                  disabled={applying}
+                >
+                  {applying ? (
+                    <>
+                      <Loader2 className="h-4 w-4 mr-2 animate-spin" />
+                      投递中...
+                    </>
+                  ) : applied ? (
+                    <>
+                      <Send className="h-4 w-4 mr-2" />
+                      已投递
+                    </>
+                  ) : (
+                    <>
+                      <Send className="h-4 w-4 mr-2" />
+                      立即投递
+                    </>
+                  )}
                 </Button>
-              )}
+                {job.job_url && (
+                  <Button variant="outline" asChild>
+                    <a href={job.job_url} target="_blank" rel="noopener noreferrer">
+                      <ExternalLink className="h-4 w-4 mr-2" />
+                      原链接
+                    </a>
+                  </Button>
+                )}
+              </div>
             </div>
           </CardContent>
         </Card>
@@ -236,5 +322,14 @@ export default function JobDetailPage() {
         </Card>
       </div>
     </div>
+  );
+}
+
+// 默认导出
+export default function JobDetailPage() {
+  return (
+    <AccessGuard>
+      <JobDetailContent />
+    </AccessGuard>
   );
 }

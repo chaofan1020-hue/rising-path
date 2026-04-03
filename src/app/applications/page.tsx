@@ -240,8 +240,10 @@ function ApplicationsContent() {
                           </p>
                         )}
                       </div>
-                      <Button size="sm" variant="outline">
-                        查看详情
+                      <Button size="sm" variant="outline" asChild>
+                        <Link href={`/jobs/${app.job_id}`}>
+                          查看详情
+                        </Link>
                       </Button>
                     </div>
                   </div>
