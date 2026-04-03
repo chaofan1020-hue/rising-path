@@ -22,7 +22,6 @@ const features = [
   {
     title: '岗位开放',
     description: '按地区、方向、受众筛选海量海外岗位',
-    detail: '支持多维度筛选，一键收藏心仪机会',
     icon: Search,
     href: '/jobs',
     gradient: 'from-blue-600 via-blue-500 to-cyan-500',
@@ -32,18 +31,15 @@ const features = [
   {
     title: 'AI智能选岗',
     description: '基于简历深度分析，精准匹配岗位',
-    detail: 'AI驱动智能推荐，找到最适合你的机会',
     icon: Brain,
     href: '/ai-match',
     gradient: 'from-violet-600 via-purple-500 to-fuchsia-500',
     hoverBg: 'hover:bg-violet-50',
     borderHover: 'hover:border-violet-300',
-    featured: true,
   },
   {
     title: '简历管理',
     description: '智能解析简历，一键管理',
-    detail: '支持 PDF、Word 多格式上传',
     icon: FileText,
     href: '/resume',
     gradient: 'from-emerald-600 via-green-500 to-teal-500',
@@ -53,7 +49,6 @@ const features = [
   {
     title: 'ATS简历优化',
     description: '针对招聘系统优化简历',
-    detail: '提高简历通过率，让 HR 更容易看到你',
     icon: Wand2,
     href: '/optimize',
     gradient: 'from-orange-600 via-amber-500 to-yellow-500',
@@ -63,7 +58,6 @@ const features = [
   {
     title: '自动网申',
     description: '智能填写企业网申表单',
-    detail: '学习记录填写规则，高效完成投递',
     icon: Send,
     href: '/applications',
     gradient: 'from-pink-600 via-rose-500 to-red-500',
@@ -73,7 +67,6 @@ const features = [
   {
     title: '浏览器扩展',
     description: '一键自动填充网申表单',
-    detail: '智能识别表单字段，快速完成申请',
     icon: Puzzle,
     href: '/extension',
     gradient: 'from-cyan-600 via-teal-500 to-emerald-500',
@@ -181,50 +174,35 @@ export default function Home() {
           </p>
         </div>
 
-        {/* Features Grid */}
-        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+        {/* Features Grid - Uniform Cards */}
+        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-6">
           {features.map((feature) => (
             <Link
               href={feature.href}
               key={feature.title}
-              className={`group relative ${feature.featured ? 'lg:col-span-2' : ''}`}
+              className="group"
             >
-              <div className={`relative h-full p-8 rounded-3xl bg-white border-2 border-slate-200 ${feature.hoverBg} ${feature.borderHover} transition-all duration-300 hover:shadow-xl hover:-translate-y-1 overflow-hidden`}>
+              <div className={`relative h-full p-6 rounded-2xl bg-white border-2 border-slate-200 ${feature.hoverBg} ${feature.borderHover} transition-all duration-300 hover:shadow-xl hover:-translate-y-2 overflow-hidden`}>
                 
-                {/* Background Gradient */}
-                <div className={`absolute inset-0 bg-gradient-to-br ${feature.gradient} opacity-0 group-hover:opacity-5 transition-opacity duration-500`} />
+                {/* Icon */}
+                <div className={`w-14 h-14 rounded-xl bg-gradient-to-br ${feature.gradient} flex items-center justify-center mb-5 shadow-md group-hover:scale-110 group-hover:rotate-3 transition-all duration-300`}>
+                  <feature.icon className="h-7 w-7 text-white" />
+                </div>
                 
-                {/* Top Right Decoration */}
-                <div className={`absolute -top-10 -right-10 w-40 h-40 rounded-full bg-gradient-to-br ${feature.gradient} opacity-10 blur-2xl group-hover:opacity-20 transition-opacity duration-500`} />
+                {/* Title */}
+                <h3 className="font-bold text-xl mb-2 group-hover:text-primary transition-colors">
+                  {feature.title}
+                </h3>
                 
-                <div className="relative flex flex-col h-full">
-                  {/* Icon */}
-                  <div className={`w-16 h-16 rounded-2xl bg-gradient-to-br ${feature.gradient} flex items-center justify-center mb-6 shadow-lg group-hover:scale-110 group-hover:rotate-3 transition-all duration-300`}>
-                    <feature.icon className="h-8 w-8 text-white" />
-                  </div>
-                  
-                  {/* Title */}
-                  <h3 className="font-bold text-2xl mb-3 group-hover:text-primary transition-colors">
-                    {feature.title}
-                  </h3>
-                  
-                  {/* Description */}
-                  <p className="text-muted-foreground text-base leading-relaxed mb-3">
-                    {feature.description}
-                  </p>
-                  
-                  {/* Detail */}
-                  {feature.detail && (
-                    <p className="text-muted-foreground/70 text-sm">
-                      {feature.detail}
-                    </p>
-                  )}
-                  
-                  {/* Arrow */}
-                  <div className="mt-auto pt-6 flex items-center text-primary font-medium opacity-0 group-hover:opacity-100 transition-all duration-300">
-                    <span>立即使用</span>
-                    <ArrowRight className="ml-2 h-4 w-4 group-hover:translate-x-2 transition-transform" />
-                  </div>
+                {/* Description */}
+                <p className="text-muted-foreground text-sm leading-relaxed mb-4">
+                  {feature.description}
+                </p>
+                
+                {/* Arrow */}
+                <div className="flex items-center text-primary font-medium text-sm">
+                  <span>立即体验</span>
+                  <ArrowRight className="ml-1 h-4 w-4 group-hover:translate-x-2 transition-transform" />
                 </div>
               </div>
             </Link>
