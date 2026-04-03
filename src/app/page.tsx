@@ -61,9 +61,9 @@ const features = [
 
   },
   {
-    title: '自动网申',
-    description: '智能填写企业网申表单',
-    detail: '学习记录填写规则，高效完成投递',
+    title: '投递数据',
+    description: '追踪网申进度，管理投递状态',
+    detail: '实时查看投递记录，掌握求职进展',
     icon: Send,
     href: '/applications',
     gradient: 'from-pink-600 via-rose-500 to-red-500',
@@ -225,7 +225,7 @@ export default function Home() {
         <div className="text-center mb-20">
           <div className="inline-flex items-center gap-2 px-4 py-2 rounded-full bg-muted/50 border border-muted/50 mb-8">
             <Layers className="h-5 w-5 text-primary" />
-            <span className="text-base font-medium">五大核心能力</span>
+            <span className="text-base font-medium">六大核心能力</span>
           </div>
           <h2 className="text-5xl md:text-6xl font-bold mb-6">
             为求职而生的
