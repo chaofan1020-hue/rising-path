@@ -278,9 +278,9 @@ export default function Home() {
               <div className={`absolute inset-0 bg-gradient-to-br ${feature.gradient} opacity-0 group-hover:opacity-5 transition-opacity duration-500`} />
               
               {/* Mobile: Horizontal Layout / Desktop: Vertical Layout */}
-              <div className="relative h-full p-4 md:p-9 flex flex-row md:flex-col items-center gap-4 md:gap-0 min-h-[auto] md:min-h-[260px]">
+              <div className="relative h-full p-4 md:p-9 flex flex-row md:flex-col items-center gap-4 md:gap-6 min-h-[auto] md:min-h-[280px]">
                 {/* Icon */}
-                <div className={`w-14 h-14 md:w-16 md:h-16 rounded-2xl bg-gradient-to-br ${feature.gradient} flex items-center justify-center md:mb-auto shadow-lg md:shadow-xl group-hover:scale-110 md:group-hover:rotate-3 transition-all duration-300 md:duration-500 flex-shrink-0`}>
+                <div className={`w-14 h-14 md:w-16 md:h-16 rounded-2xl bg-gradient-to-br ${feature.gradient} flex items-center justify-center shadow-lg md:shadow-xl group-hover:scale-110 md:group-hover:rotate-3 transition-all duration-300 md:duration-500 flex-shrink-0`}>
                   <feature.icon className="h-7 w-7 md:h-8 md:w-8 text-white" />
                 </div>
                 
