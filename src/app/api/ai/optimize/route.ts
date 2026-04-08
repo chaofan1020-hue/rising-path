@@ -2,10 +2,23 @@ import { NextRequest, NextResponse } from 'next/server';
 import { getSupabaseClient } from '@/storage/database/supabase-client';
 import { LLMClient, Config, HeaderUtils } from 'coze-coding-dev-sdk';
 
+// 地区名称映射
+const REGION_NAMES: Record<string, string> = {
+  'us': '美国',
+  'uk': '英国',
+  'sg': '新加坡',
+  'hk': '香港',
+  'au': '澳大利亚',
+  'ca': '加拿大',
+  'eu': '欧洲',
+  'cn': '中国内地',
+  'jp': '日本',
+};
+
 export async function POST(request: NextRequest) {
   try {
     const client = getSupabaseClient();
-    const { resumeId, targetCompany, targetPosition, suggestions, accessCodeId, jdContent } = await request.json();
+    const { resumeId, targetCompany, targetPosition, targetRegion, suggestions, accessCodeId, jdContent } = await request.json();
 
     // 必须提供 access_code_id
     if (!accessCodeId) {
@@ -29,6 +42,12 @@ export async function POST(request: NextRequest) {
     
     const resumeContent = resume.parsed_content || JSON.stringify(resume.user_info);
 
+    // 构建地区信息
+    const regionName = targetRegion ? REGION_NAMES[targetRegion] || targetRegion : null;
+    const regionSection = regionName 
+      ? `\n\n目标地区：${regionName}\n请考虑该地区的招聘习惯和用语习惯进行优化。` 
+      : '';
+
     // 构建岗位描述部分（如果获取到了）
     const jdSection = jdContent
       ? `\n\n【目标岗位的真实描述和要求】\n${jdContent}\n\n请严格按照上述岗位描述中的要求来优化简历，确保简历内容与岗位需求高度匹配。`
@@ -44,7 +63,7 @@ export async function POST(request: NextRequest) {
 请根据以下信息优化简历：
 
 目标公司：${targetCompany || '通用'}
-目标岗位：${targetPosition}${jdSection}
+目标岗位：${targetPosition}${regionSection}${jdSection}
 
 原简历内容：
 ${resumeContent}${suggestionsSection}

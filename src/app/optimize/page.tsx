@@ -269,6 +269,7 @@ function OptimizeContent() {
   const [selectedResumeId, setSelectedResumeId] = useState<string>('');
   const [targetCompany, setTargetCompany] = useState('');
   const [targetPosition, setTargetPosition] = useState('');
+  const [targetRegion, setTargetRegion] = useState('');
   const [suggestions, setSuggestions] = useState('');
   const [optimizing, setOptimizing] = useState(false);
   const [optimizeProgress, setOptimizeProgress] = useState(0);
@@ -282,6 +283,20 @@ function OptimizeContent() {
   const [savedRecords, setSavedRecords] = useState<OptimizedRecord[]>([]);
   const [showSavedToast, setShowSavedToast] = useState(false);
   const { accessCodeId } = useAccessCode();
+
+  // 地区列表
+  const regionList = [
+    { value: '', label: '不限' },
+    { value: 'us', label: '美国', sites: ['linkedin.com', 'indeed.com', 'glassdoor.com', 'dice.com', 'monster.com'] },
+    { value: 'uk', label: '英国', sites: ['linkedin.com', 'indeed.co.uk', 'glassdoor.co.uk', 'cv-library.co.uk', 'reed.co.uk'] },
+    { value: 'sg', label: '新加坡', sites: ['linkedin.com', 'indeed.com.sg', 'glassdoor.sg', 'jobsdb.com', 'mycareersfuture.sg'] },
+    { value: 'hk', label: '香港', sites: ['linkedin.com', 'indeed.com.hk', 'glassdoor.hk', 'jobsdb.com.hk', 'ctgoodjobs.hk'] },
+    { value: 'au', label: '澳大利亚', sites: ['linkedin.com', 'indeed.com.au', 'glassdoor.com.au', 'seek.com.au', 'jora.com.au'] },
+    { value: 'ca', label: '加拿大', sites: ['linkedin.com', 'indeed.ca', 'glassdoor.ca', 'monster.ca', 'eluta.ca'] },
+    { value: 'eu', label: '欧洲', sites: ['linkedin.com', 'indeed.com', 'glassdoor.de', 'glassdoor.fr', 'xing.com'] },
+    { value: 'cn', label: '中国内地', sites: ['linkedin.com', 'zhilian.com', '51job.com', 'boss.com', 'lagou.com'] },
+    { value: 'jp', label: '日本', sites: ['linkedin.com', 'indeed.co.jp', 'doda.jp', 'rikunabi.com', 'green.co.jp'] },
+  ];
 
   // 加载历史记录
   useEffect(() => {
@@ -337,6 +352,7 @@ function OptimizeContent() {
         body: JSON.stringify({
           company: targetCompany,
           position: targetPosition,
+          region: targetRegion,
         }),
       });
       const data = await response.json();
@@ -425,6 +441,7 @@ function OptimizeContent() {
           resumeId: selectedResumeId,
           targetCompany,
           targetPosition,
+          targetRegion,
           suggestions,
           accessCodeId,
           jdContent, // 传入获取到的岗位描述
@@ -939,6 +956,21 @@ function OptimizeContent() {
                   onChange={(e) => setTargetPosition(e.target.value)}
                   className="h-9 md:h-10"
                 />
+              </div>
+              <div>
+                <label className="text-xs md:text-sm font-medium mb-1.5 md:mb-2 block">目标地区（可选）</label>
+                <Select value={targetRegion} onValueChange={setTargetRegion}>
+                  <SelectTrigger className="h-9 md:h-10">
+                    <SelectValue placeholder="选择目标地区" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    {regionList.map((region) => (
+                      <SelectItem key={region.value} value={region.value}>
+                        {region.label}
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
               </div>
             </div>
 
