@@ -194,7 +194,7 @@ export default function Home() {
       </section>
 
       {/* Job Stats Section */}
-      <section className="container mx-auto px-4 pt-8 pb-2">
+      <section className="container mx-auto px-4 pt-4 pb-2">
         <div className="max-w-xl mx-auto">
           <JobStatsWidget />
         </div>
