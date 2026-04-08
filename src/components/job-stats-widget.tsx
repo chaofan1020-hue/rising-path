@@ -47,7 +47,8 @@ export function JobStatsWidget() {
   }
 
   return (
-    <div className="flex items-center justify-center gap-6 text-sm">
+    <div className="flex items-center justify-center gap-4 text-sm">
+      <span className="text-muted-foreground">岗位开放</span>
       <div className="flex items-center gap-1.5">
         <span className="text-muted-foreground">今日</span>
         <span className="font-bold text-foreground">{stats.today}</span>
