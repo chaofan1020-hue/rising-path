@@ -185,18 +185,14 @@ export default function Home() {
             </span>
           </h1>
           
-          <p className="text-base md:text-xl text-muted-foreground max-w-2xl mx-auto mb-8 md:mb-12 leading-relaxed">
+          <p className="text-base md:text-xl text-muted-foreground max-w-2xl mx-auto mb-6 leading-relaxed">
             AI驱动的求职助手，从简历优化到岗位匹配
             <br className="hidden sm:block" />
             让每一步都更精准、更高效
           </p>
-        </div>
-      </section>
-
-      {/* Job Stats Section */}
-      <section className="container mx-auto px-4 pt-4 pb-2">
-        <div className="max-w-xl mx-auto">
-          <JobStatsWidget />
+          <div className="max-w-xl mx-auto">
+            <JobStatsWidget />
+          </div>
         </div>
       </section>
 
