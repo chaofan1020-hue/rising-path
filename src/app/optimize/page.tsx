@@ -345,6 +345,7 @@ function OptimizeContent() {
 
     setSearchingJD(true);
     try {
+      const regionName = regionList.find(r => r.value === targetRegion)?.label || '美国';
       const response = await fetch('/api/jobs/search-jd', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
