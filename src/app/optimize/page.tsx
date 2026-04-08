@@ -956,11 +956,13 @@ function OptimizeContent() {
                   className="h-9 md:h-10"
                 />
               </div>
-              <div>
-                <label className="text-xs md:text-sm font-medium mb-1.5 md:mb-2 block">目标地区（可选）</label>
+            </div>
+
+            <div className="flex flex-wrap gap-3 md:gap-4 items-end">
+              <div className="w-32">
                 <Select value={targetRegion} onValueChange={setTargetRegion}>
                   <SelectTrigger className="h-9 md:h-10">
-                    <SelectValue placeholder="选择目标地区" />
+                    <SelectValue placeholder="目标地区" />
                   </SelectTrigger>
                   <SelectContent>
                     {regionList.map((region) => (
@@ -971,9 +973,6 @@ function OptimizeContent() {
                   </SelectContent>
                 </Select>
               </div>
-            </div>
-
-            <div className="flex gap-3 md:gap-4">
               <Button 
                 onClick={handleOptimize}
                 disabled={!selectedResumeId || !targetPosition || optimizing}
