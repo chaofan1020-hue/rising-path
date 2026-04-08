@@ -187,22 +187,6 @@ export default function Home() {
             <br className="hidden sm:block" />
             让每一步都更精准、更高效
           </p>
-          
-          <div className="flex flex-col sm:flex-row gap-3 md:gap-4 justify-center">
-            <Link href="/login" className="w-full sm:w-auto">
-              <Button size="lg" className="w-full sm:w-auto h-12 md:h-16 px-8 md:px-12 text-base md:text-lg bg-gradient-to-r from-primary to-primary/80 hover:opacity-90 shadow-2xl shadow-primary/20 rounded-2xl group">
-                <Search className="mr-2 h-4 w-4 md:h-5 md:w-5" />
-                开始使用
-                <ArrowRight className="ml-2 h-4 w-4 md:h-5 md:w-5 group-hover:translate-x-1 transition-transform" />
-              </Button>
-            </Link>
-            <Link href="/resume" className="w-full sm:w-auto">
-              <Button size="lg" variant="outline" className="w-full sm:w-auto h-12 md:h-16 px-8 md:px-12 text-base md:text-lg rounded-2xl border-2 hover:bg-muted/50">
-                <Upload className="mr-2 h-4 w-4 md:h-5 md:w-5" />
-                上传简历
-              </Button>
-            </Link>
-          </div>
         </div>
       </section>
 
