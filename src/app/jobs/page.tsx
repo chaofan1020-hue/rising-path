@@ -11,7 +11,7 @@ import {
   PopoverContent,
   PopoverTrigger,
 } from '@/components/ui/popover';
-import { Search, MapPin, Briefcase, Users, ExternalLink, ChevronDown, X, Plus, Check, Loader2 } from 'lucide-react';
+import { Search, MapPin, Briefcase, Users, ExternalLink, ChevronDown, X, Plus, Check, Loader2, Sparkles, Wand2, Send } from 'lucide-react';
 import Link from 'next/link';
 import Image from 'next/image';
 import { AccessGuard, useAccessCode } from '@/components/access-guard';
@@ -394,11 +394,17 @@ function JobsContent() {
             <span className="font-bold text-lg md:text-xl">PathUp</span>
           </Link>
           <nav className="flex items-center gap-2 md:gap-4">
+            <Link href="/ai-match">
+              <Button size="sm" className="text-xs md:text-sm">
+                <Sparkles className="h-3 w-3 md:h-4 md:w-4 mr-1" />
+                AI选岗
+              </Button>
+            </Link>
             <Link href="/resume">
               <Button variant="ghost" size="sm" className="text-xs md:text-sm">简历管理</Button>
             </Link>
-            <Link href="/ai-match">
-              <Button size="sm" className="text-xs md:text-sm">AI选岗</Button>
+            <Link href="/optimize">
+              <Button variant="ghost" size="sm" className="text-xs md:text-sm">简历优化</Button>
             </Link>
           </nav>
         </div>
@@ -406,9 +412,32 @@ function JobsContent() {
 
       <main className="container mx-auto px-4 py-4 md:py-8">
         {/* Page Title */}
-        <div className="mb-4 md:mb-8">
+        <div className="mb-4 md:mb-6">
           <h1 className="text-2xl md:text-3xl font-bold mb-1 md:mb-2">岗位查询</h1>
-          <p className="text-sm md:text-base text-muted-foreground">按地区、方向、受众筛选海量海外岗位</p>
+          <p className="text-sm md:text-base text-muted-foreground">
+            海量海外岗位，多维度精准筛选
+          </p>
+          {/* Quick Actions */}
+          <div className="flex flex-wrap items-center gap-2 mt-3">
+            <Link href="/ai-match">
+              <Button variant="outline" size="sm" className="h-7 text-xs bg-primary/5 border-primary/20 hover:bg-primary/10">
+                <Sparkles className="h-3 w-3 mr-1" />
+                AI智能选岗
+              </Button>
+            </Link>
+            <Link href="/optimize">
+              <Button variant="outline" size="sm" className="h-7 text-xs bg-orange-50 border-orange-200 hover:bg-orange-100 text-orange-700">
+                <Wand2 className="h-3 w-3 mr-1" />
+                优化简历
+              </Button>
+            </Link>
+            <Link href="/applications">
+              <Button variant="outline" size="sm" className="h-7 text-xs bg-pink-50 border-pink-200 hover:bg-pink-100 text-pink-700">
+                <Send className="h-3 w-3 mr-1" />
+                查看我的投递
+              </Button>
+            </Link>
+          </div>
         </div>
 
         {/* Filters */}
