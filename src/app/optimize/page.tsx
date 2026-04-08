@@ -286,16 +286,15 @@ function OptimizeContent() {
 
   // 地区列表
   const regionList = [
-    { value: '', label: '不限' },
-    { value: 'us', label: '美国', sites: ['linkedin.com', 'indeed.com', 'glassdoor.com', 'dice.com', 'monster.com'] },
-    { value: 'uk', label: '英国', sites: ['linkedin.com', 'indeed.co.uk', 'glassdoor.co.uk', 'cv-library.co.uk', 'reed.co.uk'] },
-    { value: 'sg', label: '新加坡', sites: ['linkedin.com', 'indeed.com.sg', 'glassdoor.sg', 'jobsdb.com', 'mycareersfuture.sg'] },
-    { value: 'hk', label: '香港', sites: ['linkedin.com', 'indeed.com.hk', 'glassdoor.hk', 'jobsdb.com.hk', 'ctgoodjobs.hk'] },
-    { value: 'au', label: '澳大利亚', sites: ['linkedin.com', 'indeed.com.au', 'glassdoor.com.au', 'seek.com.au', 'jora.com.au'] },
-    { value: 'ca', label: '加拿大', sites: ['linkedin.com', 'indeed.ca', 'glassdoor.ca', 'monster.ca', 'eluta.ca'] },
-    { value: 'eu', label: '欧洲', sites: ['linkedin.com', 'indeed.com', 'glassdoor.de', 'glassdoor.fr', 'xing.com'] },
-    { value: 'cn', label: '中国内地', sites: ['linkedin.com', 'zhilian.com', '51job.com', 'boss.com', 'lagou.com'] },
-    { value: 'jp', label: '日本', sites: ['linkedin.com', 'indeed.co.jp', 'doda.jp', 'rikunabi.com', 'green.co.jp'] },
+    { value: 'us', label: '美国' },
+    { value: 'uk', label: '英国' },
+    { value: 'sg', label: '新加坡' },
+    { value: 'hk', label: '香港' },
+    { value: 'au', label: '澳大利亚' },
+    { value: 'ca', label: '加拿大' },
+    { value: 'eu', label: '欧洲' },
+    { value: 'cn', label: '中国内地' },
+    { value: 'jp', label: '日本' },
   ];
 
   // 加载历史记录
