@@ -39,6 +39,9 @@ import {
   Target,
   AlertCircle,
   Languages,
+  Save,
+  Clock,
+  Trash2,
 } from 'lucide-react';
 import Link from 'next/link';
 import { Document, Packer, Paragraph, TextRun, HeadingLevel, AlignmentType } from 'docx';
@@ -50,6 +53,18 @@ interface Resume {
   file_name: string;
   parsed_content: string;
   user_info: Record<string, unknown>;
+}
+
+// 优化记录历史
+interface OptimizedRecord {
+  id: string;
+  resumeId: string;
+  resumeName: string;
+  targetCompany: string;
+  targetPosition: string;
+  resumeData: ResumeData;
+  isEnglish: boolean;
+  createdAt: string;
 }
 
 interface ResumeData {
@@ -255,7 +270,61 @@ function OptimizeContent() {
   const [translating, setTranslating] = useState(false);
   const [isEnglishVersion, setIsEnglishVersion] = useState(false);
   const [downloading, setDownloading] = useState(false);
+  const [savedRecords, setSavedRecords] = useState<OptimizedRecord[]>([]);
+  const [showSavedToast, setShowSavedToast] = useState(false);
   const { accessCodeId } = useAccessCode();
+
+  // 加载历史记录
+  useEffect(() => {
+    const saved = localStorage.getItem('optimized_records');
+    if (saved) {
+      try {
+        setSavedRecords(JSON.parse(saved));
+      } catch (e) {
+        console.error('Failed to parse saved records:', e);
+      }
+    }
+  }, []);
+
+  // 保存到本地存储
+  const handleSave = () => {
+    if (!resumeData || !selectedResumeId) return;
+    
+    const record: OptimizedRecord = {
+      id: Date.now().toString(),
+      resumeId: selectedResumeId,
+      resumeName: resumes.find(r => r.id.toString() === selectedResumeId)?.file_name || '未知简历',
+      targetCompany,
+      targetPosition,
+      resumeData,
+      isEnglish: isEnglishVersion,
+      createdAt: new Date().toISOString(),
+    };
+    
+    const newRecords = [record, ...savedRecords].slice(0, 20); // 最多保存20条
+    setSavedRecords(newRecords);
+    localStorage.setItem('optimized_records', JSON.stringify(newRecords));
+    setShowSavedToast(true);
+    setTimeout(() => setShowSavedToast(false), 2000);
+  };
+
+  // 加载历史记录
+  const loadRecord = (record: OptimizedRecord) => {
+    setSelectedResumeId(record.resumeId);
+    setTargetCompany(record.targetCompany);
+    setTargetPosition(record.targetPosition);
+    setResumeData(record.resumeData);
+    setIsEnglishVersion(record.isEnglish);
+    setOptimizedContent(JSON.stringify(record.resumeData, null, 2));
+    setShowResult(true);
+  };
+
+  // 删除历史记录
+  const deleteRecord = (id: string) => {
+    const newRecords = savedRecords.filter(r => r.id !== id);
+    setSavedRecords(newRecords);
+    localStorage.setItem('optimized_records', JSON.stringify(newRecords));
+  };
 
   useEffect(() => {
     if (accessCodeId) {
@@ -322,6 +391,23 @@ function OptimizeContent() {
       setOriginalContent(data.original_content || '');
       setIsEnglishVersion(data.is_english || false);
       setShowResult(true);
+
+      // 自动保存
+      if (data.resume_data) {
+        const record: OptimizedRecord = {
+          id: Date.now().toString(),
+          resumeId: selectedResumeId,
+          resumeName: resumes.find(r => r.id.toString() === selectedResumeId)?.file_name || '未知简历',
+          targetCompany,
+          targetPosition,
+          resumeData: data.resume_data,
+          isEnglish: data.is_english || false,
+          createdAt: new Date().toISOString(),
+        };
+        const newRecords = [record, ...savedRecords].slice(0, 20);
+        setSavedRecords(newRecords);
+        localStorage.setItem('optimized_records', JSON.stringify(newRecords));
+      }
 
       setTimeout(() => {
         setOptimizeProgress(0);
@@ -683,6 +769,66 @@ function OptimizeContent() {
           </p>
         </div>
 
+        {/* 历史记录 */}
+        {savedRecords.length > 0 && (
+          <Card className="mb-6 md:mb-8">
+            <CardHeader className="pb-2 md:pb-4">
+              <CardTitle className="flex items-center gap-2 text-base md:text-lg">
+                <Clock className="h-4 w-4 md:h-5 md:w-5" />
+                优化历史
+              </CardTitle>
+            </CardHeader>
+            <CardContent>
+              <div className="space-y-2">
+                {savedRecords.slice(0, 5).map((record) => (
+                  <div 
+                    key={record.id}
+                    className="flex items-center justify-between p-2 md:p-3 rounded-lg bg-muted/50 hover:bg-muted transition-colors cursor-pointer group"
+                    onClick={() => loadRecord(record)}
+                  >
+                    <div className="flex-1 min-w-0">
+                      <div className="flex items-center gap-2">
+                        <span className="text-xs md:text-sm font-medium truncate">
+                          {record.targetPosition}
+                        </span>
+                        {record.targetCompany && (
+                          <Badge variant="secondary" className="text-[10px] md:text-xs">
+                            {record.targetCompany}
+                          </Badge>
+                        )}
+                        <Badge variant="outline" className="text-[10px] md:text-xs">
+                          {record.isEnglish ? '英文' : '中文'}
+                        </Badge>
+                      </div>
+                      <div className="flex items-center gap-2 mt-0.5">
+                        <span className="text-[10px] md:text-xs text-muted-foreground truncate">
+                          {record.resumeName}
+                        </span>
+                        <span className="text-[10px] md:text-xs text-muted-foreground">
+                          {new Date(record.createdAt).toLocaleDateString()}
+                        </span>
+                      </div>
+                    </div>
+                    <div className="flex items-center gap-1 ml-2">
+                      <Button 
+                        variant="ghost" 
+                        size="sm" 
+                        className="h-7 w-7 p-0 opacity-0 group-hover:opacity-100 transition-opacity"
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          deleteRecord(record.id);
+                        }}
+                      >
+                        <Trash2 className="h-3.5 w-3.5" />
+                      </Button>
+                    </div>
+                  </div>
+                ))}
+              </div>
+            </CardContent>
+          </Card>
+        )}
+
         {/* Optimization Form */}
         <Card className="mb-6 md:mb-8">
           <CardHeader className="pb-2 md:pb-4">
@@ -849,6 +995,17 @@ function OptimizeContent() {
               <Copy className="mr-1.5 h-3.5 w-3.5" />
               复制
             </Button>
+            {resumeData && (
+              <Button variant="outline" size="sm" onClick={handleSave} className="h-9 text-xs items-center relative">
+                <Save className="mr-1.5 h-3.5 w-3.5" />
+                保存
+                {showSavedToast && (
+                  <span className="absolute -top-8 left-1/2 -translate-x-1/2 bg-green-600 text-white text-xs px-2 py-1 rounded whitespace-nowrap">
+                    已保存
+                  </span>
+                )}
+              </Button>
+            )}
             {resumeData && (
               <DropdownMenu>
                 <DropdownMenuTrigger asChild>
