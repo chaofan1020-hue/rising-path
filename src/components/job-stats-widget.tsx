@@ -63,11 +63,6 @@ export function JobStatsWidget() {
         <span className="text-muted-foreground">本月更新</span>
         <span className="font-bold text-foreground">{stats.thisMonth}</span>
       </div>
-      <div className="w-px h-4 bg-border" />
-      <div className="flex items-center gap-1.5">
-        <span className="text-muted-foreground">总计</span>
-        <span className="font-bold text-foreground">{stats.total}</span>
-      </div>
     </div>
   );
 }
