@@ -102,12 +102,21 @@ interface ResumeData {
 }
 
 // 简历预览组件
-const ResumePreview = ({ data }: { data: ResumeData }) => {
+const ResumePreview = ({ data, isEnglish }: { data: ResumeData; isEnglish?: boolean }) => {
+  const labels = {
+    summary: isEnglish ? 'Summary' : '个人简介',
+    skills: isEnglish ? 'Skills' : '专业技能',
+    experience: isEnglish ? 'Experience' : '工作经历',
+    education: isEnglish ? 'Education' : '教育背景',
+    projects: isEnglish ? 'Projects' : '项目经历',
+    certifications: isEnglish ? 'Certifications' : '证书资质',
+  };
+  
   return (
     <div className="bg-white text-black p-4 md:p-8 shadow-lg rounded-lg">
       {/* 头部：姓名和联系方式 */}
       <div className="text-center border-b-2 border-gray-800 pb-3 md:pb-4 mb-3 md:mb-4">
-        <h1 className="text-lg md:text-2xl font-bold text-gray-900 mb-1 md:mb-2">{data.name || '姓名'}</h1>
+        <h1 className="text-lg md:text-2xl font-bold text-gray-900 mb-1 md:mb-2">{data.name || (isEnglish ? 'Name' : '姓名')}</h1>
         <div className="flex flex-wrap justify-center gap-2 md:gap-4 text-xs md:text-sm text-gray-600">
           {data.contact?.email && <span>{data.contact.email}</span>}
           {data.contact?.phone && <span>{data.contact.phone}</span>}
@@ -120,7 +129,7 @@ const ResumePreview = ({ data }: { data: ResumeData }) => {
       {data.summary && (
         <div className="mb-3 md:mb-4">
           <h2 className="text-xs md:text-sm font-bold text-gray-800 uppercase tracking-wide border-b border-gray-300 pb-1 mb-1.5 md:mb-2">
-            个人简介
+            {labels.summary}
           </h2>
           <p className="text-xs md:text-sm text-gray-700 leading-relaxed">{data.summary}</p>
         </div>
@@ -130,7 +139,7 @@ const ResumePreview = ({ data }: { data: ResumeData }) => {
       {data.skills && data.skills.length > 0 && (
         <div className="mb-3 md:mb-4">
           <h2 className="text-xs md:text-sm font-bold text-gray-800 uppercase tracking-wide border-b border-gray-300 pb-1 mb-1.5 md:mb-2">
-            专业技能
+            {labels.skills}
           </h2>
           <div className="flex flex-wrap gap-1.5 md:gap-2">
             {data.skills.map((skill, index) => (
@@ -146,7 +155,7 @@ const ResumePreview = ({ data }: { data: ResumeData }) => {
       {data.experience && data.experience.length > 0 && (
         <div className="mb-3 md:mb-4">
           <h2 className="text-xs md:text-sm font-bold text-gray-800 uppercase tracking-wide border-b border-gray-300 pb-1 mb-1.5 md:mb-2">
-            工作经历
+            {labels.experience}
           </h2>
           <div className="space-y-2 md:space-y-3">
             {data.experience.map((exp, index) => (
@@ -180,14 +189,14 @@ const ResumePreview = ({ data }: { data: ResumeData }) => {
       {data.education && data.education.length > 0 && (
         <div className="mb-3 md:mb-4">
           <h2 className="text-xs md:text-sm font-bold text-gray-800 uppercase tracking-wide border-b border-gray-300 pb-1 mb-1.5 md:mb-2">
-            教育背景
+            {labels.education}
           </h2>
           <div className="space-y-1.5 md:space-y-2">
             {data.education.map((edu, index) => (
               <div key={index} className="flex flex-col sm:flex-row sm:justify-between sm:items-start gap-0.5 sm:gap-0">
                 <div className="text-xs md:text-sm">
                   <span className="font-semibold text-gray-900">{edu.degree}</span>
-                  {edu.major && <span className="text-gray-600 mx-1">in {edu.major}</span>}
+                  {edu.major && <span className="text-gray-600 mx-1">{isEnglish ? 'in' : '，'}{edu.major}</span>}
                   <span className="text-gray-400 mx-1 md:mx-2">|</span>
                   <span className="text-gray-700">{edu.school}</span>
                   {edu.gpa && <span className="text-gray-500 ml-1 md:ml-2">GPA: {edu.gpa}</span>}
@@ -203,7 +212,7 @@ const ResumePreview = ({ data }: { data: ResumeData }) => {
       {data.projects && data.projects.length > 0 && (
         <div className="mb-3 md:mb-4">
           <h2 className="text-xs md:text-sm font-bold text-gray-800 uppercase tracking-wide border-b border-gray-300 pb-1 mb-1.5 md:mb-2">
-            项目经历
+            {labels.projects}
           </h2>
           <div className="space-y-2 md:space-y-3">
             {data.projects.map((project, index) => (
@@ -238,7 +247,7 @@ const ResumePreview = ({ data }: { data: ResumeData }) => {
       {data.certifications && data.certifications.length > 0 && (
         <div className="mb-3 md:mb-4">
           <h2 className="text-xs md:text-sm font-bold text-gray-800 uppercase tracking-wide border-b border-gray-300 pb-1 mb-1.5 md:mb-2">
-            证书资质
+            {labels.certifications}
           </h2>
           <div className="flex flex-wrap gap-x-3 md:gap-x-4 gap-y-0.5 md:gap-y-1">
             {data.certifications.map((cert, index) => (
@@ -1173,7 +1182,7 @@ function OptimizeContent() {
               <div className="bg-gray-100 p-2 md:p-3 rounded-lg flex-1 overflow-y-auto min-h-[200px] md:min-h-0">
                 {resumeData ? (
                   <div className="md:scale-100 w-full">
-                    <ResumePreview data={resumeData} />
+                    <ResumePreview data={resumeData} isEnglish={isEnglishVersion} />
                   </div>
                 ) : (
                   <div className="bg-white p-3 md:p-6 shadow rounded-lg text-xs md:text-sm text-gray-700 whitespace-pre-wrap leading-relaxed">
