@@ -194,13 +194,9 @@ export default function Home() {
       </section>
 
       {/* Job Stats Section */}
-      <section className="container mx-auto px-4 md:px-6 py-8 md:py-12">
-        <div className="max-w-2xl mx-auto">
-          <Card className="bg-gradient-to-br from-background via-background to-muted/20 border-muted/50 shadow-lg">
-            <CardContent className="pt-6 md:pt-8 pb-6 md:pb-8">
-              <JobStatsWidget />
-            </CardContent>
-          </Card>
+      <section className="container mx-auto px-4 py-4">
+        <div className="max-w-xl mx-auto">
+          <JobStatsWidget />
         </div>
       </section>
 
