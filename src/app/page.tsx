@@ -18,6 +18,7 @@ import {
   Wand2,
   Puzzle,
 } from 'lucide-react';
+import { ScrollCard } from '@/components/scroll-card';
 
 const features = [
   {
@@ -193,31 +194,24 @@ export default function Home() {
       {/* Advantages Section - Premium Style */}
       <section className="container mx-auto px-4 md:px-6 py-12 md:py-20">
         <div className="grid grid-cols-1 md:grid-cols-3 gap-4 md:gap-8">
-          {advantages.map((item) => (
-            <div
-              key={item.title}
-              className="group"
-            >
-              <div className="relative p-6 md:p-12 rounded-2xl md:rounded-[32px] bg-neutral-950 text-white overflow-hidden hover:-translate-y-1 md:hover:-translate-y-3 transition-all duration-500">
-                {/* Gradient overlay - more visible */}
-                <div className={`absolute inset-0 opacity-0 group-hover:opacity-100 transition-opacity duration-500 ${item.iconColor === 'text-sky-600' ? 'bg-gradient-to-br from-blue-500/30 via-blue-600/10 to-transparent' : item.iconColor === 'text-violet-600' ? 'bg-gradient-to-br from-purple-500/30 via-purple-600/10 to-transparent' : 'bg-gradient-to-br from-orange-500/30 via-orange-600/10 to-transparent'}`} />
-                
-                {/* Icon */}
-                <div className="relative mb-4 md:mb-10">
-                  <div className="w-10 h-10 md:w-14 md:h-14 rounded-full border border-white/20 flex items-center justify-center group-hover:border-white/60 group-hover:bg-white/10 transition-all duration-300">
-                    <item.icon className="h-5 w-5 md:h-7 md:w-7 text-white/80 group-hover:text-white transition-colors" />
-                  </div>
-                </div>
-                
-                {/* Text */}
-                <h3 className="relative font-semibold text-lg md:text-2xl mb-2 md:mb-4 tracking-tight">{item.title}</h3>
-                <p className="relative text-white/50 text-sm md:text-base leading-relaxed font-light">{item.description}</p>
-                
-                {/* Bottom line accent - brighter on hover */}
-                <div className={`absolute bottom-0 left-0 right-0 h-px ${item.iconColor === 'text-sky-600' ? 'bg-gradient-to-r from-transparent via-blue-400 to-transparent' : item.iconColor === 'text-violet-600' ? 'bg-gradient-to-r from-transparent via-purple-400 to-transparent' : 'bg-gradient-to-r from-transparent via-orange-400 to-transparent'} opacity-50 group-hover:opacity-100 transition-opacity duration-300`} />
-              </div>
-            </div>
-          ))}
+          <ScrollCard
+            iconName="MapPin"
+            title="全球岗位覆盖"
+            description="覆盖美国、英国、新加坡、香港等主流留学地区"
+            iconColor="text-sky-600"
+          />
+          <ScrollCard
+            iconName="Crosshair"
+            title="精准智能匹配"
+            description="AI深度分析简历与岗位匹配度"
+            iconColor="text-violet-600"
+          />
+          <ScrollCard
+            iconName="Rocket"
+            title="高效求职工具"
+            description="一站式完成简历优化、岗位筛选、网申投递"
+            iconColor="text-amber-600"
+          />
         </div>
       </section>
 
@@ -352,7 +346,7 @@ export default function Home() {
       </section>
 
       {/* CTA Section */}
-      <section className="container mx-auto px-6 py-24">
+      <section id="cta" className="container mx-auto px-6 py-24">
         <div className="relative text-center">
           {/* Background glow */}
           <div className="absolute inset-0 flex items-center justify-center">
