@@ -123,6 +123,31 @@ function CompanyLogo({ company, logoUrl }: { company: string; logoUrl?: string }
   );
 }
 
+// 地区国旗映射
+const regionFlags: Record<string, string> = {
+  '美国': '🇺🇸',
+  '英国': '🇬🇧',
+  '加拿大': '🇨🇦',
+  '澳大利亚': '🇦🇺',
+  '新加坡': '🇸🇬',
+  '香港': '🇭🇰',
+  '日本': '🇯🇵',
+  '韩国': '🇰🇷',
+  '德国': '🇩🇪',
+  '法国': '🇫🇷',
+  '欧洲': '🇪🇺',
+  '欧洲其他国家': '🇪🇺',
+  '全球': '🌍',
+  '其他国家': '🌍',
+  'Remote': '🌍',
+};
+
+// 获取地区对应的显示文本（带国旗）
+function getRegionDisplayText(region: string): string {
+  const flag = regionFlags[region];
+  return flag ? `${flag} ${region}` : region;
+}
+
 // 多选筛选器组件 - 现代化设计
 function MultiSelectFilter({
   label,
@@ -130,12 +155,14 @@ function MultiSelectFilter({
   options,
   selected,
   onChange,
+  showFlag = false,
 }: {
   label: string;
   icon: React.ElementType;
   options: JobConfig[];
   selected: string[];
   onChange: (values: string[]) => void;
+  showFlag?: boolean;
 }) {
   const handleToggle = (value: string) => {
     if (selected.includes(value)) {
@@ -176,7 +203,9 @@ function MultiSelectFilter({
                 onCheckedChange={() => handleToggle(option.config_value)}
                 className="data-[state=checked]:bg-primary data-[state=checked]:border-primary"
               />
-              <span className="text-sm font-medium">{option.config_value}</span>
+              <span className="text-sm font-medium">
+                {showFlag ? getRegionDisplayText(option.config_value) : option.config_value}
+              </span>
             </label>
           ))}
         </div>
@@ -435,6 +464,7 @@ function JobsContent() {
                   options={configs.region || []}
                   selected={selectedRegions}
                   onChange={setSelectedRegions}
+                  showFlag={true}
                 />
                 <MultiSelectFilter
                   label="方向"
@@ -505,7 +535,7 @@ function JobsContent() {
                       <div className="flex flex-wrap gap-1.5 md:gap-2">
                         <Badge variant="secondary" className="rounded-md text-xs" translate="no">
                           <MapPin className="h-3 w-3 mr-1" />
-                          {job.region}
+                          {getRegionDisplayText(job.region)}
                         </Badge>
                         <Badge variant="secondary" className="rounded-md text-xs" translate="no">
                           <Briefcase className="h-3 w-3 mr-1" />
