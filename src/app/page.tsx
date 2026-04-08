@@ -1,5 +1,7 @@
 import Link from 'next/link';
 import { Button } from '@/components/ui/button';
+import { Card, CardContent } from '@/components/ui/card';
+import { JobStatsWidget } from '@/components/job-stats-widget';
 import {
   Briefcase,
   FileText,
@@ -188,6 +190,17 @@ export default function Home() {
             <br className="hidden sm:block" />
             让每一步都更精准、更高效
           </p>
+        </div>
+      </section>
+
+      {/* Job Stats Section */}
+      <section className="container mx-auto px-4 md:px-6 py-8 md:py-12">
+        <div className="max-w-2xl mx-auto">
+          <Card className="bg-gradient-to-br from-background via-background to-muted/20 border-muted/50 shadow-lg">
+            <CardContent className="pt-6 md:pt-8 pb-6 md:pb-8">
+              <JobStatsWidget />
+            </CardContent>
+          </Card>
         </div>
       </section>
 
