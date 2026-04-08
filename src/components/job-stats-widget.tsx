@@ -50,17 +50,17 @@ export function JobStatsWidget() {
     <div className="flex items-center justify-center gap-4 text-sm">
       <span className="text-muted-foreground">岗位开放</span>
       <div className="flex items-center gap-1.5">
-        <span className="text-muted-foreground">今日</span>
+        <span className="text-muted-foreground">今日更新</span>
         <span className="font-bold text-foreground">{stats.today}</span>
       </div>
       <div className="w-px h-4 bg-border" />
       <div className="flex items-center gap-1.5">
-        <span className="text-muted-foreground">本周</span>
+        <span className="text-muted-foreground">本周更新</span>
         <span className="font-bold text-foreground">{stats.thisWeek}</span>
       </div>
       <div className="w-px h-4 bg-border" />
       <div className="flex items-center gap-1.5">
-        <span className="text-muted-foreground">本月</span>
+        <span className="text-muted-foreground">本月更新</span>
         <span className="font-bold text-foreground">{stats.thisMonth}</span>
       </div>
       <div className="w-px h-4 bg-border" />
