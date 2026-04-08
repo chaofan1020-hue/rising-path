@@ -72,7 +72,7 @@ const features = [
 
   },
   {
-    title: 'AutoFill',
+    title: 'AutoFill一键填写',
     description: '智能填写企业网申表单',
     detail: '浏览器扩展一键填充，高效完成投递',
     icon: Puzzle,
@@ -142,7 +142,7 @@ export default function Home() {
             <Link href="/extension">
               <Button variant="ghost" size="sm" className="text-muted-foreground hover:text-foreground">
                 <Puzzle className="h-4 w-4 mr-1" />
-                AutoFill
+                AutoFill一键填写
               </Button>
             </Link>
             <Link href="/login">
