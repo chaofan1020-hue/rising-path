@@ -5,7 +5,7 @@ import { LLMClient, Config, HeaderUtils } from 'coze-coding-dev-sdk';
 export async function POST(request: NextRequest) {
   try {
     const client = getSupabaseClient();
-    const { resumeId, targetCompany, targetPosition, suggestions, accessCodeId } = await request.json();
+    const { resumeId, targetCompany, targetPosition, suggestions, accessCodeId, jdContent } = await request.json();
 
     // 必须提供 access_code_id
     if (!accessCodeId) {
@@ -29,6 +29,11 @@ export async function POST(request: NextRequest) {
     
     const resumeContent = resume.parsed_content || JSON.stringify(resume.user_info);
 
+    // 构建岗位描述部分（如果获取到了）
+    const jdSection = jdContent
+      ? `\n\n【目标岗位的真实描述和要求】\n${jdContent}\n\n请严格按照上述岗位描述中的要求来优化简历，确保简历内容与岗位需求高度匹配。`
+      : '';
+
     // 构建优化建议部分
     const suggestionsSection = suggestions 
       ? `\n\n参考优化建议：\n${suggestions}\n\n请根据以上建议重点优化简历的相应部分。`
@@ -39,7 +44,7 @@ export async function POST(request: NextRequest) {
 请根据以下信息优化简历：
 
 目标公司：${targetCompany || '通用'}
-目标岗位：${targetPosition}
+目标岗位：${targetPosition}${jdSection}
 
 原简历内容：
 ${resumeContent}${suggestionsSection}

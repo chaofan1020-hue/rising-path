@@ -308,6 +308,45 @@ function OptimizeContent() {
     setTimeout(() => setShowSavedToast(false), 2000);
   };
 
+  // JD搜索相关状态
+  const [searchingJD, setSearchingJD] = useState(false);
+  const [jdContent, setJdContent] = useState('');
+  const [jdResults, setJdResults] = useState<Array<{title: string; siteName: string; url: string; snippet: string}>>([]);
+
+  // 获取岗位描述
+  const handleSearchJD = async () => {
+    if (!targetCompany || !targetPosition) {
+      alert('请先填写目标公司和岗位');
+      return;
+    }
+
+    setSearchingJD(true);
+    try {
+      const response = await fetch('/api/jobs/search-jd', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          company: targetCompany,
+          position: targetPosition,
+        }),
+      });
+      const data = await response.json();
+      
+      if (data.success) {
+        setJdContent(data.jdContent || '');
+        setJdResults(data.results || []);
+        setSuggestions(data.summary || '');
+      } else {
+        alert(data.error || '获取岗位描述失败');
+      }
+    } catch (error) {
+      console.error('Search JD failed:', error);
+      alert('获取岗位描述失败，请稍后重试');
+    } finally {
+      setSearchingJD(false);
+    }
+  };
+
   // 加载历史记录
   const loadRecord = (record: OptimizedRecord) => {
     setSelectedResumeId(record.resumeId);
@@ -379,6 +418,7 @@ function OptimizeContent() {
           targetPosition,
           suggestions,
           accessCodeId,
+          jdContent, // 传入获取到的岗位描述
         }),
       });
 
@@ -859,12 +899,28 @@ function OptimizeContent() {
               </div>
               <div>
                 <label className="text-xs md:text-sm font-medium mb-1.5 md:mb-2 block">目标公司（可选）</label>
-                <Input
-                  placeholder="如：Google, Apple..."
-                  value={targetCompany}
-                  onChange={(e) => setTargetCompany(e.target.value)}
-                  className="h-9 md:h-10"
-                />
+                <div className="flex gap-2">
+                  <Input
+                    placeholder="如：Google, Apple..."
+                    value={targetCompany}
+                    onChange={(e) => setTargetCompany(e.target.value)}
+                    className="h-9 md:h-10 flex-1"
+                  />
+                  <Button 
+                    variant="outline" 
+                    size="sm"
+                    onClick={handleSearchJD}
+                    disabled={!targetCompany || !targetPosition || searchingJD}
+                    className="h-9 md:h-10 px-3"
+                    title="从网络获取该岗位的描述和要求"
+                  >
+                    {searchingJD ? (
+                      <Loader2 className="h-4 w-4 animate-spin" />
+                    ) : (
+                      <Target className="h-4 w-4" />
+                    )}
+                  </Button>
+                </div>
               </div>
               <div>
                 <label className="text-xs md:text-sm font-medium mb-1.5 md:mb-2 block">目标岗位</label>
@@ -895,7 +951,41 @@ function OptimizeContent() {
                   </>
                 )}
               </Button>
+              {jdContent && (
+                <Button 
+                  variant="outline"
+                  size="sm"
+                  onClick={() => {
+                    setJdContent('');
+                    setJdResults([]);
+                    setSuggestions('');
+                  }}
+                  className="h-9 md:h-10"
+                >
+                  清除JD
+                </Button>
+              )}
             </div>
+
+            {/* JD搜索结果 */}
+            {jdContent && (
+              <div className="mt-3 md:mt-4 p-3 md:p-4 rounded-lg bg-blue-50 dark:bg-blue-950/30 border border-blue-200 dark:border-blue-800">
+                <div className="flex items-center gap-2 mb-2">
+                  <Target className="h-4 w-4 text-blue-600" />
+                  <span className="text-xs md:text-sm font-medium text-blue-700 dark:text-blue-400">
+                    已获取岗位描述
+                  </span>
+                </div>
+                <p className="text-xs md:text-sm text-blue-600/80 mb-2">
+                  AI将基于以下真实岗位要求进行优化
+                </p>
+                <div className="max-h-32 md:max-h-40 overflow-y-auto">
+                  <p className="text-xs md:text-sm text-muted-foreground whitespace-pre-wrap">
+                    {jdContent}
+                  </p>
+                </div>
+              </div>
+            )}
 
             {/* AI匹配优化建议 */}
             {suggestions && (
