@@ -32,6 +32,7 @@ import {
 } from 'lucide-react';
 import Link from 'next/link';
 import { AccessGuard, useAccessCode } from '@/components/access-guard';
+import { Target, Wand2, Send, CheckCircle2 } from 'lucide-react';
 
 interface ParsedFields {
   name?: string;
@@ -256,14 +257,6 @@ function ResumeContent() {
             <Briefcase className="h-5 w-5 md:h-6 md:w-6 text-primary" />
             <span className="font-bold text-lg md:text-xl">PathUp</span>
           </Link>
-          <nav className="flex items-center gap-2 md:gap-4">
-            <Link href="/jobs">
-              <Button variant="ghost" size="sm" className="text-xs md:text-sm">岗位查询</Button>
-            </Link>
-            <Link href="/ai-match">
-              <Button size="sm" className="text-xs md:text-sm">AI选岗</Button>
-            </Link>
-          </nav>
         </div>
       </header>
 
@@ -273,6 +266,63 @@ function ResumeContent() {
           <h1 className="text-2xl md:text-3xl font-bold mb-1 md:mb-2">简历管理</h1>
           <p className="text-sm md:text-base text-muted-foreground">上传、管理你的简历，支持智能解析</p>
         </div>
+
+        {/* 状态引导区域 */}
+        {resumes.length > 0 ? (
+          /* 已上传简历 - 显示简历状态和快捷操作 */
+          <Card className="mb-4 md:mb-8 border-green-200 dark:border-green-900 bg-green-50/50 dark:bg-green-950/20">
+            <CardContent className="pt-4 pb-4">
+              <div className="flex flex-col md:flex-row md:items-center justify-between gap-4">
+                <div className="flex items-center gap-3">
+                  <div className="w-10 h-10 rounded-full bg-green-100 dark:bg-green-900/50 flex items-center justify-center">
+                    <CheckCircle2 className="h-5 w-5 text-green-600 dark:text-green-400" />
+                  </div>
+                  <div>
+                    <p className="font-medium text-sm md:text-base">已上传 {resumes.length} 份简历</p>
+                    <p className="text-xs text-muted-foreground">你可以基于简历进行下一步操作</p>
+                  </div>
+                </div>
+                <div className="flex items-center gap-2">
+                  <Link href="/ai-match">
+                    <Button size="sm" className="gap-1">
+                      <Target className="h-3.5 w-3.5" />
+                      AI选岗
+                    </Button>
+                  </Link>
+                  <Link href="/optimize">
+                    <Button variant="outline" size="sm" className="gap-1">
+                      <Wand2 className="h-3.5 w-3.5" />
+                      优化简历
+                    </Button>
+                  </Link>
+                </div>
+              </div>
+            </CardContent>
+          </Card>
+        ) : (
+          /* 未上传简历 - 显示引导卡片 */
+          <Card className="mb-4 md:mb-8 border-dashed">
+            <CardContent className="pt-4 pb-4">
+              <div className="text-center py-4">
+                <p className="text-sm text-muted-foreground mb-3">还没有简历？上传后可以享受更多服务</p>
+                <div className="grid grid-cols-3 gap-2 max-w-md mx-auto text-xs">
+                  <div className="flex flex-col items-center gap-1 p-2 rounded-lg bg-muted/50">
+                    <Target className="h-4 w-4 text-primary" />
+                    <span>AI智能选岗</span>
+                  </div>
+                  <div className="flex flex-col items-center gap-1 p-2 rounded-lg bg-muted/50">
+                    <Wand2 className="h-4 w-4 text-primary" />
+                    <span>优化简历ATS</span>
+                  </div>
+                  <div className="flex flex-col items-center gap-1 p-2 rounded-lg bg-muted/50">
+                    <Send className="h-4 w-4 text-primary" />
+                    <span>一键填写网申</span>
+                  </div>
+                </div>
+              </div>
+            </CardContent>
+          </Card>
+        )}
 
         {/* Upload Section */}
         <Card className="mb-4 md:mb-8">
