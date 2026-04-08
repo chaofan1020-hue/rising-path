@@ -2,167 +2,11 @@ import { NextRequest, NextResponse } from 'next/server';
 import { SearchClient, Config, HeaderUtils } from 'coze-coding-dev-sdk';
 import { getSupabaseClient } from '@/storage/database/supabase-client';
 
-// 美国科技大厂 - 精准搜索策略
-const US_TECH_COMPANIES = [
-  { 
-    name: 'Google', 
-    careersUrl: 'https://careers.google.com/',
-    queries: [
-      'site:careers.google.com software engineer',
-      'site:careers.google.com data scientist'
-    ]
-  },
-  { 
-    name: 'Apple', 
-    careersUrl: 'https://jobs.apple.com/',
-    queries: [
-      'site:jobs.apple.com software engineer',
-      'site:apple.com careers software'
-    ]
-  },
-  { 
-    name: 'Microsoft', 
-    careersUrl: 'https://careers.microsoft.com/',
-    queries: [
-      'site:careers.microsoft.com software engineer',
-      'site:Microsoft.com jobs software'
-    ]
-  },
-  { 
-    name: 'Amazon', 
-    careersUrl: 'https://amazon.jobs/',
-    queries: [
-      'site:amazon.jobs software development engineer',
-      'site:amazon.jobs data scientist'
-    ]
-  },
-  { 
-    name: 'Meta', 
-    careersUrl: 'https://www.metacareers.com/',
-    queries: [
-      'site:metacareers.com software engineer',
-      'site:meta.com careers software'
-    ]
-  },
-  { 
-    name: 'Netflix', 
-    careersUrl: 'https://jobs.netflix.com/',
-    queries: [
-      'site:jobs.netflix.com software engineer',
-      'site:netflix.com jobs engineering'
-    ]
-  },
-  { 
-    name: 'NVIDIA', 
-    careersUrl: 'https://nvidia.com/careers',
-    queries: [
-      'site:nvidia.com careers software',
-      'site:nvidia.com careers engineer'
-    ]
-  },
-  { 
-    name: 'Tesla', 
-    careersUrl: 'https://www.tesla.com/careers',
-    queries: [
-      'site:tesla.com careers software engineer',
-      'site:tesla.com careers engineering'
-    ]
-  },
-  { 
-    name: 'Uber', 
-    careersUrl: 'https://www.uber.com/careers/',
-    queries: [
-      'site:uber.com careers software engineer',
-      'site:uber.com jobs engineering'
-    ]
-  },
-  { 
-    name: 'Airbnb', 
-    careersUrl: 'https://www.airbnb.com/careers',
-    queries: [
-      'site:airbnb.com careers software',
-      'site:airbnb.com jobs engineering'
-    ]
-  },
-  { 
-    name: 'Stripe', 
-    careersUrl: 'https://stripe.com/jobs',
-    queries: [
-      'site:stripe.com jobs software',
-      'site:stripe.com careers engineer'
-    ]
-  },
-  { 
-    name: 'Shopify', 
-    careersUrl: 'https://www.shopify.com/careers',
-    queries: [
-      'site:shopify.com careers software engineer',
-      'site:shopify.com jobs engineering'
-    ]
-  },
-  { 
-    name: 'Salesforce', 
-    careersUrl: 'https://www.salesforce.com/company/careers/',
-    queries: [
-      'site:salesforce.com careers software engineer',
-      'site:salesforce.com jobs engineering'
-    ]
-  },
-  { 
-    name: 'Adobe', 
-    careersUrl: 'https://www.adobe.com/careers.html',
-    queries: [
-      'site:adobe.com careers software',
-      'site:adobe.com careers engineer'
-    ]
-  },
-  { 
-    name: 'Oracle', 
-    careersUrl: 'https://www.oracle.com/careers/',
-    queries: [
-      'site:oracle.com careers software engineer',
-      'site:oracle.com jobs engineering'
-    ]
-  },
-  { 
-    name: 'LinkedIn', 
-    careersUrl: 'https://careers.linkedin.com/',
-    queries: [
-      'site:linkedin.com careers software engineer',
-      'site:linkedin.com jobs engineering'
-    ]
-  },
-  { 
-    name: 'Microsoft', 
-    careersUrl: 'https://careers.microsoft.com/',
-    queries: [
-      'site:careers.linkedin.com microsoft'
-    ]
-  },
-  { 
-    name: 'Snap', 
-    careersUrl: 'https://www.snap.com/jobs/',
-    queries: [
-      'site:snap.com jobs software engineer',
-      'site:snap.com careers engineering'
-    ]
-  },
-  { 
-    name: 'Pinterest', 
-    careersUrl: 'https://www.pinterestcareers.com/',
-    queries: [
-      'site:pinterestcareers.com software engineer',
-      'site:pinterest.com careers engineering'
-    ]
-  },
-  { 
-    name: 'Twitter', 
-    careersUrl: 'https://careers.twitter.com/',
-    queries: [
-      'site:careers.twitter.com software engineer',
-      'site:x.com careers engineering'
-    ]
-  },
+// 美国科技大厂
+const TECH_COMPANIES = [
+  'Google', 'Apple', 'Microsoft', 'Amazon', 'Meta', 'Netflix', 
+  'Tesla', 'NVIDIA', 'Uber', 'Airbnb', 'Stripe', 'Shopify',
+  'Salesforce', 'Adobe', 'Oracle', 'LinkedIn', 'Snap', 'Pinterest', 'Twitter'
 ];
 
 // 地区映射
@@ -172,16 +16,15 @@ const US_REGIONS = [
   'Remote - United States', 'United States'
 ];
 
-// 判断是否为有效岗位
 function isValidJob(title: string, url: string): boolean {
   if (!title || title.length < 15) return false;
   if (!url || url.length < 15) return false;
   
-  // 过滤非英文标题
+  // 过滤中文
   const chineseChars = title.match(/[\u4e00-\u9fa5]/g);
   if (chineseChars && chineseChars.length > 0) return false;
   
-  // 过滤包含数字开头的通用标题（如 "119,000+ Junior Software Engineer"）
+  // 过滤数字开头的标题
   if (/^\d+[\s,]/.test(title)) return false;
   
   // 过滤太通用的标题
@@ -193,60 +36,51 @@ function isValidJob(title: string, url: string): boolean {
     'python developer', 'python engineer', 'java developer',
     'ai developer', 'ml engineer', 'ux designer', 'ux researcher'
   ];
-  const titleLower = title.toLowerCase().trim();
-  if (genericTitles.includes(titleLower)) return false;
+  if (genericTitles.includes(title.toLowerCase().trim())) return false;
   
-  // 过滤公司名作为标题的
-  const companyOnly = [
-    'google', 'apple', 'microsoft', 'amazon', 'meta', 'netflix',
-    'tesla', 'nvidia', 'uber', 'airbnb', 'stripe', 'shopify',
-    'salesforce', 'adobe', 'oracle', 'linkedin', 'snap', 'twitter'
-  ];
-  if (companyOnly.includes(titleLower)) return false;
-  
-  // 过滤噪音关键词
+  // 过滤噪音
   const noisePatterns = [
-    'blog', 'news', 'article', 'medium.com', 'zhihu', 'baidu', 'qq.com', 
-    '163.com', 'sina', 'sohu.com', 'juesheng', 'liepin.com', '51job',
-    '中介', '申请', '培训', '实习', 'referral', '内推', 'youtube',
-    'landing', 'about', 'overview', 'benefits', 'culture', 'faq',
-    'pulse', 'fortune', 'indeed', 'glassdoor', 'how-to', 'consulting',
-    'freelancer', 'contractor', 'mindfriend', 'informationen',
-    'company profile', 'jobber', 'case', 'study', 'casestudy',
-    '#1 ai crm', 'discover your place', 'workflow automation'
+    'zhihu', 'baidu', 'qq.com', '163.com', 'sina', 'sohu.com', 
+    'liepin.com', '51job', '中介', '申请', '培训', 'referral', '内推',
+    'company profile', 'casestudy', '#1 ai crm'
   ];
   
-  const urlLower = url.toLowerCase();
-  const titleUrl = title.toLowerCase() + ' ' + urlLower;
+  const titleUrl = title.toLowerCase() + ' ' + url.toLowerCase();
   for (const pattern of noisePatterns) {
     if (titleUrl.includes(pattern)) return false;
-  }
-  
-  // 过滤特殊字符过多的标题
-  if (title.includes('////') || title.includes('|||') || title.length > 150) {
-    return false;
   }
   
   return true;
 }
 
-// 提取岗位标题
-function extractTitle(rawTitle: string, companyName: string): string {
+function extractTitle(rawTitle: string): string {
   return rawTitle
-    .replace(new RegExp(`\\s*[-|]\\s*${companyName}.*$`, 'i'), '')
-    .replace(/\s*[-|]\s*LinkedIn$/i, '')
-    .replace(/\s*[-|]\s*Indeed$/i, '')
-    .replace(/\s*[-|]\s*Glassdoor$/i, '')
-    .replace(/\s*正在招聘.*$/, '')
-    .replace(/\s*招聘.*$/, '')
+    .replace(/\s*[-|]\s*(Indeed|Glassdoor|LinkedIn|Jobs|Careers).*$/i, '')
+    .replace(/\s*[-|]\s*\d+.*$/, '')
     .replace(/【.*?】/g, '')
     .replace(/\[.*?\]/g, '')
     .replace(/Job Openings.*$/i, '')
     .replace(/Careers.*$/i, '')
     .replace(/Jobs.*$/i, '')
-    .replace(/Hiring.*$/i, '')
+    .replace(/\s*at\s+\w+\s*$/i, '')
     .trim()
     .substring(0, 150);
+}
+
+function identifySource(url: string): string | null {
+  const urlLower = url.toLowerCase();
+  if (urlLower.includes('indeed.com') || urlLower.includes('indeed.')) return 'Indeed';
+  if (urlLower.includes('glassdoor.com') || urlLower.includes('glassdoor.')) return 'Glassdoor';
+  if (urlLower.includes('linkedin.com') || urlLower.includes('linkedin.')) return 'LinkedIn';
+  return null;
+}
+
+function extractCompany(url: string): string | null {
+  const urlLower = url.toLowerCase();
+  for (const company of TECH_COMPANIES) {
+    if (urlLower.includes(company.toLowerCase())) return company;
+  }
+  return null;
 }
 
 export async function POST(request: NextRequest) {
@@ -262,44 +96,42 @@ export async function POST(request: NextRequest) {
       failed: 0,
       total: 0,
       details: [] as string[],
+      sources: { Indeed: 0, Glassdoor: 0, LinkedIn: 0 },
     };
 
-    // 去重 URL 集合
     const seenUrls = new Set<string>();
 
-    // 遍历每个公司
-    for (const company of US_TECH_COMPANIES) {
-      let companySuccess = 0;
-      
-      // 使用每个查询搜索
-      for (const query of company.queries) {
+    // 第一步：从大厂官网和 LinkedIn 获取岗位
+    for (const company of TECH_COMPANIES) {
+      const queries = [
+        `${company} software engineer jobs United States 2024`,
+        `${company} senior developer openings available`,
+        `${company} data scientist machine learning jobs`,
+      ];
+
+      for (const query of queries.slice(0, 2)) {
         try {
-          const response = await client.webSearch(query, 10, false);
+          const response = await client.webSearch(query, 8, false);
 
           if (response.web_items && response.web_items.length > 0) {
             for (const item of response.web_items) {
               const url = item.url || '';
+              const source = identifySource(url);
               
-              // 去重
+              if (!source) continue;
+              
               if (seenUrls.has(url)) continue;
               seenUrls.add(url);
               
-              const title = extractTitle(item.title || '', company.name);
+              const title = extractTitle(item.title || '');
               
               if (!isValidJob(title, url)) continue;
               
-              // 验证 URL 包含公司域名
-              const companyDomain = company.name.toLowerCase().replace(/\s+/g, '');
-              const urlLower = url.toLowerCase();
-              const hasCompanyDomain = 
-                urlLower.includes(company.name.toLowerCase()) ||
-                urlLower.includes(companyDomain);
-              
-              if (!hasCompanyDomain) continue;
+              const jobCompany = extractCompany(url);
+              if (!jobCompany) continue;
               
               results.total++;
               
-              // 检查是否已存在
               const { data: existing } = await supabase
                 .from('jobs')
                 .select('id')
@@ -307,14 +139,13 @@ export async function POST(request: NextRequest) {
                 .single();
 
               if (!existing) {
-                // 随机分配地区
                 const region = US_REGIONS[Math.floor(Math.random() * US_REGIONS.length)];
                 
                 const { error } = await supabase
                   .from('jobs')
                   .insert({
                     title,
-                    company: company.name,
+                    company: jobCompany,
                     region,
                     direction: 'Tech',
                     audience: '留学生',
@@ -328,7 +159,7 @@ export async function POST(request: NextRequest) {
 
                 if (!error) {
                   results.success++;
-                  companySuccess++;
+                  results.sources[source as keyof typeof results.sources]++;
                 } else {
                   results.failed++;
                 }
@@ -338,16 +169,155 @@ export async function POST(request: NextRequest) {
             }
           }
 
-          // 避免请求过快
           await new Promise(resolve => setTimeout(resolve, 500));
           
         } catch (error) {
-          console.error(`Error searching "${query}":`, error);
+          console.error(`Search error:`, error);
         }
       }
-      
-      if (companySuccess > 0) {
-        results.details.push(`${company.name}: ${companySuccess}`);
+    }
+
+    // 第二步：专门搜索 Indeed 岗位（不使用 site: 限制）
+    const indeedKeywords = [
+      'apply indeed.com jobs software engineer',
+      'indeed job openings developer careers',
+      'now hiring indeed software developer',
+    ];
+
+    for (const keyword of indeedKeywords) {
+      try {
+        const response = await client.webSearch(keyword, 10, false);
+        
+        if (response.web_items && response.web_items.length > 0) {
+          for (const item of response.web_items) {
+            const url = item.url || '';
+            
+            // 查找 Indeed 链接
+            if (!url.toLowerCase().includes('indeed.com')) continue;
+            if (seenUrls.has(url)) continue;
+            seenUrls.add(url);
+            
+            const title = extractTitle(item.title || '');
+            if (!isValidJob(title, url)) continue;
+            
+            const company = extractCompany(url);
+            if (!company) continue;
+            
+            results.total++;
+            
+            const { data: existing } = await supabase
+              .from('jobs')
+              .select('id')
+              .eq('job_url', url)
+              .single();
+
+            if (!existing) {
+              const region = US_REGIONS[Math.floor(Math.random() * US_REGIONS.length)];
+              
+              const { error } = await supabase
+                .from('jobs')
+                .insert({
+                  title,
+                  company,
+                  region,
+                  direction: 'Tech',
+                  audience: '留学生',
+                  description: (item.snippet || '').substring(0, 500),
+                  requirements: '',
+                  salary_range: '',
+                  job_url: url,
+                  created_at: new Date().toISOString(),
+                  updated_at: new Date().toISOString(),
+                });
+
+              if (!error) {
+                results.success++;
+                results.sources['Indeed']++;
+              } else {
+                results.failed++;
+              }
+            } else {
+              results.skipped++;
+            }
+          }
+        }
+        
+        await new Promise(resolve => setTimeout(resolve, 500));
+        
+      } catch (error) {
+        console.error(`Indeed search error:`, error);
+      }
+    }
+
+    // 第三步：专门搜索 Glassdoor 岗位
+    const glassdoorKeywords = [
+      'glassdoor.com jobs software engineer hiring',
+      'glassdoor job postings developer careers',
+      'glassdoor openings technology jobs',
+    ];
+
+    for (const keyword of glassdoorKeywords) {
+      try {
+        const response = await client.webSearch(keyword, 10, false);
+        
+        if (response.web_items && response.web_items.length > 0) {
+          for (const item of response.web_items) {
+            const url = item.url || '';
+            
+            // 查找 Glassdoor 链接
+            if (!url.toLowerCase().includes('glassdoor')) continue;
+            if (seenUrls.has(url)) continue;
+            seenUrls.add(url);
+            
+            const title = extractTitle(item.title || '');
+            if (!isValidJob(title, url)) continue;
+            
+            const company = extractCompany(url);
+            if (!company) continue;
+            
+            results.total++;
+            
+            const { data: existing } = await supabase
+              .from('jobs')
+              .select('id')
+              .eq('job_url', url)
+              .single();
+
+            if (!existing) {
+              const region = US_REGIONS[Math.floor(Math.random() * US_REGIONS.length)];
+              
+              const { error } = await supabase
+                .from('jobs')
+                .insert({
+                  title,
+                  company,
+                  region,
+                  direction: 'Tech',
+                  audience: '留学生',
+                  description: (item.snippet || '').substring(0, 500),
+                  requirements: '',
+                  salary_range: '',
+                  job_url: url,
+                  created_at: new Date().toISOString(),
+                  updated_at: new Date().toISOString(),
+                });
+
+              if (!error) {
+                results.success++;
+                results.sources['Glassdoor']++;
+              } else {
+                results.failed++;
+              }
+            } else {
+              results.skipped++;
+            }
+          }
+        }
+        
+        await new Promise(resolve => setTimeout(resolve, 500));
+        
+      } catch (error) {
+        console.error(`Glassdoor search error:`, error);
       }
     }
 
@@ -367,10 +337,10 @@ export async function POST(request: NextRequest) {
   }
 }
 
-export async function GET(request: NextRequest) {
+export async function GET() {
   return NextResponse.json({
     method: 'POST',
-    description: '同步美国科技大厂岗位信息',
-    usage: 'curl -X POST https://your-domain.com/api/jobs/sync-us-tech',
+    description: '从大厂官网、Indeed、Glassdoor 和 LinkedIn 同步岗位信息',
+    usage: 'curl -X POST http://localhost:5000/api/jobs/sync-us-tech',
   });
 }
