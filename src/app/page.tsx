@@ -170,32 +170,8 @@ export default function Home() {
         </div>
       </nav>
 
-      {/* Advantages Section - Premium Style */}
-      <section className="container mx-auto px-4 md:px-6 py-6 md:py-8">
-        <div className="grid grid-cols-1 md:grid-cols-3 gap-4 md:gap-8">
-          <ScrollCard
-            iconName="MapPin"
-            title="全球岗位覆盖"
-            description="覆盖美国、英国、新加坡、香港等主流留学地区"
-            iconColor="text-sky-600"
-          />
-          <ScrollCard
-            iconName="Crosshair"
-            title="精准智能匹配"
-            description="AI深度分析简历与岗位匹配度"
-            iconColor="text-violet-600"
-          />
-          <ScrollCard
-            iconName="Rocket"
-            title="高效求职工具"
-            description="一站式完成简历优化、岗位筛选、网申投递"
-            iconColor="text-amber-600"
-          />
-        </div>
-      </section>
-
       {/* Hero Section */}
-      <section className="container mx-auto px-4 md:px-6 pb-6">
+      <section className="container mx-auto px-4 md:px-6 pt-16 pb-16 md:pt-28 md:pb-24">
         <div className="max-w-4xl mx-auto text-center">
           <div className="inline-flex items-center gap-2 px-3 py-1.5 md:px-4 md:py-2 rounded-full bg-primary/5 border border-primary/10 mb-6 md:mb-10">
             <div className="w-2 h-2 rounded-full bg-primary animate-pulse" />
@@ -217,6 +193,30 @@ export default function Home() {
           <div className="max-w-xl mx-auto">
             <JobStatsWidget />
           </div>
+        </div>
+      </section>
+
+      {/* Advantages Section - Premium Style */}
+      <section className="container mx-auto px-4 md:px-6 py-8 md:py-12">
+        <div className="grid grid-cols-1 md:grid-cols-3 gap-4 md:gap-8">
+          <ScrollCard
+            iconName="MapPin"
+            title="全球岗位覆盖"
+            description="覆盖美国、英国、新加坡、香港等主流留学地区"
+            iconColor="text-sky-600"
+          />
+          <ScrollCard
+            iconName="Crosshair"
+            title="精准智能匹配"
+            description="AI深度分析简历与岗位匹配度"
+            iconColor="text-violet-600"
+          />
+          <ScrollCard
+            iconName="Rocket"
+            title="高效求职工具"
+            description="一站式完成简历优化、岗位筛选、网申投递"
+            iconColor="text-amber-600"
+          />
         </div>
       </section>
 
