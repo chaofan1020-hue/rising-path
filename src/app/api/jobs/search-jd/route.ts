@@ -8,17 +8,44 @@ const JOB_SITES = [
   'glassdoor.com',
 ];
 
-// 地区对应的招聘平台
-const REGION_SITES: Record<string, string[]> = {
-  'us': ['linkedin.com', 'indeed.com', 'glassdoor.com', 'dice.com', 'monster.com'],
-  'uk': ['linkedin.com', 'indeed.co.uk', 'glassdoor.co.uk', 'cv-library.co.uk', 'reed.co.uk'],
-  'sg': ['linkedin.com', 'indeed.com.sg', 'glassdoor.sg', 'jobsdb.com', 'mycareersfuture.sg'],
-  'hk': ['linkedin.com', 'indeed.com.hk', 'glassdoor.hk', 'jobsdb.com.hk'],
-  'au': ['linkedin.com', 'indeed.com.au', 'glassdoor.com.au', 'seek.com.au'],
-  'ca': ['linkedin.com', 'indeed.ca', 'glassdoor.ca', 'monster.ca'],
-  'eu': ['linkedin.com', 'indeed.com', 'glassdoor.de', 'glassdoor.fr', 'xing.com'],
-  'cn': ['linkedin.com', 'zhilian.com', '51job.com', 'boss.com', 'lagou.com'],
-  'jp': ['linkedin.com', 'indeed.co.jp', 'doda.jp', 'rikunabi.com'],
+// 地区对应的招聘平台和搜索关键词
+const REGION_SITES: Record<string, { sites: string[]; keywords: string[] }> = {
+  'us': { 
+    sites: ['linkedin.com', 'indeed.com', 'glassdoor.com', 'dice.com', 'monster.com'],
+    keywords: ['United States', 'USA', 'US', 'San Francisco', 'New York', 'Seattle']
+  },
+  'uk': { 
+    sites: ['linkedin.com', 'indeed.co.uk', 'glassdoor.co.uk', 'cv-library.co.uk', 'reed.co.uk'],
+    keywords: ['United Kingdom', 'UK', 'London', 'Manchester', 'UK']
+  },
+  'sg': { 
+    sites: ['linkedin.com', 'indeed.com.sg', 'glassdoor.sg', 'jobsdb.com', 'mycareersfuture.sg'],
+    keywords: ['Singapore', 'SG']
+  },
+  'hk': { 
+    sites: ['linkedin.com', 'indeed.com.hk', 'glassdoor.hk', 'jobsdb.com.hk'],
+    keywords: ['Hong Kong', 'HK']
+  },
+  'au': { 
+    sites: ['linkedin.com', 'indeed.com.au', 'glassdoor.com.au', 'seek.com.au'],
+    keywords: ['Australia', 'Sydney', 'Melbourne', 'AU']
+  },
+  'ca': { 
+    sites: ['linkedin.com', 'indeed.ca', 'glassdoor.ca', 'monster.ca'],
+    keywords: ['Canada', 'Toronto', 'Vancouver', 'CA']
+  },
+  'eu': { 
+    sites: ['linkedin.com', 'indeed.com', 'glassdoor.de', 'glassdoor.fr', 'xing.com'],
+    keywords: ['Germany', 'France', 'Netherlands', 'Europe', 'EU']
+  },
+  'cn': { 
+    sites: ['linkedin.com', 'zhilian.com', '51job.com', 'boss.com', 'lagou.com'],
+    keywords: ['China', 'Shanghai', 'Beijing', 'Shenzhen', 'CN']
+  },
+  'jp': { 
+    sites: ['linkedin.com', 'indeed.co.jp', 'doda.jp', 'rikunabi.com'],
+    keywords: ['Japan', 'Tokyo', 'Osaka', 'JP']
+  },
 };
 
 // 公司招聘域名映射
@@ -59,8 +86,10 @@ export async function POST(request: NextRequest) {
     const customHeaders = HeaderUtils.extractForwardHeaders(request.headers);
     const client = new SearchClient(config, customHeaders);
 
-    // 获取目标地区的招聘平台
-    const regionSites = region && REGION_SITES[region] ? REGION_SITES[region] : REGION_SITES['us'];
+    // 获取目标地区的招聘平台和关键词
+    const regionConfig = REGION_SITES[region] || REGION_SITES['us'];
+    const regionSites = regionConfig.sites;
+    const regionKeywords = regionConfig.keywords;
     
     // 获取公司官网招聘页
     const companySites = COMPANY_CAREERS[company.toLowerCase()] || [];
@@ -69,6 +98,9 @@ export async function POST(request: NextRequest) {
     const searchSites = [...companySites, ...regionSites];
     const uniqueSites = [...new Set(searchSites)];
     
+    // 选择一个地区关键词
+    const regionKeyword = regionKeywords[0];
+    
     // 优先从官网/招聘平台搜索
     const queries = [
       // 优先：官网招聘页
@@ -76,9 +108,9 @@ export async function POST(request: NextRequest) {
         ? `${company} ${position} site:${companySites.join(' OR site:')}`
         : null,
       // 其次：地区招聘平台
-      `${company} ${position} site:${regionSites.slice(0, 3).join(' OR site:')}`,
-      // 兜底：通用搜索
-      `${company} ${position} ${position} job description responsibilities requirements`,
+      `${company} ${position} ${regionKeyword} site:${regionSites.slice(0, 3).join(' OR site:')}`,
+      // 兜底：通用搜索 + 地区关键词
+      `${company} ${position} ${regionKeyword} job description responsibilities requirements`,
     ].filter(Boolean) as string[];
 
     let bestResult: { content: string; source: string; url: string } | null = null;
