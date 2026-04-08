@@ -197,7 +197,7 @@ export default function Home() {
       </section>
 
       {/* Advantages Section - Premium Style */}
-      <section className="container mx-auto px-4 md:px-6 py-12 md:py-20">
+      <section className="container mx-auto px-4 md:px-6 py-8 md:py-12">
         <div className="grid grid-cols-1 md:grid-cols-3 gap-4 md:gap-8">
           <ScrollCard
             iconName="MapPin"
