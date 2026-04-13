@@ -66,6 +66,7 @@ import {
   ImageIcon,
   Wand2,
   PieChart,
+  DollarSign,
 } from 'lucide-react';
 import Link from 'next/link';
 
@@ -1672,6 +1673,43 @@ export default function AdminPage() {
                         <Globe className={`h-4 w-4 ${syncing ? 'animate-spin' : ''} md:mr-2`} />
                         <span className="hidden md:inline">{syncing ? '同步中...' : '同步大厂岗位'}</span>
                         <span className="md:hidden">{syncing ? '同步中' : '同步'}</span>
+                      </Button>
+                      <Button 
+                        variant="outline"
+                        size="sm"
+                        className="h-8 text-xs md:text-sm"
+                        onClick={() => {
+                          const password = prompt('请输入管理员密码：');
+                          if (password) {
+                            setSyncing(true);
+                            setSyncResult(null);
+                            fetch('/api/jobs/sync-us-finance', {
+                              method: 'POST',
+                              headers: { 'x-admin-password': password }
+                            }).then(r => r.json()).then(data => {
+                              if (data.results) {
+                                const newCount = data.results.success || 0;
+                                const skippedCount = data.results.skipped || 0;
+                                setSyncResult({ 
+                                  success: 1, 
+                                  message: `金融岗位同步完成：新增 ${newCount} 个，跳过 ${skippedCount} 个`
+                                });
+                                fetchJobs();
+                              } else {
+                                setSyncResult({ success: 0, message: data.error || '同步失败' });
+                              }
+                              setSyncing(false);
+                            }).catch(() => {
+                              setSyncResult({ success: 0, message: '同步失败，请重试' });
+                              setSyncing(false);
+                            });
+                          }
+                        }}
+                        disabled={syncing}
+                      >
+                        <DollarSign className={`h-4 w-4 ${syncing ? 'animate-spin' : ''} md:mr-2`} />
+                        <span className="hidden md:inline">{syncing ? '同步中...' : '同步金融岗位'}</span>
+                        <span className="md:hidden">{syncing ? '同步中' : '金融'}</span>
                       </Button>
                       <Button 
                         variant="outline"
