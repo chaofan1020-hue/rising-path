@@ -249,8 +249,15 @@ export default function AdminPage() {
         headers: { 'x-admin-password': password }
       });
       const data = await response.json();
-      if (data.success) {
-        setSyncResult({ success: data.results.success, message: `成功同步 ${data.results.success} 个岗位` });
+      // 只要有返回结果就算成功（无论是否新增岗位）
+      if (data.results) {
+        const newCount = data.results.success || 0;
+        const skippedCount = data.results.skipped || 0;
+        const invalidCount = data.results.invalid || 0;
+        setSyncResult({ 
+          success: 1, 
+          message: `同步完成：新增 ${newCount} 个，跳过 ${skippedCount} 个，过滤 ${invalidCount} 个无效岗位` 
+        });
         fetchJobs();
       } else {
         setSyncResult({ success: 0, message: data.error || '同步失败' });
