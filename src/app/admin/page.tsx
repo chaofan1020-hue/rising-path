@@ -184,6 +184,10 @@ export default function AdminPage() {
   }
   const [accessCodes, setAccessCodes] = useState<AccessCode[]>([]);
 
+  // Job sync state
+  const [syncing, setSyncing] = useState(false);
+  const [syncResult, setSyncResult] = useState<{ success: number; message: string } | null>(null);
+
   // Change password
   const handleChangePassword = async () => {
     setPasswordError('');
@@ -230,6 +234,29 @@ export default function AdminPage() {
       setPasswordError('修改失败，请稍后重试');
     } finally {
       setPasswordSaving(false);
+    }
+  };
+
+  // 同步大厂岗位
+  const handleSyncJobs = async (password: string) => {
+    setSyncing(true);
+    setSyncResult(null);
+    try {
+      const response = await fetch('/api/jobs/sync-us-tech', {
+        method: 'POST',
+        headers: { 'x-admin-password': password }
+      });
+      const data = await response.json();
+      if (data.success) {
+        setSyncResult({ success: data.results.success, message: `成功同步 ${data.results.success} 个岗位` });
+        fetchJobs();
+      } else {
+        setSyncResult({ success: 0, message: data.error || '同步失败' });
+      }
+    } catch {
+      setSyncResult({ success: 0, message: '同步失败，请重试' });
+    } finally {
+      setSyncing(false);
     }
   };
 
@@ -1538,6 +1565,20 @@ export default function AdminPage() {
                         size="sm"
                         className="h-8 text-xs md:text-sm"
                         onClick={() => {
+                          const password = prompt('请输入管理员密码：');
+                          if (password) handleSyncJobs(password);
+                        }}
+                        disabled={syncing}
+                      >
+                        <Globe className={`h-4 w-4 ${syncing ? 'animate-spin' : ''} md:mr-2`} />
+                        <span className="hidden md:inline">{syncing ? '同步中...' : '同步大厂岗位'}</span>
+                        <span className="md:hidden">{syncing ? '同步中' : '同步'}</span>
+                      </Button>
+                      <Button 
+                        variant="outline"
+                        size="sm"
+                        className="h-8 text-xs md:text-sm"
+                        onClick={() => {
                           setBatchResult(null);
                           setBatchText('');
                           setBatchImportOpen(true);
@@ -1761,6 +1802,11 @@ export default function AdminPage() {
                     </div>
                   </div>
                 </CardHeader>
+                {syncResult && (
+                  <div className={`px-4 py-2 text-sm ${syncResult.success > 0 ? 'bg-green-50 text-green-700' : 'bg-orange-50 text-orange-700'}`}>
+                    {syncResult.message}
+                  </div>
+                )}
                 <CardContent>
                   {/* Search and Batch Actions */}
                   <div className="mb-4 flex flex-col sm:flex-row sm:items-center gap-3 sm:gap-4">
