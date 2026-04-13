@@ -123,9 +123,78 @@ function CompanyLogo({ company, logoUrl }: { company: string; logoUrl?: string }
   );
 }
 
+// 大地区选项（用于筛选）
+const mainRegions = [
+  { id: -1, config_type: 'region', config_value: '美国', sort_order: 1, is_active: true },
+  { id: -2, config_type: 'region', config_value: '英国', sort_order: 2, is_active: true },
+  { id: -3, config_type: 'region', config_value: '加拿大', sort_order: 3, is_active: true },
+  { id: -4, config_type: 'region', config_value: '澳大利亚', sort_order: 4, is_active: true },
+  { id: -5, config_type: 'region', config_value: '新加坡', sort_order: 5, is_active: true },
+  { id: -6, config_type: 'region', config_value: '香港', sort_order: 6, is_active: true },
+  { id: -7, config_type: 'region', config_value: '日本', sort_order: 7, is_active: true },
+  { id: -8, config_type: 'region', config_value: '欧洲', sort_order: 8, is_active: true },
+];
+
+// 地区映射：将具体地区映射到所属大地区
+const regionMapping: Record<string, string> = {
+  // 美国主要城市
+  'San Francisco, CA': '美国',
+  'Seattle, WA': '美国',
+  'New York, NY': '美国',
+  'Los Angeles, CA': '美国',
+  'Austin, TX': '美国',
+  'Boston, MA': '美国',
+  'Chicago, IL': '美国',
+  'Denver, CO': '美国',
+  'Atlanta, GA': '美国',
+  'Remote - United States': '美国',
+  'United States': '美国',
+  // 英国
+  'London, UK': '英国',
+  'United Kingdom': '英国',
+  // 加拿大
+  'Toronto, ON': '加拿大',
+  'Vancouver, BC': '加拿大',
+  'Canada': '加拿大',
+  // 澳大利亚
+  'Sydney, NSW': '澳大利亚',
+  'Melbourne, VIC': '澳大利亚',
+  'Australia': '澳大利亚',
+  // 新加坡
+  'Singapore': '新加坡',
+  // 香港
+  'Hong Kong': '香港',
+  // 日本
+  'Tokyo, Japan': '日本',
+  'Japan': '日本',
+  // 欧洲
+  'Germany': '德国',
+  'France': '法国',
+  'Europe': '欧洲',
+};
+
 // 获取地区对应的显示文本
 function getRegionDisplayText(region: string): string {
   return region;
+}
+
+// 获取岗位所属的大地区
+function getRegionCategory(region: string): string {
+  return regionMapping[region] || region;
+}
+
+// 判断岗位是否匹配选中的地区（支持包含关系）
+function isRegionMatch(jobRegion: string, selectedRegions: string[]): boolean {
+  if (selectedRegions.length === 0) return true;
+  
+  for (const selected of selectedRegions) {
+    const jobCategory = getRegionCategory(jobRegion);
+    // 如果选中的地区等于岗位的地区分类
+    if (jobCategory === selected) return true;
+    // 如果选中的地区等于岗位的完整地区
+    if (jobRegion === selected) return true;
+  }
+  return false;
 }
 
 // 多选筛选器组件 - 现代化设计
@@ -381,7 +450,20 @@ function JobsContent() {
     fetch('/api/configs')
       .then(res => res.json())
       .then(data => {
-        setConfigs(data.configs || {});
+        // 合并大地区选项和具体地区选项
+        const regionConfigs = data.configs?.region || [];
+        // 去重：大地区选项优先
+        const existingMainRegions = regionConfigs.filter(
+          (r: JobConfig) => mainRegions.some(mr => mr.config_value === r.config_value)
+        );
+        if (existingMainRegions.length === 0) {
+          setConfigs({
+            ...data.configs,
+            region: [...mainRegions, ...regionConfigs]
+          });
+        } else {
+          setConfigs(data.configs || {});
+        }
       })
       .catch(console.error);
     
@@ -431,8 +513,14 @@ function JobsContent() {
   const filteredJobs = jobs
     .filter(
       (job) =>
-        job.title.toLowerCase().includes(searchTerm.toLowerCase()) ||
-        job.company.toLowerCase().includes(searchTerm.toLowerCase())
+        (job.title.toLowerCase().includes(searchTerm.toLowerCase()) ||
+        job.company.toLowerCase().includes(searchTerm.toLowerCase())) &&
+        // 地区筛选（支持包含关系）
+        (selectedRegions.length === 0 || isRegionMatch(job.region, selectedRegions)) &&
+        // 方向筛选
+        (selectedDirections.length === 0 || selectedDirections.includes(job.direction)) &&
+        // 受众筛选
+        (selectedAudience === '全部' || job.audience === selectedAudience)
     )
     .sort((a, b) => {
       // 首先按投递状态排序：可投递排在前面
