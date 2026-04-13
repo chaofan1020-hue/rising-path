@@ -39,25 +39,27 @@ const regionMapping: Record<string, string> = {
   'Europe': '欧洲',
 };
 
-// 方向映射：将子方向映射到父方向（Tech 包含所有方向）
+// 方向映射：将子方向映射到父方向（SDE 包含所有工程方向）
 const directionMapping: Record<string, string> = {
-  // Tech 是大类，包含所有
-  'SDE': 'Tech',
-  'Fullstack': 'Tech',
-  'Frontend': 'Tech',
-  'Backend': 'Tech',
-  'Mobile': 'Tech',
-  'SRE': 'Tech',
-  'MLE': 'Tech',
-  'Data': 'Tech',
-  'Quant': 'Tech',
-  'PM': 'Tech',
-  'Research': 'Tech',
-  'Risk': 'Tech',
-  'Design': 'Tech',
-  'Marketing': 'Tech',
-  'Finance': 'Tech',
-  'Legal': 'Tech',
+  // SDE 是大类，包含所有软件工程方向
+  'SDE': 'SDE',
+  'Fullstack': 'SDE',
+  'Frontend': 'SDE',
+  'Backend': 'SDE',
+  'Mobile': 'SDE',
+  
+  // 其他专业方向独立分类
+  'SRE': 'SRE',
+  'MLE': 'MLE',
+  'Data': 'Data',
+  'Quant': 'Quant',
+  'PM': 'PM',
+  'Research': 'Research',
+  'Risk': 'Risk',
+  'Design': 'Design',
+  'Marketing': 'Marketing',
+  'Finance': 'Finance',
+  'Legal': 'Legal',
   'Tech': 'Tech',
 };
 
@@ -88,11 +90,9 @@ function isDirectionMatch(jobDirection: string, selectedDirections: string[]): b
   if (selectedDirections.length === 0) return true;
   
   for (const selected of selectedDirections) {
-    // 如果选中 Tech，包含所有方向
-    if (selected === 'Tech') return true;
     // 如果选中的方向等于岗位的方向
     if (jobDirection === selected) return true;
-    // 如果岗位方向属于选中方向的大类
+    // 如果岗位方向属于选中方向的大类（SDE 包含 Fullstack/Backend/Frontend/Mobile）
     const jobCategory = getDirectionCategory(jobDirection);
     if (jobCategory === selected) return true;
   }
