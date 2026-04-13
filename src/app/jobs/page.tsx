@@ -123,32 +123,9 @@ function CompanyLogo({ company, logoUrl }: { company: string; logoUrl?: string }
   );
 }
 
-// 地区国旗映射
-const regionFlags: Record<string, string> = {
-  '美国': '\u{1F1FA}\u{1F1F8}',
-  '英国': '\u{1F1EC}\u{1F1E7}',
-  '加拿大': '\u{1F1E8}\u{1F1E6}',
-  '澳大利亚': '\u{1F1E6}\u{1F1FA}',
-  '澳洲': '\u{1F1E6}\u{1F1FA}',
-  '新加坡': '\u{1F1F8}\u{1F1EC}',
-  '香港': '\u{1F1ED}\u{1F1F0}',
-  '日本': '\u{1F1EF}\u{1F1F5}',
-  '韩国': '\u{1F1F0}\u{1F1F7}',
-  '德国': '\u{1F1E9}\u{1F1EA}',
-  '法国': '\u{1F1EB}\u{1F1F7}',
-  '欧洲': '\u{1F1EA}\u{1F1FA}',
-  '欧洲其他国家': '\u{1F1EA}\u{1F1FA}',
-  '大陆': '\u{1F1E8}\u{1F1F3}',
-  '中国': '\u{1F1E8}\u{1F1F3}',
-  '全球': '\u{1F30D}',
-  '其他国家': '\u{1F30D}',
-  'Remote': '\u{1F30D}',
-};
-
-// 获取地区对应的显示文本（带国旗）
+// 获取地区对应的显示文本
 function getRegionDisplayText(region: string): string {
-  const flag = regionFlags[region];
-  return flag ? `${flag} ${region}` : region;
+  return region;
 }
 
 // 多选筛选器组件 - 现代化设计
