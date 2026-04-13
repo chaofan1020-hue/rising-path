@@ -55,6 +55,32 @@ function isValidTitle(title: string): boolean {
   return true;
 }
 
+// 智能分类岗位方向
+function classifyDirection(title: string): string {
+  const titleLower = title.toLowerCase();
+  
+  // 优先匹配更具体的方向
+  if (/\b(quant|quantitative)\b/.test(titleLower)) return 'Quant';
+  if (/\b(pm|product manager|program manager)\b/.test(titleLower)) return 'PM';
+  if (/\b(research scientist|researcher|applied scientist)\b/.test(titleLower)) return 'Research';
+  if (/\b(risk|fraud|compliance)\b/.test(titleLower)) return 'Risk';
+  if (/\b(legal|counsel|attorney)\b/.test(titleLower)) return 'Legal';
+  if (/\b(finance|accounting|controller)\b/.test(titleLower)) return 'Finance';
+  if (/\b(marketing|sales|business development)\b/.test(titleLower)) return 'Marketing';
+  if (/\b(designer|ux|ui|product designer)\b/.test(titleLower)) return 'Design';
+  if (/\b(mle|machine learning engineer|deep learning|nlp|cv|computer vision)\b/.test(titleLower)) return 'MLE';
+  if (/\b(data scientist|data engineer|analytics|analyst|statistician)\b/.test(titleLower)) return 'Data';
+  if (/\b(sre|site reliability|infrastructure|platform|security)\b/.test(titleLower)) return 'SRE';
+  if (/\b(mobile|ios|android|flutter|react native)\b/.test(titleLower)) return 'Mobile';
+  if (/\b(frontend|front-end|front end|ui developer)\b/.test(titleLower)) return 'Frontend';
+  if (/\b(backend|back-end|back end|distributed|systems)\b/.test(titleLower)) return 'Backend';
+  if (/\b(fullstack|full-stack|full stack|fullstack)\b/.test(titleLower)) return 'Fullstack';
+  if (/\b(swe|software engineer|software developer|developer)\b/.test(titleLower)) return 'SDE';
+  
+  // 默认 Tech
+  return 'Tech';
+}
+
 // 验证 URL
 function isValidUrl(url: string): boolean {
   const urlLower = url.toLowerCase();
@@ -290,7 +316,7 @@ export async function POST(request: NextRequest) {
             title: job.title,
             company: job.company,
             region: job.region,
-            direction: 'Tech',
+            direction: classifyDirection(job.title), // 智能分类方向
             audience: '留学生',
             description: job.description,
             requirements: '',

@@ -39,9 +39,36 @@ const regionMapping: Record<string, string> = {
   'Europe': '欧洲',
 };
 
+// 方向映射：将子方向映射到父方向（Tech 包含所有方向）
+const directionMapping: Record<string, string> = {
+  // Tech 是大类，包含所有
+  'SDE': 'Tech',
+  'Fullstack': 'Tech',
+  'Frontend': 'Tech',
+  'Backend': 'Tech',
+  'Mobile': 'Tech',
+  'SRE': 'Tech',
+  'MLE': 'Tech',
+  'Data': 'Tech',
+  'Quant': 'Tech',
+  'PM': 'Tech',
+  'Research': 'Tech',
+  'Risk': 'Tech',
+  'Design': 'Tech',
+  'Marketing': 'Tech',
+  'Finance': 'Tech',
+  'Legal': 'Tech',
+  'Tech': 'Tech',
+};
+
 // 获取岗位所属的大地区
 function getRegionCategory(region: string): string {
   return regionMapping[region] || region;
+}
+
+// 获取岗位所属的方向大类
+function getDirectionCategory(direction: string): string {
+  return directionMapping[direction] || direction;
 }
 
 // 判断岗位是否匹配选中的地区（支持包含关系）
@@ -50,10 +77,24 @@ function isRegionMatch(jobRegion: string, selectedRegions: string[]): boolean {
   
   for (const selected of selectedRegions) {
     const jobCategory = getRegionCategory(jobRegion);
-    // 如果选中的地区等于岗位的地区分类
     if (jobCategory === selected) return true;
-    // 如果选中的地区等于岗位的完整地区
     if (jobRegion === selected) return true;
+  }
+  return false;
+}
+
+// 判断岗位是否匹配选中的方向（支持包含关系）
+function isDirectionMatch(jobDirection: string, selectedDirections: string[]): boolean {
+  if (selectedDirections.length === 0) return true;
+  
+  for (const selected of selectedDirections) {
+    // 如果选中 Tech，包含所有方向
+    if (selected === 'Tech') return true;
+    // 如果选中的方向等于岗位的方向
+    if (jobDirection === selected) return true;
+    // 如果岗位方向属于选中方向的大类
+    const jobCategory = getDirectionCategory(jobDirection);
+    if (jobCategory === selected) return true;
   }
   return false;
 }
@@ -77,10 +118,6 @@ export async function GET(request: NextRequest) {
     // 只获取活跃的岗位
     query = query.eq('is_active', true);
 
-    // 方向多选筛选
-    if (directions.length > 0) {
-      query = query.in('direction', directions);
-    }
     // 受众单选筛选
     if (audience && audience !== '全部') {
       query = query.eq('audience', audience);
@@ -97,16 +134,24 @@ export async function GET(request: NextRequest) {
       throw new Error(`查询岗位失败: ${error.message}`);
     }
 
-    // 地区筛选（在应用层处理，支持包含关系）
-    let filteredJobs = data;
+    // 筛选结果
+    let filteredJobs = data || [];
+
+    // 地区筛选（支持包含关系）
     if (regions.length > 0) {
-      filteredJobs = data.filter((job: { region: string }) => isRegionMatch(job.region, regions));
+      filteredJobs = filteredJobs.filter((job: { region: string }) => isRegionMatch(job.region, regions));
     }
 
-    // 为每个岗位添加地区分类
-    const jobsWithCategory = filteredJobs.map((job: { region: string; [key: string]: unknown }) => ({
+    // 方向筛选（支持包含关系：选 Tech 包含所有方向）
+    if (directions.length > 0) {
+      filteredJobs = filteredJobs.filter((job: { direction: string }) => isDirectionMatch(job.direction, directions));
+    }
+
+    // 为每个岗位添加分类信息
+    const jobsWithCategory = filteredJobs.map((job: { region: string; direction: string; [key: string]: unknown }) => ({
       ...job,
-      region_category: getRegionCategory(job.region)
+      region_category: getRegionCategory(job.region),
+      direction_category: getDirectionCategory(job.direction)
     }));
 
     return NextResponse.json({ jobs: jobsWithCategory });
