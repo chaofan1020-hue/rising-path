@@ -93,7 +93,7 @@ function classifyDirection(title: string): string {
   return 'Finance';
 }
 
-// 验证 URL
+// 验证 URL - 只接受真正的岗位页面
 function isValidUrl(url: string): boolean {
   const urlLower = url.toLowerCase();
   
@@ -105,23 +105,52 @@ function isValidUrl(url: string): boolean {
     'getro.com', 'goodwillness.com', 'contactout.com',
     'arc.dev', 'builtin.com', 'handwiki.org', '6figr.com', 'ycombinator.com',
     'wiki', 'blog', 'article', '/news/', 'pulse', 'fortune', 'medium.com', 
-    'youtube.com', 'casestudy', 'comparisons', 'glassdoor', 'indeed'
+    'youtube.com', 'casestudy', 'comparisons', 'glassdoor', 'indeed',
+    // 过滤非岗位页面
+    '/what-we-do/', '/about-us/', '/about-us', '/products/', '/funds/',
+    'am.jpmorgan.com',  // 基金页面
+    '/research/', '/insights/', '/stories/'
   ];
   
   for (const pattern of blockedPatterns) {
     if (urlLower.includes(pattern)) return false;
   }
   
+  // LinkedIn 只接受具体岗位详情页（包含 /view/ 且是职位页面）
+  if (urlLower.includes('linkedin.com/jobs/')) {
+    // 必须是具体岗位详情页格式
+    if (!urlLower.includes('/jobs/view/')) return false;
+    // 过滤 LinkedIn 搜索结果页
+    if (urlLower.includes('/jobs/search?') || urlLower.includes('/jobs/?')) return false;
+  }
+  
   // 允许的域名
   const allowedDomains = [
-    'goldmansachs.com', 'morganstanley.com', 'jpmorgan.com', 'jpmorganchase.com',
-    'blackrock.com', 'bloomberg.com', 'citadel.com', 'twosigma.com',
-    'janestreet.com', 'barclays.com', 'deutschebank.com',
-    'wellsfargo.com', 'bankofamerica.com', 'citi.com', 'citigroup.com',
-    'credit-suisse.com', 'ubs.com', 'hsbc.com',
-    'vanguard.com', 'fidelity.com', 'pimco.com', 'deshaw.com', 'aqr.com',
+    // 金融公司官网 careers
+    'goldmansachs.com/careers', 'goldmansachs.com/jobs',
+    'morganstanley.com/careers', 'morganstanley.jobs',
+    'jpmorgan.com/careers', 'jpmorganchase.com/careers', 'careers.jpmorgan.com',
+    'blackrock.com/careers', 'blackrock.jobs',
+    'bloomberg.com/careers', 'careers.bloomberg.com',
+    'citadel.com/careers', 'careers.citadel.com',
+    'twosigma.com/careers', 'careers.twosigma.com',
+    'janestreet.com/careers', 'careers.janestreet.com',
+    'barclays.com/careers', 'barclays.jobs',
+    'deutschebank.com/careers',
+    'wellsfargo.com/careers',
+    'bankofamerica.com/careers',
+    'citi.com/careers', 'citigroup.com/careers',
+    'vanguard.com/careers',
+    'fidelity.com/careers',
+    'pimco.com/careers',
+    'deshaw.com/careers',
+    'aqr.com/careers',
+    // 招聘平台
     'greenhouse.io', 'lever.co', 'workday.com', 'successfactors.com',
-    'linkedin.com'
+    'linkedin.com/jobs/view/',
+    // 允许的金融公司其他域名
+    '.goldmansachs.com', '.morganstanley.com', '.jpmorgan.com', 
+    '.blackrock.com', '.citadel.com'
   ];
   
   return allowedDomains.some(domain => urlLower.includes(domain));
@@ -198,19 +227,41 @@ function extractRegion(url: string, title: string): string {
   return 'New York, NY'; // 默认纽约
 }
 
-// 获取真实岗位描述（仅官网）
-async function fetchJobDescription(url: string, company: string): Promise<string> {
+// 获取真实岗位描述
+async function fetchJobDescription(url: string, company: string, snippet?: string): Promise<string> {
   const urlLower = url.toLowerCase();
   
-  // 只有官网和 Greenhouse/Lever 才获取详细描述
+  // LinkedIn 岗位详情页 - 使用搜索片段或标题作为描述
+  if (urlLower.includes('linkedin.com/jobs/view/')) {
+    // 如果有搜索片段，使用它作为描述
+    if (snippet && snippet.length > 50) {
+      return snippet
+        .replace(/<[^>]+>/g, ' ')
+        .replace(/\s+/g, ' ')
+        .substring(0, 3000);
+    }
+    
+    // 否则只返回标题
+    return '';
+  }
+  
+  // 官网和招聘平台 - 尝试获取详细描述
   const isOfficial = 
     urlLower.includes('greenhouse.io') ||
     urlLower.includes('lever.co') ||
     urlLower.includes('workday.com') ||
     urlLower.includes('successfactors.com') ||
-    FINANCE_COMPANIES.some(c => urlLower.includes(c.toLowerCase().replace(/\s+/g, '')));
+    urlLower.includes('/careers/') ||
+    urlLower.includes('/jobs/');
   
   if (!isOfficial) {
+    // 如果不是官网，使用搜索片段
+    if (snippet && snippet.length > 50) {
+      return snippet
+        .replace(/<[^>]+>/g, ' ')
+        .replace(/\s+/g, ' ')
+        .substring(0, 3000);
+    }
     return '';
   }
   
@@ -227,10 +278,23 @@ async function fetchJobDescription(url: string, company: string): Promise<string
         .join('\n')
         .substring(0, 3000);
       
-      return textContent;
+      if (textContent.length > 100) {
+        return textContent
+          .replace(/<[^>]+>/g, ' ')
+          .replace(/\s+/g, ' ')
+          .trim();
+      }
     }
   } catch (error) {
     console.error('Fetch error:', error);
+  }
+  
+  // 兜底使用搜索片段
+  if (snippet && snippet.length > 50) {
+    return snippet
+      .replace(/<[^>]+>/g, ' ')
+      .replace(/\s+/g, ' ')
+      .substring(0, 3000);
   }
   
   return '';
@@ -290,6 +354,13 @@ export async function POST(request: NextRequest) {
               
               const title = extractTitle(item.title || '', company);
               const direction = classifyDirection(title);
+              const snippet = item.snippet || '';
+              
+              // 额外验证：LinkedIn 岗位标题必须包含公司名
+              if (urlLower.includes('linkedin.com') && !item.title?.toLowerCase().includes(company.toLowerCase())) {
+                results.skipped++;
+                continue;
+              }
               
               results.total++;
               
@@ -324,8 +395,9 @@ export async function POST(request: NextRequest) {
                 continue;
               }
               
-              // 获取详细描述
-              const description = await fetchJobDescription(url, company);
+              // 获取详细描述（传入搜索片段）
+              const snippet = item.snippet || '';
+              const description = await fetchJobDescription(url, company, snippet);
               if (description) {
                 results.descriptions++;
               }
