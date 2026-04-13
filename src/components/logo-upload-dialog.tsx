@@ -63,40 +63,51 @@ export function LogoUploadDialog({ open, onOpenChange, onSuccess }: LogoUploadDi
 
   const onImageLoad = useCallback((e: React.SyntheticEvent<HTMLImageElement>) => {
     const { width, height } = e.currentTarget;
-    const newCrop = centerAspectCrop(width, height, 1);
-    setCrop(newCrop);
+    // 初始化为整个图片区域的 90%
+    setCrop({
+      unit: "%",
+      x: 5,
+      y: 5,
+      width: 90,
+      height: 90,
+    });
   }, []);
 
   const getCroppedImage = async (): Promise<Blob | null> => {
     if (!imgRef.current || !crop || !imgRef.current.src) return null;
 
     const image = imgRef.current;
-    // 固定输出尺寸为 200x200，确保1:1
-    const outputSize = 200;
+    const outputSize = 200; // 最终输出 200x200
 
+    // 计算裁剪区域的像素坐标
     const cropX = (crop.x / 100) * image.naturalWidth;
     const cropY = (crop.y / 100) * image.naturalHeight;
     const cropWidth = (crop.width / 100) * image.naturalWidth;
     const cropHeight = (crop.height / 100) * image.naturalHeight;
 
+    // 创建白色背景画布
     const canvas = document.createElement("canvas");
     canvas.width = outputSize;
     canvas.height = outputSize;
-
     const ctx = canvas.getContext("2d");
     if (!ctx) return null;
 
-    // 拉伸填充到固定尺寸
+    // 填充白色背景
+    ctx.fillStyle = "#ffffff";
+    ctx.fillRect(0, 0, outputSize, outputSize);
+
+    // 计算缩放比例，使裁剪区域填充整个输出
+    const scale = Math.min(outputSize / cropWidth, outputSize / cropHeight);
+    const scaledWidth = cropWidth * scale;
+    const scaledHeight = cropHeight * scale;
+    const offsetX = (outputSize - scaledWidth) / 2;
+    const offsetY = (outputSize - scaledHeight) / 2;
+
+    // 绘制裁剪区域并缩放（居中）
     ctx.drawImage(
       image,
-      cropX,
-      cropY,
-      cropWidth,
-      cropHeight,
-      0,
-      0,
-      outputSize,
-      outputSize
+      cropX, cropY, cropWidth, cropHeight,
+      offsetX, offsetY, scaledWidth, scaledHeight
     );
 
     return new Promise((resolve) => {
@@ -194,7 +205,7 @@ export function LogoUploadDialog({ open, onOpenChange, onSuccess }: LogoUploadDi
           {src && (
             <div className="space-y-3">
               <div className="flex items-center justify-between">
-                <span className="text-sm font-medium">裁剪预览</span>
+                <span className="text-sm font-medium">裁剪区域（可拖拽调整）</span>
                 <Button variant="ghost" size="sm" onClick={handleReset}>
                   重新选择
                 </Button>
@@ -204,7 +215,6 @@ export function LogoUploadDialog({ open, onOpenChange, onSuccess }: LogoUploadDi
                 <ReactCrop
                   crop={crop}
                   onChange={(_, percentCrop) => setCrop(percentCrop)}
-                  aspect={1}
                   keepSelection
                 >
                   <img
@@ -218,7 +228,7 @@ export function LogoUploadDialog({ open, onOpenChange, onSuccess }: LogoUploadDi
               </div>
               
               <p className="text-xs text-muted-foreground text-center">
-                拖拽调整 Logo 区域
+                拖拽调整选择区域，选中内容会自动缩放填充为正方形（留白补齐）
               </p>
             </div>
           )}
