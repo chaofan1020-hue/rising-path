@@ -358,41 +358,50 @@ function JobsContent() {
     audience: JobConfig[];
   }>({ region: [], direction: [], audience: [] });
 
-  // 检查是否需要自动同步（距离上次同步超过1小时）
-  const needsAutoSync = useCallback(async () => {
-    try {
-      const response = await fetch('/api/jobs?limit=1');
-      const data = await response.json();
-      if (data.jobs && data.jobs.length > 0) {
-        const lastJobTime = new Date(data.jobs[0].created_at).getTime();
-        const oneHourAgo = Date.now() - 60 * 60 * 1000;
-        return lastJobTime < oneHourAgo;
-      }
-      return true; // 没有岗位时需要同步
-    } catch {
-      return false;
-    }
-  }, []);
+  // 移除自动同步 - 改为管理员手动触发
+  // const needsAutoSync = useCallback(async () => {
+  //   try {
+  //     const response = await fetch('/api/jobs?limit=1');
+  //     const data = await response.json();
+  //     if (data.jobs && data.jobs.length > 0) {
+  //       const lastJobTime = new Date(data.jobs[0].created_at).getTime();
+  //       const oneHourAgo = Date.now() - 60 * 60 * 1000;
+  //       return lastJobTime < oneHourAgo;
+  //     }
+  //     return true; // 没有岗位时需要同步
+  //   } catch {
+  //     return false;
+  //   }
+  // }, []);
 
   // 自动同步岗位
-  useEffect(() => {
-    const autoSync = async () => {
-      const shouldSync = await needsAutoSync();
-      if (shouldSync && !syncing) {
-        handleSyncJobs();
-      }
-    };
-    autoSync();
-  }, [needsAutoSync]);
+  // useEffect(() => {
+  //   const autoSync = async () => {
+  //     const shouldSync = await needsAutoSync();
+  //     if (shouldSync && !syncing) {
+  //       handleSyncJobs();
+  //     }
+  //   };
+  //   autoSync();
+  // }, [needsAutoSync]);
 
   const { accessCodeId } = useAccessCode();
 
-  // 同步大厂岗位
+  // 同步大厂岗位（需要管理员密码）
   const handleSyncJobs = async () => {
+    // 弹出密码输入
+    const password = prompt('请输入管理员密码以刷新岗位数据：');
+    if (!password) return;
+    
     setSyncing(true);
     setSyncResult(null);
     try {
-      const response = await fetch('/api/jobs/sync-us-tech', { method: 'POST' });
+      const response = await fetch('/api/jobs/sync-us-tech', { 
+        method: 'POST',
+        headers: {
+          'x-admin-password': password
+        }
+      });
       const data = await response.json();
       if (data.success) {
         setSyncResult({ success: data.results.success, message: `成功同步 ${data.results.success} 个岗位` });

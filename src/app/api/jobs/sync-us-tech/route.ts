@@ -178,6 +178,19 @@ async function fetchJobDescription(url: string, company: string): Promise<string
 
 export async function POST(request: NextRequest) {
   try {
+    // 验证管理员密码
+    const authHeader = request.headers.get('x-admin-password');
+    if (!authHeader) {
+      return NextResponse.json({ error: '需要管理员密码' }, { status: 401 });
+    }
+    
+    // 导入密码验证逻辑
+    const { verifyAdminPassword } = await import('@/lib/admin-auth');
+    const isValid = await verifyAdminPassword(authHeader);
+    if (!isValid) {
+      return NextResponse.json({ error: '管理员密码错误' }, { status: 401 });
+    }
+
     const config = new Config();
     const customHeaders = HeaderUtils.extractForwardHeaders(request.headers);
     const client = new SearchClient(config, customHeaders);
