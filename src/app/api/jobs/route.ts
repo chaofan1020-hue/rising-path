@@ -48,21 +48,22 @@ const directionMapping: Record<string, string> = {
   'Backend': 'SDE',
   'Mobile': 'SDE',
   
-  // 其他专业方向独立分类
-  'SRE': 'SDE',  // SRE 也属于 SDE
-  'MLE': 'MLE',
-  'Data': 'Data',
-  'Quant': 'Quant',
-  'PM': 'PM',
-  'Research': 'Research',
-  'Risk': 'Risk',
-  'Design': 'Design',
-  'Marketing': 'Marketing',
+  // 方向映射
+  'MLE': 'ML/AI',
+  'Research': 'ML/AI',
+  'Marketing': 'MKT',
   'Finance': 'Finance',
   'Legal': 'Legal',
+  'Design': 'Design',
+  'Risk': 'Risk',
+  'Quant': 'Quant',
+  'PM': 'PM',
+  'Data': 'Data',
+  'IBD/S&T': 'IBD/S&T',
+  'Consulting': 'Consulting',
+  'Hardware': 'Hardware',
+  'Security': 'Security',
 };
-
-// 获取岗位所属的大地区
 function getRegionCategory(region: string): string {
   return regionMapping[region] || region;
 }
