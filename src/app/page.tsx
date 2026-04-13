@@ -204,24 +204,27 @@ export default function Home() {
             title="全球岗位覆盖"
             description="覆盖美国、英国、新加坡、香港等主流留学地区"
             iconColor="text-sky-600"
+            scrollTo="features"
           />
           <ScrollCard
             iconName="Crosshair"
             title="精准智能匹配"
             description="AI深度分析简历与岗位匹配度"
             iconColor="text-violet-600"
+            scrollTo="features"
           />
           <ScrollCard
             iconName="Rocket"
             title="高效求职工具"
             description="一站式完成简历优化、岗位筛选、网申投递"
             iconColor="text-amber-600"
+            scrollTo="features"
           />
         </div>
       </section>
 
       {/* Features Section - Bento Grid Style */}
-      <section className="container mx-auto px-4 md:px-6 py-12 md:py-24">
+      <section id="features" className="container mx-auto px-4 md:px-6 py-12 md:py-24">
         <div className="text-center mb-6 md:mb-20">
           <div className="inline-flex items-center gap-2 px-3 py-1.5 md:px-4 md:py-2 rounded-full bg-muted/50 border border-muted/50 mb-3 md:mb-8">
             <Layers className="h-4 w-4 md:h-5 md:w-5 text-primary" />

@@ -13,18 +13,25 @@ interface ScrollCardProps {
   title: string;
   description: string;
   iconColor: string;
+  scrollTo?: string;
 }
 
 export function ScrollCard({ 
   iconName, 
   title, 
   description, 
-  iconColor 
+  iconColor,
+  scrollTo 
 }: ScrollCardProps) {
   const Icon = iconMap[iconName as keyof typeof iconMap];
   
   const handleClick = () => {
-    document.getElementById('cta')?.scrollIntoView({ behavior: 'smooth' });
+    if (scrollTo) {
+      const element = document.getElementById(scrollTo);
+      if (element) {
+        element.scrollIntoView({ behavior: 'smooth', block: 'start' });
+      }
+    }
   };
 
   if (!Icon) return null;
