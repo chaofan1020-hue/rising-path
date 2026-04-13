@@ -74,40 +74,40 @@ function getCompanyInitial(company: string): string {
   return company.charAt(0).toUpperCase();
 }
 
-// 公司Logo组件
-function CompanyLogo({ company, logoUrl }: { company: string; logoUrl?: string }) {
+// 公司Logo组件 - 自适应大小
+function CompanyLogo({ company, logoUrl, className = '' }: { company: string; logoUrl?: string; className?: string }) {
   const [imgError, setImgError] = useState(false);
   
   // 如果有logo_url且图片加载成功
   if (logoUrl && !imgError) {
     return (
-      <div className="w-12 h-12 rounded-xl overflow-hidden bg-white border border-muted/50 flex-shrink-0 shadow-sm">
+      <div className={`w-10 h-10 md:w-12 md:h-12 rounded-xl overflow-hidden bg-white border border-muted/50 flex-shrink-0 shadow-sm ${className}`}>
         <Image
           src={logoUrl}
           alt={company}
-          width={48}
-          height={48}
-          className="w-full h-full object-contain p-1"
+          fill
+          className="object-contain p-1"
           onError={() => setImgError(true)}
+          sizes="48px"
         />
       </div>
     );
   }
   
   // 尝试使用 Clearbit Logo API
-  const clearbitUrl = `https://logo.clearbit.com/${company.toLowerCase().replace(/\s+/g, '')}.com?size=96`;
+  const clearbitUrl = `https://logo.clearbit.com/${company.toLowerCase().replace(/\s+/g, '')}.com?size=128`;
   
   if (!imgError) {
     return (
-      <div className="w-12 h-12 rounded-xl overflow-hidden bg-white border border-muted/50 flex-shrink-0 shadow-sm">
+      <div className={`w-10 h-10 md:w-12 md:h-12 rounded-xl overflow-hidden bg-white border border-muted/50 flex-shrink-0 shadow-sm ${className}`}>
         <Image
           src={clearbitUrl}
           alt={company}
-          width={48}
-          height={48}
-          className="w-full h-full object-contain p-1.5"
+          fill
+          className="object-contain p-1"
           onError={() => setImgError(true)}
           unoptimized
+          sizes="48px"
         />
       </div>
     );
@@ -115,8 +115,8 @@ function CompanyLogo({ company, logoUrl }: { company: string; logoUrl?: string }
   
   // 使用首字母占位符
   return (
-    <div className={`w-12 h-12 rounded-xl bg-gradient-to-br ${getCompanyGradient(company)} flex items-center justify-center flex-shrink-0 shadow-sm`}>
-      <span className="text-white font-bold text-lg">
+    <div className={`w-10 h-10 md:w-12 md:h-12 rounded-xl bg-gradient-to-br ${getCompanyGradient(company)} flex items-center justify-center flex-shrink-0 shadow-sm ${className}`}>
+      <span className="text-white font-bold text-base md:text-lg">
         {getCompanyInitial(company)}
       </span>
     </div>

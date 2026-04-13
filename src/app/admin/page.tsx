@@ -2123,27 +2123,29 @@ export default function AdminPage() {
                       <p className="text-sm">点击上方按钮上传企业 Logo</p>
                     </div>
                   ) : (
-                    <div className="grid grid-cols-2 md:grid-cols-4 lg:grid-cols-6 gap-4">
+                    <div className="grid grid-cols-3 sm:grid-cols-4 md:grid-cols-6 lg:grid-cols-8 gap-3">
                       {companyLogos.map((logo) => (
                         <div
                           key={logo.id}
-                          className="relative group border rounded-lg p-4 bg-card hover:bg-accent/50 transition-colors"
+                          className="relative group border rounded-xl p-3 bg-card hover:bg-accent/50 transition-colors"
                         >
-                          <div className="aspect-square flex items-center justify-center">
+                          <div className="aspect-video flex items-center justify-center bg-white rounded-lg p-2 shadow-sm">
                             <img
                               src={logo.logo_url}
                               alt={logo.company_name}
-                              className="max-h-12 max-w-full object-contain"
+                              className="max-h-full max-w-full object-contain"
                               onError={(e) => {
                                 (e.target as HTMLImageElement).style.display = 'none';
                               }}
                             />
                           </div>
-                          <p className="text-center text-sm mt-2 truncate">{logo.company_name}</p>
+                          <p className="text-center text-xs mt-2 truncate font-medium" title={logo.company_name}>
+                            {logo.company_name}
+                          </p>
                           <Button
                             variant="destructive"
                             size="sm"
-                            className="absolute top-1 right-1 h-6 w-6 p-0 opacity-0 group-hover:opacity-100 transition-opacity"
+                            className="absolute -top-1 -right-1 h-5 w-5 p-0 opacity-0 group-hover:opacity-100 transition-opacity shadow-md"
                             onClick={() => handleLogoDelete(logo.company_name)}
                           >
                             <X className="h-3 w-3" />
