@@ -1,21 +1,18 @@
-import { createClient } from '@supabase/supabase-js';
 import { getSupabaseClient } from '@/storage/database/supabase-client';
-
-// 获取存储客户端
-function getStorageClient() {
-  const supabaseUrl = process.env.SUPABASE_URL || '';
-  const supabaseKey = process.env.SUPABASE_SERVICE_KEY || '';
-  return createClient(supabaseUrl, supabaseKey);
-}
 
 // 上传文件到 Supabase Storage
 export async function uploadFile(file: File | Blob, fileName: string): Promise<string | null> {
   try {
-    const supabase = getStorageClient();
+    const supabase = getSupabaseClient();
+    
+    // 转换 File 为 ArrayBuffer
+    const arrayBuffer = await file.arrayBuffer();
+    const buffer = Buffer.from(arrayBuffer);
     
     const { data, error } = await supabase.storage
       .from('pathup-assets')
-      .upload(fileName, file, {
+      .upload(fileName, buffer, {
+        contentType: file.type || 'image/png',
         cacheControl: '3600',
         upsert: true,
       });
