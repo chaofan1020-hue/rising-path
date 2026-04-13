@@ -38,6 +38,17 @@ export function LogoUploadDialog({ open, onOpenChange, onSuccess }: LogoUploadDi
   const [uploading, setUploading] = useState(false);
   const imgRef = useRef<HTMLImageElement>(null);
 
+  // 监听 dialog 关闭，重置状态
+  const handleOpenChange = (isOpen: boolean) => {
+    if (!isOpen) {
+      setSrc(null);
+      setCompanyName("");
+      setCrop(undefined);
+      setUploading(false);
+    }
+    onOpenChange(isOpen);
+  };
+
   const onSelectFile = (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
     if (!file) return;
@@ -122,7 +133,7 @@ export function LogoUploadDialog({ open, onOpenChange, onSuccess }: LogoUploadDi
 
       const data = await response.json();
       if (response.ok && data.success) {
-        alert("Logo 上传成功！");
+        setUploading(false);
         handleClose();
         onSuccess();
       } else {
@@ -137,10 +148,7 @@ export function LogoUploadDialog({ open, onOpenChange, onSuccess }: LogoUploadDi
   };
 
   const handleClose = () => {
-    setSrc(null);
-    setCompanyName("");
-    setCrop(undefined);
-    onOpenChange(false);
+    handleOpenChange(false);
   };
 
   const handleReset = () => {
@@ -149,7 +157,7 @@ export function LogoUploadDialog({ open, onOpenChange, onSuccess }: LogoUploadDi
   };
 
   return (
-    <Dialog open={open} onOpenChange={handleClose}>
+    <Dialog open={open} onOpenChange={handleOpenChange}>
       <DialogContent className="sm:max-w-md max-h-[90vh] overflow-y-auto">
         <DialogHeader>
           <DialogTitle>上传企业 Logo</DialogTitle>
