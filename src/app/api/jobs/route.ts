@@ -1,6 +1,64 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { getSupabaseClient } from '@/storage/database/supabase-client';
 
+// 公司域名映射
+const companyDomains: Record<string, string> = {
+  'Stripe': 'stripe.com',
+  'Airbnb': 'airbnb.com',
+  'Uber': 'uber.com',
+  'Lyft': 'lyft.com',
+  'DoorDash': 'doordash.com',
+  'Dropbox': 'dropbox.com',
+  'Coinbase': 'coinbase.com',
+  'Robinhood': 'robinhood.com',
+  'Figma': 'figma.com',
+  'Notion': 'notion.so',
+  'Palantir': 'palantir.com',
+  'Databricks': 'databricks.com',
+  'Snowflake': 'snowflake.com',
+  'Twilio': 'twilio.com',
+  'Zoom': 'zoom.us',
+  'Atlassian': 'atlassian.com',
+  'Confluent': 'confluent.io',
+  'MongoDB': 'mongodb.com',
+  'Cloudflare': 'cloudflare.com',
+  'Rubrik': 'rubrik.com',
+  'Scale AI': 'scale.com',
+  'OpenAI': 'openai.com',
+  'Anthropic': 'anthropic.com',
+  'Instacart': 'instacart.com',
+  'Discord': 'discord.com',
+  'Plaid': 'plaid.com',
+  'Brex': 'brex.com',
+  'Datadog': 'datadoghq.com',
+  'GitLab': 'gitlab.com',
+  'Google': 'google.com',
+  'Meta': 'meta.com',
+  'Apple': 'apple.com',
+  'Microsoft': 'microsoft.com',
+  'Amazon': 'amazon.com',
+  'Netflix': 'netflix.com',
+  'Tesla': 'tesla.com',
+  'NVIDIA': 'nvidia.com',
+  'Adobe': 'adobe.com',
+  'Oracle': 'oracle.com',
+  'Salesforce': 'salesforce.com',
+  'Snap': 'snap.com',
+  'Pinterest': 'pinterest.com',
+  'LinkedIn': 'linkedin.com',
+};
+
+// 获取公司 logo URL
+function getCompanyLogo(company: string): string | null {
+  const domain = companyDomains[company];
+  if (domain) {
+    return `https://logo.clearbit.com/${domain}`;
+  }
+  // 尝试使用公司名构造域名
+  const cleanName = company.toLowerCase().replace(/\s+/g, '');
+  return `https://logo.clearbit.com/${cleanName}.com`;
+}
+
 // 地区映射：将具体地区映射到所属大地区
 const regionMapping: Record<string, string> = {
   // 美国主要城市
@@ -147,11 +205,12 @@ export async function GET(request: NextRequest) {
       filteredJobs = filteredJobs.filter((job: { direction: string }) => isDirectionMatch(job.direction, directions));
     }
 
-    // 为每个岗位添加分类信息
-    const jobsWithCategory = filteredJobs.map((job: { region: string; direction: string; [key: string]: unknown }) => ({
+    // 为每个岗位添加分类信息和 logo
+    const jobsWithCategory = filteredJobs.map((job: { region: string; direction: string; company: string; [key: string]: unknown }) => ({
       ...job,
       region_category: getRegionCategory(job.region),
-      direction_category: getDirectionCategory(job.direction)
+      direction_category: getDirectionCategory(job.direction),
+      logo_url: getCompanyLogo(job.company)
     }));
 
     return NextResponse.json({ jobs: jobsWithCategory });
