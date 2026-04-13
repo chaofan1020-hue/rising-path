@@ -82,13 +82,14 @@ function CompanyLogo({ company, logoUrl }: { company: string; logoUrl?: string }
   if (logoUrl && !imgError) {
     return (
       <div className="w-12 h-12 rounded-lg overflow-hidden bg-white border flex-shrink-0">
-        <Image
+        <img
           src={logoUrl}
           alt={company}
-          width={48}
-          height={48}
           className="w-full h-full object-contain p-1"
-          onError={() => setImgError(true)}
+          onError={() => {
+            console.log('Logo load error:', logoUrl);
+            setImgError(true);
+          }}
         />
       </div>
     );
@@ -100,14 +101,11 @@ function CompanyLogo({ company, logoUrl }: { company: string; logoUrl?: string }
   if (!imgError) {
     return (
       <div className="w-12 h-12 rounded-lg overflow-hidden bg-white border flex-shrink-0">
-        <Image
+        <img
           src={clearbitUrl}
           alt={company}
-          width={48}
-          height={48}
           className="w-full h-full object-contain p-1.5"
           onError={() => setImgError(true)}
-          unoptimized
         />
       </div>
     );

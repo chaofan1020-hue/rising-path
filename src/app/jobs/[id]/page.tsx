@@ -55,12 +55,11 @@ function CompanyLogo({ company, logoUrl }: { company: string; logoUrl?: string }
 
   if (logoUrl && !logoError) {
     return (
-      <div className="relative w-16 h-16 rounded-lg border overflow-hidden bg-white flex-shrink-0">
-        <Image
+      <div className="w-16 h-16 rounded-lg border overflow-hidden bg-white flex-shrink-0">
+        <img
           src={logoUrl}
           alt={`${company} logo`}
-          fill
-          className="object-contain p-2"
+          className="w-full h-full object-contain p-2"
           onError={() => setLogoError(true)}
         />
       </div>
@@ -69,14 +68,12 @@ function CompanyLogo({ company, logoUrl }: { company: string; logoUrl?: string }
 
   if (clearbitUrl && !logoError) {
     return (
-      <div className="relative w-16 h-16 rounded-lg border overflow-hidden bg-white flex-shrink-0">
-        <Image
+      <div className="w-16 h-16 rounded-lg border overflow-hidden bg-white flex-shrink-0">
+        <img
           src={clearbitUrl}
           alt={`${company} logo`}
-          fill
-          className="object-contain p-2"
+          className="w-full h-full object-contain p-2"
           onError={() => setLogoError(true)}
-          unoptimized
         />
       </div>
     );
