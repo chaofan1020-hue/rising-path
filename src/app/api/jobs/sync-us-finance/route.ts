@@ -2,6 +2,91 @@ import { NextRequest, NextResponse } from 'next/server';
 import { SearchClient, FetchClient, Config, HeaderUtils } from 'coze-coding-dev-sdk';
 import { getSupabaseClient } from '@/storage/database/supabase-client';
 
+// 解析岗位描述为结构化数据
+function parseJobDescription(text: string, title: string, company: string): {
+  overview: string;
+  responsibilities: string;
+  requirements: string;
+  nice_to_have: string;
+} {
+  // 生成概述
+  const overview = `Join ${company}'s team as ${title}. This role offers an opportunity to work on cutting-edge projects in a fast-paced environment.`;
+  
+  // 提取职责
+  const respPatterns = [
+    /what you'll do[:\s]*(.+?)(?=qualifications|requirements|skills|$)/is,
+    /responsibilities[:\s]*(.+?)(?=qualifications|requirements|skills|you'll bring|$)/is,
+    /about the role[:\s]*(.+?)(?=qualifications|requirements|skills|$)/is,
+  ];
+  
+  let responsibilities = '';
+  for (const pattern of respPatterns) {
+    const match = text.match(pattern);
+    if (match) {
+      const bulletPoints = match[1]
+        .split(/[-•·▪▸·]\s*|\n+/)
+        .filter((s: string) => s.trim().length > 20 && s.trim().length < 200)
+        .slice(0, 5)
+        .map((s: string) => s.trim().replace(/<[^>]+>/g, ''))
+        .join('|');
+      if (bulletPoints) {
+        responsibilities = bulletPoints;
+        break;
+      }
+    }
+  }
+  
+  // 提取要求
+  const reqPatterns = [
+    /qualifications[:\s]*(.+?)(?=nice to have|bonus|preferred|$)/is,
+    /requirements[:\s]*(.+?)(?=nice to have|bonus|preferred|$)/is,
+    /what you'll bring[:\s]*(.+?)(?=nice to have|bonus|preferred|$)/is,
+  ];
+  
+  let requirements = '';
+  for (const pattern of reqPatterns) {
+    const match = text.match(pattern);
+    if (match) {
+      const bulletPoints = match[1]
+        .split(/[-•·▪▸·]\s*|\n+/)
+        .filter((s: string) => s.trim().length > 10 && s.trim().length < 200)
+        .slice(0, 5)
+        .map((s: string) => s.trim().replace(/<[^>]+>/g, ''))
+        .join('|');
+      if (bulletPoints) {
+        requirements = bulletPoints;
+        break;
+      }
+    }
+  }
+  
+  // 提取加分项
+  const nicePatterns = [
+    /nice to have[:\s]*(.+?)(?=|$)/is,
+    /bonus[:\s]*(.+?)(?=|$)/is,
+    /preferred[:\s]*(.+?)(?=|$)/is,
+  ];
+  
+  let nice_to_have = '';
+  for (const pattern of nicePatterns) {
+    const match = text.match(pattern);
+    if (match) {
+      const bulletPoints = match[1]
+        .split(/[-•·▪▸·]\s*|\n+/)
+        .filter((s: string) => s.trim().length > 10 && s.trim().length < 200)
+        .slice(0, 3)
+        .map((s: string) => s.trim().replace(/<[^>]+>/g, ''))
+        .join('|');
+      if (bulletPoints) {
+        nice_to_have = bulletPoints;
+        break;
+      }
+    }
+  }
+  
+  return { overview, responsibilities, requirements, nice_to_have };
+}
+
 // 美国顶尖金融公司
 const FINANCE_COMPANIES = [
   'Goldman Sachs', 'Morgan Stanley', 'JPMorgan', 'BlackRock', 'Bloomberg',
@@ -331,7 +416,18 @@ export async function POST(request: NextRequest) {
     };
 
     const seenUrls = new Set<string>();
-    const jobsToInsert: Array<{ title: string; company: string; region: string; url: string; description: string; direction: string }> = [];
+    const jobsToInsert: Array<{
+      title: string;
+      company: string;
+      region: string;
+      url: string;
+      description: string;
+      direction: string;
+      overview: string;
+      responsibilities: string;
+      requirements: string;
+      nice_to_have: string;
+    }> = [];
 
     for (const company of FINANCE_COMPANIES) {
       const queries = [
@@ -396,19 +492,25 @@ export async function POST(request: NextRequest) {
               }
               
               // 获取详细描述（传入搜索片段）
-              const snippet = item.snippet || '';
-              const description = await fetchJobDescription(url, company, snippet);
-              if (description) {
+              const rawDescription = await fetchJobDescription(url, company, snippet);
+              if (rawDescription) {
                 results.descriptions++;
               }
+              
+              // 解析岗位描述为结构化数据
+              const parsed = parseJobDescription(rawDescription || snippet, title, company);
               
               jobsToInsert.push({
                 title,
                 company,
                 region,
                 url,
-                description: description || title,
+                description: rawDescription || title,
                 direction,
+                overview: parsed.overview,
+                responsibilities: parsed.responsibilities,
+                requirements: parsed.requirements,
+                nice_to_have: parsed.nice_to_have,
               });
               
               results.details.push(`[新增] ${title.substring(0, 60)}...`);
@@ -433,7 +535,11 @@ export async function POST(request: NextRequest) {
         direction: job.direction,
         job_url: job.url,
         description: job.description,
-        requirements: '',
+        overview: job.overview,
+        responsibilities: job.responsibilities,
+        requirements: job.requirements,
+        nice_to_have: job.nice_to_have,
+        job_type: job.title.toLowerCase().includes('intern') ? '实习' : '社招',
         salary_range: '',
         audience: '留学生',
         is_active: true,

@@ -17,7 +17,10 @@ import {
   DollarSign,
   FileText,
   Loader2,
-  Send
+  Send,
+  Target,
+  CheckCircle,
+  Star
 } from 'lucide-react';
 import Link from 'next/link';
 import Image from 'next/image';
@@ -278,8 +281,93 @@ function JobDetailContent() {
           </CardContent>
         </Card>
 
-        {/* Job Description */}
-        {job.description && (
+        {/* 岗位概述 */}
+        {job.overview && (
+          <Card className="mb-4 md:mb-6 bg-gradient-to-r from-green-50 to-blue-50 border-green-200">
+            <CardContent className="pt-4 md:pt-6">
+              <p className="text-base md:text-lg text-foreground font-medium leading-relaxed">
+                {job.overview}
+              </p>
+            </CardContent>
+          </Card>
+        )}
+
+        {/* 岗位职责 */}
+        {job.responsibilities && (
+          <Card className="mb-4 md:mb-6">
+            <CardHeader className="pb-2 md:pb-4">
+              <CardTitle className="flex items-center gap-2 text-base md:text-lg">
+                <Target className="h-4 w-4 md:h-5 md:w-5 text-green-600" />
+                岗位职责
+              </CardTitle>
+            </CardHeader>
+            <CardContent>
+              <ul className="space-y-3">
+                {job.responsibilities.split('|').filter((item: string) => item.trim()).map((item: string, index: number) => (
+                  <li key={index} className="flex items-start gap-3">
+                    <span className="flex-shrink-0 w-6 h-6 rounded-full bg-green-100 text-green-600 flex items-center justify-center text-sm font-medium">
+                      {index + 1}
+                    </span>
+                    <span className="text-sm md:text-base text-muted-foreground leading-relaxed">
+                      {item.trim()}
+                    </span>
+                  </li>
+                ))}
+              </ul>
+            </CardContent>
+          </Card>
+        )}
+
+        {/* 岗位要求 */}
+        {job.requirements && (
+          <Card className="mb-4 md:mb-6">
+            <CardHeader className="pb-2 md:pb-4">
+              <CardTitle className="flex items-center gap-2 text-base md:text-lg">
+                <CheckCircle className="h-4 w-4 md:h-5 md:w-5 text-blue-600" />
+                任职要求
+              </CardTitle>
+            </CardHeader>
+            <CardContent>
+              <ul className="space-y-2">
+                {job.requirements.split('|').filter((item: string) => item.trim()).map((item: string, index: number) => (
+                  <li key={index} className="flex items-start gap-3">
+                    <CheckCircle className="h-5 w-5 text-blue-500 flex-shrink-0 mt-0.5" />
+                    <span className="text-sm md:text-base text-muted-foreground">
+                      {item.trim()}
+                    </span>
+                  </li>
+                ))}
+              </ul>
+            </CardContent>
+          </Card>
+        )}
+
+        {/* 加分项 */}
+        {job.nice_to_have && (
+          <Card className="mb-4 md:mb-6 border-amber-200 bg-amber-50/50">
+            <CardHeader className="pb-2 md:pb-4">
+              <CardTitle className="flex items-center gap-2 text-base md:text-lg text-amber-800">
+                <Star className="h-4 w-4 md:h-5 md:w-5" />
+                加分项
+              </CardTitle>
+            </CardHeader>
+            <CardContent>
+              <ul className="space-y-2">
+                {job.nice_to_have.split('|').filter((item: string) => item.trim()).map((item: string, index: number) => (
+                  <li key={index} className="flex items-start gap-3">
+                    <Star className="h-5 w-5 text-amber-500 flex-shrink-0 mt-0.5" />
+                    <span className="text-sm md:text-base text-amber-700">
+                      {item.trim()}
+                    </span>
+                  </li>
+                ))}
+              </ul>
+            </CardContent>
+          </Card>
+        )}
+
+        {/* 原始岗位描述 - 如果没有结构化数据，显示原始描述 */}
+        {!job.overview && job.description && (
           <Card className="mb-4 md:mb-6">
             <CardHeader className="pb-2 md:pb-4">
               <CardTitle className="flex items-center gap-2 text-base md:text-lg">
@@ -290,23 +378,6 @@ function JobDetailContent() {
             <CardContent>
               <div className="whitespace-pre-wrap text-muted-foreground text-sm md:text-base">
                 {job.description}
-              </div>
-            </CardContent>
-          </Card>
-        )}
-
-        {/* Job Requirements */}
-        {job.requirements && (
-          <Card className="mb-4 md:mb-6">
-            <CardHeader className="pb-2 md:pb-4">
-              <CardTitle className="flex items-center gap-2 text-base md:text-lg">
-                <Briefcase className="h-4 w-4 md:h-5 md:w-5" />
-                岗位要求
-              </CardTitle>
-            </CardHeader>
-            <CardContent>
-              <div className="whitespace-pre-wrap text-muted-foreground text-sm md:text-base">
-                {job.requirements}
               </div>
             </CardContent>
           </Card>
