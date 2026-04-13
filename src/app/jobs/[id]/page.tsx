@@ -85,7 +85,7 @@ function CompanyLogo({ company, logoUrl }: { company: string; logoUrl?: string }
   // Fallback: 首字母
   const initial = company?.charAt(0)?.toUpperCase() || '?';
   return (
-    <div className="w-16 h-16 rounded-lg border bg-primary/10 flex items-center justify-center flex-shrink-0">
+    <div className="w-16 h-16 rounded-lg border bg-white flex items-center justify-center flex-shrink-0">
       <span className="text-2xl font-bold text-primary">{initial}</span>
     </div>
   );

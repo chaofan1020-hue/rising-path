@@ -81,7 +81,7 @@ function CompanyLogo({ company, logoUrl }: { company: string; logoUrl?: string }
   // 如果有logo_url且图片加载成功
   if (logoUrl && !imgError) {
     return (
-      <div className="w-12 h-12 rounded-xl overflow-hidden bg-white border border-muted/50 flex-shrink-0 shadow-sm">
+      <div className="w-12 h-12 rounded-lg overflow-hidden bg-white border flex-shrink-0">
         <Image
           src={logoUrl}
           alt={company}
@@ -99,7 +99,7 @@ function CompanyLogo({ company, logoUrl }: { company: string; logoUrl?: string }
   
   if (!imgError) {
     return (
-      <div className="w-12 h-12 rounded-xl overflow-hidden bg-white border border-muted/50 flex-shrink-0 shadow-sm">
+      <div className="w-12 h-12 rounded-lg overflow-hidden bg-white border flex-shrink-0">
         <Image
           src={clearbitUrl}
           alt={company}
