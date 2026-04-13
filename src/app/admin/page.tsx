@@ -36,6 +36,7 @@ import {
 import { Label } from '@/components/ui/label';
 import { Switch } from '@/components/ui/switch';
 import { AdminAuthGuard } from '@/components/admin-auth-guard';
+import { LogoUploadDialog } from '@/components/logo-upload-dialog';
 import Image from 'next/image';
 import { 
   LayoutDashboard,
@@ -2058,61 +2059,10 @@ export default function AdminPage() {
                       <CardTitle className="text-base md:text-lg">企业 Logo 管理</CardTitle>
                       <CardDescription className="text-xs md:text-sm">上传自定义企业 Logo，岗位列表页优先显示</CardDescription>
                     </div>
-                    <Dialog open={logoDialogOpen} onOpenChange={setLogoDialogOpen}>
-                      <DialogTrigger asChild>
-                        <Button size="sm" className="h-8 text-xs md:text-sm">
-                          <Plus className="h-4 w-4 md:mr-2" />
-                          <span className="hidden md:inline">上传 Logo</span>
-                        </Button>
-                      </DialogTrigger>
-                      <DialogContent className="sm:max-w-md">
-                        <DialogHeader>
-                          <DialogTitle>上传企业 Logo</DialogTitle>
-                          <DialogDescription>
-                            支持 JPG、PNG、GIF、WebP 格式，最大 500KB
-                          </DialogDescription>
-                        </DialogHeader>
-                        <div className="space-y-4 py-4">
-                          <div>
-                            <Label htmlFor="company">公司名称</Label>
-                            <Input
-                              id="company"
-                              value={logoForm.company_name}
-                              onChange={(e) => setLogoForm({ ...logoForm, company_name: e.target.value })}
-                              placeholder="例如：Stripe"
-                              className="mt-1"
-                            />
-                          </div>
-                          <div>
-                            <Label htmlFor="logo">Logo 文件</Label>
-                            <Input
-                              id="logo"
-                              type="file"
-                              accept="image/jpeg,image/png,image/gif,image/webp"
-                              onChange={(e) => setLogoForm({ ...logoForm, logo: e.target.files?.[0] || null })}
-                              className="mt-1"
-                            />
-                          </div>
-                          {logoForm.logo && (
-                            <div className="mt-2">
-                              <img
-                                src={URL.createObjectURL(logoForm.logo)}
-                                alt="Preview"
-                                className="h-16 w-16 object-contain border rounded"
-                              />
-                            </div>
-                          )}
-                        </div>
-                        <DialogFooter>
-                          <Button variant="outline" onClick={() => setLogoDialogOpen(false)}>
-                            取消
-                          </Button>
-                          <Button onClick={handleLogoUpload} disabled={logoUploading}>
-                            {logoUploading ? <Loader2 className="h-4 w-4 animate-spin" /> : '上传'}
-                          </Button>
-                        </DialogFooter>
-                      </DialogContent>
-                    </Dialog>
+                    <Button size="sm" className="h-8 text-xs md:text-sm" onClick={() => setLogoDialogOpen(true)}>
+                      <Plus className="h-4 w-4 md:mr-2" />
+                      <span className="hidden md:inline">上传 Logo</span>
+                    </Button>
                   </div>
                 </CardHeader>
                 <CardContent>
@@ -2753,8 +2703,14 @@ export default function AdminPage() {
             )}
           </DialogFooter>
         </DialogContent>
-      </Dialog>
-    </div>
+        </Dialog>
+
+        <LogoUploadDialog
+          open={logoDialogOpen}
+          onOpenChange={setLogoDialogOpen}
+          onSuccess={fetchLogos}
+        />
+      </div>
     </AdminAuthGuard>
   );
 }
