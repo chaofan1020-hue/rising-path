@@ -49,7 +49,7 @@ const directionMapping: Record<string, string> = {
   'Mobile': 'SDE',
   
   // 其他专业方向独立分类
-  'SRE': 'SRE',
+  'SRE': 'SDE',  // SRE 也属于 SDE
   'MLE': 'MLE',
   'Data': 'Data',
   'Quant': 'Quant',
@@ -60,7 +60,6 @@ const directionMapping: Record<string, string> = {
   'Marketing': 'Marketing',
   'Finance': 'Finance',
   'Legal': 'Legal',
-  'Tech': 'Tech',
 };
 
 // 获取岗位所属的大地区
