@@ -125,8 +125,9 @@ function isValidJob(title: string, url: string): boolean {
   
   // 8. 过滤关键词在 at 后面
   const thirdPartyKeywords = [
-    'dubclub', 'zensar', 'chels', 'lazer', 'honeysuckle', 'gelato',
-    'w2/c2c', 'w2_c2c', 'contract', 'corp', 'corp-to-cor', 'c2c'
+    'dubclub', 'zensar', 'chels', 'lazer technologies', 'honeysuckle', 'gelato',
+    'w2/c2c', 'w2_c2c', 'corp-to-corp', 'corp2corp', 'c2c',
+    'talent acquisition', 'recruiting partner'
   ];
   for (const keyword of thirdPartyKeywords) {
     if (titleLower.includes(keyword)) return false;
@@ -138,7 +139,22 @@ function isValidJob(title: string, url: string): boolean {
     return false;
   }
   
-  // 8. 过滤标题是纯地区名的情况
+  // 10. 如果是 LinkedIn URL，检查是否包含第三方公司名（at xxx）
+  // 例如: linkedin.com/jobs/view/xxx-at-dubclub
+  if (urlLower.includes('linkedin.com')) {
+    const linkedinAtMatch = urlLower.match(/\/jobs\/view\/[\w-]+-at-([a-z0-9-]+)/);
+    if (linkedinAtMatch) {
+      const companyAfterAt = linkedinAtMatch[1];
+      const targetCompanies = TECH_COMPANIES.map(c => c.toLowerCase());
+      const isTargetCompany = targetCompanies.some(c => 
+        companyAfterAt === c || companyAfterAt.includes(c)
+      );
+      // 如果 "at" 后面的公司不是目标公司，则是猎头发布的
+      if (!isTargetCompany) return false;
+    }
+  }
+  
+  // 11. 过滤标题是纯地区名的情况
   if (/^(San Francisco|Seattle|New York|Los Angeles|Austin|Boston|Chicago|Denver|Atlanta|London|Tokyo|Singapore|Hong Kong),?\s*(,|$)/i.test(title)) {
     return false;
   }
