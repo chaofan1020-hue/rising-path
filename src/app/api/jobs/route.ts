@@ -10,11 +10,15 @@ export async function GET(request: NextRequest) {
     const regions = searchParams.getAll('region');
     const directions = searchParams.getAll('direction');
     const audience = searchParams.get('audience');
+    const limit = searchParams.get('limit');
 
     let query = client
       .from('jobs')
       .select('*')
       .order('created_at', { ascending: false });
+
+    // 只获取活跃的岗位
+    query = query.eq('is_active', true);
 
     // 地区多选筛选
     if (regions.length > 0) {
@@ -27,6 +31,11 @@ export async function GET(request: NextRequest) {
     // 受众单选筛选
     if (audience && audience !== '全部') {
       query = query.eq('audience', audience);
+    }
+
+    // 限制返回数量（用于自动同步检查）
+    if (limit) {
+      query = query.limit(parseInt(limit));
     }
 
     const { data, error } = await query;

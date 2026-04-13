@@ -11,7 +11,7 @@ import {
   PopoverContent,
   PopoverTrigger,
 } from '@/components/ui/popover';
-import { Search, MapPin, Briefcase, Users, ExternalLink, ChevronDown, X, Plus, Check, Loader2 } from 'lucide-react';
+import { Search, MapPin, Briefcase, Users, ExternalLink, ChevronDown, X, Plus, Check, Loader2, RefreshCw } from 'lucide-react';
 import Link from 'next/link';
 import Image from 'next/image';
 import { AccessGuard, useAccessCode } from '@/components/access-guard';
@@ -296,6 +296,8 @@ function SingleSelectFilter({
 function JobsContent() {
   const [jobs, setJobs] = useState<Job[]>([]);
   const [loading, setLoading] = useState(true);
+  const [syncing, setSyncing] = useState(false);
+  const [syncResult, setSyncResult] = useState<{ success: number; message: string } | null>(null);
   const [searchTerm, setSearchTerm] = useState('');
   const [selectedRegions, setSelectedRegions] = useState<string[]>([]);
   const [selectedDirections, setSelectedDirections] = useState<string[]>([]);
@@ -310,7 +312,57 @@ function JobsContent() {
     audience: JobConfig[];
   }>({ region: [], direction: [], audience: [] });
 
+  // 检查是否需要自动同步（距离上次同步超过1小时）
+  const needsAutoSync = useCallback(async () => {
+    try {
+      const response = await fetch('/api/jobs?limit=1');
+      const data = await response.json();
+      if (data.jobs && data.jobs.length > 0) {
+        const lastJobTime = new Date(data.jobs[0].created_at).getTime();
+        const oneHourAgo = Date.now() - 60 * 60 * 1000;
+        return lastJobTime < oneHourAgo;
+      }
+      return true; // 没有岗位时需要同步
+    } catch {
+      return false;
+    }
+  }, []);
+
+  // 自动同步岗位
+  useEffect(() => {
+    const autoSync = async () => {
+      const shouldSync = await needsAutoSync();
+      if (shouldSync && !syncing) {
+        handleSyncJobs();
+      }
+    };
+    autoSync();
+  }, [needsAutoSync]);
+
   const { accessCodeId } = useAccessCode();
+
+  // 同步大厂岗位
+  const handleSyncJobs = async () => {
+    setSyncing(true);
+    setSyncResult(null);
+    try {
+      const response = await fetch('/api/jobs/sync-us-tech', { method: 'POST' });
+      const data = await response.json();
+      if (data.success) {
+        setSyncResult({ success: data.results.success, message: `成功同步 ${data.results.success} 个岗位` });
+        // 刷新岗位列表
+        fetchJobs();
+      } else {
+        setSyncResult({ success: 0, message: data.error || '同步失败' });
+      }
+    } catch (error) {
+      setSyncResult({ success: 0, message: '同步失败，请重试' });
+    } finally {
+      setSyncing(false);
+      // 3秒后清除结果提示
+      setTimeout(() => setSyncResult(null), 3000);
+    }
+  };
 
   const fetchJobs = useCallback(async () => {
     setLoading(true);
@@ -439,8 +491,27 @@ function JobsContent() {
       <main className="container mx-auto px-4 py-4 md:py-8">
         {/* Page Title */}
         <div className="mb-4 md:mb-8">
-          <h1 className="text-2xl md:text-3xl font-bold mb-1 md:mb-2">岗位查询</h1>
-          <p className="text-sm md:text-base text-muted-foreground">按地区、方向、受众筛选海量海外岗位</p>
+          <div className="flex items-center justify-between">
+            <div>
+              <h1 className="text-2xl md:text-3xl font-bold mb-1 md:mb-2">岗位查询</h1>
+              <p className="text-sm md:text-base text-muted-foreground">按地区、方向、受众筛选海量海外岗位</p>
+            </div>
+            <Button 
+              onClick={handleSyncJobs} 
+              disabled={syncing}
+              variant="outline"
+              size="sm"
+              className="gap-2"
+            >
+              <RefreshCw className={`h-4 w-4 ${syncing ? 'animate-spin' : ''}`} />
+              {syncing ? '同步中...' : '刷新岗位'}
+            </Button>
+          </div>
+          {syncResult && (
+            <div className={`mt-2 text-sm ${syncResult.success > 0 ? 'text-green-600' : 'text-orange-500'}`}>
+              {syncResult.message}
+            </div>
+          )}
         </div>
 
         {/* Filters */}
