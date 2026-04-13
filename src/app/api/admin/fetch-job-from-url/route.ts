@@ -201,7 +201,13 @@ export async function POST(request: NextRequest) {
         }
       });
 
-      const jobInfo = extractJobInfo(result.content || '', url);
+      // 确保 content 是字符串
+      let htmlContent = '';
+      if (result.content) {
+        htmlContent = typeof result.content === 'string' ? result.content : JSON.stringify(result.content);
+      }
+      
+      const jobInfo = extractJobInfo(htmlContent, url);
       
       if (!jobInfo) {
         return NextResponse.json({ error: '无法从页面提取岗位信息' }, { status: 400 });
