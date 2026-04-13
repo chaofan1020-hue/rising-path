@@ -71,21 +71,22 @@ export function LogoUploadDialog({ open, onOpenChange, onSuccess }: LogoUploadDi
     if (!imgRef.current || !crop || !imgRef.current.src) return null;
 
     const image = imgRef.current;
-    const canvas = document.createElement("canvas");
-    const scaleX = image.naturalWidth / image.width;
-    const scaleY = image.naturalHeight / image.height;
+    // 固定输出尺寸为 200x200，确保1:1
+    const outputSize = 200;
 
     const cropX = (crop.x / 100) * image.naturalWidth;
     const cropY = (crop.y / 100) * image.naturalHeight;
     const cropWidth = (crop.width / 100) * image.naturalWidth;
     const cropHeight = (crop.height / 100) * image.naturalHeight;
 
-    canvas.width = cropWidth;
-    canvas.height = cropHeight;
+    const canvas = document.createElement("canvas");
+    canvas.width = outputSize;
+    canvas.height = outputSize;
 
     const ctx = canvas.getContext("2d");
     if (!ctx) return null;
 
+    // 拉伸填充到固定尺寸
     ctx.drawImage(
       image,
       cropX,
@@ -94,8 +95,8 @@ export function LogoUploadDialog({ open, onOpenChange, onSuccess }: LogoUploadDi
       cropHeight,
       0,
       0,
-      cropWidth,
-      cropHeight
+      outputSize,
+      outputSize
     );
 
     return new Promise((resolve) => {
