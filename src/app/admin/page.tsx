@@ -62,6 +62,7 @@ import {
   BarChart3,
   TrendingUp,
   Activity,
+  Wand2,
   PieChart,
 } from 'lucide-react';
 import Link from 'next/link';
@@ -187,6 +188,7 @@ export default function AdminPage() {
   // Job sync state
   const [syncing, setSyncing] = useState(false);
   const [syncResult, setSyncResult] = useState<{ success: number; message: string } | null>(null);
+  const [fetchingFromUrl, setFetchingFromUrl] = useState(false);
 
   // Change password
   const handleChangePassword = async () => {
@@ -257,6 +259,42 @@ export default function AdminPage() {
       setSyncResult({ success: 0, message: '同步失败，请重试' });
     } finally {
       setSyncing(false);
+    }
+  };
+
+  // 从 URL 智能填充岗位信息
+  const handleFetchFromUrl = async () => {
+    if (!jobForm.job_url) {
+      alert('请先输入岗位链接');
+      return;
+    }
+    
+    setFetchingFromUrl(true);
+    try {
+      const response = await fetch('/api/admin/fetch-job-from-url', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ url: jobForm.job_url }),
+      });
+      
+      const data = await response.json();
+      
+      if (data.success && data.data) {
+        setJobForm(prev => ({
+          ...prev,
+          title: data.data.title || prev.title,
+          company: data.data.company || prev.company,
+          region: data.data.region || prev.region,
+          description: data.data.description || prev.description,
+        }));
+        alert('成功提取岗位信息！请检查并补充其他字段。');
+      } else {
+        alert(data.error || '提取失败，请手动填写');
+      }
+    } catch {
+      alert('提取失败，请手动填写');
+    } finally {
+      setFetchingFromUrl(false);
     }
   };
 
@@ -1686,13 +1724,32 @@ export default function AdminPage() {
                             </div>
                             <div>
                               <Label htmlFor="url" className="text-xs md:text-sm">岗位链接</Label>
-                              <Input
-                                id="url"
-                                value={jobForm.job_url}
-                                onChange={(e) => setJobForm({ ...jobForm, job_url: e.target.value })}
-                                placeholder="https://..."
-                                className="h-9 md:h-10"
-                              />
+                              <div className="flex gap-2">
+                                <Input
+                                  id="url"
+                                  value={jobForm.job_url}
+                                  onChange={(e) => setJobForm({ ...jobForm, job_url: e.target.value })}
+                                  placeholder="https://careers.xxx.com/..."
+                                  className="h-9 md:h-10 flex-1"
+                                />
+                                <Button
+                                  type="button"
+                                  variant="outline"
+                                  size="sm"
+                                  onClick={handleFetchFromUrl}
+                                  disabled={fetchingFromUrl}
+                                  className="h-9 md:h-10 whitespace-nowrap"
+                                >
+                                  {fetchingFromUrl ? (
+                                    <Loader2 className="h-4 w-4 animate-spin" />
+                                  ) : (
+                                    <>
+                                      <Wand2 className="h-4 w-4 mr-1" />
+                                      智能填充
+                                    </>
+                                  )}
+                                </Button>
+                              </div>
                             </div>
                           </div>
                           <div>
