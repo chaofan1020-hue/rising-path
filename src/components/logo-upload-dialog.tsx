@@ -1,9 +1,9 @@
 "use client";
 
-import { useState, useRef, useCallback } from "react";
-import Cropper, { ReactCropperElement } from "react-image-crop";
+import { useState, useRef } from "react";
+import ReactCrop, { Crop, centerCrop, makeAspectCrop } from "react-image-crop";
 import "react-image-crop/dist/ReactCrop.css";
-import { X, ZoomIn, ZoomOut, RotateCw, Check } from "lucide-react";
+import { Plus, Upload, ZoomIn, ZoomOut, RotateCw, X, Loader2 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription, DialogFooter } from "@/components/ui/dialog";
 import { Input } from "@/components/ui/input";
@@ -15,15 +15,29 @@ interface LogoUploadDialogProps {
   onSuccess: () => void;
 }
 
+function centerAspectCrop(mediaWidth: number, mediaHeight: number, aspect: number) {
+  return centerCrop(
+    makeAspectCrop(
+      {
+        unit: "%",
+        width: 90,
+      },
+      aspect,
+      mediaWidth,
+      mediaHeight
+    ),
+    mediaWidth,
+    mediaHeight
+  );
+}
+
 export function LogoUploadDialog({ open, onOpenChange, onSuccess }: LogoUploadDialogProps) {
   const [companyName, setCompanyName] = useState("");
   const [src, setSrc] = useState<string | null>(null);
-  const [crop, setCrop] = useState<{ x: number; y: number }>({ x: 0, y: 0 });
-  const [completedCrop, setCompletedCrop] = useState<any>(null);
+  const [crop, setCrop] = useState<Crop>();
+  const [completedCrop, setCompletedCrop] = useState<Crop>();
   const [uploading, setUploading] = useState(false);
-  const [zoom, setZoom] = useState(1);
-  const imgRef = useRef<HTMLImageElement | null>(null);
-  const cropperRef = useRef<ReactCropperElement>(null);
+  const imgRef = useRef<HTMLImageElement>(null);
 
   const onSelectFile = (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
@@ -36,13 +50,17 @@ export function LogoUploadDialog({ open, onOpenChange, onSuccess }: LogoUploadDi
     reader.readAsDataURL(file);
   };
 
-  const getCroppedImage = useCallback(() => {
-    if (!cropperRef.current || !completedCrop) return null;
+  const onImageLoad = (e: React.SyntheticEvent<HTMLImageElement>) => {
+    const { width, height } = e.currentTarget;
+    const crop = centerAspectCrop(width, height, 1);
+    setCrop(crop);
+  };
 
-    const canvas = document.createElement("canvas");
+  const getCroppedImage = async (): Promise<Blob | null> => {
+    if (!imgRef.current || !completedCrop) return null;
+
     const image = imgRef.current;
-    if (!image) return null;
-
+    const canvas = document.createElement("canvas");
     const scaleX = image.naturalWidth / image.width;
     const scaleY = image.naturalHeight / image.height;
 
@@ -64,16 +82,10 @@ export function LogoUploadDialog({ open, onOpenChange, onSuccess }: LogoUploadDi
       canvas.height
     );
 
-    return new Promise<Blob | null>((resolve) => {
-      canvas.toBlob(
-        (blob) => {
-          resolve(blob);
-        },
-        "image/png",
-        1
-      );
+    return new Promise((resolve) => {
+      canvas.toBlob((blob) => resolve(blob), "image/png", 1);
     });
-  }, [completedCrop]);
+  };
 
   const handleUpload = async () => {
     if (!companyName || !completedCrop) {
@@ -116,111 +128,69 @@ export function LogoUploadDialog({ open, onOpenChange, onSuccess }: LogoUploadDi
   const handleClose = () => {
     setSrc(null);
     setCompanyName("");
-    setCrop({ x: 0, y: 0 });
-    setCompletedCrop(null);
-    setZoom(1);
+    setCrop(undefined);
+    setCompletedCrop(undefined);
     onOpenChange(false);
-  };
-
-  const handleZoomIn = () => {
-    setZoom((z) => Math.min(z + 0.25, 3));
-    cropperRef.current?.cropper?.zoom(0.25);
-  };
-
-  const handleZoomOut = () => {
-    setZoom((z) => Math.max(z - 0.25, 0.5));
-    cropperRef.current?.cropper?.zoom(-0.25);
-  };
-
-  const handleRotate = () => {
-    cropperRef.current?.cropper?.rotate(90);
   };
 
   return (
     <Dialog open={open} onOpenChange={handleClose}>
-      <DialogContent className="sm:max-w-lg">
+      <DialogContent className="sm:max-w-md">
         <DialogHeader>
           <DialogTitle>上传企业 Logo</DialogTitle>
-          <DialogDescription>支持 JPG、PNG、GIF、WebP 格式，可裁剪至合适比例</DialogDescription>
+          <DialogDescription>支持 JPG、PNG、GIF、WebP 格式，可裁剪至 1:1 正方形</DialogDescription>
         </DialogHeader>
 
         <div className="space-y-4 py-4">
           {/* 步骤1: 选择文件 */}
-          {!src && (
-            <div>
-              <Label htmlFor="company">公司名称</Label>
-              <Input
-                id="company"
-                value={companyName}
-                onChange={(e) => setCompanyName(e.target.value)}
-                placeholder="例如：Stripe"
-                className="mt-1 mb-4"
-              />
-              <Label htmlFor="logo-file" className="cursor-pointer">
-                <div className="border-2 border-dashed rounded-lg p-8 text-center hover:border-primary transition-colors">
-                  <p className="text-muted-foreground">点击选择图片文件</p>
-                  <p className="text-sm text-muted-foreground mt-1">或拖拽文件到此处</p>
-                </div>
+          {!src ? (
+            <div className="space-y-4">
+              <div>
+                <Label htmlFor="company">公司名称</Label>
+                <Input
+                  id="company"
+                  value={companyName}
+                  onChange={(e) => setCompanyName(e.target.value)}
+                  placeholder="例如：Stripe"
+                  className="mt-1"
+                />
+              </div>
+              <div>
+                <Label htmlFor="logo-file">选择图片</Label>
                 <Input
                   id="logo-file"
                   type="file"
                   accept="image/jpeg,image/png,image/gif,image/webp"
                   onChange={onSelectFile}
-                  className="hidden"
+                  className="mt-1"
                 />
-              </Label>
-            </div>
-          )}
-
-          {/* 步骤2: 裁剪 */}
-          {src && (
-            <div className="space-y-4">
-              <div className="flex items-center justify-between">
-                <span className="text-sm font-medium">裁剪 Logo</span>
-                <div className="flex gap-2">
-                  <Button type="button" variant="outline" size="sm" onClick={handleZoomOut}>
-                    <ZoomOut className="h-4 w-4" />
-                  </Button>
-                  <Button type="button" variant="outline" size="sm" onClick={handleZoomIn}>
-                    <ZoomIn className="h-4 w-4" />
-                  </Button>
-                  <Button type="button" variant="outline" size="sm" onClick={handleRotate}>
-                    <RotateCw className="h-4 w-4" />
-                  </Button>
-                </div>
               </div>
-
-              <div className="relative h-[300px] bg-muted rounded-lg overflow-hidden">
-                <Cropper
-                  ref={cropperRef}
-                  src={src}
-                  style={{ height: "100%", width: "100%" }}
-                  aspectRatio={1}
-                  viewMode={1}
-                  dragMode="move"
-                  guides={true}
-                  crop={({ x, y }) => setCrop({ x, y })}
-                  onInitialized={(instance) => {
-                    imgRef.current = instance.imageDom;
-                  }}
-                  onCropChange={setCrop}
-                  onCropComplete={(_, percentage) => {
-                    // 计算裁剪框
-                    const cropBoxData = instance?.getCropBoxData?.();
-                    if (cropBoxData) {
-                      setCompletedCrop({
-                        x: cropBoxData.left,
-                        y: cropBoxData.top,
-                        width: cropBoxData.width,
-                        height: cropBoxData.height,
-                      });
-                    }
-                  }}
-                />
+            </div>
+          ) : (
+            /* 步骤2: 裁剪 */
+            <div className="space-y-4">
+              <div className="text-sm font-medium">拖拽调整裁剪区域（正方形）</div>
+              
+              <div className="border rounded-lg overflow-hidden bg-muted">
+                <ReactCrop
+                  crop={crop}
+                  onChange={(_, percentCrop) => setCrop(percentCrop)}
+                  onComplete={(c) => setCompletedCrop(c)}
+                  aspect={1}
+                  keepSelection
+                >
+                  <img
+                    ref={imgRef}
+                    src={src}
+                    alt="Logo"
+                    onLoad={onImageLoad}
+                    className="max-h-[300px] w-auto mx-auto"
+                  />
+                </ReactCrop>
               </div>
 
               <p className="text-xs text-muted-foreground text-center">
-                拖拽移动图片，调整裁剪框到合适区域
+                拖拽图片或裁剪框调整 Logo 区域
               </p>
             </div>
           )}
@@ -236,7 +206,8 @@ export function LogoUploadDialog({ open, onOpenChange, onSuccess }: LogoUploadDi
             </Button>
           )}
           <Button onClick={handleUpload} disabled={uploading || !companyName || !completedCrop}>
-            {uploading ? "上传中..." : "上传"}
+            {uploading ? <Loader2 className="h-4 w-4 animate-spin" /> : <Upload className="h-4 w-4" />}
+            <span className="ml-2">{uploading ? "上传中..." : "上传"}</span>
           </Button>
         </DialogFooter>
       </DialogContent>
