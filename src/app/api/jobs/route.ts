@@ -48,15 +48,60 @@ const companyDomains: Record<string, string> = {
   'LinkedIn': 'linkedin.com',
 };
 
-// 获取公司 logo URL
-function getCompanyLogo(company: string): string | null {
+// 本地 logo 缓存
+let localLogosCache: Record<string, string> = {};
+let lastCacheTime = 0;
+const CACHE_DURATION = 5 * 60 * 1000; // 5 分钟
+
+// 获取公司 logo URL（优先本地，fallback 到 Clearbit）
+async function getCompanyLogo(company: string): Promise<string | null> {
+  // 先检查缓存
+  if (localLogosCache[company]) {
+    return localLogosCache[company];
+  }
+  
+  // 尝试从数据库获取本地 logo
+  try {
+    const supabase = getSupabaseClient();
+    const { data } = await supabase
+      .from('company_logos')
+      .select('logo_url')
+      .eq('company_name', company)
+      .single();
+    
+    if (data?.logo_url) {
+      localLogosCache[company] = data.logo_url;
+      return data.logo_url;
+    }
+  } catch (error) {
+    // 忽略错误，继续使用 Clearbit
+  }
+  
+  // 使用 Clearbit API
   const domain = companyDomains[company];
   if (domain) {
     return `https://logo.clearbit.com/${domain}`;
   }
-  // 尝试使用公司名构造域名
   const cleanName = company.toLowerCase().replace(/\s+/g, '');
   return `https://logo.clearbit.com/${cleanName}.com`;
+}
+
+// 刷新 logo 缓存
+async function refreshLogoCache(): Promise<void> {
+  try {
+    const supabase = getSupabaseClient();
+    const { data } = await supabase.from('company_logos').select('company_name, logo_url');
+    
+    if (data) {
+      localLogosCache = {};
+      for (const item of data) {
+        localLogosCache[item.company_name] = item.logo_url;
+      }
+      lastCacheTime = Date.now();
+    }
+  } catch (error) {
+    console.error('Error refreshing logo cache:', error);
+  }
 }
 
 // 地区映射：将具体地区映射到所属大地区
@@ -205,15 +250,22 @@ export async function GET(request: NextRequest) {
       filteredJobs = filteredJobs.filter((job: { direction: string }) => isDirectionMatch(job.direction, directions));
     }
 
-    // 为每个岗位添加分类信息和 logo
-    const jobsWithCategory = filteredJobs.map((job: { region: string; direction: string; company: string; [key: string]: unknown }) => ({
-      ...job,
-      region_category: getRegionCategory(job.region),
-      direction_category: getDirectionCategory(job.direction),
-      logo_url: getCompanyLogo(job.company)
-    }));
+    // 检查是否需要刷新缓存
+    if (Date.now() - lastCacheTime > CACHE_DURATION) {
+      await refreshLogoCache();
+    }
 
-    return NextResponse.json({ jobs: jobsWithCategory });
+    // 为每个岗位添加分类信息和 logo
+    const jobsWithLogo = await Promise.all(
+      filteredJobs.map(async (job: { region: string; direction: string; company: string; [key: string]: unknown }) => ({
+        ...job,
+        region_category: getRegionCategory(job.region),
+        direction_category: getDirectionCategory(job.direction),
+        logo_url: await getCompanyLogo(job.company)
+      }))
+    );
+
+    return NextResponse.json({ jobs: jobsWithLogo });
   } catch (error) {
     console.error('Error fetching jobs:', error);
     return NextResponse.json(

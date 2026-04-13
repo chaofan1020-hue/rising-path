@@ -62,6 +62,7 @@ import {
   BarChart3,
   TrendingUp,
   Activity,
+  ImageIcon,
   Wand2,
   PieChart,
 } from 'lucide-react';
@@ -184,6 +185,12 @@ export default function AdminPage() {
     last_used_at: string | null;
   }
   const [accessCodes, setAccessCodes] = useState<AccessCode[]>([]);
+
+  // Company logos state
+  const [companyLogos, setCompanyLogos] = useState<{ id: number; company_name: string; logo_url: string }[]>([]);
+  const [logoDialogOpen, setLogoDialogOpen] = useState(false);
+  const [logoForm, setLogoForm] = useState({ company_name: '', logo: null as File | null });
+  const [logoUploading, setLogoUploading] = useState(false);
 
   // Job sync state
   const [syncing, setSyncing] = useState(false);
@@ -310,8 +317,75 @@ export default function AdminPage() {
     }
   };
 
+  // Fetch company logos
+  const fetchLogos = async () => {
+    try {
+      const response = await fetch('/api/admin/company-logos');
+      const data = await response.json();
+      if (data.logos) {
+        setCompanyLogos(data.logos);
+      }
+    } catch (error) {
+      console.error('Error fetching logos:', error);
+    }
+  };
+
+  // Handle logo upload
+  const handleLogoUpload = async () => {
+    if (!logoForm.company_name || !logoForm.logo) {
+      alert('请填写公司名称并选择 logo 文件');
+      return;
+    }
+
+    setLogoUploading(true);
+    try {
+      const formData = new FormData();
+      formData.append('company_name', logoForm.company_name);
+      formData.append('logo', logoForm.logo);
+
+      const response = await fetch('/api/admin/company-logos', {
+        method: 'POST',
+        body: formData,
+      });
+
+      const data = await response.json();
+      if (data.success) {
+        alert('Logo 上传成功！');
+        setLogoDialogOpen(false);
+        setLogoForm({ company_name: '', logo: null });
+        fetchLogos();
+      } else {
+        alert(data.error || '上传失败');
+      }
+    } catch (error) {
+      alert('上传失败');
+    } finally {
+      setLogoUploading(false);
+    }
+  };
+
+  // Handle logo delete
+  const handleLogoDelete = async (companyName: string) => {
+    if (!confirm(`确定删除 ${companyName} 的 logo？`)) return;
+
+    try {
+      const response = await fetch(`/api/admin/company-logos?company_name=${encodeURIComponent(companyName)}`, {
+        method: 'DELETE',
+      });
+
+      const data = await response.json();
+      if (data.success) {
+        alert('删除成功');
+        fetchLogos();
+      } else {
+        alert(data.error || '删除失败');
+      }
+    } catch (error) {
+      alert('删除失败');
+    }
+  };
+
   // Logo upload state
-  const [logoUploading, setLogoUploading] = useState(false);
   const fileInputRef = useRef<HTMLInputElement>(null);
 
   // Job form state
@@ -423,39 +497,9 @@ export default function AdminPage() {
 
   useEffect(() => {
     fetchAnalytics();
+    fetchLogos();
   }, [analyticsRange]);
 
-  // Logo upload
-  const handleLogoUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
-    const file = e.target.files?.[0];
-    if (!file) return;
-
-    setLogoUploading(true);
-    try {
-      const formData = new FormData();
-      formData.append('file', file);
-
-      const response = await fetch('/api/upload/logo', {
-        method: 'POST',
-        body: formData,
-      });
-      const data = await response.json();
-      
-      if (data.url) {
-        setJobForm({ ...jobForm, logo_url: data.url });
-      } else {
-        alert('上传失败: ' + (data.error || '未知错误'));
-      }
-    } catch (error) {
-      console.error('Upload failed:', error);
-      alert('上传失败');
-    } finally {
-      setLogoUploading(false);
-      if (fileInputRef.current) {
-        fileInputRef.current.value = '';
-      }
-    }
-  };
 
   // Config CRUD
   const handleCreateConfig = async () => {
@@ -970,7 +1014,7 @@ export default function AdminPage() {
         ) : (
           <Tabs defaultValue="overview" className="space-y-4 md:space-y-6">
             <div className="overflow-x-auto -mx-4 px-4 md:mx-0 md:px-0">
-              <TabsList className="grid w-max md:w-full grid-cols-7 gap-1 md:gap-0 md:inline-flex">
+              <TabsList className="grid w-max md:w-full grid-cols-8 gap-1 md:gap-0 md:inline-flex">
                 <TabsTrigger value="overview" className="px-3 md:px-4">
                   <LayoutDashboard className="h-4 w-4 md:mr-2" />
                   <span className="hidden md:inline">概览</span>
@@ -982,6 +1026,10 @@ export default function AdminPage() {
                 <TabsTrigger value="jobs" className="px-3 md:px-4">
                   <Briefcase className="h-4 w-4 md:mr-2" />
                   <span className="hidden md:inline">岗位管理</span>
+                </TabsTrigger>
+                <TabsTrigger value="logos" className="px-3 md:px-4">
+                  <ImageIcon className="h-4 w-4 md:mr-2" />
+                  <span className="hidden md:inline">Logo</span>
                 </TabsTrigger>
                 <TabsTrigger value="resumes" className="px-3 md:px-4">
                   <FileText className="h-4 w-4 md:mr-2" />
@@ -1997,6 +2045,113 @@ export default function AdminPage() {
                       </div>
                     )}
                   </div>
+                </CardContent>
+              </Card>
+            </TabsContent>
+
+            {/* Logos Tab */}
+            <TabsContent value="logos">
+              <Card>
+                <CardHeader className="pb-3 md:pb-6">
+                  <div className="flex items-center justify-between">
+                    <div>
+                      <CardTitle className="text-base md:text-lg">企业 Logo 管理</CardTitle>
+                      <CardDescription className="text-xs md:text-sm">上传自定义企业 Logo，岗位列表页优先显示</CardDescription>
+                    </div>
+                    <Dialog open={logoDialogOpen} onOpenChange={setLogoDialogOpen}>
+                      <DialogTrigger asChild>
+                        <Button size="sm" className="h-8 text-xs md:text-sm">
+                          <Plus className="h-4 w-4 md:mr-2" />
+                          <span className="hidden md:inline">上传 Logo</span>
+                        </Button>
+                      </DialogTrigger>
+                      <DialogContent className="sm:max-w-md">
+                        <DialogHeader>
+                          <DialogTitle>上传企业 Logo</DialogTitle>
+                          <DialogDescription>
+                            支持 JPG、PNG、GIF、WebP 格式，最大 500KB
+                          </DialogDescription>
+                        </DialogHeader>
+                        <div className="space-y-4 py-4">
+                          <div>
+                            <Label htmlFor="company">公司名称</Label>
+                            <Input
+                              id="company"
+                              value={logoForm.company_name}
+                              onChange={(e) => setLogoForm({ ...logoForm, company_name: e.target.value })}
+                              placeholder="例如：Stripe"
+                              className="mt-1"
+                            />
+                          </div>
+                          <div>
+                            <Label htmlFor="logo">Logo 文件</Label>
+                            <Input
+                              id="logo"
+                              type="file"
+                              accept="image/jpeg,image/png,image/gif,image/webp"
+                              onChange={(e) => setLogoForm({ ...logoForm, logo: e.target.files?.[0] || null })}
+                              className="mt-1"
+                            />
+                          </div>
+                          {logoForm.logo && (
+                            <div className="mt-2">
+                              <img
+                                src={URL.createObjectURL(logoForm.logo)}
+                                alt="Preview"
+                                className="h-16 w-16 object-contain border rounded"
+                              />
+                            </div>
+                          )}
+                        </div>
+                        <DialogFooter>
+                          <Button variant="outline" onClick={() => setLogoDialogOpen(false)}>
+                            取消
+                          </Button>
+                          <Button onClick={handleLogoUpload} disabled={logoUploading}>
+                            {logoUploading ? <Loader2 className="h-4 w-4 animate-spin" /> : '上传'}
+                          </Button>
+                        </DialogFooter>
+                      </DialogContent>
+                    </Dialog>
+                  </div>
+                </CardHeader>
+                <CardContent>
+                  {companyLogos.length === 0 ? (
+                    <div className="text-center py-8 text-muted-foreground">
+                      <ImageIcon className="h-12 w-12 mx-auto mb-3 opacity-50" />
+                      <p>暂无自定义 Logo</p>
+                      <p className="text-sm">点击上方按钮上传企业 Logo</p>
+                    </div>
+                  ) : (
+                    <div className="grid grid-cols-2 md:grid-cols-4 lg:grid-cols-6 gap-4">
+                      {companyLogos.map((logo) => (
+                        <div
+                          key={logo.id}
+                          className="relative group border rounded-lg p-4 bg-card hover:bg-accent/50 transition-colors"
+                        >
+                          <div className="aspect-square flex items-center justify-center">
+                            <img
+                              src={logo.logo_url}
+                              alt={logo.company_name}
+                              className="max-h-12 max-w-full object-contain"
+                              onError={(e) => {
+                                (e.target as HTMLImageElement).style.display = 'none';
+                              }}
+                            />
+                          </div>
+                          <p className="text-center text-sm mt-2 truncate">{logo.company_name}</p>
+                          <Button
+                            variant="destructive"
+                            size="sm"
+                            className="absolute top-1 right-1 h-6 w-6 p-0 opacity-0 group-hover:opacity-100 transition-opacity"
+                            onClick={() => handleLogoDelete(logo.company_name)}
+                          >
+                            <X className="h-3 w-3" />
+                          </Button>
+                        </div>
+                      ))}
+                    </div>
+                  )}
                 </CardContent>
               </Card>
             </TabsContent>
