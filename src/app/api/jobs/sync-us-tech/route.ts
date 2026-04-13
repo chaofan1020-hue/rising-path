@@ -331,10 +331,57 @@ export async function POST(request: NextRequest) {
       }
     }
 
+    // 同步完成后清理无效数据
+    let cleaned = 0;
+    try {
+      // 先查询所有岗位，找出无效的
+      const { data: allJobs } = await supabase.from('jobs').select('id, title, description');
+      
+      if (allJobs && allJobs.length > 0) {
+        const invalidIds: number[] = [];
+        
+        for (const job of allJobs) {
+          const title = (job.title || '').toLowerCase();
+          const desc = (job.description || '').toLowerCase();
+          
+          // 检查是否无效
+          const invalidPatterns = [
+            '跳到', 'sign in', '马上加入', 'persönliche', 'iş kategori',
+            'job-kategorie', 'vorname', 'founding engineer', 'graphic designer',
+            'logistics', 'new york city area', 'build your career', 'unveils',
+            'signal', 'find remote work',
+          ];
+          
+          for (const pattern of invalidPatterns) {
+            if (title.includes(pattern) || desc.includes(pattern)) {
+              invalidIds.push(job.id);
+              break;
+            }
+          }
+        }
+        
+        // 批量删除无效岗位
+        if (invalidIds.length > 0) {
+          const { error } = await supabase
+            .from('jobs')
+            .delete()
+            .in('id', invalidIds);
+          
+          if (!error) {
+            cleaned = invalidIds.length;
+          }
+        }
+      }
+      
+      results.cleaned = cleaned;
+    } catch (err) {
+      console.error('Cleanup error:', err);
+    }
+
     return NextResponse.json({
       success: true,
-      message: `同步完成：新增 ${results.success} 个岗位，获取 ${results.descriptions} 个详细描述`,
-      results,
+      message: `同步完成：新增 ${results.success} 个岗位，清理 ${cleaned} 个无效岗位`,
+      results: { ...results, cleaned },
       timestamp: new Date().toISOString(),
     });
 

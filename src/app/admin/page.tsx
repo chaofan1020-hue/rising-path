@@ -254,9 +254,14 @@ export default function AdminPage() {
         const newCount = data.results.success || 0;
         const skippedCount = data.results.skipped || 0;
         const invalidCount = data.results.invalid || 0;
+        const cleanedCount = data.results.cleaned || 0;
+        let message = `同步完成：新增 ${newCount} 个，跳过 ${skippedCount} 个`;
+        if (cleanedCount > 0) {
+          message += `，清理 ${cleanedCount} 个无效岗位`;
+        }
         setSyncResult({ 
           success: 1, 
-          message: `同步完成：新增 ${newCount} 个，跳过 ${skippedCount} 个，过滤 ${invalidCount} 个无效岗位` 
+          message
         });
         fetchJobs();
       } else {
