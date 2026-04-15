@@ -67,7 +67,6 @@ import {
   Wand2,
   PieChart,
   DollarSign,
-  Star,
 } from 'lucide-react';
 import Link from 'next/link';
 
@@ -1684,79 +1683,6 @@ export default function AdminPage() {
                           if (password) {
                             setSyncing(true);
                             setSyncResult(null);
-                            fetch('/api/jobs/sync-remotive', {
-                              method: 'POST',
-                              headers: { 'x-admin-password': password }
-                            }).then(r => r.json()).then(data => {
-                              if (data.results) {
-                                const newCount = data.results.success || 0;
-                                const skippedCount = data.results.skipped || 0;
-                                setSyncResult({ 
-                                  success: 1, 
-                                  message: `Remotive 同步完成：新增 ${newCount} 个，跳过 ${skippedCount} 个`
-                                });
-                                fetchJobs();
-                              } else {
-                                setSyncResult({ success: 0, message: data.error || '同步失败' });
-                              }
-                              setSyncing(false);
-                            }).catch(() => {
-                              setSyncResult({ success: 0, message: '同步失败，请重试' });
-                              setSyncing(false);
-                            });
-                          }
-                        }}
-                        disabled={syncing}
-                      >
-                        <Globe className={`h-4 w-4 ${syncing ? 'animate-spin' : ''} md:mr-2`} />
-                        <span className="hidden md:inline">{syncing ? '同步中...' : 'Remotive'}</span>
-                        <span className="md:hidden">{syncing ? '同步中' : 'Remote'}</span>
-                      </Button>
-                      <Button 
-                        variant="outline"
-                        size="sm"
-                        className="h-8 text-xs md:text-sm"
-                        onClick={() => {
-                          const password = prompt('请输入管理员密码：');
-                          if (password) {
-                            setSyncing(true);
-                            setSyncResult(null);
-                            fetch('/api/admin/import-quality-jobs', {
-                              method: 'POST',
-                              headers: { 'x-admin-password': password }
-                            }).then(r => r.json()).then(data => {
-                              if (data.results) {
-                                const newCount = data.results.success || 0;
-                                setSyncResult({ 
-                                  success: 1, 
-                                  message: `高质量岗位导入完成：新增 ${newCount} 个`
-                                });
-                                fetchJobs();
-                              } else {
-                                setSyncResult({ success: 0, message: data.error || '导入失败' });
-                              }
-                              setSyncing(false);
-                            }).catch(() => {
-                              setSyncResult({ success: 0, message: '导入失败，请重试' });
-                              setSyncing(false);
-                            });
-                          }
-                        }}
-                        disabled={syncing}
-                      >
-                        <Star className={`h-4 w-4 ${syncing ? 'animate-spin' : ''} md:mr-2`} />
-                        <span className="hidden md:inline">{syncing ? '导入中...' : '导入高质量'}</span>
-                        <span className="md:hidden">{syncing ? '导入中' : '高质量'}</span>
-                      </Button>
-                      <Button 
-                        variant="outline"
-                        size="sm"
-                        className="h-8 text-xs md:text-sm"
-                        onClick={() => {
-                          const password = prompt('请输入管理员密码：');
-                          if (password) {
-                            setSyncing(true);
-                            setSyncResult(null);
                             fetch('/api/jobs/sync-us-finance', {
                               method: 'POST',
                               headers: { 'x-admin-password': password }
@@ -1782,8 +1708,8 @@ export default function AdminPage() {
                         disabled={syncing}
                       >
                         <DollarSign className={`h-4 w-4 ${syncing ? 'animate-spin' : ''} md:mr-2`} />
-                        <span className="hidden md:inline">{syncing ? '同步中...' : '搜索同步'}</span>
-                        <span className="md:hidden">{syncing ? '同步中' : '搜索'}</span>
+                        <span className="hidden md:inline">{syncing ? '同步中...' : '同步金融岗位'}</span>
+                        <span className="md:hidden">{syncing ? '同步中' : '金融'}</span>
                       </Button>
                       <Button 
                         variant="outline"
