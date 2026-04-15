@@ -201,41 +201,37 @@ function isValidUrl(url: string): boolean {
     if (urlLower.includes(pattern)) return false;
   }
   
-  // LinkedIn 只接受具体岗位详情页（包含 /view/ 且是职位页面）
+  // LinkedIn 岗位详情页（放宽限制）
   if (urlLower.includes('linkedin.com/jobs/')) {
-    // 必须是具体岗位详情页格式
-    if (!urlLower.includes('/jobs/view/')) return false;
     // 过滤 LinkedIn 搜索结果页
-    if (urlLower.includes('/jobs/search?') || urlLower.includes('/jobs/?')) return false;
+    if (urlLower.includes('/jobs/search?') || urlLower.includes('/jobs/?search')) return false;
+    return true;
   }
   
-  // 允许的域名
+  // 允许的域名（放宽限制）
   const allowedDomains = [
-    // 金融公司官网 careers
-    'goldmansachs.com/careers', 'goldmansachs.com/jobs',
-    'morganstanley.com/careers', 'morganstanley.jobs',
-    'jpmorgan.com/careers', 'jpmorganchase.com/careers', 'careers.jpmorgan.com',
-    'blackrock.com/careers', 'blackrock.jobs',
-    'bloomberg.com/careers', 'careers.bloomberg.com',
-    'citadel.com/careers', 'careers.citadel.com',
-    'twosigma.com/careers', 'careers.twosigma.com',
-    'janestreet.com/careers', 'careers.janestreet.com',
-    'barclays.com/careers', 'barclays.jobs',
-    'deutschebank.com/careers',
-    'wellsfargo.com/careers',
-    'bankofamerica.com/careers',
-    'citi.com/careers', 'citigroup.com/careers',
-    'vanguard.com/careers',
-    'fidelity.com/careers',
-    'pimco.com/careers',
-    'deshaw.com/careers',
-    'aqr.com/careers',
+    // 金融公司官网 careers 和 jobs
+    'goldmansachs.com', 
+    'morganstanley.com', 
+    'jpmorgan.com', 'jpmorganchase.com', 
+    'blackrock.com', 
+    'bloomberg.com', 
+    'citadel.com', 
+    'twosigma.com', 
+    'janestreet.com', 
+    'barclays.com', 
+    'deutschebank.com',
+    'wellsfargo.com', 
+    'bankofamerica.com', 
+    'citi.com', 'citigroup.com',
+    'ubs.com',
+    'vanguard.com', 
+    'fidelity.com', 
+    'pimco.com', 
+    'deshaw.com', 
+    'aqr.com',
     // 招聘平台
     'greenhouse.io', 'lever.co', 'workday.com', 'successfactors.com',
-    'linkedin.com/jobs/view/',
-    // 允许的金融公司其他域名
-    '.goldmansachs.com', '.morganstanley.com', '.jpmorgan.com', 
-    '.blackrock.com', '.citadel.com'
   ];
   
   return allowedDomains.some(domain => urlLower.includes(domain));
@@ -444,6 +440,7 @@ export async function POST(request: NextRequest) {
           if (response.web_items && response.web_items.length > 0) {
             for (const item of response.web_items) {
               const url = item.url || '';
+              const urlLower = url.toLowerCase();
               
               if (seenUrls.has(url)) continue;
               seenUrls.add(url);
