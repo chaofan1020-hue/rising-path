@@ -67,6 +67,8 @@ import {
   Wand2,
   PieChart,
   RefreshCw,
+  Building2,
+  Pencil,
 } from 'lucide-react';
 import Link from 'next/link';
 
@@ -174,6 +176,26 @@ export default function AdminPage() {
   const [configDialogOpen, setConfigDialogOpen] = useState(false);
   const [configForm, setConfigForm] = useState({ type: 'region', value: '' });
   const [editingConfig, setEditingConfig] = useState<JobConfig | null>(null);
+
+  // Company config state
+  interface CompanyConfig {
+    id: number;
+    company_name: string;
+    careers_url: string;
+    ats_type: string;
+    ats_id: string;
+    logo_url: string;
+  }
+  const [companies, setCompanies] = useState<CompanyConfig[]>([]);
+  const [companyDialogOpen, setCompanyDialogOpen] = useState(false);
+  const [companyForm, setCompanyForm] = useState({
+    company_name: '',
+    careers_url: '',
+    ats_type: 'manual',
+    ats_id: '',
+    logo_url: '',
+  });
+  const [editingCompany, setEditingCompany] = useState<CompanyConfig | null>(null);
 
   // Access codes state
   interface AccessCode {
@@ -413,23 +435,26 @@ export default function AdminPage() {
   const fetchData = async () => {
     setLoading(true);
     try {
-      const [jobsRes, resumesRes, appsRes, configsRes, accessCodesRes] = await Promise.all([
+      const [jobsRes, resumesRes, appsRes, configsRes, accessCodesRes, companiesRes] = await Promise.all([
         fetch('/api/jobs'),
         fetch('/api/resume'),
         fetch('/api/applications'),
         fetch('/api/configs'),
         fetch('/api/access-codes'),
+        fetch('/api/admin/company-config'),
       ]);
       const jobsData = await jobsRes.json();
       const resumesData = await resumesRes.json();
       const appsData = await appsRes.json();
       const configsData = await configsRes.json();
       const accessCodesData = await accessCodesRes.json();
+      const companiesData = await companiesRes.json();
       setJobs(jobsData.jobs || []);
       setResumes(resumesData.resumes || []);
       setApplications(appsData.applications || []);
       setConfigs(configsData.configs || {});
       setAccessCodes(accessCodesData.codes || []);
+      setCompanies(companiesData.companies || []);
       
       // Set default form values from configs
       if (configsData.configs?.region?.[0]) {
@@ -504,6 +529,58 @@ export default function AdminPage() {
       }));
     } catch (error) {
       console.error('Failed to delete config:', error);
+    }
+  };
+
+  // Company Config CRUD
+  const handleSaveCompany = async () => {
+    if (!companyForm.company_name) {
+      alert('请输入公司名称');
+      return;
+    }
+    try {
+      const response = await fetch('/api/admin/company-config', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(companyForm),
+      });
+      const data = await response.json();
+      if (data.success) {
+        setCompanyDialogOpen(false);
+        // Refresh company list
+        const res = await fetch('/api/admin/company-config');
+        const data = await res.json();
+        setCompanies(data.companies || []);
+        setCompanyForm({ company_name: '', careers_url: '', ats_type: 'manual', ats_id: '', logo_url: '' });
+        setEditingCompany(null);
+      } else {
+        alert(data.error || '保存失败');
+      }
+    } catch (error) {
+      console.error('Failed to save company:', error);
+      alert('保存失败');
+    }
+  };
+
+  const handleEditCompany = (company: CompanyConfig) => {
+    setEditingCompany(company);
+    setCompanyForm({
+      company_name: company.company_name,
+      careers_url: company.careers_url || '',
+      ats_type: company.ats_type || 'manual',
+      ats_id: company.ats_id || '',
+      logo_url: company.logo_url || '',
+    });
+    setCompanyDialogOpen(true);
+  };
+
+  const handleDeleteCompany = async (id: number) => {
+    if (!confirm('确定要删除这家企业吗？')) return;
+    try {
+      await fetch(`/api/admin/company-config?id=${id}`, { method: 'DELETE' });
+      setCompanies(prev => prev.filter(c => c.id !== id));
+    } catch (error) {
+      console.error('Failed to delete company:', error);
     }
   };
 
@@ -2355,6 +2432,107 @@ export default function AdminPage() {
                   </CardContent>
                 </Card>
               </div>
+
+              {/* Company Config - 企业配置 */}
+              <Card className="mt-4 md:mt-6">
+                <CardHeader className="pb-3 md:pb-4">
+                  <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+                    <div>
+                      <CardTitle className="text-base md:text-lg">企业配置</CardTitle>
+                      <CardDescription className="text-xs md:text-sm">配置同步企业列表，支持 Greenhouse/Lever ATS</CardDescription>
+                    </div>
+                    <Button
+                      size="sm"
+                      onClick={() => {
+                        setEditingCompany(null);
+                        setCompanyForm({ company_name: '', careers_url: '', ats_type: 'manual', ats_id: '', logo_url: '' });
+                        setCompanyDialogOpen(true);
+                      }}
+                    >
+                      <Plus className="h-4 w-4 md:mr-2" />
+                      <span>添加企业</span>
+                    </Button>
+                  </div>
+                </CardHeader>
+                <CardContent>
+                  {companies.length > 0 ? (
+                    <div className="border rounded-lg overflow-hidden">
+                      <div className="overflow-x-auto">
+                        <table className="w-full min-w-[700px]">
+                          <thead className="bg-muted/50">
+                            <tr>
+                              <th className="px-3 md:px-4 py-2 md:py-3 text-left text-xs md:text-sm font-medium">企业名称</th>
+                              <th className="px-3 md:px-4 py-2 md:py-3 text-left text-xs md:text-sm font-medium hidden sm:table-cell">ATS类型</th>
+                              <th className="px-3 md:px-4 py-2 md:py-3 text-left text-xs md:text-sm font-medium hidden md:table-cell">ATS ID</th>
+                              <th className="px-3 md:px-4 py-2 md:py-3 text-left text-xs md:text-sm font-medium">招聘页面</th>
+                              <th className="px-3 md:px-4 py-2 md:py-3 text-right text-xs md:text-sm font-medium">操作</th>
+                            </tr>
+                          </thead>
+                          <tbody className="divide-y">
+                            {companies.map((company) => (
+                              <tr key={company.id} className="hover:bg-muted/30">
+                                <td className="px-3 md:px-4 py-2 md:py-3">
+                                  <span className="text-xs md:text-sm font-medium">{company.company_name}</span>
+                                </td>
+                                <td className="px-3 md:px-4 py-2 md:py-3 hidden sm:table-cell">
+                                  <Badge variant="outline" className="text-xs">
+                                    {company.ats_type === 'greenhouse' ? 'Greenhouse' : 
+                                     company.ats_type === 'lever' ? 'Lever' : 
+                                     company.ats_type === 'builtin' ? 'BuiltIn' : '手动'}
+                                  </Badge>
+                                </td>
+                                <td className="px-3 md:px-4 py-2 md:py-3 text-xs md:text-sm text-muted-foreground hidden md:table-cell">
+                                  {company.ats_id || '-'}
+                                </td>
+                                <td className="px-3 md:px-4 py-2 md:py-3">
+                                  {company.careers_url ? (
+                                    <a 
+                                      href={company.careers_url} 
+                                      target="_blank" 
+                                      rel="noopener noreferrer"
+                                      className="text-xs md:text-sm text-blue-600 hover:underline"
+                                    >
+                                      查看
+                                    </a>
+                                  ) : (
+                                    <span className="text-xs md:text-sm text-muted-foreground">-</span>
+                                  )}
+                                </td>
+                                <td className="px-3 md:px-4 py-2 md:py-3">
+                                  <div className="flex items-center justify-end gap-1">
+                                    <Button
+                                      size="sm"
+                                      variant="ghost"
+                                      className="h-7 w-7 p-0"
+                                      onClick={() => handleEditCompany(company)}
+                                    >
+                                      <Pencil className="h-4 w-4" />
+                                    </Button>
+                                    <Button
+                                      size="sm"
+                                      variant="ghost"
+                                      className="text-destructive h-7 w-7 p-0"
+                                      onClick={() => handleDeleteCompany(company.id)}
+                                    >
+                                      <Trash2 className="h-4 w-4" />
+                                    </Button>
+                                  </div>
+                                </td>
+                              </tr>
+                            ))}
+                          </tbody>
+                        </table>
+                      </div>
+                    </div>
+                  ) : (
+                    <div className="text-center py-8 text-muted-foreground">
+                      <Building2 className="h-12 w-12 mx-auto mb-3 opacity-50" />
+                      <p className="text-sm">暂无企业配置</p>
+                      <p className="text-xs mt-1">点击上方按钮添加企业</p>
+                    </div>
+                  )}
+                </CardContent>
+              </Card>
             </TabsContent>
 
             {/* Access Codes Tab */}
@@ -2588,6 +2766,79 @@ export default function AdminPage() {
             </Button>
             <Button onClick={handleCreateConfig} disabled={!configForm.value.trim()}>
               添加
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      {/* Company Config Dialog */}
+      <Dialog open={companyDialogOpen} onOpenChange={setCompanyDialogOpen}>
+        <DialogContent className="max-w-lg">
+          <DialogHeader>
+            <DialogTitle>
+              {editingCompany ? '编辑企业' : '添加企业'}
+            </DialogTitle>
+            <DialogDescription>
+              配置企业信息用于智能同步，支持 Greenhouse/Lever ATS 系统
+            </DialogDescription>
+          </DialogHeader>
+          <div className="space-y-4 py-4">
+            <div>
+              <Label>企业名称 *</Label>
+              <Input
+                value={companyForm.company_name}
+                onChange={(e) => setCompanyForm({ ...companyForm, company_name: e.target.value })}
+                placeholder="如：Goldman Sachs"
+                disabled={!!editingCompany}
+              />
+            </div>
+            <div>
+              <Label>ATS 类型</Label>
+              <select
+                className="w-full h-10 px-3 rounded-md border border-input bg-background text-sm"
+                value={companyForm.ats_type}
+                onChange={(e) => setCompanyForm({ ...companyForm, ats_type: e.target.value })}
+              >
+                <option value="manual">手动 (不支持自动同步)</option>
+                <option value="greenhouse">Greenhouse</option>
+                <option value="lever">Lever</option>
+                <option value="builtin">BuiltIn</option>
+              </select>
+            </div>
+            <div>
+              <Label>ATS ID</Label>
+              <Input
+                value={companyForm.ats_id}
+                onChange={(e) => setCompanyForm({ ...companyForm, ats_id: e.target.value })}
+                placeholder="Greenhouse: 公司短名 / Lever: 公司短名"
+              />
+              <p className="text-xs text-muted-foreground mt-1">
+                Greenhouse: 如 goldmansachs / Lever: 如 goldman-sachs
+              </p>
+            </div>
+            <div>
+              <Label>招聘页面 URL</Label>
+              <Input
+                value={companyForm.careers_url}
+                onChange={(e) => setCompanyForm({ ...companyForm, careers_url: e.target.value })}
+                placeholder="https://www.goldmansachs.com/careers/..."
+              />
+            </div>
+            <div>
+              <Label>Logo URL</Label>
+              <Input
+                value={companyForm.logo_url}
+                onChange={(e) => setCompanyForm({ ...companyForm, logo_url: e.target.value })}
+                placeholder="https://..."
+              />
+            </div>
+          </div>
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setCompanyDialogOpen(false)}>
+              取消
+            </Button>
+            <Button onClick={handleSaveCompany} disabled={!companyForm.company_name.trim()}>
+              {editingCompany ? '保存' : '添加'}
             </Button>
           </DialogFooter>
         </DialogContent>
