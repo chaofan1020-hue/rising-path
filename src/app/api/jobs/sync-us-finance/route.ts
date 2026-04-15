@@ -121,10 +121,15 @@ function isValidTitle(title: string): boolean {
   if (/[\u4e00-\u9fa5]/.test(title)) return false;
   
   // 过滤非英语语言特征
-  if (/rekrytointi|rekrytering|reclutamiento|rekrutacja|recrute|stellenanzeige|empleo|offre d'emploi|trabajo|pracownik|mitarbeiter/i.test(title)) return false;
+  if (/rekrytointi|rekrytering|reclutamiento|rekrutacja|recrute|stellenanzeige|empleo|offre d'emploi|trabajo|pracownik|mitarbeiter|carri.res|carreras/i.test(title)) return false;
   
   // 过滤数字开头的标题
   if (/^\d+[\s,]/.test(title)) return false;
+  
+  // 过滤招聘列表页/导航页
+  if (/^jobs?\s*(at|in|for|@)\s/.test(titleLower)) return false;
+  if (/^welcome\s+to/.test(titleLower)) return false;
+  if (/experience\s+league|learn\s+with/.test(titleLower)) return false;
   
   // 检查是否包含金融相关关键词
   const hasKeyword = FINANCE_KEYWORDS.some(kw => titleLower.includes(kw));
@@ -138,7 +143,7 @@ function isValidTitle(title: string): boolean {
   if (genericTitles.includes(titleLower.trim())) return false;
   
   // 过滤非技术类岗位
-  if (/recruiter|hr|human resources|marketing manager|account executive|account manager|sales representative|customer success/i.test(title)) return false;
+  if (/recruiter|hr|human resources|marketing manager|account executive|account manager|sales representative|customer success|social media|content creator|graphic design/i.test(title)) return false;
   
   // 过滤个人帖子和列表页
   if (/'s post|post$|hiring|work with us|find new jobs|careers in|about us|our team/i.test(title)) return false;
@@ -178,11 +183,11 @@ function classifyDirection(title: string): string {
   return 'Finance';
 }
 
-// 验证 URL - 只接受真正的岗位页面
+// 验证 URL - 只接受真正的官网岗位页面
 function isValidUrl(url: string): boolean {
   const urlLower = url.toLowerCase();
   
-  // 过滤噪音网站
+  // 过滤噪音网站和猎头
   const blockedPatterns = [
     'zhihu', 'baidu', 'qq.com', '163.com', 'sina', 'sohu.com', 
     'liepin.com', '51job.com', 'zhaopin', 'zhipin.com', 'zhipin',
@@ -194,23 +199,20 @@ function isValidUrl(url: string): boolean {
     // 过滤非岗位页面
     '/what-we-do/', '/about-us/', '/about-us', '/products/', '/funds/',
     'am.jpmorgan.com',  // 基金页面
-    '/research/', '/insights/', '/stories/'
+    '/research/', '/insights/', '/stories/',
+    // 过滤猎头/中介网站
+    'falconx', 'hiretalent', 'mercor', 'hired.com', 'toptal', 'gun.io',
+    'linkedin.com/jobs/',  // 过滤 LinkedIn（反爬虫）
+    'greenhouse.io/apply',  // 过滤过度申请的
   ];
   
   for (const pattern of blockedPatterns) {
     if (urlLower.includes(pattern)) return false;
   }
   
-  // LinkedIn 岗位详情页（放宽限制）
-  if (urlLower.includes('linkedin.com/jobs/')) {
-    // 过滤 LinkedIn 搜索结果页
-    if (urlLower.includes('/jobs/search?') || urlLower.includes('/jobs/?search')) return false;
-    return true;
-  }
-  
-  // 允许的域名（放宽限制）
+  // 只接受官网域名
   const allowedDomains = [
-    // 金融公司官网 careers 和 jobs
+    // 金融公司官网
     'goldmansachs.com', 
     'morganstanley.com', 
     'jpmorgan.com', 'jpmorganchase.com', 
@@ -230,7 +232,7 @@ function isValidUrl(url: string): boolean {
     'pimco.com', 
     'deshaw.com', 
     'aqr.com',
-    // 招聘平台
+    // 招聘平台（只接受 ATS 系统）
     'greenhouse.io', 'lever.co', 'workday.com', 'successfactors.com',
   ];
   
