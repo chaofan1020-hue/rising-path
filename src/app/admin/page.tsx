@@ -66,7 +66,6 @@ import {
   ImageIcon,
   Wand2,
   PieChart,
-  DollarSign,
   RefreshCw,
 } from 'lucide-react';
 import Link from 'next/link';
@@ -246,41 +245,6 @@ export default function AdminPage() {
       setPasswordError('修改失败，请稍后重试');
     } finally {
       setPasswordSaving(false);
-    }
-  };
-
-  // 同步大厂岗位
-  const handleSyncJobs = async (password: string) => {
-    setSyncing(true);
-    setSyncResult(null);
-    try {
-      const response = await fetch('/api/jobs/sync-us-tech', {
-        method: 'POST',
-        headers: { 'x-admin-password': password }
-      });
-      const data = await response.json();
-      // 只要有返回结果就算成功（无论是否新增岗位）
-      if (data.results) {
-        const newCount = data.results.success || 0;
-        const skippedCount = data.results.skipped || 0;
-        const invalidCount = data.results.invalid || 0;
-        const cleanedCount = data.results.cleaned || 0;
-        let message = `同步完成：新增 ${newCount} 个，跳过 ${skippedCount} 个`;
-        if (cleanedCount > 0) {
-          message += `，清理 ${cleanedCount} 个无效岗位`;
-        }
-        setSyncResult({ 
-          success: 1, 
-          message
-        });
-        fetchJobs();
-      } else {
-        setSyncResult({ success: 0, message: data.error || '同步失败' });
-      }
-    } catch {
-      setSyncResult({ success: 0, message: '同步失败，请重试' });
-    } finally {
-      setSyncing(false);
     }
   };
 
@@ -1661,57 +1625,6 @@ export default function AdminPage() {
                       <CardDescription className="text-xs md:text-sm">添加、编辑和删除岗位信息</CardDescription>
                     </div>
                     <div className="flex gap-2">
-                      <Button 
-                        variant="outline"
-                        size="sm"
-                        className="h-8 text-xs md:text-sm"
-                        onClick={() => {
-                          const password = prompt('请输入管理员密码：');
-                          if (password) handleSyncJobs(password);
-                        }}
-                        disabled={syncing}
-                      >
-                        <Globe className={`h-4 w-4 ${syncing ? 'animate-spin' : ''} md:mr-2`} />
-                        <span className="hidden md:inline">{syncing ? '同步中...' : '同步大厂岗位'}</span>
-                        <span className="md:hidden">{syncing ? '同步中' : '同步'}</span>
-                      </Button>
-                      <Button 
-                        variant="outline"
-                        size="sm"
-                        className="h-8 text-xs md:text-sm"
-                        onClick={() => {
-                          const password = prompt('请输入管理员密码：');
-                          if (password) {
-                            setSyncing(true);
-                            setSyncResult(null);
-                            fetch('/api/jobs/sync-us-finance', {
-                              method: 'POST',
-                              headers: { 'x-admin-password': password }
-                            }).then(r => r.json()).then(data => {
-                              if (data.results) {
-                                const newCount = data.results.success || 0;
-                                const skippedCount = data.results.skipped || 0;
-                                setSyncResult({ 
-                                  success: 1, 
-                                  message: `金融岗位同步完成：新增 ${newCount} 个，跳过 ${skippedCount} 个`
-                                });
-                                fetchJobs();
-                              } else {
-                                setSyncResult({ success: 0, message: data.error || '同步失败' });
-                              }
-                              setSyncing(false);
-                            }).catch(() => {
-                              setSyncResult({ success: 0, message: '同步失败，请重试' });
-                              setSyncing(false);
-                            });
-                          }
-                        }}
-                        disabled={syncing}
-                      >
-                        <DollarSign className={`h-4 w-4 ${syncing ? 'animate-spin' : ''} md:mr-2`} />
-                        <span className="hidden md:inline">{syncing ? '同步中...' : '同步金融岗位'}</span>
-                        <span className="md:hidden">{syncing ? '同步中' : '金融'}</span>
-                      </Button>
                       <Button 
                         variant="default"
                         size="sm"
