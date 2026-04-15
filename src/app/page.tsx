@@ -136,6 +136,12 @@ export default function Home() {
                 岗位开放
               </Button>
             </Link>
+            <Link href="/submit-job">
+              <Button variant="ghost" size="sm" className="text-muted-foreground hover:text-foreground">
+                <span className="mr-1">+</span>
+                贡献岗位
+              </Button>
+            </Link>
             <Link href="/resume">
               <Button variant="ghost" size="sm" className="text-muted-foreground hover:text-foreground">
                 简历管理
