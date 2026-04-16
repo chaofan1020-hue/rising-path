@@ -11,7 +11,7 @@ import {
   PopoverContent,
   PopoverTrigger,
 } from '@/components/ui/popover';
-import { Search, MapPin, Briefcase, Users, ExternalLink, ChevronDown, X, Plus, Check, Loader2, Clock } from 'lucide-react';
+import { Search, MapPin, Briefcase, Users, ExternalLink, ChevronDown, X, Plus, Check, Loader2 } from 'lucide-react';
 import Link from 'next/link';
 import Image from 'next/image';
 import { AccessGuard, useAccessCode } from '@/components/access-guard';
@@ -345,7 +345,6 @@ function JobsContent() {
   const [selectedRegions, setSelectedRegions] = useState<string[]>([]);
   const [selectedDirections, setSelectedDirections] = useState<string[]>([]);
   const [selectedAudience, setSelectedAudience] = useState('全部');
-  const [selectedJobType, setSelectedJobType] = useState('全部');
   const [applyingJobId, setApplyingJobId] = useState<number | null>(null);
   const [appliedJobIds, setAppliedJobIds] = useState<Set<number>>(new Set());
   
@@ -369,7 +368,6 @@ function JobsContent() {
         selectedDirections.forEach(d => params.append('direction', d));
       }
       if (selectedAudience !== '全部') params.append('audience', selectedAudience);
-      if (selectedJobType !== '全部') params.append('job_type', selectedJobType);
 
       const response = await fetch(`/api/jobs?${params.toString()}`);
       const data = await response.json();
@@ -379,7 +377,7 @@ function JobsContent() {
     } finally {
       setLoading(false);
     }
-  }, [selectedRegions, selectedDirections, selectedAudience, selectedJobType]);
+  }, [selectedRegions, selectedDirections, selectedAudience]);
 
   // 获取已投递的岗位ID列表
   const fetchAppliedJobIds = useCallback(async () => {
@@ -550,37 +548,13 @@ function JobsContent() {
                   onChange={setSelectedAudience}
                 />
                 
-                {/* 岗位类型筛选 - 实习/全职 */}
-                <div className="flex items-center gap-2">
-                  <div className="flex items-center gap-1.5 text-xs text-muted-foreground">
-                    <Clock className="h-3.5 w-3.5" />
-                    <span>类型</span>
-                  </div>
-                  <div className="flex gap-1">
-                    {['全部', '实习', '校招', '社招'].map((type) => (
-                      <button
-                        key={type}
-                        onClick={() => setSelectedJobType(type)}
-                        className={`px-2.5 py-1 rounded-md text-xs transition-colors ${
-                          selectedJobType === type
-                            ? 'bg-primary text-primary-foreground'
-                            : 'bg-muted hover:bg-muted/80 text-muted-foreground'
-                        }`}
-                      >
-                        {type}
-                      </button>
-                    ))}
-                  </div>
-                </div>
-                
                 {/* 清除筛选按钮 */}
-                {(selectedRegions.length > 0 || selectedDirections.length > 0 || selectedAudience !== '全部' || selectedJobType !== '全部') && (
+                {(selectedRegions.length > 0 || selectedDirections.length > 0 || selectedAudience !== '全部') && (
                   <button
                     onClick={() => {
                       setSelectedRegions([]);
                       setSelectedDirections([]);
                       setSelectedAudience('全部');
-                      setSelectedJobType('全部');
                     }}
                     className="inline-flex items-center gap-1 px-2 py-1 text-xs text-muted-foreground hover:text-foreground transition-colors"
                   >
@@ -638,19 +612,6 @@ function JobsContent() {
                           <Users className="h-3 w-3 mr-1" />
                           {job.audience}
                         </Badge>
-                        {/* 岗位类型标签 */}
-                        {job.job_type && job.job_type !== '社招' && (
-                          <Badge 
-                            variant="outline" 
-                            className={`rounded-md text-xs ${
-                              job.job_type === '实习' 
-                                ? 'text-purple-600 border-purple-600' 
-                                : 'text-blue-600 border-blue-600'
-                            }`}
-                          >
-                            {job.job_type}
-                          </Badge>
-                        )}
                         {job.salary_range && (
                           <Badge variant="outline" className="text-green-600 border-green-600 rounded-md text-xs">
                             {job.salary_range}
@@ -736,7 +697,6 @@ function JobsContent() {
         {!loading && filteredJobs.length > 0 && (
           <div className="mt-4 md:mt-6 text-center text-xs md:text-sm text-muted-foreground">
             共找到 {filteredJobs.length} 个岗位
-            {selectedJobType !== '全部' && <span className="ml-1">（{selectedJobType === '实习' ? '实习' : selectedJobType === '校招' ? '校招' : '全职'}）</span>}
           </div>
         )}
       </main>
