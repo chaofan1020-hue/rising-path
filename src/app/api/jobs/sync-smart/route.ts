@@ -71,8 +71,8 @@ function isValidTitle(title: string): boolean {
 }
 
 // 从 Greenhouse API 获取岗位
-async function fetchGreenhouseJobs(companyId: string): Promise<Array<{title: string; url: string; location: string; updated_at: string; content?: string}>> {
-  const jobs: Array<{title: string; url: string; location: string; updated_at: string; content?: string}> = [];
+async function fetchGreenhouseJobs(companyId: string): Promise<Array<{title: string; url: string; location: string; updated_at: string; content?: string; plainText?: string}>> {
+  const jobs: Array<{title: string; url: string; location: string; updated_at: string; content?: string; plainText?: string}> = [];
   
   try {
     const response = await fetch(`https://boards-api.greenhouse.io/v1/boards/${companyId}/jobs?content=true`);
@@ -80,14 +80,20 @@ async function fetchGreenhouseJobs(companyId: string): Promise<Array<{title: str
       const data = await response.json();
       if (data.jobs) {
         for (const job of data.jobs) {
-          // 提取纯文本内容用于 sponsorship 检测
+          // 保留完整 HTML 描述用于展示
+          // 提取纯文本用于 Sponsor 检测
           let plainText = '';
           if (job.content) {
             plainText = job.content
-              .replace(/<[^>]*>/g, ' ')  // 移除 HTML 标签
-              .replace(/\s+/g, ' ')      // 压缩空白
+              .replace(/<h1[^>]*>.*?<\/h1>/gi, '')
+              .replace(/<[^>]+>/g, ' ')
+              .replace(/&nbsp;/g, ' ')
+              .replace(/&amp;/g, '&')
+              .replace(/&lt;/g, '<')
+              .replace(/&gt;/g, '>')
+              .replace(/\s+/g, ' ')
               .trim()
-              .substring(0, 5000);       // 限制长度
+              .substring(0, 5000);
           }
           
           jobs.push({
@@ -95,7 +101,8 @@ async function fetchGreenhouseJobs(companyId: string): Promise<Array<{title: str
             url: job.absolute_url,
             location: job.location?.name || 'United States',
             updated_at: job.updated_at,
-            content: plainText,
+            content: job.content || '',  // 保留完整 HTML
+            plainText,  // 纯文本用于 Sponsor 检测
           });
         }
       }
@@ -309,8 +316,11 @@ export async function POST(request: NextRequest) {
             const region = extractRegion(job.title, job.location);
             const job_type = getJobType(job.title);
             
-            // 检测 sponsorship
-            const sponsorship = detectSponsorship(job.content || job.title);
+            // 检测 sponsorship（使用纯文本）
+            const sponsorship = detectSponsorship(job.plainText || job.title);
+            
+            // 根据岗位类型设置受众
+            const audience = job_type === '实习' ? '实习' : '全职';
 
             const { error: insertError } = await supabase
               .from('jobs')
@@ -322,8 +332,8 @@ export async function POST(request: NextRequest) {
                 job_type,
                 job_url: job.url,
                 source_url: company.careers_url,
-                description: job.content || job.title,
-                audience: '留学生',
+                description: job.content || job.title,  // 完整 HTML 描述
+                audience,
                 is_active: true,
                 is_closed: false,
                 sponsorship,
