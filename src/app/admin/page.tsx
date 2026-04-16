@@ -69,6 +69,7 @@ import {
   RefreshCw,
   Building2,
   Pencil,
+  Target,
 } from 'lucide-react';
 import Link from 'next/link';
 
@@ -238,7 +239,10 @@ export default function AdminPage() {
           success: 1, 
           message: `Sponsor 检测完成：已检测 ${data.total} 个岗位，其中 ${data.with_sponsor} 个提供 Sponsor，${data.no_sponsor} 个不提供`
         });
-        fetchJobs(); // 刷新岗位列表
+        // 刷新岗位列表
+        const jobsRes = await fetch('/api/jobs');
+        const jobsData = await jobsRes.json();
+        setJobs(jobsData.jobs || []);
       } else {
         setSponsorResult({ success: 0, message: data.error || '检测失败' });
       }
@@ -1743,7 +1747,7 @@ export default function AdminPage() {
                             fetch('/api/jobs/sync-smart', {
                               method: 'POST',
                               headers: { 'x-admin-password': password }
-                            }).then(r => r.json()).then(data => {
+                            }).then(r => r.json()).then(async (data) => {
                               if (data.message) {
                                 const newJobs = data.new_jobs || 0;
                                 const closedJobs = data.closed_jobs || 0;
@@ -1751,7 +1755,10 @@ export default function AdminPage() {
                                   success: 1, 
                                   message: `智能同步完成：新增 ${newJobs} 个岗位，关闭 ${closedJobs} 个`
                                 });
-                                fetchJobs();
+                                // 刷新岗位列表
+                                const jobsRes = await fetch('/api/jobs');
+                                const jobsData = await jobsRes.json();
+                                setJobs(jobsData.jobs || []);
                               } else {
                                 setSyncResult({ success: 0, message: data.error || '同步失败' });
                               }
