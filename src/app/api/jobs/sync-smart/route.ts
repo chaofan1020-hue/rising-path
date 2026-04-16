@@ -114,6 +114,104 @@ async function fetchGreenhouseJobs(companyId: string): Promise<Array<{title: str
   return jobs;
 }
 
+// 结构化 HTML 描述
+function parseStructuredDescription(html: string): { overview: string; responsibilities: string; requirements: string; nice_to_have: string } {
+  // 先把转义的 HTML 还原
+  let text = html
+    .replace(/&lt;/g, '<')
+    .replace(/&gt;/g, '>')
+    .replace(/&amp;/g, '&')
+    .replace(/&quot;/g, '"')
+    .replace(/&#39;/g, "'")
+    .replace(/&nbsp;/g, ' ')
+    // 然后清理 HTML
+    .replace(/<br\s*\/?>/gi, '\n')
+    .replace(/<\/p>/gi, '\n\n')
+    .replace(/<p[^>]*>/gi, '')
+    .replace(/<li[^>]*>/gi, '\n- ')
+    .replace(/<\/li>/gi, '')
+    .replace(/<h[1-6][^>]*>/gi, '\n\n**')
+    .replace(/<\/h[1-6]>/gi, '**\n')
+    .replace(/<strong[^>]*>/gi, '**')
+    .replace(/<\/strong>/gi, '**')
+    .replace(/<b[^>]*>/gi, '**')
+    .replace(/<\/b>/gi, '**')
+    .replace(/<em[^>]*>/gi, '_')
+    .replace(/<\/em>/gi, '_')
+    .replace(/<i[^>]*>/gi, '_')
+    .replace(/<\/i>/gi, '_')
+    .replace(/<a[^>]*>/gi, '')
+    .replace(/<\/a>/gi, '')
+    .replace(/<div[^>]*>/gi, '')
+    .replace(/<\/div>/gi, '\n')
+    .replace(/<span[^>]*>/gi, '')
+    .replace(/<\/span>/gi, '')
+    .replace(/<ul[^>]*>/gi, '\n')
+    .replace(/<\/ul>/gi, '\n')
+    .replace(/<ol[^>]*>/gi, '\n')
+    .replace(/<\/ol>/gi, '\n')
+    .replace(/<[^>]+>/g, '')  // 移除剩余 HTML 标签
+    .replace(/\*{3,}/g, '**')
+    .replace(/_{3,}/g, '_')
+    .replace(/\n{3,}/g, '\n\n')
+    .trim();
+
+  // 提取各部分内容
+  const lines = text.split('\n').filter(line => line.trim());
+  
+  let overview = '';
+  let responsibilities = '';
+  let requirements = '';
+  let nice_to_have = '';
+  
+  let currentSection = 'overview';
+  
+  for (const line of lines) {
+    const upperLine = line.toLowerCase();
+    
+    // 检测章节标题
+    if (upperLine.includes('about') || upperLine.includes('who we are') || upperLine.includes('overview') || upperLine.includes('summary') || upperLine.includes('description') || upperLine.includes('team')) {
+      currentSection = 'overview';
+      overview += line.trim() + '\n';
+    } else if (upperLine.includes('responsibility') || upperLine.includes('what you') || upperLine.includes('will do') || upperLine.includes('role') || upperLine.includes('job detail') || upperLine.includes('**what')) {
+      currentSection = 'responsibilities';
+      responsibilities += line.trim() + '\n';
+    } else if (upperLine.includes('qualification') || upperLine.includes('requirement') || upperLine.includes('must have') || upperLine.includes('you have') || upperLine.includes('skills') || upperLine.includes('you\'ll need') || upperLine.includes('minimum')) {
+      currentSection = 'requirements';
+      requirements += line.trim() + '\n';
+    } else if (upperLine.includes('nice to have') || upperLine.includes('preferred') || upperLine.includes('bonus') || upperLine.includes('plus') || upperLine.includes('extra')) {
+      currentSection = 'nice_to_have';
+      nice_to_have += line.trim() + '\n';
+    } else {
+      // 根据当前章节添加内容
+      const trimmedLine = line.trim();
+      if (trimmedLine.length > 15 && !trimmedLine.startsWith('**')) {
+        if (currentSection === 'overview' && overview.length < 600) {
+          overview += trimmedLine + '\n';
+        } else if (currentSection === 'responsibilities' && responsibilities.length < 1200) {
+          responsibilities += trimmedLine + '\n';
+        } else if (currentSection === 'requirements' && requirements.length < 1200) {
+          requirements += trimmedLine + '\n';
+        } else if (currentSection === 'nice_to_have' && nice_to_have.length < 600) {
+          nice_to_have += trimmedLine + '\n';
+        }
+      }
+    }
+  }
+
+  // 如果某个部分为空，尝试从其他部分提取
+  if (!overview && text) {
+    overview = text.substring(0, 400) + (text.length > 400 ? '...' : '');
+  }
+
+  return {
+    overview: overview.trim().substring(0, 600),
+    responsibilities: responsibilities.trim().substring(0, 1200),
+    requirements: requirements.trim().substring(0, 1200),
+    nice_to_have: nice_to_have.trim().substring(0, 600),
+  };
+}
+
 // 从 Lever API 获取岗位
 async function fetchLeverJobs(companyId: string): Promise<Array<{title: string; url: string; location: string; updated_at: string}>> {
   const jobs: Array<{title: string; url: string; location: string; updated_at: string}> = [];
@@ -170,8 +268,7 @@ async function fetchFromCareersPage(url: string, company: string): Promise<Array
   
   try {
     const config = new Config();
-    const customHeaders = HeaderUtils.extractForwardHeaders({} as NextRequest.headers);
-    const client = new FetchClient(config, customHeaders);
+    const client = new FetchClient(config);
     
     const response = await client.fetch(url);
     
@@ -317,10 +414,14 @@ export async function POST(request: NextRequest) {
             const job_type = getJobType(job.title);
             
             // 检测 sponsorship（使用纯文本）
-            const sponsorship = detectSponsorship(job.plainText || job.title);
+            const jobAny = job as { plainText?: string; title: string };
+            const sponsorship = detectSponsorship(jobAny.plainText || job.title);
             
             // 根据岗位类型设置受众
             const audience = job_type === '实习' ? '实习' : '全职';
+            
+            // 结构化描述
+            const structured = parseStructuredDescription(job.content || job.title);
 
             const { error: insertError } = await supabase
               .from('jobs')
@@ -332,7 +433,11 @@ export async function POST(request: NextRequest) {
                 job_type,
                 job_url: job.url,
                 source_url: company.careers_url,
-                description: job.content || job.title,  // 完整 HTML 描述
+                description: structured.overview || job.title,
+                overview: structured.overview || job.title,
+                responsibilities: structured.responsibilities,
+                requirements: structured.requirements,
+                nice_to_have: structured.nice_to_have,
                 audience,
                 is_active: true,
                 is_closed: false,
