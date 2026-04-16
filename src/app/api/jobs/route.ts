@@ -212,6 +212,7 @@ export async function GET(request: NextRequest) {
     const regions = searchParams.getAll('region');
     const directions = searchParams.getAll('direction');
     const audience = searchParams.get('audience');
+    const jobType = searchParams.get('job_type');
     const limit = searchParams.get('limit');
 
     let query = client
@@ -225,6 +226,11 @@ export async function GET(request: NextRequest) {
     // 受众单选筛选
     if (audience && audience !== '全部') {
       query = query.eq('audience', audience);
+    }
+
+    // 岗位类型筛选（实习/校招/社招）
+    if (jobType && jobType !== '全部') {
+      query = query.eq('job_type', jobType);
     }
 
     // 限制返回数量（用于自动同步检查）
