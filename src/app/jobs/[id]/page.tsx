@@ -38,6 +38,7 @@ interface Job {
   salary_range: string;
   job_url: string;
   logo_url?: string;
+  sponsorship?: 'yes' | 'no' | 'unknown';
   created_at: string;
 }
 
@@ -238,6 +239,19 @@ function JobDetailContent() {
                       <Badge variant="outline" className="text-green-600 border-green-600 rounded-md text-xs md:text-sm">
                         <DollarSign className="h-3 w-3 mr-1" />
                         {job.salary_range}
+                      </Badge>
+                    )}
+                    {job.sponsorship && job.sponsorship !== 'unknown' && (
+                      <Badge 
+                        variant="outline" 
+                        className={`rounded-md text-xs md:text-sm ${
+                          job.sponsorship === 'yes' 
+                            ? 'text-green-600 border-green-600' 
+                            : 'text-red-600 border-red-600'
+                        }`}
+                      >
+                        <Target className="h-3 w-3 mr-1" />
+                        {job.sponsorship === 'yes' ? '提供Sponsor' : '不提供Sponsor'}
                       </Badge>
                     )}
                   </div>

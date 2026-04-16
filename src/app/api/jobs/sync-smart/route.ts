@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { FetchClient, SearchClient, Config, HeaderUtils } from 'coze-coding-dev-sdk';
 import { getSupabaseClient } from '@/storage/database/supabase-client';
+import { detectSponsorship } from '@/lib/utils';
 
 // 岗位方向分类
 function classifyDirection(title: string): string {
@@ -70,8 +71,8 @@ function isValidTitle(title: string): boolean {
 }
 
 // 从 Greenhouse API 获取岗位
-async function fetchGreenhouseJobs(companyId: string): Promise<Array<{title: string; url: string; location: string; updated_at: string}>> {
-  const jobs: Array<{title: string; url: string; location: string; updated_at: string}> = [];
+async function fetchGreenhouseJobs(companyId: string): Promise<Array<{title: string; url: string; location: string; updated_at: string; content?: string}>> {
+  const jobs: Array<{title: string; url: string; location: string; updated_at: string; content?: string}> = [];
   
   try {
     const response = await fetch(`https://boards-api.greenhouse.io/v1/boards/${companyId}/jobs?content=true`);
@@ -79,11 +80,22 @@ async function fetchGreenhouseJobs(companyId: string): Promise<Array<{title: str
       const data = await response.json();
       if (data.jobs) {
         for (const job of data.jobs) {
+          // 提取纯文本内容用于 sponsorship 检测
+          let plainText = '';
+          if (job.content) {
+            plainText = job.content
+              .replace(/<[^>]*>/g, ' ')  // 移除 HTML 标签
+              .replace(/\s+/g, ' ')      // 压缩空白
+              .trim()
+              .substring(0, 5000);       // 限制长度
+          }
+          
           jobs.push({
             title: job.title,
             url: job.absolute_url,
             location: job.location?.name || 'United States',
             updated_at: job.updated_at,
+            content: plainText,
           });
         }
       }
@@ -252,7 +264,7 @@ export async function POST(request: NextRequest) {
 
     // 遍历每个公司
     for (const company of companies) {
-      let fetchedJobs: Array<{title: string; url: string; location: string; updated_at: string}> = [];
+      let fetchedJobs: Array<{title: string; url: string; location: string; updated_at: string; content?: string}> = [];
 
       try {
         // 根据 ATS 类型获取岗位
@@ -296,6 +308,9 @@ export async function POST(request: NextRequest) {
             const direction = classifyDirection(job.title);
             const region = extractRegion(job.title, job.location);
             const job_type = getJobType(job.title);
+            
+            // 检测 sponsorship
+            const sponsorship = detectSponsorship(job.content || job.title);
 
             const { error: insertError } = await supabase
               .from('jobs')
@@ -307,10 +322,11 @@ export async function POST(request: NextRequest) {
                 job_type,
                 job_url: job.url,
                 source_url: company.careers_url,
-                description: job.title,
+                description: job.content || job.title,
                 audience: '留学生',
                 is_active: true,
                 is_closed: false,
+                sponsorship,
                 last_verified_at: new Date().toISOString(),
               });
 

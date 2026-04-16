@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { getSupabaseClient } from '@/storage/database/supabase-client';
+import { detectSponsorship } from '@/lib/utils';
 
 // 公司域名映射
 const companyDomains: Record<string, string> = {
@@ -280,9 +281,15 @@ export async function POST(request: NextRequest) {
     const client = getSupabaseClient();
     const body = await request.json();
 
+    // 自动检测 sponsorship
+    const description = body.description || '';
+    const requirements = body.requirements || '';
+    const fullText = description + ' ' + requirements;
+    const sponsorship = detectSponsorship(fullText);
+
     const { data, error } = await client
       .from('jobs')
-      .insert(body)
+      .insert({ ...body, sponsorship })
       .select()
       .single();
 

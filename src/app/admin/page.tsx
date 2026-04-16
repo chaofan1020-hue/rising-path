@@ -219,7 +219,35 @@ export default function AdminPage() {
   // Job sync state
   const [syncing, setSyncing] = useState(false);
   const [syncResult, setSyncResult] = useState<{ success: number; message: string } | null>(null);
+  const [sponsorChecking, setSponsorChecking] = useState(false);
+  const [sponsorResult, setSponsorResult] = useState<{ success: number; message: string } | null>(null);
   const [fetchingFromUrl, setFetchingFromUrl] = useState(false);
+
+  // 检测所有岗位的 Sponsor
+  const handleCheckSponsor = async (password: string) => {
+    setSponsorChecking(true);
+    setSponsorResult(null);
+    try {
+      const response = await fetch('/api/jobs/check-sponsor', {
+        method: 'POST',
+        headers: { 'x-admin-password': password }
+      });
+      const data = await response.json();
+      if (data.success) {
+        setSponsorResult({ 
+          success: 1, 
+          message: `Sponsor 检测完成：已检测 ${data.total} 个岗位，其中 ${data.with_sponsor} 个提供 Sponsor，${data.no_sponsor} 个不提供`
+        });
+        fetchJobs(); // 刷新岗位列表
+      } else {
+        setSponsorResult({ success: 0, message: data.error || '检测失败' });
+      }
+    } catch {
+      setSponsorResult({ success: 0, message: '检测失败，请重试' });
+    } finally {
+      setSponsorChecking(false);
+    }
+  };
 
   // Change password
   const handleChangePassword = async () => {
@@ -1745,6 +1773,20 @@ export default function AdminPage() {
                         size="sm"
                         className="h-8 text-xs md:text-sm"
                         onClick={() => {
+                          const password = prompt('请输入管理员密码：');
+                          if (password) handleCheckSponsor(password);
+                        }}
+                        disabled={sponsorChecking}
+                      >
+                        <Target className={`h-4 w-4 ${sponsorChecking ? 'animate-spin' : ''} md:mr-2`} />
+                        <span className="hidden md:inline">{sponsorChecking ? '检测中...' : 'Sponsor'}</span>
+                        <span className="md:hidden">{sponsorChecking ? '检测' : 'Sponsor'}</span>
+                      </Button>
+                      <Button 
+                        variant="outline"
+                        size="sm"
+                        className="h-8 text-xs md:text-sm"
+                        onClick={() => {
                           setBatchResult(null);
                           setBatchText('');
                           setBatchImportOpen(true);
@@ -1990,6 +2032,11 @@ export default function AdminPage() {
                 {syncResult && (
                   <div className={`px-4 py-2 text-sm ${syncResult.success > 0 ? 'bg-green-50 text-green-700' : 'bg-orange-50 text-orange-700'}`}>
                     {syncResult.message}
+                  </div>
+                )}
+                {sponsorResult && (
+                  <div className={`px-4 py-2 text-sm ${sponsorResult.success > 0 ? 'bg-blue-50 text-blue-700' : 'bg-orange-50 text-orange-700'}`}>
+                    {sponsorResult.message}
                   </div>
                 )}
                 <CardContent>

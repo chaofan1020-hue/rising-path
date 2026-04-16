@@ -28,6 +28,7 @@ interface Job {
   salary_range: string;
   job_url: string;
   logo_url?: string;
+  sponsorship?: 'yes' | 'no' | 'unknown';
   is_active?: boolean;
   created_at: string;
 }
@@ -614,6 +615,18 @@ function JobsContent() {
                         {job.salary_range && (
                           <Badge variant="outline" className="text-green-600 border-green-600 rounded-md text-xs">
                             {job.salary_range}
+                          </Badge>
+                        )}
+                        {job.sponsorship && job.sponsorship !== 'unknown' && (
+                          <Badge 
+                            variant="outline" 
+                            className={`rounded-md text-xs ${
+                              job.sponsorship === 'yes' 
+                                ? 'text-green-600 border-green-600' 
+                                : 'text-red-600 border-red-600'
+                            }`}
+                          >
+                            {job.sponsorship === 'yes' ? 'Sponsor' : '无Sponsor'}
                           </Badge>
                         )}
                         {job.is_active === false ? (
