@@ -223,6 +223,8 @@ export default function AdminPage() {
   const [sponsorChecking, setSponsorChecking] = useState(false);
   const [sponsorResult, setSponsorResult] = useState<{ success: number; message: string } | null>(null);
   const [fetchingFromUrl, setFetchingFromUrl] = useState(false);
+  const [fetchingDescriptions, setFetchingDescriptions] = useState(false);
+  const [descResult, setDescResult] = useState<{ success: number; message: string } | null>(null);
 
   // 检测所有岗位的 Sponsor
   const handleCheckSponsor = async (password: string) => {
@@ -250,6 +252,37 @@ export default function AdminPage() {
       setSponsorResult({ success: 0, message: '检测失败，请重试' });
     } finally {
       setSponsorChecking(false);
+    }
+  };
+
+  // 获取岗位完整描述
+  const handleFetchDescriptions = async (password: string) => {
+    if (!confirm('这将从公司官网重新获取所有岗位的完整描述，可能需要几分钟。是否继续？')) return;
+    
+    setFetchingDescriptions(true);
+    setDescResult(null);
+    try {
+      const response = await fetch('/api/jobs/fetch-descriptions', {
+        method: 'POST',
+        headers: { 'x-admin-password': password }
+      });
+      const data = await response.json();
+      if (data.success) {
+        setDescResult({ 
+          success: 1, 
+          message: `描述获取完成：更新 ${data.updated} 个，跳过 ${data.skipped} 个，失败 ${data.failed} 个`
+        });
+        // 刷新岗位列表
+        const jobsRes = await fetch('/api/jobs');
+        const jobsData = await jobsRes.json();
+        setJobs(jobsData.jobs || []);
+      } else {
+        setDescResult({ success: 0, message: data.error || '获取失败' });
+      }
+    } catch {
+      setDescResult({ success: 0, message: '获取失败，请重试' });
+    } finally {
+      setFetchingDescriptions(false);
     }
   };
 
@@ -1794,6 +1827,20 @@ export default function AdminPage() {
                         size="sm"
                         className="h-8 text-xs md:text-sm"
                         onClick={() => {
+                          const password = prompt('请输入管理员密码：');
+                          if (password) handleFetchDescriptions(password);
+                        }}
+                        disabled={fetchingDescriptions}
+                      >
+                        <FileText className={`h-4 w-4 ${fetchingDescriptions ? 'animate-spin' : ''} md:mr-2`} />
+                        <span className="hidden md:inline">{fetchingDescriptions ? '获取中...' : '详情'}</span>
+                        <span className="md:hidden">{fetchingDescriptions ? '获取' : '详情'}</span>
+                      </Button>
+                      <Button 
+                        variant="outline"
+                        size="sm"
+                        className="h-8 text-xs md:text-sm"
+                        onClick={() => {
                           setBatchResult(null);
                           setBatchText('');
                           setBatchImportOpen(true);
@@ -2044,6 +2091,11 @@ export default function AdminPage() {
                 {sponsorResult && (
                   <div className={`px-4 py-2 text-sm ${sponsorResult.success > 0 ? 'bg-blue-50 text-blue-700' : 'bg-orange-50 text-orange-700'}`}>
                     {sponsorResult.message}
+                  </div>
+                )}
+                {descResult && (
+                  <div className={`px-4 py-2 text-sm ${descResult.success > 0 ? 'bg-green-50 text-green-700' : 'bg-orange-50 text-orange-700'}`}>
+                    {descResult.message}
                   </div>
                 )}
                 <CardContent>
