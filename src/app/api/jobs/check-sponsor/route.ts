@@ -18,11 +18,10 @@ export async function POST(request: NextRequest) {
 
     const supabase = getSupabaseClient();
 
-    // 获取所有有描述的岗位
+    // 获取所有岗位（包含公司名）
     const { data: jobs, error } = await supabase
       .from('jobs')
-      .select('id, title, description, requirements, sponsorship')
-      .not('description', 'is', null);
+      .select('id, title, company, description, requirements, sponsorship');
 
     if (error) {
       return NextResponse.json({ error: '获取岗位失败' }, { status: 500 });
@@ -36,7 +35,8 @@ export async function POST(request: NextRequest) {
     // 批量更新
     for (const job of jobs || []) {
       const fullText = (job.description || '') + ' ' + (job.requirements || '');
-      const newSponsorship = detectSponsorship(fullText);
+      // 传入公司名以便做推断
+      const newSponsorship = detectSponsorship(fullText, job.company);
       
       // 只更新有变化的
       if (job.sponsorship !== newSponsorship) {

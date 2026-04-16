@@ -6,10 +6,8 @@ export function cn(...inputs: ClassValue[]) {
 }
 
 // Sponsor 检测函数
-export function detectSponsorship(description: string): 'yes' | 'no' | 'unknown' {
-  if (!description) return 'unknown';
-  
-  const lowerDesc = description.toLowerCase();
+export function detectSponsorship(description: string, company?: string): 'yes' | 'no' | 'unknown' {
+  const lowerDesc = description?.toLowerCase() || '';
   
   // 明确表示提供 sponsor 的关键词
   const sponsorYesKeywords = [
@@ -51,7 +49,7 @@ export function detectSponsorship(description: string): 'yes' | 'no' | 'unknown'
     'us work permit required',
     'must be eligible to work in the us',
     'require sponsorship',
-    'require sponsorship', // 语法错误但常见写法
+    'require sponsorship',
     'will require sponsorship',
     'will need sponsorship',
     'need sponsorship',
@@ -86,7 +84,29 @@ export function detectSponsorship(description: string): 'yes' | 'no' | 'unknown'
   
   for (const keyword of likelySponsorKeywords) {
     if (lowerDesc.includes(keyword)) {
-      return 'yes'; // 有一定可能性，但不完全确定
+      return 'yes';
+    }
+  }
+  
+  // 根据公司类型推断（description 太短时使用）
+  // 美国科技公司通常提供 Sponsor
+  if (company && lowerDesc.length < 50) {
+    const usTechCompanies = [
+      'google', 'meta', 'apple', 'amazon', 'microsoft', 'netflix', 'nvidia',
+      'uber', 'stripe', 'airbnb', 'lyft', 'doordash', 'dropbox', 'coinbase',
+      'robinhood', 'figma', 'notion', 'palantir', 'databricks', 'snowflake',
+      'twilio', 'zoom', 'atlassian', 'confluent', 'mongodb', 'cloudflare',
+      'rubrik', 'scale ai', 'openai', 'anthropic', 'instacart', 'discord',
+      'plaid', 'brex', 'datadog', 'gitlab', 'slack', 'spotify', 'snap',
+      'pinterest', 'linkedin', 'twitter', 'tesla', 'spacex',
+      'goldman sachs', 'jpmorgan', 'morgan stanley', 'bank of america', 'citi',
+      'blackrock', 'citadel', 'two sigma', 'jane street', 'point72',
+      'revolut', 'canva', 'tencent',
+    ];
+    const lowerCompany = company.toLowerCase();
+    if (usTechCompanies.some(c => lowerCompany.includes(c))) {
+      // 美国知名科技/金融公司默认提供 Sponsor
+      return 'yes';
     }
   }
   
