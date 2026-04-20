@@ -12,12 +12,15 @@ export async function GET() {
       .order('company_name');
 
     if (error) {
-      return NextResponse.json({ error: '获取失败' }, { status: 500 });
+      console.error('Company config query error:', error);
+      return NextResponse.json({ error: '获取失败', detail: error.message }, { status: 500 });
     }
 
     return NextResponse.json({ companies: data });
-  } catch (error) {
-    return NextResponse.json({ error: '服务器错误' }, { status: 500 });
+  } catch (error: unknown) {
+    const message = error instanceof Error ? error.message : 'Unknown error';
+    console.error('Company config error:', message);
+    return NextResponse.json({ error: '服务器错误', detail: message }, { status: 500 });
   }
 }
 
