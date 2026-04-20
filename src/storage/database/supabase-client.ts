@@ -16,9 +16,12 @@ function loadEnv(): void {
   try {
     try {
       require('dotenv').config();
-      if (process.env.COZE_SUPABASE_URL && process.env.COZE_SUPABASE_ANON_KEY) {
-        envLoaded = true;
-        return;
+      // 将 COZE_SUPABASE_* 映射到 SUPABASE_* (兼容旧配置)
+      if (process.env.COZE_SUPABASE_URL && !process.env.SUPABASE_URL) {
+        process.env.SUPABASE_URL = process.env.COZE_SUPABASE_URL;
+      }
+      if (process.env.COZE_SUPABASE_ANON_KEY && !process.env.SUPABASE_ANON_KEY) {
+        process.env.SUPABASE_ANON_KEY = process.env.COZE_SUPABASE_ANON_KEY;
       }
     } catch {
       // dotenv not available
