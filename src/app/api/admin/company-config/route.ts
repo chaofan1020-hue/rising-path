@@ -35,9 +35,6 @@ export async function POST(request: NextRequest) {
       ats_id, 
       logo_url,
       description,
-      industry,
-      employee_count,
-      founded_year
     } = body;
 
     if (!company_name) {
@@ -62,9 +59,6 @@ export async function POST(request: NextRequest) {
           ats_id,
           logo_url,
           description,
-          industry,
-          employee_count,
-          founded_year,
           updated_at: new Date().toISOString(),
         })
         .eq('id', existing.id);
@@ -86,9 +80,6 @@ export async function POST(request: NextRequest) {
           ats_id,
           logo_url,
           description,
-          industry,
-          employee_count,
-          founded_year,
         });
 
       if (error) {

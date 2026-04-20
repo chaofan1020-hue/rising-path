@@ -194,9 +194,6 @@ export default function AdminPage() {
     ats_id: '',
     logo_url: '',
     description: '',
-    industry: '',
-    employee_count: '',
-    founded_year: '',
   });
   const [editingCompany, setEditingCompany] = useState<CompanyConfig | null>(null);
 
@@ -523,9 +520,6 @@ export default function AdminPage() {
           ats_id: '', 
           logo_url: '',
           description: '',
-          industry: '',
-          employee_count: '',
-          founded_year: '',
         });
         setEditingCompany(null);
       } else {
@@ -547,9 +541,6 @@ export default function AdminPage() {
       ats_id: company.ats_id || '',
       logo_url: company.logo_url || '',
       description: (company as { description?: string }).description || '',
-      industry: (company as { industry?: string }).industry || '',
-      employee_count: (company as { employee_count?: string }).employee_count || '',
-      founded_year: (company as { founded_year?: string }).founded_year || '',
     });
     setCompanyDialogOpen(true);
   };
@@ -2419,9 +2410,6 @@ export default function AdminPage() {
                           ats_id: '', 
                           logo_url: '',
                           description: '',
-                          industry: '',
-                          employee_count: '',
-                          founded_year: '',
                         });
                         setCompanyDialogOpen(true);
                       }}
@@ -2802,34 +2790,8 @@ export default function AdminPage() {
                 placeholder="如：查看全部职位"
               />
             </div>
-            <div className="grid grid-cols-2 gap-4">
-              <div>
-                <Label>行业</Label>
-                <Input
-                  value={companyForm.industry}
-                  onChange={(e) => setCompanyForm({ ...companyForm, industry: e.target.value })}
-                  placeholder="如：金融科技"
-                />
-              </div>
-              <div>
-                <Label>员工规模</Label>
-                <Input
-                  value={companyForm.employee_count}
-                  onChange={(e) => setCompanyForm({ ...companyForm, employee_count: e.target.value })}
-                  placeholder="如：1000-5000人"
-                />
-              </div>
-            </div>
-            <div>
-              <Label>成立年份</Label>
-              <Input
-                value={companyForm.founded_year}
-                onChange={(e) => setCompanyForm({ ...companyForm, founded_year: e.target.value })}
-                placeholder="如：1869"
-              />
-            </div>
             <div className="border-t pt-4">
-              <p className="text-sm font-medium text-muted-foreground mb-3">自动同步配置（可选）</p>
+              <p className="text-sm font-medium text-muted-foreground mb-3">ATS 配置（可选）</p>
               <div>
                 <Label>ATS 类型</Label>
                 <select
