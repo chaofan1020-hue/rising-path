@@ -188,12 +188,14 @@ export default function AdminPage() {
   const [companyDialogOpen, setCompanyDialogOpen] = useState(false);
   const [companyForm, setCompanyForm] = useState({
     company_name: '',
-    careers_url: '',
-    careers_url_label: '',
-    ats_type: 'manual',
-    ats_id: '',
+    short_desc: '',
+    full_desc: '',
+    industry: '',
+    headquarters: '',
+    founded_year: '',
+    employees: '',
+    careers_page: '',
     logo_url: '',
-    description: '',
   });
   const [editingCompany, setEditingCompany] = useState<CompanyConfig | null>(null);
 
@@ -514,12 +516,14 @@ export default function AdminPage() {
         setCompanies(data.companies || []);
         setCompanyForm({ 
           company_name: '', 
-          careers_url: '', 
-          careers_url_label: '',
-          ats_type: 'manual', 
-          ats_id: '', 
+          short_desc: '',
+          full_desc: '',
+          industry: '',
+          headquarters: '',
+          founded_year: '',
+          employees: '',
+          careers_page: '',
           logo_url: '',
-          description: '',
         });
         setEditingCompany(null);
       } else {
@@ -535,12 +539,14 @@ export default function AdminPage() {
     setEditingCompany(company);
     setCompanyForm({
       company_name: company.company_name,
-      careers_url: company.careers_url || '',
-      careers_url_label: (company as { careers_url_label?: string }).careers_url_label || '',
-      ats_type: company.ats_type || 'manual',
-      ats_id: company.ats_id || '',
+      short_desc: (company as { short_desc?: string }).short_desc || '',
+      full_desc: (company as { full_desc?: string }).full_desc || '',
+      industry: (company as { industry?: string }).industry || '',
+      headquarters: (company as { headquarters?: string }).headquarters || '',
+      founded_year: (company as { founded_year?: string }).founded_year || '',
+      employees: (company as { employees?: string }).employees || '',
+      careers_page: (company as { careers_page?: string }).careers_page || '',
       logo_url: company.logo_url || '',
-      description: (company as { description?: string }).description || '',
     });
     setCompanyDialogOpen(true);
   };
@@ -2396,7 +2402,7 @@ export default function AdminPage() {
                   <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
                     <div>
                       <CardTitle className="text-base md:text-lg">企业配置</CardTitle>
-                      <CardDescription className="text-xs md:text-sm">配置同步企业列表，支持 Greenhouse/Lever ATS</CardDescription>
+                      <CardDescription className="text-xs md:text-sm">管理公司基本信息，岗位自动关联</CardDescription>
                     </div>
                     <Button
                       size="sm"
@@ -2404,12 +2410,14 @@ export default function AdminPage() {
                         setEditingCompany(null);
                         setCompanyForm({ 
                           company_name: '', 
-                          careers_url: '', 
-                          careers_url_label: '',
-                          ats_type: 'manual', 
-                          ats_id: '', 
+                          short_desc: '',
+                          full_desc: '',
+                          industry: '',
+                          headquarters: '',
+                          founded_year: '',
+                          employees: '',
+                          careers_page: '',
                           logo_url: '',
-                          description: '',
                         });
                         setCompanyDialogOpen(true);
                       }}
@@ -2748,24 +2756,81 @@ export default function AdminPage() {
             </DialogDescription>
           </DialogHeader>
           <div className="space-y-4 py-4">
+            <div className="grid grid-cols-2 gap-4">
+              <div>
+                <Label>公司名称 *</Label>
+                <Input
+                  value={companyForm.company_name}
+                  onChange={(e) => setCompanyForm({ ...companyForm, company_name: e.target.value })}
+                  placeholder="如：Amazon"
+                  disabled={!!editingCompany}
+                />
+              </div>
+              <div>
+                <Label>总部</Label>
+                <Input
+                  value={companyForm.headquarters}
+                  onChange={(e) => setCompanyForm({ ...companyForm, headquarters: e.target.value })}
+                  placeholder="如：美国西雅图"
+                />
+              </div>
+            </div>
+            
             <div>
-              <Label>企业名称 *</Label>
+              <Label>一句话简介</Label>
               <Input
-                value={companyForm.company_name}
-                onChange={(e) => setCompanyForm({ ...companyForm, company_name: e.target.value })}
-                placeholder="如：Goldman Sachs"
-                disabled={!!editingCompany}
+                value={companyForm.short_desc}
+                onChange={(e) => setCompanyForm({ ...companyForm, short_desc: e.target.value })}
+                placeholder="如：全球云计算和电商巨头，正全面转向AI优先"
               />
             </div>
+            
             <div>
-              <Label>公司简介</Label>
+              <Label>公司介绍</Label>
               <Textarea
-                value={companyForm.description}
-                onChange={(e) => setCompanyForm({ ...companyForm, description: e.target.value })}
-                placeholder="公司介绍信息，用于岗位详情页展示"
-                className="min-h-[80px]"
+                value={companyForm.full_desc}
+                onChange={(e) => setCompanyForm({ ...companyForm, full_desc: e.target.value })}
+                placeholder="详细介绍公司背景、业务、文化等..."
+                className="min-h-[100px]"
               />
             </div>
+            
+            <div className="grid grid-cols-3 gap-4">
+              <div>
+                <Label>行业</Label>
+                <Input
+                  value={companyForm.industry}
+                  onChange={(e) => setCompanyForm({ ...companyForm, industry: e.target.value })}
+                  placeholder="如：科技/电商"
+                />
+              </div>
+              <div>
+                <Label>成立年份</Label>
+                <Input
+                  value={companyForm.founded_year}
+                  onChange={(e) => setCompanyForm({ ...companyForm, founded_year: e.target.value })}
+                  placeholder="如：1994"
+                />
+              </div>
+              <div>
+                <Label>员工规模</Label>
+                <Input
+                  value={companyForm.employees}
+                  onChange={(e) => setCompanyForm({ ...companyForm, employees: e.target.value })}
+                  placeholder="如：150万+"
+                />
+              </div>
+            </div>
+            
+            <div>
+              <Label>招聘页面</Label>
+              <Input
+                value={companyForm.careers_page}
+                onChange={(e) => setCompanyForm({ ...companyForm, careers_page: e.target.value })}
+                placeholder="https://www.amazon.jobs"
+              />
+            </div>
+            
             <div>
               <div className="flex items-center justify-between">
                 <Label>Logo</Label>
@@ -2830,49 +2895,6 @@ export default function AdminPage() {
                   </Button>
                 </div>
               )}
-            </div>
-            <div>
-              <Label>招聘页面链接</Label>
-              <Input
-                value={companyForm.careers_url}
-                onChange={(e) => setCompanyForm({ ...companyForm, careers_url: e.target.value })}
-                placeholder="https://careers.example.com/jobs"
-              />
-            </div>
-            <div>
-              <Label>招聘页面名称</Label>
-              <Input
-                value={companyForm.careers_url_label}
-                onChange={(e) => setCompanyForm({ ...companyForm, careers_url_label: e.target.value })}
-                placeholder="如：查看全部职位"
-              />
-            </div>
-            <div className="border-t pt-4">
-              <p className="text-sm font-medium text-muted-foreground mb-3">ATS 配置（可选）</p>
-              <div>
-                <Label>ATS 类型</Label>
-                <select
-                  className="w-full h-10 px-3 rounded-md border border-input bg-background text-sm"
-                  value={companyForm.ats_type}
-                  onChange={(e) => setCompanyForm({ ...companyForm, ats_type: e.target.value })}
-                >
-                  <option value="manual">手动 (不支持自动同步)</option>
-                  <option value="greenhouse">Greenhouse</option>
-                  <option value="lever">Lever</option>
-                  <option value="builtin">BuiltIn</option>
-                </select>
-              </div>
-              <div className="mt-3">
-                <Label>ATS ID</Label>
-                <Input
-                  value={companyForm.ats_id}
-                  onChange={(e) => setCompanyForm({ ...companyForm, ats_id: e.target.value })}
-                  placeholder="ATS 平台的公司标识"
-                />
-                <p className="text-xs text-muted-foreground mt-1">
-                  Greenhouse: 公司短名 / Lever: 公司短名
-                </p>
-              </div>
             </div>
           </div>
           <DialogFooter>

@@ -29,12 +29,14 @@ export async function POST(request: NextRequest) {
     
     const { 
       company_name, 
-      careers_url, 
-      careers_url_label,
-      ats_type, 
-      ats_id, 
+      short_desc, 
+      full_desc, 
+      industry, 
+      headquarters, 
+      founded_year, 
+      employees, 
+      careers_page,
       logo_url,
-      description,
     } = body;
 
     if (!company_name) {
@@ -53,12 +55,14 @@ export async function POST(request: NextRequest) {
       const { error } = await supabase
         .from('company_config')
         .update({
-          careers_url,
-          careers_url_label,
-          ats_type,
-          ats_id,
+          short_desc,
+          full_desc,
+          industry,
+          headquarters,
+          founded_year,
+          employees,
+          careers_page,
           logo_url,
-          description,
           updated_at: new Date().toISOString(),
         })
         .eq('id', existing.id);
@@ -74,12 +78,14 @@ export async function POST(request: NextRequest) {
         .from('company_config')
         .insert({
           company_name,
-          careers_url,
-          careers_url_label,
-          ats_type: ats_type || 'manual',
-          ats_id,
+          short_desc,
+          full_desc,
+          industry,
+          headquarters,
+          founded_year,
+          employees,
+          careers_page,
           logo_url,
-          description,
         });
 
       if (error) {
