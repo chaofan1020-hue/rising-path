@@ -57,6 +57,8 @@ interface Job {
     logo_url?: string;
     short_desc?: string;
     full_desc?: string;
+    headquarters?: string;
+    industry?: string;
   };
 }
 
@@ -348,20 +350,44 @@ function JobDetailContent() {
                   {job.company_info.short_desc && (
                     <p className="text-sm text-muted-foreground mb-2">{job.company_info.short_desc}</p>
                   )}
-                  {job.company_info.careers_page && (
-                    <a 
-                      href={job.company_info.careers_page}
-                      target="_blank"
-                      rel="noopener noreferrer"
-                      className="inline-flex items-center gap-1 text-sm text-blue-600 hover:underline"
-                    >
-                      <Globe className="h-3 w-3" />
-                      查看公司全部职位
-                      <ChevronRight className="h-3 w-3" />
-                    </a>
+                  {job.company_info.headquarters && (
+                    <p className="text-xs text-muted-foreground flex items-center gap-1 mb-1">
+                      <MapPin className="h-3 w-3" />
+                      {job.company_info.headquarters}
+                    </p>
+                  )}
+                  {job.company_info.industry && (
+                    <p className="text-xs text-muted-foreground mb-2">
+                      行业：{job.company_info.industry}
+                    </p>
                   )}
                 </div>
               </div>
+              {job.company_info.full_desc && (
+                <div className="mt-4 pt-4 border-t border-slate-200">
+                  <h4 className="font-medium text-sm mb-2 flex items-center gap-2">
+                    <Building2 className="h-4 w-4 text-blue-600" />
+                    公司介绍
+                  </h4>
+                  <p className="text-sm text-muted-foreground leading-relaxed whitespace-pre-wrap">
+                    {job.company_info.full_desc}
+                  </p>
+                </div>
+              )}
+              {job.company_info.careers_page && (
+                <div className="mt-4">
+                  <a 
+                    href={job.company_info.careers_page}
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    className="inline-flex items-center gap-1 text-sm text-blue-600 hover:underline"
+                  >
+                    <Globe className="h-3 w-3" />
+                    查看公司全部职位
+                    <ChevronRight className="h-3 w-3" />
+                  </a>
+                </div>
+              )}
             </CardContent>
           </Card>
         )}
