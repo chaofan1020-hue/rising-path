@@ -225,6 +225,8 @@ export default function AdminPage() {
   const [fetchingFromUrl, setFetchingFromUrl] = useState(false);
   const [fetchingDescriptions, setFetchingDescriptions] = useState(false);
   const [descResult, setDescResult] = useState<{ success: number; message: string } | null>(null);
+  const [techmapSyncing, setTechmapSyncing] = useState(false);
+  const [techmapResult, setTechmapResult] = useState<{ success: number; message: string } | null>(null);
 
   // 检测所有岗位的 Sponsor
   const handleCheckSponsor = async (password: string) => {
@@ -283,6 +285,37 @@ export default function AdminPage() {
       setDescResult({ success: 0, message: '获取失败，请重试' });
     } finally {
       setFetchingDescriptions(false);
+    }
+  };
+
+  // Techmap 同步
+  const handleTechmapSync = async (password: string) => {
+    if (!confirm('这将从 Techmap API 获取金融岗位数据（需要配置 API Key）。是否继续？')) return;
+    
+    setTechmapSyncing(true);
+    setTechmapResult(null);
+    try {
+      const response = await fetch('/api/jobs/sync-techmap', {
+        method: 'POST',
+        headers: { 'x-admin-password': password }
+      });
+      const data = await response.json();
+      if (data.success) {
+        setTechmapResult({ 
+          success: 1, 
+          message: data.message || `Techmap 同步完成：新增 ${data.added} 个岗位`
+        });
+        // 刷新岗位列表
+        const jobsRes = await fetch('/api/jobs');
+        const jobsData = await jobsRes.json();
+        setJobs(jobsData.jobs || []);
+      } else {
+        setTechmapResult({ success: 0, message: data.error || data.hint || '同步失败' });
+      }
+    } catch {
+      setTechmapResult({ success: 0, message: '同步失败，请重试' });
+    } finally {
+      setTechmapSyncing(false);
     }
   };
 
@@ -1837,6 +1870,20 @@ export default function AdminPage() {
                         <span className="md:hidden">{fetchingDescriptions ? '获取' : '详情'}</span>
                       </Button>
                       <Button 
+                        variant="default"
+                        size="sm"
+                        className="h-8 text-xs md:text-sm bg-gradient-to-r from-blue-600 to-purple-600 hover:from-blue-700 hover:to-purple-700"
+                        onClick={() => {
+                          const password = prompt('请输入管理员密码：');
+                          if (password) handleTechmapSync(password);
+                        }}
+                        disabled={techmapSyncing}
+                      >
+                        <Globe className={`h-4 w-4 ${techmapSyncing ? 'animate-spin' : ''} md:mr-2`} />
+                        <span className="hidden md:inline">{techmapSyncing ? '同步中...' : 'Techmap'}</span>
+                        <span className="md:hidden">{techmapSyncing ? '同步' : 'Tech'}</span>
+                      </Button>
+                      <Button 
                         variant="outline"
                         size="sm"
                         className="h-8 text-xs md:text-sm"
@@ -2096,6 +2143,11 @@ export default function AdminPage() {
                 {descResult && (
                   <div className={`px-4 py-2 text-sm ${descResult.success > 0 ? 'bg-green-50 text-green-700' : 'bg-orange-50 text-orange-700'}`}>
                     {descResult.message}
+                  </div>
+                )}
+                {techmapResult && (
+                  <div className={`px-4 py-2 text-sm ${techmapResult.success > 0 ? 'bg-blue-50 text-blue-700' : 'bg-orange-50 text-orange-700'}`}>
+                    {techmapResult.message}
                   </div>
                 )}
                 <CardContent>
