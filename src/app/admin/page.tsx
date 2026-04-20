@@ -1742,7 +1742,18 @@ export default function AdminPage() {
                               <div className="space-y-1">
                                 <Select 
                                   value={jobForm.company} 
-                                  onValueChange={(value) => setJobForm({ ...jobForm, company: value })}
+                                  onValueChange={(value) => {
+                                    const company = companies.find(c => c.company_name === value);
+                                    if (company) {
+                                      setJobForm({ 
+                                        ...jobForm, 
+                                        company: value,
+                                        logo_url: company.logo_url || jobForm.logo_url,
+                                      });
+                                    } else {
+                                      setJobForm({ ...jobForm, company: value });
+                                    }
+                                  }}
                                 >
                                   <SelectTrigger className="h-9 md:h-10">
                                     <SelectValue placeholder="输入或选择公司" />
@@ -1776,12 +1787,27 @@ export default function AdminPage() {
                                     </div>
                                   </SelectContent>
                                 </Select>
-                                {jobForm.company && companies.some(c => c.company_name.toLowerCase() === jobForm.company.toLowerCase()) && (
-                                  <p className="text-xs text-green-600 flex items-center gap-1">
-                                    <CheckCircle className="h-3 w-3" />
-                                    已关联公司配置
-                                  </p>
-                                )}
+                                {jobForm.company && (() => {
+                                  const matchedCompany = companies.find(c => c.company_name.toLowerCase() === jobForm.company.toLowerCase());
+                                  if (matchedCompany) {
+                                    return (
+                                      <div className="flex items-center gap-2">
+                                        <p className="text-xs text-green-600 flex items-center gap-1">
+                                          <CheckCircle className="h-3 w-3" />
+                                          已关联公司配置
+                                        </p>
+                                        {matchedCompany.logo_url && (
+                                          <>
+                                            <span className="text-xs text-muted-foreground">|</span>
+                                            <img src={matchedCompany.logo_url} alt="" className="h-4 w-4 rounded" />
+                                            <span className="text-xs text-muted-foreground">将自动使用公司Logo</span>
+                                          </>
+                                        )}
+                                      </div>
+                                    );
+                                  }
+                                  return null;
+                                })()}
                               </div>
                             </div>
                           </div>
