@@ -10,8 +10,8 @@ import {
   ArrowLeft, 
   MapPin, 
   Briefcase, 
-  Users, 
-  Building, 
+  Users,
+  Building2,
   ExternalLink,
   Clock,
   DollarSign,
@@ -20,10 +20,14 @@ import {
   Send,
   Target,
   CheckCircle,
-  Star
+  Star,
+  GraduationCap,
+  AlertCircle,
+  Calendar,
+  ChevronRight,
+  Globe,
 } from 'lucide-react';
 import Link from 'next/link';
-import Image from 'next/image';
 import { AccessGuard, useAccessCode } from '@/components/access-guard';
 
 interface Job {
@@ -43,24 +47,38 @@ interface Job {
   logo_url?: string;
   sponsorship?: 'yes' | 'no' | 'unknown';
   created_at: string;
-  // 公司信息（关联查询）
+  application_deadline?: string;
+  job_type?: string;
+  // 公司信息
   company_info?: {
     id: number;
     company_name: string;
-    careers_url?: string;
+    careers_page?: string;
     logo_url?: string;
-    description?: string;
+    short_desc?: string;
+    full_desc?: string;
   };
 }
 
+interface RelatedJob {
+  id: number;
+  title: string;
+  region: string;
+}
+
 // Company Logo Component
-function CompanyLogo({ company, logoUrl }: { company: string; logoUrl?: string }) {
+function CompanyLogo({ company, logoUrl, size = 'md' }: { company: string; logoUrl?: string; size?: 'sm' | 'md' | 'lg' }) {
   const [logoError, setLogoError] = useState(false);
   const [clearbitUrl, setClearbitUrl] = useState<string | null>(null);
+  
+  const sizeClasses = {
+    sm: 'w-8 h-8',
+    md: 'w-12 h-12',
+    lg: 'w-16 h-16',
+  };
 
   useEffect(() => {
     if (!logoUrl && company) {
-      // 尝试从 Clearbit 获取 logo
       const domain = company.toLowerCase()
         .replace(/[^a-z0-9]/g, '')
         .replace(/\s+/g, '');
@@ -68,46 +86,52 @@ function CompanyLogo({ company, logoUrl }: { company: string; logoUrl?: string }
     }
   }, [company, logoUrl]);
 
-  if (logoUrl && !logoError) {
+  const logoSource = logoUrl || clearbitUrl;
+  
+  if (logoSource && !logoError) {
     return (
-      <div className="w-16 h-16 rounded-lg border overflow-hidden bg-white flex-shrink-0">
+      <div className={`${sizeClasses[size]} rounded-lg border overflow-hidden bg-white flex-shrink-0`}>
         <img
-          src={logoUrl}
+          src={logoSource}
           alt={`${company} logo`}
-          className="w-full h-full object-contain p-2"
+          className="w-full h-full object-contain p-1.5"
           onError={() => setLogoError(true)}
         />
       </div>
     );
   }
 
-  if (clearbitUrl && !logoError) {
-    return (
-      <div className="w-16 h-16 rounded-lg border overflow-hidden bg-white flex-shrink-0">
-        <img
-          src={clearbitUrl}
-          alt={`${company} logo`}
-          className="w-full h-full object-contain p-2"
-          onError={() => setLogoError(true)}
-        />
-      </div>
-    );
-  }
-
-  // Fallback: 首字母
   const initial = company?.charAt(0)?.toUpperCase() || '?';
   return (
-    <div className="w-16 h-16 rounded-lg border bg-white flex items-center justify-center flex-shrink-0">
-      <span className="text-2xl font-bold text-primary">{initial}</span>
+    <div className={`${sizeClasses[size]} rounded-lg border bg-white flex items-center justify-center flex-shrink-0`}>
+      <span className={`${size === 'lg' ? 'text-2xl' : 'text-lg'} font-bold text-primary`}>{initial}</span>
     </div>
   );
 }
 
-// 内部组件 - 在 AccessGuard 内部使用 useAccessCode
+// Badge variants
+function InfoBadge({ icon: Icon, children, variant = 'default' }: { icon: any; children: React.ReactNode; variant?: 'default' | 'success' | 'warning' | 'info' }) {
+  const variants = {
+    default: 'bg-muted text-muted-foreground',
+    success: 'bg-green-100 text-green-700 border-green-200',
+    warning: 'bg-amber-100 text-amber-700 border-amber-200',
+    info: 'bg-blue-100 text-blue-700 border-blue-200',
+  };
+  
+  return (
+    <Badge variant="outline" className={`${variants[variant]} rounded-md text-xs md:text-sm font-normal`}>
+      <Icon className="h-3 w-3 mr-1" />
+      {children}
+    </Badge>
+  );
+}
+
+// 内部组件
 function JobDetailContent() {
   const params = useParams();
   const router = useRouter();
   const [job, setJob] = useState<Job | null>(null);
+  const [relatedJobs, setRelatedJobs] = useState<RelatedJob[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [applying, setApplying] = useState(false);
@@ -124,6 +148,14 @@ function JobDetailContent() {
         }
         const data = await response.json();
         setJob(data.job);
+        
+        // 获取同公司其他岗位
+        if (data.job.company) {
+          const relatedRes = await fetch(`/api/jobs?company=${encodeURIComponent(data.job.company)}&limit=5`);
+          const relatedData = await relatedRes.json();
+          const others = (relatedData.jobs || []).filter((j: Job) => j.id !== data.job.id);
+          setRelatedJobs(others.slice(0, 4));
+        }
       } catch (err) {
         setError(err instanceof Error ? err.message : '加载失败');
       } finally {
@@ -137,7 +169,6 @@ function JobDetailContent() {
     }
   }, [params.id]);
 
-  // 检查是否已投递
   const checkIfApplied = async () => {
     if (!accessCodeId || !params.id) return;
     try {
@@ -150,7 +181,6 @@ function JobDetailContent() {
     }
   };
 
-  // 投递岗位
   const handleApply = async () => {
     if (!accessCodeId) {
       alert('请先登录');
@@ -184,7 +214,6 @@ function JobDetailContent() {
         alert('投递失败: ' + data.error);
       }
     } catch (error) {
-      console.error('Failed to apply:', error);
       alert('投递失败，请重试');
     } finally {
       setApplying(false);
@@ -202,115 +231,150 @@ function JobDetailContent() {
   if (error || !job) {
     return (
       <div className="min-h-screen bg-muted/30 flex flex-col items-center justify-center gap-4">
+        <AlertCircle className="h-12 w-12 text-muted-foreground" />
         <p className="text-muted-foreground">{error || '岗位不存在'}</p>
         <Button onClick={() => router.back()}>
           <ArrowLeft className="h-4 w-4 mr-2" />
-          返回
+          返回岗位列表
         </Button>
       </div>
     );
   }
 
+  // 计算新鲜度
+  const postedDays = Math.floor((Date.now() - new Date(job.created_at).getTime()) / (1000 * 60 * 60 * 24));
+  const isNew = postedDays <= 7;
+  const isHot = (relatedJobs.length > 3);
+
   return (
     <div className="min-h-screen bg-muted/30">
       <div className="container mx-auto px-4 py-4 md:py-8 max-w-4xl">
-        {/* Back Button */}
-        <Button variant="ghost" className="mb-4 md:mb-6 h-9 text-sm md:text-base" onClick={() => router.back()}>
-          <ArrowLeft className="h-4 w-4 mr-1 md:mr-2" />
+        {/* 返回按钮 */}
+        <Button variant="ghost" className="mb-4 h-9 text-sm" onClick={() => router.back()}>
+          <ArrowLeft className="h-4 w-4 mr-2" />
           返回岗位列表
         </Button>
 
-        {/* Job Header */}
-        <Card className="mb-4 md:mb-6">
+        {/* 主卡片 - 核心信息 */}
+        <Card className="mb-4">
           <CardContent className="pt-4 md:pt-6">
-            {/* 手机端：纵向布局，桌面端：横向布局 */}
-            <div className="flex flex-col md:flex-row md:items-start gap-4">
-              {/* Logo + 基本信息 */}
-              <div className="flex items-start gap-3 md:gap-4 flex-1">
-                <CompanyLogo company={job.company} logoUrl={job.logo_url} />
-                <div className="flex-1 min-w-0">
-                  <h1 className="text-xl md:text-2xl font-bold mb-1 md:mb-2 line-clamp-2">{job.title}</h1>
-                  <p className="text-base md:text-lg text-muted-foreground mb-2 md:mb-4">{job.company}</p>
-                  
-                  {/* 标签区 */}
-                  <div className="flex flex-wrap gap-2 md:gap-3">
-                    <Badge variant="secondary" className="rounded-md text-xs md:text-sm" translate="no">
-                      <MapPin className="h-3 w-3 mr-1" />
-                      {job.region}
-                    </Badge>
-                    <Badge variant="secondary" className="rounded-md text-xs md:text-sm" translate="no">
-                      <Briefcase className="h-3 w-3 mr-1" />
-                      {job.direction}
-                    </Badge>
-                    <Badge variant="secondary" className="rounded-md text-xs md:text-sm" translate="no">
-                      <Users className="h-3 w-3 mr-1" />
-                      {job.audience}
-                    </Badge>
-                    {job.salary_range && (
-                      <Badge variant="outline" className="text-green-600 border-green-600 rounded-md text-xs md:text-sm">
-                        <DollarSign className="h-3 w-3 mr-1" />
-                        {job.salary_range}
-                      </Badge>
-                    )}
-                    {job.sponsorship && job.sponsorship !== 'unknown' && (
-                      <Badge 
-                        variant="outline" 
-                        className={`rounded-md text-xs md:text-sm ${
-                          job.sponsorship === 'yes' 
-                            ? 'text-green-600 border-green-600' 
-                            : 'text-red-600 border-red-600'
-                        }`}
-                      >
-                        <Target className="h-3 w-3 mr-1" />
-                        {job.sponsorship === 'yes' ? '提供Sponsor' : '不提供Sponsor'}
-                      </Badge>
-                    )}
+            {/* Header: Logo + Title */}
+            <div className="flex items-start gap-3 md:gap-4 mb-4">
+              <CompanyLogo company={job.company} logoUrl={job.logo_url} size="lg" />
+              <div className="flex-1 min-w-0">
+                <div className="flex items-start justify-between gap-2">
+                  <div className="flex-1">
+                    <h1 className="text-xl md:text-2xl font-bold mb-1 line-clamp-2">{job.title}</h1>
+                    <p className="text-base md:text-lg text-muted-foreground flex items-center gap-2">
+                      <Building2 className="h-4 w-4" />
+                      {job.company}
+                      {isNew && <Badge className="bg-green-500 text-white text-xs">新发布</Badge>}
+                      {isHot && <Badge variant="outline" className="text-orange-600 border-orange-300 text-xs">热招</Badge>}
+                    </p>
                   </div>
                 </div>
               </div>
-              
-              {/* 操作按钮区 - 手机端全宽，桌面端右侧 */}
-              <div className="flex flex-col sm:flex-row md:flex-col gap-2 sm:justify-end">
-                <Button 
-                  className="bg-green-600 hover:bg-green-700 w-full sm:w-auto md:w-auto"
-                  onClick={handleApply}
-                  disabled={applying}
-                >
-                  {applying ? (
-                    <>
-                      <Loader2 className="h-4 w-4 mr-2 animate-spin" />
-                      投递中...
-                    </>
-                  ) : applied ? (
-                    <>
-                      <Send className="h-4 w-4 mr-2" />
-                      已投递
-                    </>
-                  ) : (
-                    <>
-                      <Send className="h-4 w-4 mr-2" />
-                      立即投递
-                    </>
-                  )}
-                </Button>
-                {job.job_url && (
-                  <Button variant="outline" asChild className="w-full sm:w-auto md:w-auto">
-                    <a href={job.job_url} target="_blank" rel="noopener noreferrer">
-                      <ExternalLink className="h-4 w-4 mr-2" />
-                      原链接
-                    </a>
-                  </Button>
-                )}
+            </div>
+
+            {/* 关键信息标签 */}
+            <div className="flex flex-wrap gap-2 mb-4">
+              <InfoBadge icon={MapPin}>{job.region}</InfoBadge>
+              <InfoBadge icon={GraduationCap}>{job.audience || job.job_type || 'Entry-level'}</InfoBadge>
+              {job.direction && <InfoBadge icon={Briefcase}>{job.direction}</InfoBadge>}
+              {job.salary_range && (
+                <InfoBadge icon={DollarSign} variant="success">{job.salary_range}</InfoBadge>
+              )}
+              {job.sponsorship && job.sponsorship !== 'unknown' && (
+                <InfoBadge icon={Target} variant={job.sponsorship === 'yes' ? 'success' : 'warning'}>
+                  {job.sponsorship === 'yes' ? '可提供Sponsor' : '不提供Sponsor'}
+                </InfoBadge>
+              )}
+            </div>
+
+            {/* 截止日期 */}
+            {job.application_deadline && (
+              <div className="flex items-center gap-2 text-sm text-muted-foreground mb-4">
+                <Calendar className="h-4 w-4" />
+                <span>截止日期：{job.application_deadline}</span>
               </div>
+            )}
+
+            <Separator className="my-4" />
+
+            {/* CTA 按钮 */}
+            <div className="flex flex-col sm:flex-row gap-3">
+              <Button 
+                className="bg-green-600 hover:bg-green-700 flex-1"
+                onClick={handleApply}
+                disabled={applying}
+              >
+                {applying ? (
+                  <>
+                    <Loader2 className="h-4 w-4 mr-2 animate-spin" />
+                    投递中...
+                  </>
+                ) : applied ? (
+                  <>
+                    <CheckCircle className="h-4 w-4 mr-2" />
+                    已投递 (查看进度)
+                  </>
+                ) : (
+                  <>
+                    <Send className="h-4 w-4 mr-2" />
+                    去官网申请
+                  </>
+                )}
+              </Button>
+              {job.job_url && (
+                <Button variant="outline" asChild className="flex-1 sm:flex-none">
+                  <a href={job.job_url} target="_blank" rel="noopener noreferrer">
+                    <ExternalLink className="h-4 w-4 mr-2" />
+                    原链接
+                  </a>
+                </Button>
+              )}
             </div>
           </CardContent>
         </Card>
 
+        {/* 公司信息卡 */}
+        {job.company_info && (
+          <Card className="mb-4 bg-gradient-to-r from-slate-50 to-blue-50 border-slate-200">
+            <CardContent className="pt-4">
+              <div className="flex items-start gap-3">
+                <CompanyLogo company={job.company_info.company_name} logoUrl={job.company_info.logo_url} size="md" />
+                <div className="flex-1">
+                  <h3 className="font-semibold text-base mb-1">{job.company_info.company_name}</h3>
+                  {job.company_info.short_desc && (
+                    <p className="text-sm text-muted-foreground mb-2">{job.company_info.short_desc}</p>
+                  )}
+                  {job.company_info.careers_page && (
+                    <a 
+                      href={job.company_info.careers_page}
+                      target="_blank"
+                      rel="noopener noreferrer"
+                      className="inline-flex items-center gap-1 text-sm text-blue-600 hover:underline"
+                    >
+                      <Globe className="h-3 w-3" />
+                      查看公司全部职位
+                      <ChevronRight className="h-3 w-3" />
+                    </a>
+                  )}
+                </div>
+              </div>
+            </CardContent>
+          </Card>
+        )}
+
         {/* 岗位概述 */}
         {job.overview && (
-          <Card className="mb-4 md:mb-6 bg-gradient-to-r from-green-50 to-blue-50 border-green-200">
-            <CardContent className="pt-4 md:pt-6">
-              <p className="text-base md:text-lg text-foreground font-medium leading-relaxed">
+          <Card className="mb-4 bg-gradient-to-r from-green-50 to-emerald-50 border-green-200">
+            <CardContent className="pt-4">
+              <div className="flex items-center gap-2 mb-2">
+                <FileText className="h-4 w-4 text-green-600" />
+                <span className="font-medium text-sm">岗位概述</span>
+              </div>
+              <p className="text-sm md:text-base text-foreground leading-relaxed">
                 {job.overview}
               </p>
             </CardContent>
@@ -319,23 +383,21 @@ function JobDetailContent() {
 
         {/* 岗位职责 */}
         {job.responsibilities && (
-          <Card className="mb-4 md:mb-6">
-            <CardHeader className="pb-2 md:pb-4">
-              <CardTitle className="flex items-center gap-2 text-base md:text-lg">
-                <Target className="h-4 w-4 md:h-5 md:w-5 text-green-600" />
+          <Card className="mb-4">
+            <CardHeader className="pb-2">
+              <CardTitle className="flex items-center gap-2 text-base">
+                <Target className="h-4 w-4 text-green-600" />
                 岗位职责
               </CardTitle>
             </CardHeader>
             <CardContent>
-              <ul className="space-y-3">
+              <ul className="space-y-2">
                 {job.responsibilities.split('|').filter((item: string) => item.trim()).map((item: string, index: number) => (
                   <li key={index} className="flex items-start gap-3">
-                    <span className="flex-shrink-0 w-6 h-6 rounded-full bg-green-100 text-green-600 flex items-center justify-center text-sm font-medium">
+                    <span className="flex-shrink-0 w-5 h-5 rounded-full bg-green-100 text-green-600 flex items-center justify-center text-xs font-medium mt-0.5">
                       {index + 1}
                     </span>
-                    <span className="text-sm md:text-base text-muted-foreground leading-relaxed">
-                      {item.trim()}
-                    </span>
+                    <span className="text-sm text-muted-foreground">{item.trim()}</span>
                   </li>
                 ))}
               </ul>
@@ -343,12 +405,12 @@ function JobDetailContent() {
           </Card>
         )}
 
-        {/* 岗位要求 */}
+        {/* 任职要求 */}
         {job.requirements && (
-          <Card className="mb-4 md:mb-6">
-            <CardHeader className="pb-2 md:pb-4">
-              <CardTitle className="flex items-center gap-2 text-base md:text-lg">
-                <CheckCircle className="h-4 w-4 md:h-5 md:w-5 text-blue-600" />
+          <Card className="mb-4">
+            <CardHeader className="pb-2">
+              <CardTitle className="flex items-center gap-2 text-base">
+                <CheckCircle className="h-4 w-4 text-blue-600" />
                 任职要求
               </CardTitle>
             </CardHeader>
@@ -356,10 +418,8 @@ function JobDetailContent() {
               <ul className="space-y-2">
                 {job.requirements.split('|').filter((item: string) => item.trim()).map((item: string, index: number) => (
                   <li key={index} className="flex items-start gap-3">
-                    <CheckCircle className="h-5 w-5 text-blue-500 flex-shrink-0 mt-0.5" />
-                    <span className="text-sm md:text-base text-muted-foreground">
-                      {item.trim()}
-                    </span>
+                    <CheckCircle className="h-4 w-4 text-blue-500 flex-shrink-0 mt-1" />
+                    <span className="text-sm text-muted-foreground">{item.trim()}</span>
                   </li>
                 ))}
               </ul>
@@ -369,10 +429,10 @@ function JobDetailContent() {
 
         {/* 加分项 */}
         {job.nice_to_have && (
-          <Card className="mb-4 md:mb-6 border-amber-200 bg-amber-50/50">
-            <CardHeader className="pb-2 md:pb-4">
-              <CardTitle className="flex items-center gap-2 text-base md:text-lg text-amber-800">
-                <Star className="h-4 w-4 md:h-5 md:w-5" />
+          <Card className="mb-4 border-amber-200 bg-amber-50/50">
+            <CardHeader className="pb-2">
+              <CardTitle className="flex items-center gap-2 text-base text-amber-800">
+                <Star className="h-4 w-4" />
                 加分项
               </CardTitle>
             </CardHeader>
@@ -380,10 +440,8 @@ function JobDetailContent() {
               <ul className="space-y-2">
                 {job.nice_to_have.split('|').filter((item: string) => item.trim()).map((item: string, index: number) => (
                   <li key={index} className="flex items-start gap-3">
-                    <Star className="h-5 w-5 text-amber-500 flex-shrink-0 mt-0.5" />
-                    <span className="text-sm md:text-base text-amber-700">
-                      {item.trim()}
-                    </span>
+                    <Star className="h-4 w-4 text-amber-500 flex-shrink-0 mt-1" />
+                    <span className="text-sm text-amber-700">{item.trim()}</span>
                   </li>
                 ))}
               </ul>
@@ -391,30 +449,72 @@ function JobDetailContent() {
           </Card>
         )}
 
-        {/* 原始岗位描述 - 如果没有结构化数据，显示原始描述 */}
+        {/* 原始岗位描述 - 如果没有结构化数据 */}
         {!job.overview && job.description && (
-          <Card className="mb-4 md:mb-6">
-            <CardHeader className="pb-2 md:pb-4">
-              <CardTitle className="flex items-center gap-2 text-base md:text-lg">
-                <FileText className="h-4 w-4 md:h-5 md:w-5" />
+          <Card className="mb-4">
+            <CardHeader className="pb-2">
+              <CardTitle className="flex items-center gap-2 text-base">
+                <FileText className="h-4 w-4" />
                 岗位描述
               </CardTitle>
             </CardHeader>
             <CardContent>
-              <div className="whitespace-pre-wrap text-muted-foreground text-sm md:text-base">
+              <div className="whitespace-pre-wrap text-sm text-muted-foreground">
                 {job.description}
               </div>
             </CardContent>
           </Card>
         )}
 
-        {/* Meta Info */}
+        {/* 同公司其他岗位 */}
+        {relatedJobs.length > 0 && (
+          <Card className="mb-4">
+            <CardHeader className="pb-2">
+              <CardTitle className="flex items-center gap-2 text-base">
+                <Building2 className="h-4 w-4 text-blue-600" />
+                同公司其他岗位 ({relatedJobs.length})
+              </CardTitle>
+            </CardHeader>
+            <CardContent>
+              <div className="space-y-2">
+                {relatedJobs.map((relatedJob) => (
+                  <Link 
+                    key={relatedJob.id}
+                    href={`/jobs/${relatedJob.id}`}
+                    className="flex items-center justify-between p-3 rounded-lg hover:bg-muted/50 transition-colors group"
+                  >
+                    <div>
+                      <p className="font-medium text-sm group-hover:text-blue-600">{relatedJob.title}</p>
+                      <p className="text-xs text-muted-foreground flex items-center gap-1 mt-0.5">
+                        <MapPin className="h-3 w-3" />
+                        {relatedJob.region}
+                      </p>
+                    </div>
+                    <ChevronRight className="h-4 w-4 text-muted-foreground group-hover:text-blue-600" />
+                  </Link>
+                ))}
+              </div>
+            </CardContent>
+          </Card>
+        )}
+
+        {/* 底部信息 */}
         <Card>
-          <CardContent className="pt-4 md:pt-6">
-            <div className="flex items-center gap-4 text-xs md:text-sm text-muted-foreground">
+          <CardContent className="pt-4">
+            <div className="flex items-center justify-between text-xs text-muted-foreground">
               <div className="flex items-center gap-1">
-                <Clock className="h-3 w-3 md:h-4 md:w-4" />
-                发布时间：{new Date(job.created_at).toLocaleDateString('zh-CN')}
+                <Clock className="h-3 w-3" />
+                <span>发布于 {new Date(job.created_at).toLocaleDateString('zh-CN')}</span>
+                <span className="mx-2">·</span>
+                <span>{postedDays === 0 ? '今天' : `${postedDays}天前`}</span>
+              </div>
+              <div className="flex items-center gap-2">
+                <Button variant="ghost" size="sm" className="h-7 text-xs" asChild>
+                  <a href={`/jobs?company=${encodeURIComponent(job.company)}`}>
+                    <Briefcase className="h-3 w-3 mr-1" />
+                    查看更多{job.company}岗位
+                  </a>
+                </Button>
               </div>
             </div>
           </CardContent>
@@ -424,7 +524,6 @@ function JobDetailContent() {
   );
 }
 
-// 默认导出
 export default function JobDetailPage() {
   return (
     <AccessGuard>
