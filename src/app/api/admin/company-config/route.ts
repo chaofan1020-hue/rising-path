@@ -68,7 +68,8 @@ export async function POST(request: NextRequest) {
         .eq('id', existing.id);
 
       if (error) {
-        return NextResponse.json({ error: '更新失败' }, { status: 500 });
+        console.error('Update error:', error);
+        return NextResponse.json({ error: '更新失败: ' + error.message }, { status: 500 });
       }
 
       return NextResponse.json({ success: true, message: '公司配置已更新' });
