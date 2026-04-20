@@ -2767,12 +2767,69 @@ export default function AdminPage() {
               />
             </div>
             <div>
-              <Label>Logo URL</Label>
-              <Input
-                value={companyForm.logo_url}
-                onChange={(e) => setCompanyForm({ ...companyForm, logo_url: e.target.value })}
-                placeholder="https://logo.clearbit.com/example.com"
-              />
+              <div className="flex items-center justify-between">
+                <Label>Logo</Label>
+                {companyLogos.length > 0 && (
+                  <Select 
+                    value={companyForm.logo_url || '__custom__'} 
+                    onValueChange={(value) => {
+                      if (value === '__custom__') {
+                        setCompanyForm({ ...companyForm, logo_url: '' });
+                      } else {
+                        setCompanyForm({ ...companyForm, logo_url: value });
+                      }
+                    }}
+                  >
+                    <SelectTrigger className="h-7 w-auto text-xs">
+                      <SelectValue placeholder="选择已有Logo" />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="__custom__">+ 自定义URL</SelectItem>
+                      {companyLogos.map(logo => (
+                        <SelectItem key={logo.id} value={logo.logo_url}>
+                          <div className="flex items-center gap-2">
+                            <img src={logo.logo_url} alt="" className="h-4 w-4 rounded" />
+                            {logo.company_name}
+                          </div>
+                        </SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                )}
+              </div>
+              <div className="flex items-center gap-2 mt-1.5">
+                <Input
+                  value={companyForm.logo_url}
+                  onChange={(e) => setCompanyForm({ ...companyForm, logo_url: e.target.value })}
+                  placeholder="https://logo.clearbit.com/example.com"
+                  className="flex-1"
+                />
+                {companyForm.logo_url && (
+                  <Button
+                    type="button"
+                    variant="ghost"
+                    size="sm"
+                    onClick={() => setLogoDialogOpen(true)}
+                    className="px-2"
+                  >
+                    <Upload className="h-4 w-4" />
+                  </Button>
+                )}
+              </div>
+              {companyForm.logo_url && (
+                <div className="mt-2 flex items-center gap-2">
+                  <img src={companyForm.logo_url} alt="" className="h-8 w-8 rounded border bg-white" />
+                  <Button
+                    type="button"
+                    variant="ghost"
+                    size="sm"
+                    onClick={() => setCompanyForm({ ...companyForm, logo_url: '' })}
+                  >
+                    <X className="h-4 w-4 mr-1" />
+                    移除
+                  </Button>
+                </div>
+              )}
             </div>
             <div>
               <Label>招聘页面链接</Label>
