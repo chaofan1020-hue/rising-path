@@ -114,7 +114,7 @@ export async function GET(
 
     const { data, error } = await client
       .from('jobs')
-      .select('*')
+      .select('*, company_info:company_config(id, company_name, careers_page, logo_url, short_desc, full_desc, headquarters, industry)')
       .eq('id', id)
       .single();
 
