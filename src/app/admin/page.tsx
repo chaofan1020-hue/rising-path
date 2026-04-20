@@ -41,10 +41,8 @@ import Image from 'next/image';
 import { 
   LayoutDashboard,
   Briefcase,
-  FileText,
   Send,
   Users,
-  Globe,
   GraduationCap,
   Plus,
   Edit,
@@ -66,10 +64,10 @@ import {
   ImageIcon,
   Wand2,
   PieChart,
-  RefreshCw,
   Building2,
   Pencil,
-  Target,
+  FileText,
+  Globe,
 } from 'lucide-react';
 import Link from 'next/link';
 
@@ -217,107 +215,7 @@ export default function AdminPage() {
   const [logoForm, setLogoForm] = useState({ company_name: '', logo: null as File | null });
   const [logoUploading, setLogoUploading] = useState(false);
 
-  // Job sync state
-  const [syncing, setSyncing] = useState(false);
-  const [syncResult, setSyncResult] = useState<{ success: number; message: string } | null>(null);
-  const [sponsorChecking, setSponsorChecking] = useState(false);
-  const [sponsorResult, setSponsorResult] = useState<{ success: number; message: string } | null>(null);
-  const [fetchingFromUrl, setFetchingFromUrl] = useState(false);
-  const [fetchingDescriptions, setFetchingDescriptions] = useState(false);
-  const [descResult, setDescResult] = useState<{ success: number; message: string } | null>(null);
-  const [techmapSyncing, setTechmapSyncing] = useState(false);
-  const [techmapResult, setTechmapResult] = useState<{ success: number; message: string } | null>(null);
 
-  // 检测所有岗位的 Sponsor
-  const handleCheckSponsor = async (password: string) => {
-    setSponsorChecking(true);
-    setSponsorResult(null);
-    try {
-      const response = await fetch('/api/jobs/check-sponsor', {
-        method: 'POST',
-        headers: { 'x-admin-password': password }
-      });
-      const data = await response.json();
-      if (data.success) {
-        setSponsorResult({ 
-          success: 1, 
-          message: `Sponsor 检测完成：已检测 ${data.total} 个岗位，其中 ${data.with_sponsor} 个提供 Sponsor，${data.no_sponsor} 个不提供`
-        });
-        // 刷新岗位列表
-        const jobsRes = await fetch('/api/jobs');
-        const jobsData = await jobsRes.json();
-        setJobs(jobsData.jobs || []);
-      } else {
-        setSponsorResult({ success: 0, message: data.error || '检测失败' });
-      }
-    } catch {
-      setSponsorResult({ success: 0, message: '检测失败，请重试' });
-    } finally {
-      setSponsorChecking(false);
-    }
-  };
-
-  // 获取岗位完整描述
-  const handleFetchDescriptions = async (password: string) => {
-    if (!confirm('这将从公司官网重新获取所有岗位的完整描述，可能需要几分钟。是否继续？')) return;
-    
-    setFetchingDescriptions(true);
-    setDescResult(null);
-    try {
-      const response = await fetch('/api/jobs/fetch-descriptions', {
-        method: 'POST',
-        headers: { 'x-admin-password': password }
-      });
-      const data = await response.json();
-      if (data.success) {
-        setDescResult({ 
-          success: 1, 
-          message: `描述获取完成：更新 ${data.updated} 个，跳过 ${data.skipped} 个，失败 ${data.failed} 个`
-        });
-        // 刷新岗位列表
-        const jobsRes = await fetch('/api/jobs');
-        const jobsData = await jobsRes.json();
-        setJobs(jobsData.jobs || []);
-      } else {
-        setDescResult({ success: 0, message: data.error || '获取失败' });
-      }
-    } catch {
-      setDescResult({ success: 0, message: '获取失败，请重试' });
-    } finally {
-      setFetchingDescriptions(false);
-    }
-  };
-
-  // Techmap 同步
-  const handleTechmapSync = async (password: string) => {
-    if (!confirm('这将从 Techmap API 获取金融岗位数据（需要配置 API Key）。是否继续？')) return;
-    
-    setTechmapSyncing(true);
-    setTechmapResult(null);
-    try {
-      const response = await fetch('/api/jobs/sync-techmap', {
-        method: 'POST',
-        headers: { 'x-admin-password': password }
-      });
-      const data = await response.json();
-      if (data.success) {
-        setTechmapResult({ 
-          success: 1, 
-          message: data.message || `Techmap 同步完成：新增 ${data.added} 个岗位`
-        });
-        // 刷新岗位列表
-        const jobsRes = await fetch('/api/jobs');
-        const jobsData = await jobsRes.json();
-        setJobs(jobsData.jobs || []);
-      } else {
-        setTechmapResult({ success: 0, message: data.error || data.hint || '同步失败' });
-      }
-    } catch {
-      setTechmapResult({ success: 0, message: '同步失败，请重试' });
-    } finally {
-      setTechmapSyncing(false);
-    }
-  };
 
   // Change password
   const handleChangePassword = async () => {
@@ -1801,89 +1699,6 @@ export default function AdminPage() {
                     </div>
                     <div className="flex gap-2">
                       <Button 
-                        variant="default"
-                        size="sm"
-                        className="h-8 text-xs md:text-sm bg-gradient-to-r from-blue-600 to-purple-600 hover:opacity-90"
-                        onClick={() => {
-                          if (!confirm('智能同步会从公司官网获取最新岗位，并标记已关闭的岗位。是否继续？')) return;
-                          const password = prompt('请输入管理员密码：');
-                          if (password) {
-                            setSyncing(true);
-                            setSyncResult(null);
-                            fetch('/api/jobs/sync-smart', {
-                              method: 'POST',
-                              headers: { 'x-admin-password': password }
-                            }).then(r => r.json()).then(async (data) => {
-                              if (data.message) {
-                                const newJobs = data.new_jobs || 0;
-                                const closedJobs = data.closed_jobs || 0;
-                                setSyncResult({ 
-                                  success: 1, 
-                                  message: `智能同步完成：新增 ${newJobs} 个岗位，关闭 ${closedJobs} 个`
-                                });
-                                // 刷新岗位列表
-                                const jobsRes = await fetch('/api/jobs');
-                                const jobsData = await jobsRes.json();
-                                setJobs(jobsData.jobs || []);
-                              } else {
-                                setSyncResult({ success: 0, message: data.error || '同步失败' });
-                              }
-                              setSyncing(false);
-                            }).catch(() => {
-                              setSyncResult({ success: 0, message: '同步失败，请重试' });
-                              setSyncing(false);
-                            });
-                          }
-                        }}
-                        disabled={syncing}
-                      >
-                        <RefreshCw className={`h-4 w-4 ${syncing ? 'animate-spin' : ''} md:mr-2`} />
-                        <span className="hidden md:inline">{syncing ? '同步中...' : '智能同步'}</span>
-                        <span className="md:hidden">{syncing ? '同步' : '智能'}</span>
-                      </Button>
-                      <Button 
-                        variant="outline"
-                        size="sm"
-                        className="h-8 text-xs md:text-sm"
-                        onClick={() => {
-                          const password = prompt('请输入管理员密码：');
-                          if (password) handleCheckSponsor(password);
-                        }}
-                        disabled={sponsorChecking}
-                      >
-                        <Target className={`h-4 w-4 ${sponsorChecking ? 'animate-spin' : ''} md:mr-2`} />
-                        <span className="hidden md:inline">{sponsorChecking ? '检测中...' : 'Sponsor'}</span>
-                        <span className="md:hidden">{sponsorChecking ? '检测' : 'Sponsor'}</span>
-                      </Button>
-                      <Button 
-                        variant="outline"
-                        size="sm"
-                        className="h-8 text-xs md:text-sm"
-                        onClick={() => {
-                          const password = prompt('请输入管理员密码：');
-                          if (password) handleFetchDescriptions(password);
-                        }}
-                        disabled={fetchingDescriptions}
-                      >
-                        <FileText className={`h-4 w-4 ${fetchingDescriptions ? 'animate-spin' : ''} md:mr-2`} />
-                        <span className="hidden md:inline">{fetchingDescriptions ? '获取中...' : '详情'}</span>
-                        <span className="md:hidden">{fetchingDescriptions ? '获取' : '详情'}</span>
-                      </Button>
-                      <Button 
-                        variant="default"
-                        size="sm"
-                        className="h-8 text-xs md:text-sm bg-gradient-to-r from-blue-600 to-purple-600 hover:from-blue-700 hover:to-purple-700"
-                        onClick={() => {
-                          const password = prompt('请输入管理员密码：');
-                          if (password) handleTechmapSync(password);
-                        }}
-                        disabled={techmapSyncing}
-                      >
-                        <Globe className={`h-4 w-4 ${techmapSyncing ? 'animate-spin' : ''} md:mr-2`} />
-                        <span className="hidden md:inline">{techmapSyncing ? '同步中...' : 'Techmap'}</span>
-                        <span className="md:hidden">{techmapSyncing ? '同步' : 'Tech'}</span>
-                      </Button>
-                      <Button 
                         variant="outline"
                         size="sm"
                         className="h-8 text-xs md:text-sm"
@@ -2102,7 +1917,7 @@ export default function AdminPage() {
                           <div className="flex items-center justify-between p-4 border rounded-lg bg-muted/50">
                             <div>
                               <Label className="text-base font-medium">可投递状态</Label>
-                              <p className="text-sm text-muted-foreground">开启后，该岗位将在岗位列表中显示为"可投递"状态</p>
+                              <p className="text-sm text-muted-foreground">开启后，该岗位将在岗位列表中显示为&quot;可投递&quot;状态</p>
                             </div>
                             <Switch
                               checked={jobForm.is_active}
@@ -2130,26 +1945,6 @@ export default function AdminPage() {
                     </div>
                   </div>
                 </CardHeader>
-                {syncResult && (
-                  <div className={`px-4 py-2 text-sm ${syncResult.success > 0 ? 'bg-green-50 text-green-700' : 'bg-orange-50 text-orange-700'}`}>
-                    {syncResult.message}
-                  </div>
-                )}
-                {sponsorResult && (
-                  <div className={`px-4 py-2 text-sm ${sponsorResult.success > 0 ? 'bg-blue-50 text-blue-700' : 'bg-orange-50 text-orange-700'}`}>
-                    {sponsorResult.message}
-                  </div>
-                )}
-                {descResult && (
-                  <div className={`px-4 py-2 text-sm ${descResult.success > 0 ? 'bg-green-50 text-green-700' : 'bg-orange-50 text-orange-700'}`}>
-                    {descResult.message}
-                  </div>
-                )}
-                {techmapResult && (
-                  <div className={`px-4 py-2 text-sm ${techmapResult.success > 0 ? 'bg-blue-50 text-blue-700' : 'bg-orange-50 text-orange-700'}`}>
-                    {techmapResult.message}
-                  </div>
-                )}
                 <CardContent>
                   {/* Search and Batch Actions */}
                   <div className="mb-4 flex flex-col sm:flex-row sm:items-center gap-3 sm:gap-4">
@@ -2937,7 +2732,7 @@ export default function AdminPage() {
               {editingCompany ? '编辑企业' : '添加企业'}
             </DialogTitle>
             <DialogDescription>
-              配置企业信息用于智能同步，支持 Greenhouse/Lever ATS 系统
+              配置企业信息用于手动管理公司基本信息
             </DialogDescription>
           </DialogHeader>
           <div className="space-y-4 py-4">
