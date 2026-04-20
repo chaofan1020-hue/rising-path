@@ -350,7 +350,7 @@ async function fetchJobDescription(url: string, company: string, snippet?: strin
   
   try {
     const config = new Config();
-    const customHeaders = HeaderUtils.extractForwardHeaders({} as NextRequest.headers);
+    const customHeaders = HeaderUtils.extractForwardHeaders({} as Headers);
     const client = new FetchClient(config, customHeaders);
     const response = await client.fetch(url);
     

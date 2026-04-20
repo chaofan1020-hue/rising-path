@@ -34,12 +34,23 @@ interface Job {
   direction: string;
   audience: string;
   description: string;
-  requirements: string;
+  requirements?: string;
+  overview?: string;
+  responsibilities?: string;
+  nice_to_have?: string;
   salary_range: string;
   job_url: string;
   logo_url?: string;
   sponsorship?: 'yes' | 'no' | 'unknown';
   created_at: string;
+  // 公司信息（关联查询）
+  company_info?: {
+    id: number;
+    company_name: string;
+    careers_url?: string;
+    logo_url?: string;
+    description?: string;
+  };
 }
 
 // Company Logo Component

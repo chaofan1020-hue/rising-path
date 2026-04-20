@@ -165,7 +165,7 @@ export async function POST(request: NextRequest) {
               results.total++;
               
               // 提取信息
-              const region = extractRegion(item.location || item.title || '');
+              const region = extractRegion(item.title || '');
               const direction = classifyDirection(title, company);
               const job_type = getJobType(title);
               

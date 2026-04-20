@@ -188,7 +188,7 @@ export async function POST(request: NextRequest) {
                   title: job.title.substring(0, 200),
                   company,
                   region: job.region,
-                  direction: job.titleLower?.includes('quant') ? 'Quant' : 'SDE',
+                  direction: job.title.toLowerCase().includes('quant') ? 'Quant' : 'SDE',
                   job_url: job.url,
                   description: job.title,
                   audience: '留学生',

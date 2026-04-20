@@ -217,7 +217,7 @@ export async function GET(request: NextRequest) {
 
     let query = client
       .from('jobs')
-      .select('*')
+      .select('*, company_info:company_config(id, company_name, careers_url, logo_url, description)')
       .order('created_at', { ascending: false });
 
     // 只获取活跃的岗位

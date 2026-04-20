@@ -27,7 +27,18 @@ export async function POST(request: NextRequest) {
     const supabase = getSupabaseClient();
     const body = await request.json();
     
-    const { company_name, careers_url, ats_type, ats_id, logo_url } = body;
+    const { 
+      company_name, 
+      careers_url, 
+      careers_url_label,
+      ats_type, 
+      ats_id, 
+      logo_url,
+      description,
+      industry,
+      employee_count,
+      founded_year
+    } = body;
 
     if (!company_name) {
       return NextResponse.json({ error: '公司名称是必填项' }, { status: 400 });
@@ -46,9 +57,14 @@ export async function POST(request: NextRequest) {
         .from('company_config')
         .update({
           careers_url,
+          careers_url_label,
           ats_type,
           ats_id,
           logo_url,
+          description,
+          industry,
+          employee_count,
+          founded_year,
           updated_at: new Date().toISOString(),
         })
         .eq('id', existing.id);
@@ -65,9 +81,14 @@ export async function POST(request: NextRequest) {
         .insert({
           company_name,
           careers_url,
+          careers_url_label,
           ats_type: ats_type || 'manual',
           ats_id,
           logo_url,
+          description,
+          industry,
+          employee_count,
+          founded_year,
         });
 
       if (error) {

@@ -177,7 +177,7 @@ async function fetchJobDescription(url: string, company: string): Promise<string
   
   try {
     const config = new Config();
-    const customHeaders = HeaderUtils.extractForwardHeaders({} as NextRequest.headers);
+    const customHeaders = HeaderUtils.extractForwardHeaders({} as Headers);
     const client = new FetchClient(config, customHeaders);
     const response = await client.fetch(url);
     
@@ -225,6 +225,7 @@ export async function POST(request: NextRequest) {
       total: 0,
       descriptions: 0,
       details: [] as string[],
+      cleaned: 0,
     };
 
     const seenUrls = new Set<string>();

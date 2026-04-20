@@ -147,19 +147,18 @@ function isValidCompany(title: string, expectedCompanies: string[]): string | nu
 // 获取岗位详细描述（仅从官网）
 async function fetchJobDescription(url: string): Promise<string> {
   try {
-    const fetchClient = new FetchClient();
-    const result = await fetchClient.fetch(url, {
-      timeout: 10000,
-      headers: {
-        'User-Agent': 'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36'
-      }
-    });
+    const config = new Config();
+    const fetchClient = new FetchClient(config);
+    const result = await fetchClient.fetch(url);
     
-    // 提取文本内容
-    const text = result.content || '';
+    // 提取文本内容 - FetchClient 返回 FetchContentItem[]
+    const textContent = result.content
+      .filter(item => item.type === 'text')
+      .map(item => item.text)
+      .join('\n');
     
     // 清理 HTML
-    const cleaned = text
+    const cleaned = textContent
       .replace(/<[^>]+>/g, ' ')
       .replace(/\s+/g, ' ')
       .replace(/&nbsp;/g, ' ')
