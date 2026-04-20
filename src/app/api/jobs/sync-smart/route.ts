@@ -378,8 +378,8 @@ export async function POST(request: NextRequest) {
           fetchedJobs = await fetchLeverJobs(company.ats_id);
         } else if (company.ats_type === 'builtin' && company.ats_id) {
           fetchedJobs = await fetchBuiltInJobs(company.ats_id);
-        } else if (company.careers_url) {
-          fetchedJobs = await fetchFromCareersPage(company.careers_url, company.company_name);
+        } else if (company.careers_page) {
+          fetchedJobs = await fetchFromCareersPage(company.careers_page, company.company_name);
         }
 
         results.company_stats[company.company_name] = { found: fetchedJobs.length, added: 0 };
@@ -432,7 +432,7 @@ export async function POST(request: NextRequest) {
                 direction,
                 job_type,
                 job_url: job.url,
-                source_url: company.careers_url,
+                source_url: company.careers_page,
                 description: structured.overview || job.title,
                 overview: structured.overview || job.title,
                 responsibilities: structured.responsibilities,

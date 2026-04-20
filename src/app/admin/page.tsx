@@ -179,7 +179,7 @@ export default function AdminPage() {
   interface CompanyConfig {
     id: number;
     company_name: string;
-    careers_url: string;
+    careers_page: string;
     ats_type: string;
     ats_id: string;
     logo_url: string;
@@ -2484,9 +2484,9 @@ export default function AdminPage() {
                                   {company.ats_id || '-'}
                                 </td>
                                 <td className="px-3 md:px-4 py-2 md:py-3">
-                                  {company.careers_url ? (
+                                  {company.careers_page ? (
                                     <a 
-                                      href={company.careers_url} 
+                                      href={company.careers_page} 
                                       target="_blank" 
                                       rel="noopener noreferrer"
                                       className="text-xs md:text-sm text-blue-600 hover:underline"
