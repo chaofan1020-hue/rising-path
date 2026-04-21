@@ -643,34 +643,74 @@ function JobDetailContent() {
           </Card>
         )}
 
-        {/* 同公司其他岗位 */}
-        {relatedJobs.length > 0 && (
+        {/* 同公司其他岗位 - 优先跳转到公司招聘页面 */}
+        {(relatedJobs.length > 0 || job.company_info?.careers_page) && (
           <Card className="mb-4">
             <CardHeader className="pb-2">
-              <CardTitle className="flex items-center gap-2 text-base">
-                <Building2 className="h-4 w-4 text-blue-600" />
-                同公司其他岗位 ({relatedJobs.length})
+              <CardTitle className="flex items-center justify-between text-base">
+                <span className="flex items-center gap-2">
+                  <Building2 className="h-4 w-4 text-blue-600" />
+                  同公司其他岗位 {relatedJobs.length > 0 && `(${relatedJobs.length})`}
+                </span>
+                {job.company_info?.careers_page && (
+                  <a 
+                    href={job.company_info.careers_page}
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    className="text-xs text-blue-600 hover:underline flex items-center gap-1"
+                    onClick={(e) => e.stopPropagation()}
+                  >
+                    <Globe className="h-3 w-3" />
+                    查看全部职位
+                    <ExternalLink className="h-3 w-3" />
+                  </a>
+                )}
               </CardTitle>
             </CardHeader>
             <CardContent>
-              <div className="space-y-2">
-                {relatedJobs.map((relatedJob) => (
-                  <Link 
-                    key={relatedJob.id}
-                    href={`/jobs/${relatedJob.id}`}
-                    className="flex items-center justify-between p-3 rounded-lg hover:bg-muted/50 transition-colors group"
-                  >
-                    <div>
-                      <p className="font-medium text-sm group-hover:text-blue-600">{relatedJob.title}</p>
-                      <p className="text-xs text-muted-foreground flex items-center gap-1 mt-0.5">
-                        <MapPin className="h-3 w-3" />
-                        {relatedJob.region}
-                      </p>
-                    </div>
-                    <ChevronRight className="h-4 w-4 text-muted-foreground group-hover:text-blue-600" />
-                  </Link>
-                ))}
-              </div>
+              {relatedJobs.length > 0 ? (
+                <div className="space-y-2">
+                  {relatedJobs.map((relatedJob) => (
+                    <Link 
+                      key={relatedJob.id}
+                      href={`/jobs/${relatedJob.id}`}
+                      className="flex items-center justify-between p-3 rounded-lg hover:bg-muted/50 transition-colors group"
+                    >
+                      <div>
+                        <p className="font-medium text-sm group-hover:text-blue-600">{relatedJob.title}</p>
+                        <p className="text-xs text-muted-foreground flex items-center gap-1 mt-0.5">
+                          <MapPin className="h-3 w-3" />
+                          {relatedJob.region}
+                        </p>
+                      </div>
+                      <ChevronRight className="h-4 w-4 text-muted-foreground group-hover:text-blue-600" />
+                    </Link>
+                  ))}
+                  {job.company_info?.careers_page && (
+                    <a 
+                      href={job.company_info.careers_page}
+                      target="_blank"
+                      rel="noopener noreferrer"
+                      className="flex items-center justify-center gap-2 p-3 rounded-lg bg-blue-50 hover:bg-blue-100 transition-colors text-blue-700 font-medium text-sm"
+                    >
+                      <Globe className="h-4 w-4" />
+                      去 {job.company} 官网申请
+                      <ExternalLink className="h-3 w-3" />
+                    </a>
+                  )}
+                </div>
+              ) : job.company_info?.careers_page ? (
+                <a 
+                  href={job.company_info.careers_page}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className="flex items-center justify-center gap-2 p-4 rounded-lg bg-green-50 hover:bg-green-100 transition-colors text-green-700 font-medium"
+                >
+                  <Globe className="h-5 w-5" />
+                  去 {job.company} 官网申请
+                  <ExternalLink className="h-4 w-4" />
+                </a>
+              ) : null}
             </CardContent>
           </Card>
         )}
@@ -685,14 +725,24 @@ function JobDetailContent() {
                 <span className="mx-2">·</span>
                 <span>{postedDays === 0 ? '今天' : `${postedDays}天前`}</span>
               </div>
-              <div className="flex items-center gap-2">
+              {job.company_info?.careers_page ? (
+                <a 
+                  href={job.company_info.careers_page}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className="flex items-center gap-1 text-blue-600 hover:underline"
+                >
+                  <ExternalLink className="h-3 w-3" />
+                  官网申请
+                </a>
+              ) : (
                 <Button variant="ghost" size="sm" className="h-7 text-xs" asChild>
                   <a href={`/jobs?company=${encodeURIComponent(job.company)}`}>
                     <Briefcase className="h-3 w-3 mr-1" />
                     查看更多{job.company}岗位
                   </a>
                 </Button>
-              </div>
+              )}
             </div>
           </CardContent>
         </Card>
