@@ -77,7 +77,10 @@ function HighlightedText({ text }: { text: string }) {
         } else if (part === '__END__') {
           if (currentKeyword) {
             elements.push(
-              <span key={`${index}-${currentKeyword}`} className="bg-yellow-200 text-yellow-900 px-0.5 rounded font-medium">
+              <span 
+                key={`${index}-${currentKeyword}`} 
+                className="inline-flex items-center px-1.5 py-0.5 mx-0.5 rounded-md bg-gradient-to-r from-blue-100/80 to-indigo-100/80 border border-blue-200/50 text-blue-700 font-medium text-sm shadow-sm"
+              >
                 {currentKeyword}
               </span>
             );
