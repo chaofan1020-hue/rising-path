@@ -462,7 +462,7 @@ function JobDetailContent() {
               {job.company_info.full_desc && (
                 <div className="mt-4 pt-4 border-t border-slate-200">
                   <h4 className="font-medium text-sm mb-2 flex items-center gap-2">
-                    <Building2 className="h-4 w-4 text-blue-600" />
+                    <Building2 className="h-4 w-4 text-black" />
                     公司介绍
                   </h4>
                   <p className="text-sm text-muted-foreground leading-relaxed whitespace-pre-wrap">
@@ -476,7 +476,7 @@ function JobDetailContent() {
                     href={job.company_info.careers_page}
                     target="_blank"
                     rel="noopener noreferrer"
-                    className="inline-flex items-center gap-1 text-sm text-blue-600 hover:underline"
+                    className="inline-flex items-center gap-1 text-sm text-black hover:underline"
                   >
                     <Globe className="h-3 w-3" />
                     查看公司全部职位
@@ -568,7 +568,7 @@ function JobDetailContent() {
               <CardHeader className="pb-2">
                 <CardTitle className="flex items-center gap-2 text-base">
                   <span className="flex items-center gap-2">
-                    <CheckCircle className="h-4 w-4 text-blue-600" />
+                    <CheckCircle className="h-4 w-4 text-black" />
                     任职要求
                     <Badge variant="secondary" className="text-xs ml-1">{items.length}条</Badge>
                   </span>
@@ -652,7 +652,7 @@ function JobDetailContent() {
             <CardHeader className="pb-2">
               <CardTitle className="flex items-center justify-between text-base">
                 <span className="flex items-center gap-2">
-                  <Building2 className="h-4 w-4 text-blue-600" />
+                  <Building2 className="h-4 w-4 text-black" />
                   同公司其他岗位 {relatedJobs.length > 0 && `(${relatedJobs.length})`}
                 </span>
                 {job.company_info?.careers_page && (
@@ -660,7 +660,7 @@ function JobDetailContent() {
                     href={job.company_info.careers_page}
                     target="_blank"
                     rel="noopener noreferrer"
-                    className="text-xs text-blue-600 hover:underline flex items-center gap-1"
+                    className="text-xs text-black hover:underline flex items-center gap-1"
                     onClick={(e) => e.stopPropagation()}
                   >
                     <Globe className="h-3 w-3" />
