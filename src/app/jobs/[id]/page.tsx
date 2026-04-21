@@ -686,18 +686,6 @@ function JobDetailContent() {
                       <ChevronRight className="h-4 w-4 text-muted-foreground group-hover:text-blue-600" />
                     </Link>
                   ))}
-                  {job.company_info?.careers_page && (
-                    <a 
-                      href={job.company_info.careers_page}
-                      target="_blank"
-                      rel="noopener noreferrer"
-                      className="flex items-center justify-center gap-2 p-3 rounded-lg bg-blue-50 hover:bg-blue-100 transition-colors text-blue-700 font-medium text-sm"
-                    >
-                      <Globe className="h-4 w-4" />
-                      去 {job.company} 官网申请
-                      <ExternalLink className="h-3 w-3" />
-                    </a>
-                  )}
                 </div>
               ) : job.company_info?.careers_page ? (
                 <a 
