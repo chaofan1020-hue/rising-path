@@ -32,98 +32,6 @@ import {
 import Link from 'next/link';
 import { AccessGuard, useAccessCode } from '@/components/access-guard';
 
-// 关键词列表
-const HIGHLIGHT_KEYWORDS = [
-  'Python', 'Java', 'JavaScript', 'TypeScript', 'C++', 'C#', 'Go', 'Rust', 'Ruby', 'PHP', 'Swift', 'Kotlin', 'Scala',
-  'AWS', 'Azure', 'GCP', 'Google Cloud', 'Amazon Web Services',
-  'React', 'Vue', 'Angular', 'Node.js', 'Django', 'Flask', 'Spring', 'Next.js',
-  'SQL', 'MySQL', 'PostgreSQL', 'MongoDB', 'Redis', 'DynamoDB', 'Elasticsearch',
-  'Docker', 'Kubernetes', 'Kubernetes', 'K8s', 'Terraform', 'Ansible',
-  'Machine Learning', 'ML', 'Deep Learning', 'AI', 'NLP', 'Computer Vision',
-  'OPT', 'CPT', 'H1B', 'STEM', 'F1', 'New Grad', 'Entry Level', 'Junior',
-  'Remote', 'Hybrid', 'Onsite', 'On-site',
-  'TensorFlow', 'PyTorch', 'Keras', 'Scikit-learn', 'Pandas', 'NumPy',
-  'Git', 'CI/CD', 'Jenkins', 'GitHub Actions', 'GitLab',
-  'REST', 'GraphQL', 'gRPC', 'API', 'Microservices',
-  'Agile', 'Scrum', 'Kanban', 'Jira',
-  'Product Manager', 'PM', 'Project Manager', 'Data Analyst', 'Data Scientist',
-  'Finance', 'Investment Banking', 'Consulting', 'Strategy',
-];
-
-// 关键词高亮组件
-function HighlightedText({ text }: { text: string }) {
-  const [highlighted, setHighlighted] = useState<React.ReactNode[]>([]);
-
-  useEffect(() => {
-    const processText = () => {
-      let result = text;
-
-      // 按长度降序排序，确保长关键词优先匹配
-      const sortedKeywords = [...HIGHLIGHT_KEYWORDS].sort((a, b) => b.length - a.length);
-
-      sortedKeywords.forEach(keyword => {
-        // 转义正则特殊字符，但保留原始文本用于显示
-        const escapedKeyword = keyword.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
-        // 使用动态构造正则，\b 在某些字符前可能不工作
-        let regex;
-        try {
-          // 对于包含特殊正则字符的关键词，不用 \b 边界
-          if (/[.*+?^${}()|[\]\\]/.test(keyword)) {
-            regex = new RegExp(escapedKeyword, 'gi');
-          } else {
-            regex = new RegExp(`\\b${keyword}\\b`, 'gi');
-          }
-          result = result.replace(regex, `__HIGHLIGHT__${keyword}__END__`);
-        } catch {
-          // 降级处理
-          regex = new RegExp(escapedKeyword.replace(/\\\\/g, '\\'), 'gi');
-          result = result.replace(regex, `__HIGHLIGHT__${keyword}__END__`);
-        }
-      });
-
-      const parts = result.split(/(__HIGHLIGHT__|__END__)/);
-      const elements: React.ReactNode[] = [];
-      let currentKeyword = '';
-      let isHighlight = false;
-
-      parts.forEach((part, index) => {
-        if (part === '__HIGHLIGHT__') {
-          isHighlight = true;
-        } else if (part === '__END__') {
-          if (currentKeyword) {
-            elements.push(
-              <span 
-                key={`${index}-${currentKeyword}`} 
-                className="inline-flex items-center px-1.5 py-0.5 mx-0.5 rounded-md bg-violet-100 border border-violet-200 text-violet-700 font-medium text-sm"
-              >
-                {currentKeyword}
-              </span>
-            );
-          }
-          currentKeyword = '';
-          isHighlight = false;
-        } else if (isHighlight) {
-          currentKeyword += part;
-        } else {
-          elements.push(part);
-        }
-      });
-
-      if (currentKeyword) {
-        elements.push(currentKeyword);
-      }
-
-      setHighlighted(elements);
-    };
-
-    processText();
-  }, [text]);
-
-  return <>{highlighted}</>;
-
-  return <>{highlighted}</>;
-}
-
 interface Job {
   id: number;
   title: string;
@@ -512,7 +420,7 @@ function JobDetailContent() {
                 <span className="font-medium text-sm">岗位概述</span>
               </div>
               <p className="text-sm md:text-base text-foreground leading-relaxed">
-                <HighlightedText text={job.overview} />
+                {job.overview}
               </p>
             </CardContent>
           </Card>
@@ -543,7 +451,7 @@ function JobDetailContent() {
                       <span className="flex-shrink-0 w-5 h-5 rounded-full bg-green-100 text-green-600 flex items-center justify-center text-xs font-medium mt-0.5">
                         {index + 1}
                       </span>
-                      <span className="text-sm text-muted-foreground"><HighlightedText text={item.trim()} /></span>
+                      <span className="text-sm text-muted-foreground">{item.trim()}</span>
                     </li>
                   ))}
                 </ul>
@@ -594,7 +502,7 @@ function JobDetailContent() {
                   {displayItems.map((item: string, index: number) => (
                     <li key={index} className="flex items-start gap-3">
                       <CheckCircle className="h-4 w-4 text-black flex-shrink-0 mt-1" />
-                      <span className="text-sm text-muted-foreground"><HighlightedText text={item.trim()} /></span>
+                      <span className="text-sm text-muted-foreground">{item.trim()}</span>
                     </li>
                   ))}
                 </ul>
