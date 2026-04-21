@@ -713,24 +713,12 @@ function JobDetailContent() {
                 <span className="mx-2">·</span>
                 <span>{postedDays === 0 ? '今天' : `${postedDays}天前`}</span>
               </div>
-              {job.company_info?.careers_page ? (
-                <a 
-                  href={job.company_info.careers_page}
-                  target="_blank"
-                  rel="noopener noreferrer"
-                  className="flex items-center gap-1 text-blue-600 hover:underline"
-                >
-                  <ExternalLink className="h-3 w-3" />
-                  官网申请
+              <Button variant="ghost" size="sm" className="h-7 text-xs" asChild>
+                <a href={`/jobs?company=${encodeURIComponent(job.company)}`}>
+                  <Briefcase className="h-3 w-3 mr-1" />
+                  查看更多{job.company}岗位
                 </a>
-              ) : (
-                <Button variant="ghost" size="sm" className="h-7 text-xs" asChild>
-                  <a href={`/jobs?company=${encodeURIComponent(job.company)}`}>
-                    <Briefcase className="h-3 w-3 mr-1" />
-                    查看更多{job.company}岗位
-                  </a>
-                </Button>
-              )}
+              </Button>
             </div>
           </CardContent>
         </Card>
