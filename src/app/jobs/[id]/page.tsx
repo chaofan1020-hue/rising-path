@@ -62,7 +62,9 @@ function HighlightedText({ text }: { text: string }) {
       const sortedKeywords = [...HIGHLIGHT_KEYWORDS].sort((a, b) => b.length - a.length);
 
       sortedKeywords.forEach(keyword => {
-        const regex = new RegExp(`\\b${keyword.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}\\b`, 'gi');
+        // 转义特殊字符
+        const escapedKeyword = keyword.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+        const regex = new RegExp(`\\b${escapedKeyword}\\b`, 'gi');
         result = result.replace(regex, `__HIGHLIGHT__${keyword}__END__`);
       });
 
@@ -79,7 +81,7 @@ function HighlightedText({ text }: { text: string }) {
             elements.push(
               <span 
                 key={`${index}-${currentKeyword}`} 
-                className="inline-flex items-center px-1.5 py-0.5 mx-0.5 rounded-md bg-gradient-to-r from-blue-100/80 to-indigo-100/80 border border-blue-200/50 text-blue-700 font-medium text-sm shadow-sm"
+                className="inline-flex items-center px-1.5 py-0.5 mx-0.5 rounded-md bg-violet-100 border border-violet-200 text-violet-700 font-medium text-sm"
               >
                 {currentKeyword}
               </span>
@@ -578,7 +580,7 @@ function JobDetailContent() {
                 <ul className="space-y-2">
                   {displayItems.map((item: string, index: number) => (
                     <li key={index} className="flex items-start gap-3">
-                      <CheckCircle className="h-4 w-4 text-blue-500 flex-shrink-0 mt-1" />
+                      <CheckCircle className="h-4 w-4 text-black flex-shrink-0 mt-1" />
                       <span className="text-sm text-muted-foreground"><HighlightedText text={item.trim()} /></span>
                     </li>
                   ))}
