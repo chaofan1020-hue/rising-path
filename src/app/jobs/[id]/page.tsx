@@ -25,10 +25,86 @@ import {
   AlertCircle,
   Calendar,
   ChevronRight,
+  ChevronDown,
   Globe,
+  AlertTriangle,
 } from 'lucide-react';
 import Link from 'next/link';
 import { AccessGuard, useAccessCode } from '@/components/access-guard';
+
+// 关键词列表
+const HIGHLIGHT_KEYWORDS = [
+  'Python', 'Java', 'JavaScript', 'TypeScript', 'C++', 'C#', 'Go', 'Rust', 'Ruby', 'PHP', 'Swift', 'Kotlin', 'Scala',
+  'AWS', 'Azure', 'GCP', 'Google Cloud', 'Amazon Web Services',
+  'React', 'Vue', 'Angular', 'Node.js', 'Django', 'Flask', 'Spring', 'Next.js',
+  'SQL', 'MySQL', 'PostgreSQL', 'MongoDB', 'Redis', 'DynamoDB', 'Elasticsearch',
+  'Docker', 'Kubernetes', 'Kubernetes', 'K8s', 'Terraform', 'Ansible',
+  'Machine Learning', 'ML', 'Deep Learning', 'AI', 'NLP', 'Computer Vision',
+  'OPT', 'CPT', 'H1B', 'STEM', 'F1', 'New Grad', 'Entry Level', 'Junior',
+  'Remote', 'Hybrid', 'Onsite', 'On-site',
+  'TensorFlow', 'PyTorch', 'Keras', 'Scikit-learn', 'Pandas', 'NumPy',
+  'Git', 'CI/CD', 'Jenkins', 'GitHub Actions', 'GitLab',
+  'REST', 'GraphQL', 'gRPC', 'API', 'Microservices',
+  'Agile', 'Scrum', 'Kanban', 'Jira',
+  'Product Manager', 'PM', 'Project Manager', 'Data Analyst', 'Data Scientist',
+  'Finance', 'Investment Banking', 'Consulting', 'Strategy',
+];
+
+// 关键词高亮组件
+function HighlightedText({ text }: { text: string }) {
+  const [highlighted, setHighlighted] = useState<React.ReactNode[]>([]);
+
+  useEffect(() => {
+    const processText = () => {
+      let result = text;
+
+      // 按长度降序排序，确保长关键词优先匹配
+      const sortedKeywords = [...HIGHLIGHT_KEYWORDS].sort((a, b) => b.length - a.length);
+
+      sortedKeywords.forEach(keyword => {
+        const regex = new RegExp(`\\b${keyword.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}\\b`, 'gi');
+        result = result.replace(regex, `__HIGHLIGHT__${keyword}__END__`);
+      });
+
+      const parts = result.split(/(__HIGHLIGHT__|__END__)/);
+      const elements: React.ReactNode[] = [];
+      let currentKeyword = '';
+      let isHighlight = false;
+
+      parts.forEach((part, index) => {
+        if (part === '__HIGHLIGHT__') {
+          isHighlight = true;
+        } else if (part === '__END__') {
+          if (currentKeyword) {
+            elements.push(
+              <span key={`${index}-${currentKeyword}`} className="bg-yellow-200 text-yellow-900 px-0.5 rounded font-medium">
+                {currentKeyword}
+              </span>
+            );
+          }
+          currentKeyword = '';
+          isHighlight = false;
+        } else if (isHighlight) {
+          currentKeyword += part;
+        } else {
+          elements.push(part);
+        }
+      });
+
+      if (currentKeyword) {
+        elements.push(currentKeyword);
+      }
+
+      setHighlighted(elements);
+    };
+
+    processText();
+  }, [text]);
+
+  return <>{highlighted}</>;
+
+  return <>{highlighted}</>;
+}
 
 interface Job {
   id: number;
@@ -138,6 +214,8 @@ function JobDetailContent() {
   const [error, setError] = useState<string | null>(null);
   const [applying, setApplying] = useState(false);
   const [applied, setApplied] = useState(false);
+  const [showAllResponsibilities, setShowAllResponsibilities] = useState(false);
+  const [showAllRequirements, setShowAllRequirements] = useState(false);
   
   const { accessCodeId } = useAccessCode();
 
@@ -287,9 +365,24 @@ function JobDetailContent() {
                 <InfoBadge icon={DollarSign} variant="success">{job.salary_range}</InfoBadge>
               )}
               {job.sponsorship && job.sponsorship !== 'unknown' && (
-                <InfoBadge icon={Target} variant={job.sponsorship === 'yes' ? 'success' : 'warning'}>
-                  {job.sponsorship === 'yes' ? '可提供Sponsor' : '不提供Sponsor'}
-                </InfoBadge>
+                <Badge 
+                  className={job.sponsorship === 'yes' 
+                    ? 'bg-green-100 text-green-700 border-green-300 hover:bg-green-100 text-xs md:text-sm font-medium px-2 py-1' 
+                    : 'bg-red-100 text-red-700 border-red-300 hover:bg-red-100 text-xs md:text-sm font-bold px-2 py-1 animate-pulse'
+                  }
+                >
+                  {job.sponsorship === 'yes' ? (
+                    <span className="flex items-center gap-1">
+                      <CheckCircle className="h-3 w-3" />
+                      可提供Sponsor
+                    </span>
+                  ) : (
+                    <span className="flex items-center gap-1">
+                      <AlertTriangle className="h-3 w-3" />
+                      不提供Sponsor - 不适合留学生
+                    </span>
+                  )}
+                </Badge>
               )}
             </div>
 
@@ -401,57 +494,115 @@ function JobDetailContent() {
                 <span className="font-medium text-sm">岗位概述</span>
               </div>
               <p className="text-sm md:text-base text-foreground leading-relaxed">
-                {job.overview}
+                <HighlightedText text={job.overview} />
               </p>
             </CardContent>
           </Card>
         )}
 
         {/* 岗位职责 */}
-        {job.responsibilities && (
-          <Card className="mb-4">
-            <CardHeader className="pb-2">
-              <CardTitle className="flex items-center gap-2 text-base">
-                <Target className="h-4 w-4 text-green-600" />
-                岗位职责
-              </CardTitle>
-            </CardHeader>
-            <CardContent>
-              <ul className="space-y-2">
-                {job.responsibilities.split('|').filter((item: string) => item.trim()).map((item: string, index: number) => (
-                  <li key={index} className="flex items-start gap-3">
-                    <span className="flex-shrink-0 w-5 h-5 rounded-full bg-green-100 text-green-600 flex items-center justify-center text-xs font-medium mt-0.5">
-                      {index + 1}
-                    </span>
-                    <span className="text-sm text-muted-foreground">{item.trim()}</span>
-                  </li>
-                ))}
-              </ul>
-            </CardContent>
-          </Card>
-        )}
+        {job.responsibilities && (() => {
+          const items = job.responsibilities.split('|').filter((item: string) => item.trim());
+          const initialCount = 5;
+          const showExpand = items.length > initialCount;
+          const displayItems = showExpand && !showAllResponsibilities ? items.slice(0, initialCount) : items;
+          
+          return (
+            <Card className="mb-4">
+              <CardHeader className="pb-2">
+                <CardTitle className="flex items-center justify-between text-base">
+                  <span className="flex items-center gap-2">
+                    <Target className="h-4 w-4 text-green-600" />
+                    岗位职责
+                    <Badge variant="secondary" className="text-xs ml-1">{items.length}条</Badge>
+                  </span>
+                </CardTitle>
+              </CardHeader>
+              <CardContent>
+                <ul className="space-y-2">
+                  {displayItems.map((item: string, index: number) => (
+                    <li key={index} className="flex items-start gap-3">
+                      <span className="flex-shrink-0 w-5 h-5 rounded-full bg-green-100 text-green-600 flex items-center justify-center text-xs font-medium mt-0.5">
+                        {index + 1}
+                      </span>
+                      <span className="text-sm text-muted-foreground"><HighlightedText text={item.trim()} /></span>
+                    </li>
+                  ))}
+                </ul>
+                {showExpand && (
+                  <Button 
+                    variant="ghost" 
+                    className="w-full mt-3 text-blue-600 hover:text-blue-700 hover:bg-blue-50"
+                    onClick={() => setShowAllResponsibilities(!showAllResponsibilities)}
+                  >
+                    {showAllResponsibilities ? (
+                      <>
+                        <ChevronDown className="h-4 w-4 mr-1 rotate-180" />
+                        收起
+                      </>
+                    ) : (
+                      <>
+                        <ChevronDown className="h-4 w-4 mr-1" />
+                        查看全部 {items.length} 条岗位职责
+                      </>
+                    )}
+                  </Button>
+                )}
+              </CardContent>
+            </Card>
+          );
+        })()}
 
         {/* 任职要求 */}
-        {job.requirements && (
-          <Card className="mb-4">
-            <CardHeader className="pb-2">
-              <CardTitle className="flex items-center gap-2 text-base">
-                <CheckCircle className="h-4 w-4 text-blue-600" />
-                任职要求
-              </CardTitle>
-            </CardHeader>
-            <CardContent>
-              <ul className="space-y-2">
-                {job.requirements.split('|').filter((item: string) => item.trim()).map((item: string, index: number) => (
-                  <li key={index} className="flex items-start gap-3">
-                    <CheckCircle className="h-4 w-4 text-blue-500 flex-shrink-0 mt-1" />
-                    <span className="text-sm text-muted-foreground">{item.trim()}</span>
-                  </li>
-                ))}
-              </ul>
-            </CardContent>
-          </Card>
-        )}
+        {job.requirements && (() => {
+          const items = job.requirements.split('|').filter((item: string) => item.trim());
+          const initialCount = 5;
+          const showExpand = items.length > initialCount;
+          const displayItems = showExpand && !showAllRequirements ? items.slice(0, initialCount) : items;
+          
+          return (
+            <Card className="mb-4">
+              <CardHeader className="pb-2">
+                <CardTitle className="flex items-center gap-2 text-base">
+                  <span className="flex items-center gap-2">
+                    <CheckCircle className="h-4 w-4 text-blue-600" />
+                    任职要求
+                    <Badge variant="secondary" className="text-xs ml-1">{items.length}条</Badge>
+                  </span>
+                </CardTitle>
+              </CardHeader>
+              <CardContent>
+                <ul className="space-y-2">
+                  {displayItems.map((item: string, index: number) => (
+                    <li key={index} className="flex items-start gap-3">
+                      <CheckCircle className="h-4 w-4 text-blue-500 flex-shrink-0 mt-1" />
+                      <span className="text-sm text-muted-foreground"><HighlightedText text={item.trim()} /></span>
+                    </li>
+                  ))}
+                </ul>
+                {showExpand && (
+                  <Button 
+                    variant="ghost" 
+                    className="w-full mt-3 text-blue-600 hover:text-blue-700 hover:bg-blue-50"
+                    onClick={() => setShowAllRequirements(!showAllRequirements)}
+                  >
+                    {showAllRequirements ? (
+                      <>
+                        <ChevronDown className="h-4 w-4 mr-1 rotate-180" />
+                        收起
+                      </>
+                    ) : (
+                      <>
+                        <ChevronDown className="h-4 w-4 mr-1" />
+                        查看全部 {items.length} 条任职要求
+                      </>
+                    )}
+                  </Button>
+                )}
+              </CardContent>
+            </Card>
+          );
+        })()}
 
         {/* 加分项 */}
         {job.nice_to_have && (
