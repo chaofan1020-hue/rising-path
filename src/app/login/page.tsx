@@ -37,7 +37,7 @@ export default function LoginPage() {
       if (data.valid) {
         // 保存访问码到 localStorage
         localStorage.setItem('access_code', JSON.stringify(data.code));
-        router.push('/jobs');
+        router.push('/');
       } else {
         setError(data.error || '访问码无效');
       }
