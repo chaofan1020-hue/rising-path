@@ -62,10 +62,23 @@ function HighlightedText({ text }: { text: string }) {
       const sortedKeywords = [...HIGHLIGHT_KEYWORDS].sort((a, b) => b.length - a.length);
 
       sortedKeywords.forEach(keyword => {
-        // 转义特殊字符
+        // 转义正则特殊字符，但保留原始文本用于显示
         const escapedKeyword = keyword.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
-        const regex = new RegExp(`\\b${escapedKeyword}\\b`, 'gi');
-        result = result.replace(regex, `__HIGHLIGHT__${keyword}__END__`);
+        // 使用动态构造正则，\b 在某些字符前可能不工作
+        let regex;
+        try {
+          // 对于包含特殊正则字符的关键词，不用 \b 边界
+          if (/[.*+?^${}()|[\]\\]/.test(keyword)) {
+            regex = new RegExp(escapedKeyword, 'gi');
+          } else {
+            regex = new RegExp(`\\b${keyword}\\b`, 'gi');
+          }
+          result = result.replace(regex, `__HIGHLIGHT__${keyword}__END__`);
+        } catch {
+          // 降级处理
+          regex = new RegExp(escapedKeyword.replace(/\\\\/g, '\\'), 'gi');
+          result = result.replace(regex, `__HIGHLIGHT__${keyword}__END__`);
+        }
       });
 
       const parts = result.split(/(__HIGHLIGHT__|__END__)/);
