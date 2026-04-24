@@ -4,6 +4,6 @@
     <rect x="0" y="0" width="32" height="18" rx="2" stroke="white" stroke-width="1.5" fill="none"/>
     <path d="M29 -4L35 -4L35 2" stroke="white" stroke-width="1.5" fill="none" stroke-linecap="round" stroke-linejoin="round"/>
     <path d="M35 -4L29 2" stroke="white" stroke-width="1.5" stroke-linecap="round"/>
-    <text x="16" y="13" font-family="Arial Black, sans-serif" font-size="8" font-weight="900" fill="white" text-anchor="middle">PathUp</text>
+    <text x="16" y="13" font-family="Arial Black, sans-serif" font-size="8" font-weight="900" fill="white" text-anchor="middle">RP</text>
   </g>
 </svg>

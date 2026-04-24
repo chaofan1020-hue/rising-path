@@ -1,4 +1,4 @@
-// PathUp AutoFill - Content Script
+// Rising Path AutoFill - Content Script
 // 检测网页表单并自动填写
 
 (function() {
@@ -63,7 +63,7 @@
       addVisualIndicator();
       
     } catch (error) {
-      console.error('PathUp AutoFill Error:', error);
+      console.error('Rising Path AutoFill Error:', error);
     }
   }
 
@@ -285,18 +285,18 @@
       input.dispatchEvent(changeEvent);
       
       // 标记已填充
-      input.setAttribute('data-pathup-filled', 'true');
+      input.setAttribute('data-risingpath-filled', 'true');
     }
   }
 
   // 添加可视化标识
   function addVisualIndicator() {
     // 检查是否已有指示器
-    if (document.getElementById('pathup-indicator')) return;
+    if (document.getElementById('risingpath-indicator')) return;
     
     const indicator = document.createElement('div');
-    indicator.id = 'pathup-indicator';
-    indicator.innerHTML = 'PathUp AutoFill';
+    indicator.id = 'risingpath-indicator';
+    indicator.innerHTML = 'Rising Path AutoFill';
     indicator.style.cssText = `
       position: fixed;
       bottom: 10px;
@@ -321,8 +321,8 @@
         parsedFields: parsedFields,
         currentCompany: currentCompany
       };
-      console.log('PathUp AutoFill Config:', config);
-      alert('PathUp AutoFill 配置已输出到控制台');
+      console.log('Rising Path AutoFill Config:', config);
+      alert('Rising Path AutoFill 配置已输出到控制台');
     };
     
     document.body.appendChild(indicator);
@@ -356,7 +356,7 @@
           label: findLabelForInput(input),
           matchedType: matchedType,
           currentValue: input.value,
-          filled: input.getAttribute('data-pathup-filled') === 'true'
+          filled: input.getAttribute('data-risingpath-filled') === 'true'
         });
       });
       

@@ -1,4 +1,4 @@
-// PathUp AutoFill - Popup Script
+// Rising Path AutoFill - Popup Script
 
 document.addEventListener('DOMContentLoaded', async () => {
   const statusDot = document.getElementById('statusDot');
@@ -41,7 +41,7 @@ document.addEventListener('DOMContentLoaded', async () => {
             <polyline points="14 2 14 8 20 8"></polyline>
           </svg>
           <p>暂无简历字段</p>
-          <p style="font-size: 11px; margin-top: 4px;">请先在 PathUp 平台上传并解析简历</p>
+          <p style="font-size: 11px; margin-top: 4px;">请先在 Rising Path 平台上传并解析简历</p>
         </div>
       `;
       return;
@@ -116,7 +116,7 @@ document.addEventListener('DOMContentLoaded', async () => {
     const platformUrl = platformUrlInput.value.trim();
     
     if (!platformUrl) {
-      alert('请先输入 PathUp 平台地址');
+      alert('请先输入 Rising Path 平台地址');
       return;
     }
     
@@ -182,7 +182,7 @@ document.addEventListener('DOMContentLoaded', async () => {
   
   // 打开平台
   function openPlatform() {
-    const platformUrl = platformUrlInput.value.trim() || 'https://pathup.example.com';
+    const platformUrl = platformUrlInput.value.trim() || 'https://risingpath.example.com';
     chrome.tabs.create({ url: platformUrl });
   }
   

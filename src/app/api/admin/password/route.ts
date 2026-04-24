@@ -3,11 +3,11 @@ import { getSupabaseClient } from '@/storage/database/supabase-client';
 import crypto from 'crypto';
 
 // 默认密码
-const DEFAULT_PASSWORD = 'pathup2024';
+const DEFAULT_PASSWORD = 'risingpath2024';
 
 // 简单的密码加密
 function hashPassword(password: string): string {
-  return crypto.createHash('sha256').update(password + 'pathup_salt').digest('hex');
+  return crypto.createHash('sha256').update(password + 'risingpath_salt').digest('hex');
 }
 
 // 验证密码

@@ -1,8 +1,8 @@
 {
   "manifest_version": 3,
-  "name": "PathUp AutoFill",
+  "name": "Rising Path AutoFill",
   "version": "1.0.0",
-  "description": "自动填写网申表单 - 基于 PathUp 简历字段映射",
+  "description": "自动填写网申表单 - 基于 Rising Path 简历字段映射",
   "permissions": [
     "storage",
     "activeTab",

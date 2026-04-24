@@ -4,8 +4,8 @@ import './globals.css';
 
 export const metadata: Metadata = {
   title: {
-    default: 'PathUp求职平台',
-    template: '%s | PathUp',
+    default: 'Rising Path求职平台',
+    template: '%s | Rising Path',
   },
   description:
     '专为海外留学生打造的一站式求职平台，提供岗位查询、AI选岗、简历优化、自动网申等功能',
@@ -19,7 +19,7 @@ export const metadata: Metadata = {
     '网申',
     '求职平台',
   ],
-  authors: [{ name: 'PathUp Team' }],
+  authors: [{ name: 'Rising Path Team' }],
   generator: 'Coze Code',
   icons: {
     icon: '/favicon.png',

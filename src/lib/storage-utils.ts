@@ -10,7 +10,7 @@ export async function uploadFile(file: File | Blob, fileName: string): Promise<s
     const buffer = Buffer.from(arrayBuffer);
     
     const { data, error } = await supabase.storage
-      .from('pathup-assets')
+      .from('risingpath-assets')
       .upload(fileName, buffer, {
         contentType: file.type || 'image/png',
         cacheControl: '3600',
@@ -24,7 +24,7 @@ export async function uploadFile(file: File | Blob, fileName: string): Promise<s
     
     // 获取公开 URL
     const { data: urlData } = supabase.storage
-      .from('pathup-assets')
+      .from('risingpath-assets')
       .getPublicUrl(fileName);
     
     return urlData.publicUrl;

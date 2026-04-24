@@ -1,6 +1,6 @@
-# PathUp AutoFill - Chrome 扩展
+# Rising Path AutoFill - Chrome 扩展
 
-智能网申表单自动填写浏览器扩展，基于 PathUp 平台的简历字段映射。
+智能网申表单自动填写浏览器扩展，基于 Rising Path 平台的简历字段映射。
 
 ## 功能特性
 
@@ -26,10 +26,10 @@
 3. 点击「加载已解压的扩展程序」
 4. 选择下载的 `extension` 文件夹
 
-### 3. 配置 PathUp 平台地址
+### 3. 配置 Rising Path 平台地址
 
 1. 点击扩展图标打开 popup
-2. 输入你的 PathUp 平台地址（如：`https://pathup.example.com`）
+2. 输入你的 Rising Path 平台地址（如：`https://risingpath.example.com`）
 3. 点击「同步简历数据」
 
 ### 4. 开始使用
@@ -79,7 +79,7 @@ extension/
 A: 确保 manifest.json 中的图标路径正确，或将 SVG 转换为 PNG 格式。
 
 ### Q: 表单没有自动填充？
-A: 可能是该网站的表单字段名称不在支持列表中，可手动在 PathUp 配置字段映射。
+A: 可能是该网站的表单字段名称不在支持列表中，可在 Rising Path 配置字段映射。
 
 ### Q: 如何更新简历数据？
 A: 在 popup 中点击「同步简历数据」按钮即可。

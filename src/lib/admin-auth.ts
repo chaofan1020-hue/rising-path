@@ -1,10 +1,10 @@
 import { getSupabaseClient } from '@/storage/database/supabase-client';
 import crypto from 'crypto';
 
-const DEFAULT_PASSWORD = 'pathup2024';
+const DEFAULT_PASSWORD = 'risingpath2024';
 
 function hashPassword(password: string): string {
-  return crypto.createHash('sha256').update(password + 'pathup_salt').digest('hex');
+  return crypto.createHash('sha256').update(password + 'risingpath_salt').digest('hex');
 }
 
 function verifyPassword(inputPassword: string, hashedPassword: string): boolean {

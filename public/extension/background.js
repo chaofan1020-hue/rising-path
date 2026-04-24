@@ -1,8 +1,8 @@
-// PathUp AutoFill - Background Service Worker
+// Rising Path AutoFill - Background Service Worker
 
 // 监听安装事件
 chrome.runtime.onInstalled.addListener(() => {
-  console.log('PathUp AutoFill 已安装');
+  console.log('Rising Path AutoFill 已安装');
   
   // 设置默认配置
   chrome.storage.local.set({

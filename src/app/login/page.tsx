@@ -55,7 +55,7 @@ export default function LoginPage() {
         <div className="text-center mb-8">
           <Link href="/" className="inline-flex items-center gap-2 mb-4">
             <Briefcase className="h-10 w-10 text-primary" />
-            <span className="font-bold text-3xl">PathUp</span>
+            <span className="font-bold text-3xl">Rising Path</span>
           </Link>
           <p className="text-muted-foreground">海外留学生求职平台</p>
         </div>

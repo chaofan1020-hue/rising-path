@@ -208,7 +208,7 @@ function ApplicationsContent() {
         <div className="container mx-auto px-4 h-14 md:h-16 flex items-center justify-between">
           <Link href="/" className="flex items-center gap-2">
             <Briefcase className="h-5 w-5 md:h-6 md:w-6 text-primary" />
-            <span className="font-bold text-lg md:text-xl">PathUp</span>
+            <span className="font-bold text-lg md:text-xl">Rising Path</span>
           </Link>
           <nav className="flex items-center gap-2 md:gap-4">
             <Link href="/jobs">

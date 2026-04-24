@@ -58,14 +58,14 @@ function ExtensionContent() {
               <Chrome className="h-4 w-4" />
               Chrome 扩展
             </div>
-            <h1 className="text-4xl font-bold mb-4">PathUp AutoFill</h1>
+            <h1 className="text-4xl font-bold mb-4">Rising Path AutoFill</h1>
             <p className="text-xl text-white/90 mb-8">
               智能网申表单自动填写浏览器扩展，节省你的申请时间
             </p>
             <div className="flex flex-wrap justify-center gap-4">
               <a 
-                href="/PathUp-AutoFill.zip"
-                download="PathUp-AutoFill.zip"
+                href="/Rising-Path-AutoFill.zip"
+                download="Rising-Path-AutoFill.zip"
                 className="inline-flex items-center gap-2 bg-white text-purple-600 px-6 py-3 rounded-lg font-semibold hover:bg-white/90 transition-colors"
               >
                 <Download className="h-5 w-5" />
@@ -89,7 +89,7 @@ function ExtensionContent() {
               <CardHeader>
                 <CardTitle>安装步骤</CardTitle>
                 <CardDescription>
-                  按照以下步骤在 Chrome 浏览器中安装 PathUp AutoFill 扩展
+                  按照以下步骤在 Chrome 浏览器中安装 Rising Path AutoFill 扩展
                 </CardDescription>
               </CardHeader>
               <CardContent className="space-y-6">
@@ -100,7 +100,7 @@ function ExtensionContent() {
                   <div>
                     <h4 className="font-semibold mb-1">下载扩展压缩包</h4>
                     <p className="text-sm text-muted-foreground mb-2">
-                      点击上方「下载扩展压缩包」按钮下载 <code className="bg-muted px-1 rounded">PathUp-AutoFill.zip</code>
+                      点击上方「下载扩展压缩包」按钮下载 <code className="bg-muted px-1 rounded">Rising-Path-AutoFill.zip</code>
                     </p>
                   </div>
                 </div>
@@ -112,7 +112,7 @@ function ExtensionContent() {
                   <div>
                     <h4 className="font-semibold mb-1">解压文件</h4>
                     <p className="text-sm text-muted-foreground">
-                      使用解压工具（如 WinRAR、7-Zip）解压 <code className="bg-muted px-1 rounded">PathUp-AutoFill.tgz</code>，会得到一个 <code className="bg-muted px-1 rounded">extension</code> 文件夹
+                      使用解压工具（如 WinRAR、7-Zip）解压 <code className="bg-muted px-1 rounded">Rising-Path-AutoFill.tgz</code>，会得到一个 <code className="bg-muted px-1 rounded">extension</code> 文件夹
                     </p>
                   </div>
                 </div>
@@ -160,7 +160,7 @@ function ExtensionContent() {
                   <div>
                     <h4 className="font-semibold mb-1">配置并使用</h4>
                     <p className="text-sm text-muted-foreground">
-                      点击扩展图标，输入 PathUp 平台地址，点击「同步简历数据」即可开始使用
+                      点击扩展图标，输入 Rising Path 平台地址，点击「同步简历数据」即可开始使用
                     </p>
                   </div>
                 </div>
@@ -195,7 +195,7 @@ function ExtensionContent() {
                     <span className="flex-shrink-0 w-6 h-6 rounded-full bg-green-100 text-green-600 flex items-center justify-center text-sm font-medium">1</span>
                     <div>
                       <p className="font-medium">上传并解析简历</p>
-                      <p className="text-sm text-muted-foreground">在 PathUp 平台上传简历，系统自动解析内容</p>
+                      <p className="text-sm text-muted-foreground">在 Rising Path 平台上传简历，系统自动解析内容</p>
                     </div>
                   </li>
                   <li className="flex gap-3">

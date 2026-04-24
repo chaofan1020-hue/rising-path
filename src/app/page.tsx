@@ -126,7 +126,7 @@ export default function Home() {
             <div className="w-8 h-8 md:w-9 md:h-9 rounded-xl bg-gradient-to-br from-primary to-primary/70 flex items-center justify-center shadow-lg shadow-primary/20">
               <Briefcase className="h-4 w-4 md:h-5 md:w-5 text-primary-foreground" />
             </div>
-            <span className="font-bold text-lg md:text-xl">PathUp</span>
+            <span className="font-bold text-lg md:text-xl">Rising Path</span>
           </Link>
           
           {/* Desktop Nav */}
@@ -372,7 +372,7 @@ export default function Home() {
               准备好开始了吗？
             </h2>
             <p className="text-muted-foreground text-lg mb-10 max-w-md mx-auto">
-              加入 PathUp，让求职变得更简单
+              加入 Rising Path，让求职变得更简单
             </p>
             <div className="flex flex-col sm:flex-row gap-4 justify-center">
               <Link href="/resume">
@@ -399,10 +399,10 @@ export default function Home() {
               <div className="w-8 h-8 rounded-lg bg-gradient-to-br from-primary to-primary/70 flex items-center justify-center shadow-md shadow-primary/10">
                 <Briefcase className="h-4 w-4 text-primary-foreground" />
               </div>
-              <span className="font-semibold text-lg">PathUp</span>
+              <span className="font-semibold text-lg">Rising Path</span>
             </Link>
             <p className="text-sm text-muted-foreground">
-              © 2024 PathUp. 专为海外留学生打造
+              © 2024 Rising Path. 专为海外留学生打造
             </p>
           </div>
         </div>
