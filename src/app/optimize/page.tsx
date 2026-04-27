@@ -44,6 +44,7 @@ import {
   Trash2,
 } from 'lucide-react';
 import Link from 'next/link';
+import Image from 'next/image';
 import { Document, Packer, Paragraph, TextRun, HeadingLevel, AlignmentType } from 'docx';
 import { saveAs } from 'file-saver';
 import { AccessGuard, useAccessCode } from '@/components/access-guard';

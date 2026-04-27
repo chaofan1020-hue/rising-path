@@ -31,6 +31,7 @@ import {
   Map,
 } from 'lucide-react';
 import Link from 'next/link';
+import Image from 'next/image';
 import { AccessGuard, useAccessCode } from '@/components/access-guard';
 import { Target, Wand2, Send, CheckCircle2 } from 'lucide-react';
 
