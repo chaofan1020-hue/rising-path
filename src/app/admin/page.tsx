@@ -400,8 +400,8 @@ export default function AdminPage() {
     try {
       const [jobsRes, resumesRes, appsRes, configsRes, accessCodesRes, companiesRes] = await Promise.all([
         fetch('/api/jobs'),
-        fetch('/api/resume'),
-        fetch('/api/applications'),
+        fetch('/api/resume', { headers: { 'x-admin-request': 'true' } }),
+        fetch('/api/applications', { headers: { 'x-admin-request': 'true' } }),
         fetch('/api/configs'),
         fetch('/api/access-codes'),
         fetch('/api/admin/company-config'),

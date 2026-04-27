@@ -6,22 +6,24 @@ export async function GET(request: NextRequest) {
     const client = getSupabaseClient();
     const { searchParams } = new URL(request.url);
     const accessCodeId = searchParams.get('access_code_id');
+    const isAdmin = request.headers.get('x-admin-request') === 'true';
     
-    // 必须提供 access_code_id，否则返回空列表
-    if (!accessCodeId) {
+    let query = client.from('applications').select(`
+      *,
+      jobs (title, company, region, direction),
+      resumes (file_name)
+    `);
+    
+    // 管理员可以查看所有网申记录，普通用户需要 access_code_id
+    if (!accessCodeId && !isAdmin) {
       return NextResponse.json({ applications: [] });
     }
-
-    // Get applications with job and resume info
-    const { data, error } = await client
-      .from('applications')
-      .select(`
-        *,
-        jobs (title, company, region, direction),
-        resumes (file_name)
-      `)
-      .eq('access_code_id', parseInt(accessCodeId))
-      .order('created_at', { ascending: false });
+    
+    if (accessCodeId) {
+      query = query.eq('access_code_id', parseInt(accessCodeId));
+    }
+    
+    const { data, error } = await query.order('created_at', { ascending: false });
 
     if (error) {
       throw new Error(`查询网申记录失败: ${error.message}`);

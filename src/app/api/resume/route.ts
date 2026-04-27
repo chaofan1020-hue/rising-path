@@ -173,17 +173,20 @@ export async function GET(request: NextRequest) {
     const client = getSupabaseClient();
     const { searchParams } = new URL(request.url);
     const accessCodeId = searchParams.get('access_code_id');
+    const isAdmin = request.headers.get('x-admin-request') === 'true';
     
-    // 必须提供 access_code_id，否则返回空列表
-    if (!accessCodeId) {
+    let query = client.from('resumes').select('*');
+    
+    // 管理员可以查看所有简历，普通用户需要 access_code_id
+    if (!accessCodeId && !isAdmin) {
       return NextResponse.json({ resumes: [] });
     }
     
-    const { data, error } = await client
-      .from('resumes')
-      .select('*')
-      .eq('access_code_id', parseInt(accessCodeId))
-      .order('created_at', { ascending: false });
+    if (accessCodeId) {
+      query = query.eq('access_code_id', parseInt(accessCodeId));
+    }
+    
+    const { data, error } = await query.order('created_at', { ascending: false });
 
     if (error) {
       throw new Error(`查询简历失败: ${error.message}`);
