@@ -623,6 +623,16 @@ export default function AdminPage() {
   // Job CRUD
   const handleCreateJob = async () => {
     try {
+      // 查重：公司名称 + 岗位名称
+      const duplicateJob = jobs.find(
+        j => j.company.toLowerCase() === jobForm.company.toLowerCase() &&
+             j.title.toLowerCase() === jobForm.title.toLowerCase()
+      );
+      if (duplicateJob) {
+        alert(`发现重复岗位！\n\n公司：${duplicateJob.company}\n岗位：${duplicateJob.title}\n\n如需添加，请先删除或编辑现有岗位。`);
+        return;
+      }
+
       // 如果填写了公司名称，自动关联公司
       let company_id = null;
       if (jobForm.company) {

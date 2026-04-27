@@ -68,22 +68,56 @@ export async function POST(request: NextRequest) {
       );
     }
 
-    // 批量插入
-    const { data, error } = await client
+    // 查重：查询已有的岗位
+    const { data: existingJobs } = await client
       .from('jobs')
-      .insert(validJobs)
-      .select();
+      .select('title, company');
 
-    if (error) {
-      throw new Error(`批量创建岗位失败: ${error.message}`);
+    const existingSet = new Set(
+      (existingJobs || []).map(j => 
+        `${j.title.toLowerCase()}|${j.company.toLowerCase()}`
+      )
+    );
+
+    // 过滤重复岗位
+    const newJobs: JobInput[] = [];
+    const duplicateJobs: { index: number; reason: string; data: JobInput }[] = [];
+
+    validJobs.forEach((job, index) => {
+      const key = `${job.title.toLowerCase()}|${job.company.toLowerCase()}`;
+      if (existingSet.has(key)) {
+        duplicateJobs.push({
+          index: index + 1,
+          reason: `与现有岗位重复（${job.company} - ${job.title}）`,
+          data: job
+        });
+      } else {
+        newJobs.push(job);
+        existingSet.add(key);
+      }
+    });
+
+    // 批量插入
+    let created = 0;
+    if (newJobs.length > 0) {
+      const { data, error } = await client
+        .from('jobs')
+        .insert(newJobs)
+        .select();
+
+      if (error) {
+        throw new Error(`批量创建岗位失败: ${error.message}`);
+      }
+      created = data.length;
     }
 
     return NextResponse.json({
       success: true,
-      created: data.length,
+      created,
+      skipped: duplicateJobs.length,
       total: body.jobs.length,
-      invalidCount: invalidJobs.length,
-      invalidJobs: invalidJobs.length > 0 ? invalidJobs : undefined
+      invalidCount: invalidJobs.length + duplicateJobs.length,
+      invalidJobs: [...duplicateJobs, ...invalidJobs]
     });
   } catch (error) {
     console.error('Error batch creating jobs:', error);
