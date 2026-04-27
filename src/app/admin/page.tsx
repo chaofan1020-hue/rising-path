@@ -66,6 +66,7 @@ import {
   Building2,
   Pencil,
   FileText,
+  FileSpreadsheet,
   Globe,
 } from 'lucide-react';
 import Link from 'next/link';
@@ -372,10 +373,14 @@ export default function AdminPage() {
   const [batchResult, setBatchResult] = useState<{
     success?: boolean;
     created?: number;
+    skipped?: number;
     total?: number;
     invalidCount?: number;
     invalidJobs?: { index: number; reason: string; data: Record<string, unknown> }[];
   } | null>(null);
+  const [importMode, setImportMode] = useState<'file' | 'text'>('file');
+  const [previewJobs, setPreviewJobs] = useState<Job[]>([]);
+  const [uploadedFileName, setUploadedFileName] = useState('');
 
   // Batch delete state
   const [selectedJobIds, setSelectedJobIds] = useState<Set<number>>(new Set());
@@ -696,7 +701,32 @@ export default function AdminPage() {
   };
 
   const handleBatchImport = async () => {
-    const jobsToImport = parseBatchText(batchText);
+    // 根据模式获取要导入的数据
+    let jobsToImport: Array<{
+      title: string;
+      company: string;
+      region: string;
+      direction: string;
+      audience: string;
+      salary_range?: string;
+      job_url?: string;
+      description?: string;
+    }> = [];
+
+    if (importMode === 'file') {
+      jobsToImport = previewJobs.map(j => ({
+        title: j.title,
+        company: j.company,
+        region: j.region,
+        direction: j.direction,
+        audience: j.audience,
+        salary_range: j.salary_range || '',
+        job_url: j.job_url || '',
+        description: j.description || '',
+      }));
+    } else {
+      jobsToImport = parseBatchText(batchText);
+    }
     
     if (jobsToImport.length === 0) {
       setBatchResult({
@@ -721,6 +751,7 @@ export default function AdminPage() {
       setBatchResult({
         success: data.success,
         created: data.created,
+        skipped: data.skipped,
         total: data.total,
         invalidCount: data.invalidCount,
         invalidJobs: data.invalidJobs
@@ -749,7 +780,65 @@ export default function AdminPage() {
   const resetBatchImport = () => {
     setBatchText('');
     setBatchResult(null);
+    setPreviewJobs([]);
+    setUploadedFileName('');
     setBatchImportOpen(false);
+  };
+
+  // 文件上传处理
+  const handleFileUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+
+    const formData = new FormData();
+    formData.append('file', file);
+
+    try {
+      // 使用 /api/upload 解析 Excel/CSV 文件
+      const response = await fetch('/api/upload', {
+        method: 'POST',
+        body: formData,
+      });
+      
+      if (!response.ok) {
+        const error = await response.json();
+        alert(`文件解析失败: ${error.error || '未知错误'}`);
+        return;
+      }
+
+      const data = await response.json();
+      
+      if (data.data && Array.isArray(data.data) && data.data.length > 0) {
+        // 转换数据格式
+        const parsedJobs = data.data.map((row: Record<string, string>, idx: number) => ({
+          title: row['岗位名称'] || row['title'] || row[`岗位名称(${idx + 1})`] || '',
+          company: row['公司名称'] || row['company'] || row[`公司名称(${idx + 1})`] || '',
+          region: row['地区'] || row['region'] || row['工作地区'] || row[`地区(${idx + 1})`] || '',
+          direction: row['方向'] || row['direction'] || row['岗位方向'] || row[`方向(${idx + 1})`] || '',
+          audience: row['受众'] || row['audience'] || row['招聘对象'] || row[`受众(${idx + 1})`] || '',
+          salary_range: row['薪资范围'] || row['salary_range'] || row['薪资'] || '',
+          job_url: row['JD链接'] || row['job_url'] || row['链接'] || '',
+          description: row['描述'] || row['description'] || row['岗位描述'] || '',
+          requirements: row['要求'] || row['requirements'] || row['任职要求'] || '',
+        })).filter((j: Job) => j.title && j.company && j.region && j.direction && j.audience);
+
+        if (parsedJobs.length > 0) {
+          setPreviewJobs(parsedJobs);
+          setUploadedFileName(file.name);
+          setBatchResult(null);
+        } else {
+          alert('文件中没有找到有效的岗位数据，请检查表头是否包含：岗位名称、公司名称、地区、方向、受众');
+        }
+      } else {
+        alert('文件中没有找到数据');
+      }
+    } catch (error) {
+      console.error('文件上传失败:', error);
+      alert('文件上传失败，请稍后重试');
+    }
+
+    // 清空 input
+    e.target.value = '';
   };
 
   // Batch delete handlers
@@ -2946,43 +3035,162 @@ export default function AdminPage() {
 
       {/* Batch Import Dialog */}
       <Dialog open={batchImportOpen} onOpenChange={setBatchImportOpen}>
-        <DialogContent className="max-w-3xl max-h-[90vh] overflow-y-auto">
+        <DialogContent className="max-w-4xl max-h-[90vh] overflow-y-auto">
           <DialogHeader>
             <DialogTitle>批量导入岗位</DialogTitle>
             <DialogDescription>
-              每行一个岗位，字段用 | 或 Tab 或逗号分隔
+              支持 Excel (.xlsx) 或 CSV 文件上传，也可使用文本方式导入
             </DialogDescription>
           </DialogHeader>
           
           <div className="space-y-4 py-4">
-            {/* Format hint */}
-            <div className="bg-muted/50 rounded-lg p-4 text-sm space-y-2">
-              <p className="font-medium">格式说明：</p>
-              <code className="block bg-background p-2 rounded text-xs overflow-x-auto">
-                岗位名称 | 公司名称 | 地区 | 方向 | 受众 | 薪资范围 | JD链接 | 描述
-              </code>
-              <p className="text-muted-foreground">前5项为必填，后3项可选</p>
-              <div className="border-t pt-2 mt-2">
-                <p className="font-medium mb-1">示例：</p>
-                <code className="block bg-background p-2 rounded text-xs overflow-x-auto">
-                  Software Engineer | Google | 美国 | SDE | 应届生 | 15-25万 | https://careers.google.com/xxx
-                </code>
+            {/* 模式切换 */}
+            <div className="flex gap-2 border-b pb-2">
+              <Button
+                variant={importMode === 'file' ? 'default' : 'outline'}
+                size="sm"
+                onClick={() => setImportMode('file')}
+              >
+                <FileSpreadsheet className="h-4 w-4 mr-1" />
+                表格上传
+              </Button>
+              <Button
+                variant={importMode === 'text' ? 'default' : 'outline'}
+                size="sm"
+                onClick={() => setImportMode('text')}
+              >
+                <FileText className="h-4 w-4 mr-1" />
+                文本导入
+              </Button>
+            </div>
+
+            {/* 表格上传模式 */}
+            {importMode === 'file' && (
+              <div className="space-y-4">
+                {/* 文件上传区域 */}
+                <div className="border-2 border-dashed border-muted-foreground/25 rounded-lg p-8 text-center hover:border-primary/50 transition-colors">
+                  <input
+                    type="file"
+                    accept=".xlsx,.xls,.csv"
+                    onChange={handleFileUpload}
+                    className="hidden"
+                    id="batch-file-upload"
+                    disabled={batchImporting}
+                  />
+                  <label htmlFor="batch-file-upload" className="cursor-pointer">
+                    <Upload className="h-12 w-12 mx-auto mb-3 text-muted-foreground" />
+                    <p className="text-sm text-muted-foreground mb-1">
+                      点击选择文件或拖拽文件到此处
+                    </p>
+                    <p className="text-xs text-muted-foreground">
+                      支持 .xlsx, .xls, .csv 格式
+                    </p>
+                  </label>
+                </div>
+
+                {/* 已上传文件信息 */}
+                {uploadedFileName && (
+                  <div className="bg-muted/50 rounded-lg p-3 flex items-center justify-between">
+                    <div className="flex items-center gap-2">
+                      <FileSpreadsheet className="h-5 w-5 text-green-600" />
+                      <span className="text-sm font-medium">{uploadedFileName}</span>
+                      <Badge variant="secondary">{previewJobs.length} 条</Badge>
+                    </div>
+                    <Button
+                      variant="ghost"
+                      size="sm"
+                      onClick={() => { setPreviewJobs([]); setUploadedFileName(''); }}
+                    >
+                      <X className="h-4 w-4" />
+                    </Button>
+                  </div>
+                )}
+
+                {/* 预览表格 */}
+                {previewJobs.length > 0 && (
+                  <div className="border rounded-lg overflow-hidden">
+                    <div className="max-h-[300px] overflow-auto">
+                      <table className="w-full text-sm">
+                        <thead className="bg-muted sticky top-0">
+                          <tr>
+                            <th className="px-3 py-2 text-left font-medium">岗位名称</th>
+                            <th className="px-3 py-2 text-left font-medium">公司</th>
+                            <th className="px-3 py-2 text-left font-medium">地区</th>
+                            <th className="px-3 py-2 text-left font-medium">方向</th>
+                            <th className="px-3 py-2 text-left font-medium">受众</th>
+                            <th className="px-3 py-2 text-left font-medium">薪资</th>
+                          </tr>
+                        </thead>
+                        <tbody className="divide-y">
+                          {previewJobs.slice(0, 50).map((job, idx) => (
+                            <tr key={idx} className="hover:bg-muted/50">
+                              <td className="px-3 py-2">{job.title}</td>
+                              <td className="px-3 py-2">{job.company}</td>
+                              <td className="px-3 py-2">{job.region}</td>
+                              <td className="px-3 py-2">{job.direction}</td>
+                              <td className="px-3 py-2">{job.audience}</td>
+                              <td className="px-3 py-2 text-muted-foreground">{job.salary_range || '-'}</td>
+                            </tr>
+                          ))}
+                        </tbody>
+                      </table>
+                    </div>
+                    {previewJobs.length > 50 && (
+                      <div className="bg-muted/50 px-3 py-2 text-sm text-muted-foreground">
+                        还有 {previewJobs.length - 50} 条数据未显示
+                      </div>
+                    )}
+                  </div>
+                )}
+
+                {/* 表头说明 */}
+                <div className="bg-muted/50 rounded-lg p-4 text-sm">
+                  <p className="font-medium mb-2">Excel/CSV 表头要求：</p>
+                  <div className="grid grid-cols-2 md:grid-cols-3 gap-2 text-xs">
+                    <div><span className="font-medium">岗位名称</span>（必填）</div>
+                    <div><span className="font-medium">公司名称</span>（必填）</div>
+                    <div><span className="font-medium">地区</span>（必填）</div>
+                    <div><span className="font-medium">方向</span>（必填）</div>
+                    <div><span className="font-medium">受众</span>（必填）</div>
+                    <div><span className="font-medium">薪资范围</span>（可选）</div>
+                    <div><span className="font-medium">JD链接</span>（可选）</div>
+                    <div><span className="font-medium">描述</span>（可选）</div>
+                  </div>
+                </div>
               </div>
-            </div>
+            )}
 
-            {/* Input area */}
-            <div>
-              <Label>岗位数据</Label>
-              <Textarea
-                value={batchText}
-                onChange={(e) => setBatchText(e.target.value)}
-                placeholder="粘贴岗位数据，每行一个岗位..."
-                className="min-h-[200px] font-mono text-sm"
-                disabled={batchImporting}
-              />
-            </div>
+            {/* 文本导入模式 */}
+            {importMode === 'text' && (
+              <div className="space-y-4">
+                <div className="bg-muted/50 rounded-lg p-4 text-sm space-y-2">
+                  <p className="font-medium">格式说明：</p>
+                  <code className="block bg-background p-2 rounded text-xs overflow-x-auto">
+                    岗位名称 | 公司名称 | 地区 | 方向 | 受众 | 薪资范围 | JD链接
+                  </code>
+                  <p className="text-muted-foreground">前5项为必填，后2项可选</p>
+                  <div className="border-t pt-2 mt-2">
+                    <p className="font-medium mb-1">示例：</p>
+                    <code className="block bg-background p-2 rounded text-xs overflow-x-auto">
+                      Software Engineer | Google | 美国 | SDE | 应届生 | 15-25万 | https://careers.google.com/xxx
+                    </code>
+                  </div>
+                </div>
 
-            {/* Result */}
+                <div>
+                  <Label>岗位数据</Label>
+                  <Textarea
+                    value={batchText}
+                    onChange={(e) => setBatchText(e.target.value)}
+                    placeholder="粘贴岗位数据，每行一个岗位..."
+                    className="min-h-[200px] font-mono text-sm"
+                    disabled={batchImporting}
+                  />
+                </div>
+              </div>
+            )}
+
+            {/* 结果显示 */}
             {batchResult && (
               <div className={`rounded-lg p-4 ${batchResult.success ? 'bg-green-50 border border-green-200' : 'bg-red-50 border border-red-200'}`}>
                 <div className="flex items-center gap-2 mb-2">
@@ -2996,7 +3204,13 @@ export default function AdminPage() {
                   </span>
                 </div>
                 <div className={`text-sm ${batchResult.success ? 'text-green-700' : 'text-red-700'}`}>
-                  <p>成功导入：{batchResult.created} / {batchResult.total} 条</p>
+                  <p>成功导入：{batchResult.created} 条</p>
+                  {batchResult.skipped && batchResult.skipped > 0 && (
+                    <p>跳过（重复）：{batchResult.skipped} 条</p>
+                  )}
+                  {batchResult.total && (
+                    <p>总计处理：{batchResult.total} 条</p>
+                  )}
                   {batchResult.invalidCount && batchResult.invalidCount > 0 && (
                     <p>失败：{batchResult.invalidCount} 条</p>
                   )}
@@ -3023,7 +3237,10 @@ export default function AdminPage() {
               {batchResult?.success ? '关闭' : '取消'}
             </Button>
             {!batchResult?.success && (
-              <Button onClick={handleBatchImport} disabled={batchImporting || !batchText.trim()}>
+              <Button 
+                onClick={handleBatchImport} 
+                disabled={batchImporting || (importMode === 'file' ? previewJobs.length === 0 : !batchText.trim())}
+              >
                 {batchImporting ? (
                   <>
                     <Loader2 className="h-4 w-4 mr-2 animate-spin" />
@@ -3032,7 +3249,7 @@ export default function AdminPage() {
                 ) : (
                   <>
                     <Upload className="h-4 w-4 mr-2" />
-                    开始导入
+                    开始导入 ({importMode === 'file' ? previewJobs.length : '文本'})
                   </>
                 )}
               </Button>
@@ -3044,7 +3261,7 @@ export default function AdminPage() {
             )}
           </DialogFooter>
         </DialogContent>
-        </Dialog>
+      </Dialog>
 
         <LogoUploadDialog
           open={logoDialogOpen}
