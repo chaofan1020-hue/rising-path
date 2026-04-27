@@ -809,7 +809,7 @@ function OptimizeContent() {
       <header className="border-b sticky top-0 bg-background/95 backdrop-blur z-50">
         <div className="container mx-auto px-4 h-16 flex items-center justify-between">
           <Link href="/" className="flex items-center gap-2">
-            <Briefcase className="h-5 w-5 md:h-6 md:w-6 text-primary" />
+            <Image src="/logo.svg" alt="Rising Path" width={28} height={28} className="rounded" />
             <span className="font-bold text-lg md:text-xl">Rising Path</span>
           </Link>
           <nav className="flex items-center gap-2 md:gap-4">

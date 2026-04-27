@@ -53,8 +53,8 @@ export default function LoginPage() {
       <div className="w-full max-w-md">
         {/* Logo */}
         <div className="text-center mb-8">
-          <Link href="/" className="inline-flex items-center gap-2 mb-4">
-            <Briefcase className="h-10 w-10 text-primary" />
+          <Link href="/" className="inline-flex items-center gap-3 mb-4">
+            <Image src="/logo.svg" alt="Rising Path" width={48} height={48} />
             <span className="font-bold text-3xl">Rising Path</span>
           </Link>
           <p className="text-muted-foreground">海外留学生求职平台</p>
