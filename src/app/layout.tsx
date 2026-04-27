@@ -22,8 +22,8 @@ export const metadata: Metadata = {
   authors: [{ name: 'Rising Path Team' }],
   generator: 'Coze Code',
   icons: {
-    icon: '/favicon.png',
-    apple: '/favicon.png',
+    icon: '/logo.svg',
+    apple: '/logo.svg',
   },
 };
 
