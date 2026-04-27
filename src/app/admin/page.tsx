@@ -68,6 +68,7 @@ import {
   FileText,
   FileSpreadsheet,
   Globe,
+  Download,
 } from 'lucide-react';
 import Link from 'next/link';
 
@@ -3067,6 +3068,24 @@ export default function AdminPage() {
             {/* 表格上传模式 */}
             {importMode === 'file' && (
               <div className="space-y-4">
+                {/* 下载模板提示 */}
+                <div className="flex items-center justify-between bg-blue-50 border border-blue-200 rounded-lg p-3">
+                  <div className="flex items-center gap-2">
+                    <FileSpreadsheet className="h-5 w-5 text-blue-600" />
+                    <span className="text-sm text-blue-800">
+                      首次导入？下载模板快速开始
+                    </span>
+                  </div>
+                  <a
+                    href="/岗位导入模板.xlsx"
+                    download="岗位导入模板.xlsx"
+                    className="inline-flex items-center gap-1 text-sm font-medium text-blue-600 hover:text-blue-800 hover:underline"
+                  >
+                    <Download className="h-4 w-4" />
+                    下载模板
+                  </a>
+                </div>
+
                 {/* 文件上传区域 */}
                 <div className="border-2 border-dashed border-muted-foreground/25 rounded-lg p-8 text-center hover:border-primary/50 transition-colors">
                   <input
