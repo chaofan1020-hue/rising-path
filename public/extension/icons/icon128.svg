@@ -1,17 +1,6 @@
 <svg width="128" height="128" viewBox="0 0 128 128" fill="none" xmlns="http://www.w3.org/2000/svg">
-  <!-- 背景 -->
-  <rect width="128" height="128" rx="20" fill="#0a0a0a"/>
-  
-  <!-- 白色矩形框 + 箭头 -->
-  <g transform="translate(16, 40)">
-    <!-- 矩形框 -->
-    <rect x="0" y="0" width="80" height="48" rx="4" stroke="white" stroke-width="3" fill="none"/>
-    
-    <!-- 右上角箭头 -->
-    <path d="M76 -8L88 -8L88 4" stroke="white" stroke-width="3" fill="none" stroke-linecap="round" stroke-linejoin="round"/>
-    <path d="M88 -8L76 4" stroke="white" stroke-width="3" fill="none" stroke-linecap="round"/>
-    
-    <!-- Rising Path 文字 -->
-    <text x="40" y="32" font-family="Arial Black, sans-serif" font-size="22" font-weight="900" fill="#0a0a0a" text-anchor="middle" stroke="white" stroke-width="0.5">RP</text>
-  </g>
+  <!-- Clean dark background -->
+  <rect width="128" height="128" rx="20" fill="#1a1a2e"/>
+  <!-- RP letters - larger and bolder -->
+  <text x="64" y="86" font-family="system-ui, -apple-system, sans-serif" font-size="64" font-weight="700" fill="#ffffff" text-anchor="middle" letter-spacing="4">RP</text>
 </svg>

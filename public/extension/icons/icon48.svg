@@ -1,9 +1,6 @@
 <svg width="48" height="48" viewBox="0 0 48 48" fill="none" xmlns="http://www.w3.org/2000/svg">
-  <rect width="48" height="48" rx="8" fill="#0a0a0a"/>
-  <g transform="translate(6, 15)">
-    <rect x="0" y="0" width="32" height="18" rx="2" stroke="white" stroke-width="1.5" fill="none"/>
-    <path d="M29 -4L35 -4L35 2" stroke="white" stroke-width="1.5" fill="none" stroke-linecap="round" stroke-linejoin="round"/>
-    <path d="M35 -4L29 2" stroke="white" stroke-width="1.5" stroke-linecap="round"/>
-    <text x="16" y="13" font-family="Arial Black, sans-serif" font-size="8" font-weight="900" fill="white" text-anchor="middle">RP</text>
-  </g>
+  <!-- Clean dark background -->
+  <rect width="48" height="48" rx="8" fill="#1a1a2e"/>
+  <!-- RP letters -->
+  <text x="24" y="33" font-family="system-ui, -apple-system, sans-serif" font-size="20" font-weight="700" fill="#ffffff" text-anchor="middle" letter-spacing="1">RP</text>
 </svg>
