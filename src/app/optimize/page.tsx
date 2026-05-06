@@ -1008,17 +1008,31 @@ function OptimizeContent() {
               )}
             </div>
 
+            {/* 手动输入JD */}
+            <div className="mt-3 md:mt-4">
+              <div className="flex items-center justify-between mb-1.5 md:mb-2">
+                <label className="text-xs md:text-sm font-medium">岗位JD（可选）</label>
+                <span className="text-[10px] md:text-xs text-muted-foreground">粘贴目标岗位的JD，AI将针对性优化</span>
+              </div>
+              <textarea
+                placeholder="粘贴岗位描述（Job Description）到这里...&#10;&#10;例如：&#10;We are looking for a Software Engineer who is proficient in Python, JavaScript, and cloud technologies...&#10;Requirements:&#10;- 3+ years of experience in full-stack development&#10;- Strong understanding of REST APIs&#10;- Experience with AWS or Azure"
+                value={jdContent}
+                onChange={(e) => setJdContent(e.target.value)}
+                className="w-full min-h-[100px] md:min-h-[120px] p-3 text-xs md:text-sm rounded-lg border border-input bg-background resize-y focus:outline-none focus:ring-2 focus:ring-ring focus:ring-offset-2 placeholder:text-muted-foreground/60"
+              />
+            </div>
+
             {/* JD搜索结果 */}
             {jdContent && (
               <div className="mt-3 md:mt-4 p-3 md:p-4 rounded-lg bg-blue-50 dark:bg-blue-950/30 border border-blue-200 dark:border-blue-800">
                 <div className="flex items-center gap-2 mb-2">
                   <Target className="h-4 w-4 text-blue-600" />
                   <span className="text-xs md:text-sm font-medium text-blue-700 dark:text-blue-400">
-                    已获取岗位描述
+                    已设置岗位描述
                   </span>
                 </div>
                 <p className="text-xs md:text-sm text-blue-600/80 mb-2">
-                  AI将基于以下真实岗位要求进行优化
+                  AI将基于以下岗位要求进行优化
                 </p>
                 <div className="max-h-32 md:max-h-40 overflow-y-auto">
                   <p className="text-xs md:text-sm text-muted-foreground whitespace-pre-wrap">
