@@ -1,43 +1,39 @@
 'use client';
 
 import { useState, useCallback, useEffect } from 'react';
-import { useRouter } from 'next/navigation';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Input } from '@/components/ui/input';
 import { Textarea } from '@/components/ui/textarea';
 import { Badge } from '@/components/ui/badge';
 import { Progress } from '@/components/ui/progress';
-import { Label } from '@/components/ui/label';
 import {
   Dialog,
   DialogContent,
   DialogDescription,
   DialogHeader,
   DialogTitle,
+  DialogTrigger,
 } from '@/components/ui/dialog';
 import { 
   Upload, 
   FileText, 
   Trash2, 
+  Download, 
   Loader2, 
   CheckCircle,
-  Sparkles,
-  ArrowRight,
-  Edit3,
-  Save,
-  X,
-  Plus,
-  User,
-  Mail,
-  Phone,
-  MapPin,
-  GraduationCap,
   Briefcase,
-  Wrench,
+  User,
+  Calendar,
+  Link as LinkIcon,
+  Languages,
+  Sparkles,
+  Map,
 } from 'lucide-react';
+import Link from 'next/link';
+import Image from 'next/image';
 import { AccessGuard, useAccessCode } from '@/components/access-guard';
-import { StepProgressBar } from '@/components/step-progress-bar';
+import { Target, Wand2, Send, CheckCircle2 } from 'lucide-react';
 
 interface ParsedFields {
   name?: string;
@@ -82,338 +78,44 @@ interface Resume {
   created_at: string;
 }
 
-// Editable Fields Component
-function EditableParsedFields({ 
-  fields, 
-  onChange,
-  onSave,
-  saving,
-}: { 
-  fields: ParsedFields; 
-  onChange: (fields: ParsedFields) => void;
-  onSave: () => void;
-  saving: boolean;
-}) {
-  const [editingField, setEditingField] = useState<string | null>(null);
-  const [editValue, setEditValue] = useState('');
-
-  const startEdit = (field: string, value: string) => {
-    setEditingField(field);
-    setEditValue(value);
-  };
-
-  const saveEdit = (field: string) => {
-    const newFields = { ...fields };
-    if (field === 'name') newFields.name = editValue;
-    else if (field === 'email') newFields.email = editValue;
-    else if (field === 'phone') newFields.phone = editValue;
-    else if (field === 'location') newFields.location = editValue;
-    else if (field === 'summary') newFields.summary = editValue;
-    onChange(newFields);
-    setEditingField(null);
-  };
-
-  const cancelEdit = () => {
-    setEditingField(null);
-    setEditValue('');
-  };
-
-  // Education editing
-  const [editingEduIndex, setEditingEduIndex] = useState<number | null>(null);
-  const [eduDraft, setEduDraft] = useState<{ school: string; degree: string; major: string; duration: string; gpa: string }>({ school: '', degree: '', major: '', duration: '', gpa: '' });
-
-  const startEduEdit = (index: number) => {
-    const edu = fields.education?.[index];
-    if (edu) {
-      setEduDraft({ school: edu.school, degree: edu.degree, major: edu.major, duration: edu.duration || '', gpa: edu.gpa || '' });
-      setEditingEduIndex(index);
-    }
-  };
-
-  const saveEduEdit = () => {
-    if (editingEduIndex === null) return;
-    const newFields = { ...fields };
-    if (newFields.education) {
-      newFields.education[editingEduIndex] = { ...eduDraft };
-      onChange(newFields);
-    }
-    setEditingEduIndex(null);
-  };
-
-  // Experience editing
-  const [editingExpIndex, setEditingExpIndex] = useState<number | null>(null);
-  const [expDraft, setExpDraft] = useState<{ company: string; title: string; duration: string; highlights: string }>({ company: '', title: '', duration: '', highlights: '' });
-
-  const startExpEdit = (index: number) => {
-    const exp = fields.experience?.[index];
-    if (exp) {
-      setExpDraft({ company: exp.company, title: exp.title, duration: exp.duration || '', highlights: exp.highlights?.join('\n') || '' });
-      setEditingExpIndex(index);
-    }
-  };
-
-  const saveExpEdit = () => {
-    if (editingExpIndex === null) return;
-    const newFields = { ...fields };
-    if (newFields.experience) {
-      newFields.experience[editingExpIndex] = {
-        ...expDraft,
-        highlights: expDraft.highlights ? expDraft.highlights.split('\n').filter(Boolean) : undefined,
-      };
-      onChange(newFields);
-    }
-    setEditingExpIndex(null);
-  };
-
-  // Skills editing
-  const [editingSkillType, setEditingSkillType] = useState<string | null>(null);
-  const [skillDraft, setSkillDraft] = useState('');
-
-  const startSkillEdit = (type: string) => {
-    const skills = type === 'technical' ? fields.skills?.technical : type === 'languages' ? fields.skills?.languages : fields.skills?.tools;
-    setSkillDraft(skills?.join(', ') || '');
-    setEditingSkillType(type);
-  };
-
-  const saveSkillEdit = () => {
-    if (!editingSkillType) return;
-    const newFields = { ...fields, skills: { ...fields.skills } };
-    const arr = skillDraft.split(',').map(s => s.trim()).filter(Boolean);
-    if (editingSkillType === 'technical') newFields.skills!.technical = arr;
-    else if (editingSkillType === 'languages') newFields.skills!.languages = arr;
-    else if (editingSkillType === 'tools') newFields.skills!.tools = arr;
-    onChange(newFields);
-    setEditingSkillType(null);
-  };
-
-  const renderEditableField = (label: string, field: string, value: string | undefined, icon: React.ReactNode) => {
-    if (!value) return null;
-    return (
-      <div className="flex items-center gap-2 group">
-        {icon}
-        <span className="text-muted-foreground text-sm w-12 flex-shrink-0">{label}:</span>
-        {editingField === field ? (
-          <div className="flex items-center gap-1 flex-1">
-            <Input value={editValue} onChange={e => setEditValue(e.target.value)} className="h-7 text-sm" autoFocus onKeyDown={e => { if (e.key === 'Enter') saveEdit(field); if (e.key === 'Escape') cancelEdit(); }} />
-            <Button size="sm" variant="ghost" className="h-7 w-7 p-0" onClick={() => saveEdit(field)}><CheckCircle className="h-3.5 w-3.5 text-green-600" /></Button>
-            <Button size="sm" variant="ghost" className="h-7 w-7 p-0" onClick={cancelEdit}><X className="h-3.5 w-3.5" /></Button>
-          </div>
-        ) : (
-          <div className="flex items-center gap-1 flex-1">
-            <span className="font-medium text-sm">{value}</span>
-            <Button size="sm" variant="ghost" className="h-6 w-6 p-0 opacity-0 group-hover:opacity-100 transition-opacity" onClick={() => startEdit(field, value)}>
-              <Edit3 className="h-3 w-3 text-muted-foreground" />
-            </Button>
-          </div>
-        )}
-      </div>
-    );
-  };
-
-  return (
-    <div className="space-y-4">
-      {/* Basic Info */}
-      <div>
-        <h4 className="text-sm font-semibold text-muted-foreground mb-2 flex items-center gap-1.5"><User className="h-4 w-4" /> 基本信息</h4>
-        <div className="space-y-2 pl-6">
-          {renderEditableField('姓名', 'name', fields.name, <User className="h-3.5 w-3.5 text-muted-foreground flex-shrink-0" />)}
-          {renderEditableField('邮箱', 'email', fields.email, <Mail className="h-3.5 w-3.5 text-muted-foreground flex-shrink-0" />)}
-          {renderEditableField('电话', 'phone', fields.phone, <Phone className="h-3.5 w-3.5 text-muted-foreground flex-shrink-0" />)}
-          {renderEditableField('地址', 'location', fields.location, <MapPin className="h-3.5 w-3.5 text-muted-foreground flex-shrink-0" />)}
-        </div>
-      </div>
-
-      {/* Education */}
-      {fields.education && fields.education.length > 0 && (
-        <div>
-          <h4 className="text-sm font-semibold text-muted-foreground mb-2 flex items-center gap-1.5"><GraduationCap className="h-4 w-4" /> 教育背景</h4>
-          <div className="space-y-2 pl-6">
-            {fields.education.map((edu, i) => (
-              <div key={i} className="group">
-                {editingEduIndex === i ? (
-                  <div className="space-y-2 p-2 rounded-lg bg-muted/30">
-                    <div className="grid grid-cols-2 gap-2">
-                      <Input placeholder="学校" value={eduDraft.school} onChange={e => setEduDraft({...eduDraft, school: e.target.value})} className="h-7 text-sm" />
-                      <Input placeholder="学位" value={eduDraft.degree} onChange={e => setEduDraft({...eduDraft, degree: e.target.value})} className="h-7 text-sm" />
-                      <Input placeholder="专业" value={eduDraft.major} onChange={e => setEduDraft({...eduDraft, major: e.target.value})} className="h-7 text-sm" />
-                      <Input placeholder="时间" value={eduDraft.duration} onChange={e => setEduDraft({...eduDraft, duration: e.target.value})} className="h-7 text-sm" />
-                    </div>
-                    <div className="flex gap-1">
-                      <Button size="sm" variant="ghost" className="h-7 text-xs" onClick={saveEduEdit}><CheckCircle className="h-3.5 w-3.5 text-green-600 mr-1" />保存</Button>
-                      <Button size="sm" variant="ghost" className="h-7 text-xs" onClick={() => setEditingEduIndex(null)}>取消</Button>
-                    </div>
-                  </div>
-                ) : (
-                  <div className="flex items-start gap-1">
-                    <span className="text-sm"><strong>{edu.school}</strong> - {edu.degree} {edu.major} {edu.duration && <span className="text-muted-foreground">({edu.duration})</span>} {edu.gpa && <span className="text-muted-foreground">GPA: {edu.gpa}</span>}</span>
-                    <Button size="sm" variant="ghost" className="h-6 w-6 p-0 opacity-0 group-hover:opacity-100 transition-opacity flex-shrink-0" onClick={() => startEduEdit(i)}>
-                      <Edit3 className="h-3 w-3 text-muted-foreground" />
-                    </Button>
-                  </div>
-                )}
-              </div>
-            ))}
-          </div>
-        </div>
-      )}
-
-      {/* Experience */}
-      {fields.experience && fields.experience.length > 0 && (
-        <div>
-          <h4 className="text-sm font-semibold text-muted-foreground mb-2 flex items-center gap-1.5"><Briefcase className="h-4 w-4" /> 工作经历</h4>
-          <div className="space-y-2 pl-6">
-            {fields.experience.map((exp, i) => (
-              <div key={i} className="group">
-                {editingExpIndex === i ? (
-                  <div className="space-y-2 p-2 rounded-lg bg-muted/30">
-                    <div className="grid grid-cols-2 gap-2">
-                      <Input placeholder="公司" value={expDraft.company} onChange={e => setExpDraft({...expDraft, company: e.target.value})} className="h-7 text-sm" />
-                      <Input placeholder="职位" value={expDraft.title} onChange={e => setExpDraft({...expDraft, title: e.target.value})} className="h-7 text-sm" />
-                      <Input placeholder="时间" value={expDraft.duration} onChange={e => setExpDraft({...expDraft, duration: e.target.value})} className="h-7 text-sm" />
-                    </div>
-                    <Textarea placeholder="工作内容（每行一条）" value={expDraft.highlights} onChange={e => setExpDraft({...expDraft, highlights: e.target.value})} className="text-sm min-h-[60px]" />
-                    <div className="flex gap-1">
-                      <Button size="sm" variant="ghost" className="h-7 text-xs" onClick={saveExpEdit}><CheckCircle className="h-3.5 w-3.5 text-green-600 mr-1" />保存</Button>
-                      <Button size="sm" variant="ghost" className="h-7 text-xs" onClick={() => setEditingExpIndex(null)}>取消</Button>
-                    </div>
-                  </div>
-                ) : (
-                  <div className="flex items-start gap-1">
-                    <div className="text-sm">
-                      <strong>{exp.company}</strong> - {exp.title} {exp.duration && <span className="text-muted-foreground">({exp.duration})</span>}
-                      {exp.highlights && (
-                        <ul className="mt-1 ml-3 space-y-0.5 text-muted-foreground text-xs">
-                          {exp.highlights.map((h, j) => <li key={j}>• {h}</li>)}
-                        </ul>
-                      )}
-                    </div>
-                    <Button size="sm" variant="ghost" className="h-6 w-6 p-0 opacity-0 group-hover:opacity-100 transition-opacity flex-shrink-0" onClick={() => startExpEdit(i)}>
-                      <Edit3 className="h-3 w-3 text-muted-foreground" />
-                    </Button>
-                  </div>
-                )}
-              </div>
-            ))}
-          </div>
-        </div>
-      )}
-
-      {/* Skills */}
-      {fields.skills && (
-        <div>
-          <h4 className="text-sm font-semibold text-muted-foreground mb-2 flex items-center gap-1.5"><Wrench className="h-4 w-4" /> 技能</h4>
-          <div className="space-y-2 pl-6">
-            {fields.skills.technical && fields.skills.technical.length > 0 && (
-              <div className="group">
-                <div className="flex items-center gap-2 mb-1">
-                  <span className="text-xs text-muted-foreground">技术技能:</span>
-                  <Button size="sm" variant="ghost" className="h-5 w-5 p-0 opacity-0 group-hover:opacity-100" onClick={() => startSkillEdit('technical')}><Edit3 className="h-2.5 w-2.5" /></Button>
-                </div>
-                {editingSkillType === 'technical' ? (
-                  <div className="flex items-center gap-1">
-                    <Input value={skillDraft} onChange={e => setSkillDraft(e.target.value)} className="h-7 text-sm" placeholder="逗号分隔" onKeyDown={e => { if (e.key === 'Enter') saveSkillEdit(); }} />
-                    <Button size="sm" variant="ghost" className="h-7 w-7 p-0" onClick={saveSkillEdit}><CheckCircle className="h-3.5 w-3.5 text-green-600" /></Button>
-                    <Button size="sm" variant="ghost" className="h-7 w-7 p-0" onClick={() => setEditingSkillType(null)}><X className="h-3.5 w-3.5" /></Button>
-                  </div>
-                ) : (
-                  <div className="flex flex-wrap gap-1">
-                    {fields.skills.technical.map((s, i) => <Badge key={i} variant="secondary" className="text-xs">{s}</Badge>)}
-                  </div>
-                )}
-              </div>
-            )}
-            {fields.skills.languages && fields.skills.languages.length > 0 && (
-              <div className="group">
-                <div className="flex items-center gap-2 mb-1">
-                  <span className="text-xs text-muted-foreground">语言:</span>
-                  <Button size="sm" variant="ghost" className="h-5 w-5 p-0 opacity-0 group-hover:opacity-100" onClick={() => startSkillEdit('languages')}><Edit3 className="h-2.5 w-2.5" /></Button>
-                </div>
-                {editingSkillType === 'languages' ? (
-                  <div className="flex items-center gap-1">
-                    <Input value={skillDraft} onChange={e => setSkillDraft(e.target.value)} className="h-7 text-sm" placeholder="逗号分隔" onKeyDown={e => { if (e.key === 'Enter') saveSkillEdit(); }} />
-                    <Button size="sm" variant="ghost" className="h-7 w-7 p-0" onClick={saveSkillEdit}><CheckCircle className="h-3.5 w-3.5 text-green-600" /></Button>
-                    <Button size="sm" variant="ghost" className="h-7 w-7 p-0" onClick={() => setEditingSkillType(null)}><X className="h-3.5 w-3.5" /></Button>
-                  </div>
-                ) : (
-                  <div className="flex flex-wrap gap-1">
-                    {fields.skills.languages.map((s, i) => <Badge key={i} variant="outline" className="text-xs">{s}</Badge>)}
-                  </div>
-                )}
-              </div>
-            )}
-          </div>
-        </div>
-      )}
-
-      {/* Summary */}
-      {fields.summary && (
-        <div>
-          <h4 className="text-sm font-semibold text-muted-foreground mb-2">个人总结</h4>
-          <div className="pl-6 group">
-            {editingField === 'summary' ? (
-              <div className="space-y-1">
-                <Textarea value={editValue} onChange={e => setEditValue(e.target.value)} className="text-sm min-h-[60px]" autoFocus />
-                <div className="flex gap-1">
-                  <Button size="sm" variant="ghost" className="h-7 text-xs" onClick={() => saveEdit('summary')}><CheckCircle className="h-3.5 w-3.5 text-green-600 mr-1" />保存</Button>
-                  <Button size="sm" variant="ghost" className="h-7 text-xs" onClick={cancelEdit}>取消</Button>
-                </div>
-              </div>
-            ) : (
-              <div className="flex items-start gap-1">
-                <p className="text-sm text-muted-foreground">{fields.summary}</p>
-                <Button size="sm" variant="ghost" className="h-6 w-6 p-0 opacity-0 group-hover:opacity-100 transition-opacity flex-shrink-0" onClick={() => startEdit('summary', fields.summary || '')}>
-                  <Edit3 className="h-3 w-3 text-muted-foreground" />
-                </Button>
-              </div>
-            )}
-          </div>
-        </div>
-      )}
-
-      {/* Save Button */}
-      <div className="flex justify-end pt-2 border-t">
-        <Button onClick={onSave} disabled={saving} size="sm">
-          {saving ? <Loader2 className="h-4 w-4 mr-1 animate-spin" /> : <Save className="h-4 w-4 mr-1" />}
-          保存修改
-        </Button>
-      </div>
-    </div>
-  );
-}
-
-// Main Content
+// 内部组件 - 在 AccessGuard 内部使用 useAccessCode
 function ResumeContent() {
-  const router = useRouter();
   const [resumes, setResumes] = useState<Resume[]>([]);
   const [loading, setLoading] = useState(false);
   const [uploading, setUploading] = useState(false);
   const [uploadProgress, setUploadProgress] = useState(0);
   const [selectedFile, setSelectedFile] = useState<File | null>(null);
   const [selectedResume, setSelectedResume] = useState<Resume | null>(null);
+  const [translatingId, setTranslatingId] = useState<number | null>(null);
   const [extractingId, setExtractingId] = useState<number | null>(null);
-  const [savingFields, setSavingFields] = useState(false);
-  const [editedFields, setEditedFields] = useState<ParsedFields | null>(null);
   const { accessCodeId } = useAccessCode();
 
+  // 提取结构化字段
   const extractFields = async (resume: Resume) => {
     setExtractingId(resume.id);
     try {
       const response = await fetch('/api/resume/extract-fields', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ resume_id: resume.id, access_code_id: accessCodeId }),
+        body: JSON.stringify({
+          resume_id: resume.id,
+          access_code_id: accessCodeId,
+        }),
       });
+
       const data = await response.json();
       if (data.success && data.parsed_fields) {
-        const updatedResume = { ...resume, parsed_fields: data.parsed_fields };
-        setResumes(resumes.map(r => r.id === resume.id ? updatedResume : r));
-        if (selectedResume?.id === resume.id) {
-          setSelectedResume(updatedResume);
-          setEditedFields(data.parsed_fields);
-        }
+        setResumes(resumes.map(r => 
+          r.id === resume.id ? { ...r, parsed_fields: data.parsed_fields } : r
+        ));
+        setSelectedResume(prev => prev?.id === resume.id ? { ...prev, parsed_fields: data.parsed_fields } : prev);
+        alert('字段提取成功！');
+      } else if (data.error) {
+        alert('提取失败: ' + data.error);
       }
     } catch (error) {
       console.error('Extract failed:', error);
+      alert('提取失败，请重试');
     } finally {
       setExtractingId(null);
     }
@@ -421,29 +123,55 @@ function ResumeContent() {
 
   const handleFileSelect = useCallback((e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
-    if (file) setSelectedFile(file);
+    if (file) {
+      setSelectedFile(file);
+    }
   }, []);
 
   const handleUpload = async () => {
-    if (!selectedFile || !accessCodeId) return;
+    if (!selectedFile) return;
+
+    if (!accessCodeId) {
+      alert('请先登录');
+      return;
+    }
+
     setUploading(true);
     setUploadProgress(0);
+
     try {
       const formData = new FormData();
       formData.append('file', selectedFile);
       formData.append('access_code_id', accessCodeId.toString());
-      const progressInterval = setInterval(() => setUploadProgress(prev => Math.min(prev + 10, 90)), 200);
-      const response = await fetch('/api/resume', { method: 'POST', body: formData });
+
+      // Simulate progress
+      const progressInterval = setInterval(() => {
+        setUploadProgress((prev) => Math.min(prev + 10, 90));
+      }, 200);
+
+      const response = await fetch('/api/resume', {
+        method: 'POST',
+        body: formData,
+      });
+
       clearInterval(progressInterval);
       setUploadProgress(100);
+
       const data = await response.json();
+      
       if (data.resume) {
-        setTimeout(() => fetchResumes(), 3000);
+        // 等待几秒后刷新列表以获取解析结果
+        setTimeout(() => {
+          fetchResumes();
+        }, 3000);
         setSelectedFile(null);
         setUploadProgress(0);
+      } else if (data.error) {
+        alert('上传失败: ' + data.error);
       }
     } catch (error) {
       console.error('Upload failed:', error);
+      alert('上传失败，请重试');
     } finally {
       setUploading(false);
     }
@@ -452,7 +180,10 @@ function ResumeContent() {
   const fetchResumes = async () => {
     setLoading(true);
     try {
-      if (!accessCodeId) { setResumes([]); return; }
+      if (!accessCodeId) {
+        setResumes([]);
+        return;
+      }
       const params = new URLSearchParams();
       params.append('access_code_id', accessCodeId.toString());
       const response = await fetch(`/api/resume?${params.toString()}`);
@@ -466,76 +197,143 @@ function ResumeContent() {
   };
 
   const deleteResume = async (id: number) => {
-    if (!confirm('确定要删除这份简历吗？')) return;
+    if (!confirm('确定要删除这份简历吗？此操作不可撤销。')) {
+      return;
+    }
+    
     try {
       const response = await fetch(`/api/resume/${id}`, { method: 'DELETE' });
-      if (response.ok) {
-        setResumes(resumes.filter(r => r.id !== id));
-        if (selectedResume?.id === id) setSelectedResume(null);
+      const data = await response.json();
+      
+      if (response.ok && data.success) {
+        setResumes(resumes.filter((r) => r.id !== id));
+      } else {
+        alert('删除失败: ' + (data.error || '未知错误'));
       }
     } catch (error) {
-      console.error('Failed to delete:', error);
+      console.error('Failed to delete resume:', error);
+      alert('删除失败，请重试');
     }
   };
 
-  const saveParsedFields = async () => {
-    if (!selectedResume || !editedFields) return;
-    setSavingFields(true);
+  const translateResume = async (resume: Resume) => {
+    setTranslatingId(resume.id);
     try {
-      const response = await fetch('/api/resume/update-fields', {
+      const response = await fetch('/api/ai/translate-resume-content', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
-          resume_id: selectedResume.id,
-          parsed_fields: editedFields,
+          resumeId: resume.id,
+          content: resume.parsed_content,
+          userInfo: resume.user_info,
         }),
       });
+
       const data = await response.json();
-      if (data.success) {
-        setResumes(resumes.map(r => r.id === selectedResume.id ? { ...r, parsed_fields: editedFields } : r));
-        setSelectedResume(prev => prev ? { ...prev, parsed_fields: editedFields } : prev);
+      if (data.resume) {
+        setResumes(resumes.map(r => 
+          r.id === resume.id ? { ...r, ...data.resume } : r
+        ));
       }
     } catch (error) {
-      console.error('Save failed:', error);
+      console.error('Translation failed:', error);
     } finally {
-      setSavingFields(false);
+      setTranslatingId(null);
     }
   };
 
+  // Fetch resumes when accessCodeId changes
   useEffect(() => {
-    if (accessCodeId) fetchResumes();
-  }, [accessCodeId]);
-
-  // Auto-extract fields for resumes that don't have them yet
-  useEffect(() => {
-    if (resumes.length > 0) {
-      const unextracted = resumes.find(r => r.parsed_content && !r.parsed_content.includes('正在解析') && !r.parsed_fields);
-      if (unextracted) extractFields(unextracted);
+    if (accessCodeId) {
+      fetchResumes();
     }
-  }, [resumes.length]);
-
-  const hasActiveResume = resumes.some(r => r.parsed_fields);
+  }, [accessCodeId]);
 
   return (
     <div className="min-h-screen bg-background">
-      <StepProgressBar currentStep="resume" />
+      {/* Header */}
+      <header className="border-b sticky top-0 bg-background/95 backdrop-blur z-50">
+        <div className="container mx-auto px-4 h-16 flex items-center justify-between">
+          <Link href="/" className="flex items-center gap-2">
+            <Image src="/logo.svg" alt="Rising Path" width={28} height={28} className="rounded" />
+            <span className="font-bold text-lg md:text-xl">Rising Path</span>
+          </Link>
+        </div>
+      </header>
 
       <main className="container mx-auto px-4 py-4 md:py-8">
         {/* Page Title */}
-        <div className="mb-4 md:mb-6">
-          <h1 className="text-xl md:text-2xl font-bold mb-1">Step 1: 提供简历</h1>
-          <p className="text-sm text-muted-foreground">上传简历，AI自动解析后你可以编辑确认，完成后进入下一步</p>
+        <div className="mb-4 md:mb-8">
+          <h1 className="text-2xl md:text-3xl font-bold mb-1 md:mb-2">简历管理</h1>
+          <p className="text-sm md:text-base text-muted-foreground">上传、管理你的简历，支持智能解析</p>
         </div>
 
+        {/* 状态引导区域 */}
+        {resumes.length > 0 ? (
+          /* 已上传简历 - 显示简历状态和快捷操作 */
+          <Card className="mb-4 md:mb-8 border-green-200 dark:border-green-900 bg-green-50/50 dark:bg-green-950/20">
+            <CardContent className="pt-4 pb-4">
+              <div className="flex flex-col md:flex-row md:items-center justify-between gap-4">
+                <div className="flex items-center gap-3">
+                  <div className="w-10 h-10 rounded-full bg-green-100 dark:bg-green-900/50 flex items-center justify-center">
+                    <CheckCircle2 className="h-5 w-5 text-green-600 dark:text-green-400" />
+                  </div>
+                  <div>
+                    <p className="font-medium text-sm md:text-base">已上传 {resumes.length} 份简历</p>
+                    <p className="text-xs text-muted-foreground">你可以基于简历进行下一步操作</p>
+                  </div>
+                </div>
+                <div className="flex items-center gap-2">
+                  <Link href="/ai-match">
+                    <Button size="sm" className="gap-1">
+                      <Target className="h-3.5 w-3.5" />
+                      AI选岗
+                    </Button>
+                  </Link>
+                  <Link href="/optimize">
+                    <Button variant="outline" size="sm" className="gap-1">
+                      <Wand2 className="h-3.5 w-3.5" />
+                      优化简历
+                    </Button>
+                  </Link>
+                </div>
+              </div>
+            </CardContent>
+          </Card>
+        ) : (
+          /* 未上传简历 - 显示引导卡片 */
+          <Card className="mb-4 md:mb-8 border-dashed">
+            <CardContent className="pt-4 pb-4">
+              <div className="text-center py-4">
+                <p className="text-sm text-muted-foreground mb-3">还没有简历？上传后可以享受更多服务</p>
+                <div className="grid grid-cols-3 gap-2 max-w-md mx-auto text-xs">
+                  <div className="flex flex-col items-center gap-1 p-2 rounded-lg bg-muted/50">
+                    <Target className="h-4 w-4 text-primary" />
+                    <span>AI智能选岗</span>
+                  </div>
+                  <div className="flex flex-col items-center gap-1 p-2 rounded-lg bg-muted/50">
+                    <Wand2 className="h-4 w-4 text-primary" />
+                    <span>优化简历ATS</span>
+                  </div>
+                  <div className="flex flex-col items-center gap-1 p-2 rounded-lg bg-muted/50">
+                    <Send className="h-4 w-4 text-primary" />
+                    <span>一键填写网申</span>
+                  </div>
+                </div>
+              </div>
+            </CardContent>
+          </Card>
+        )}
+
         {/* Upload Section */}
-        <Card className="mb-4 md:mb-6">
-          <CardHeader className="pb-2 md:pb-3">
-            <CardTitle className="flex items-center gap-2 text-base">
-              <Upload className="h-4 w-4" />
+        <Card className="mb-4 md:mb-8">
+          <CardHeader className="pb-2 md:pb-4">
+            <CardTitle className="flex items-center gap-2 text-base md:text-lg">
+              <Upload className="h-4 w-4 md:h-5 md:w-5" />
               上传简历
             </CardTitle>
-            <CardDescription className="text-xs">
-              支持 PDF、Word (.docx)、TXT 格式，系统自动解析提取关键信息
+            <CardDescription className="text-xs md:text-sm">
+              支持 PDF、Word (.docx)、TXT 格式，系统将自动解析提取关键信息
             </CardDescription>
           </CardHeader>
           <CardContent>
@@ -550,13 +348,26 @@ function ResumeContent() {
                 />
                 <Button onClick={handleUpload} disabled={!selectedFile || uploading} className="w-full md:w-auto h-10">
                   {uploading ? (
-                    <><Loader2 className="mr-2 h-4 w-4 animate-spin" />上传中...</>
+                    <>
+                      <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                      上传中...
+                    </>
                   ) : (
-                    <><Upload className="mr-2 h-4 w-4" />上传简历</>
+                    <>
+                      <Upload className="mr-2 h-4 w-4" />
+                      上传简历
+                    </>
                   )}
                 </Button>
               </div>
-              {selectedFile && <p className="text-xs text-muted-foreground">已选择: {selectedFile.name}</p>}
+              <p className="text-xs text-muted-foreground hidden md:block">
+                支持 PDF、Word (.docx)、TXT 格式，系统将自动提取姓名、联系方式、教育经历、工作经验、技能等信息
+              </p>
+              {selectedFile && (
+                <p className="text-xs md:text-sm text-muted-foreground">
+                  已选择: {selectedFile.name}
+                </p>
+              )}
             </div>
             {uploading && (
               <div className="mt-4">
@@ -570,107 +381,285 @@ function ResumeContent() {
         </Card>
 
         {/* Resume List */}
-        {loading ? (
-          <div className="text-center py-12 text-muted-foreground">
-            <Loader2 className="h-8 w-8 animate-spin mx-auto mb-2" />
-            加载中...
+        <div className="space-y-4">
+          <div className="flex items-center justify-between">
+            <h2 className="text-lg md:text-xl font-semibold">我的简历</h2>
+            <Button variant="outline" size="sm" className="text-xs md:text-sm" onClick={fetchResumes}>
+              刷新列表
+            </Button>
           </div>
-        ) : resumes.length === 0 ? (
-          <Card>
-            <CardContent className="py-12 text-center text-muted-foreground">
-              <FileText className="h-12 w-12 mx-auto mb-4 opacity-50" />
-              <p>暂无简历，上传你的第一份简历开始求职之旅</p>
-            </CardContent>
-          </Card>
-        ) : (
-          <div className="space-y-3">
-            <h2 className="text-lg font-semibold">我的简历</h2>
-            {resumes.map((resume) => (
-              <Card key={resume.id} className={`transition-all ${selectedResume?.id === resume.id ? 'ring-2 ring-primary shadow-md' : 'hover:shadow-md'}`}>
-                <CardContent className="pt-4">
-                  <div className="flex flex-col gap-3">
-                    {/* File info row */}
-                    <div className="flex items-center gap-3">
-                      <div className={`w-10 h-10 rounded-lg flex items-center justify-center flex-shrink-0 ${resume.parsed_fields ? 'bg-green-100 dark:bg-green-900' : 'bg-yellow-100 dark:bg-yellow-900'}`}>
-                        {resume.parsed_fields ? (
-                          <CheckCircle className="h-5 w-5 text-green-600" />
-                        ) : (
-                          <Loader2 className="h-5 w-5 text-yellow-600 animate-spin" />
-                        )}
+          {loading ? (
+            <div className="text-center py-12 text-muted-foreground">
+              <Loader2 className="h-8 w-8 animate-spin mx-auto mb-2" />
+              加载中...
+            </div>
+          ) : resumes.length === 0 ? (
+            <Card>
+              <CardContent className="py-12 text-center text-muted-foreground">
+                <FileText className="h-12 w-12 mx-auto mb-4 opacity-50" />
+                <p>暂无简历，上传你的第一份简历吧</p>
+              </CardContent>
+            </Card>
+          ) : (
+            resumes.map((resume) => (
+              <Card key={resume.id} className="hover:shadow-md transition-shadow">
+                <CardContent className="pt-4 md:pt-6">
+                  <div className="flex flex-col gap-4">
+                    {/* 文件信息 */}
+                    <div className="flex items-start gap-3 md:gap-4">
+                      <div className="w-10 h-10 md:w-12 md:h-12 rounded-lg bg-green-100 dark:bg-green-900 flex items-center justify-center flex-shrink-0">
+                        <FileText className="h-5 w-5 md:h-6 md:w-6 text-green-600" />
                       </div>
                       <div className="flex-1 min-w-0">
-                        <h3 className="font-semibold text-sm truncate">{resume.file_name}</h3>
-                        <div className="flex flex-wrap gap-1.5 mt-1">
-                          <Badge variant="secondary" className="text-xs">{new Date(resume.created_at).toLocaleDateString()}</Badge>
-                          {resume.parsed_fields?.name && <Badge variant="outline" className="text-xs">{resume.parsed_fields.name}</Badge>}
-                          {resume.parsed_fields?.email && <Badge variant="outline" className="text-xs">{resume.parsed_fields.email}</Badge>}
+                        <h3 className="font-semibold text-sm md:text-lg truncate">{resume.file_name}</h3>
+                        <div className="flex flex-wrap gap-1.5 md:gap-2 mt-2">
+                          <Badge variant="secondary" className="text-xs">
+                            <Calendar className="h-3 w-3 mr-1" />
+                            {new Date(resume.created_at).toLocaleDateString()}
+                          </Badge>
+                          {resume.user_info?.name ? (
+                            <Badge variant="outline" className="text-xs">
+                              <User className="h-3 w-3 mr-1" />
+                              {resume.user_info.name}
+                            </Badge>
+                          ) : (
+                            <Badge variant="outline" className="text-xs text-yellow-600">
+                              <Loader2 className="h-3 w-3 mr-1 animate-spin" />
+                              解析中...
+                            </Badge>
+                          )}
                         </div>
-                      </div>
-                      <div className="flex items-center gap-1">
-                        {!resume.parsed_fields && resume.parsed_content && !resume.parsed_content.includes('正在解析') && (
-                          <Button variant="outline" size="sm" className="text-xs h-8" onClick={() => extractFields(resume)} disabled={extractingId === resume.id}>
-                            {extractingId === resume.id ? <Loader2 className="h-3 w-3 mr-1 animate-spin" /> : <Sparkles className="h-3 w-3 mr-1" />}
-                            提取字段
-                          </Button>
+                        {resume.parsed_content && !resume.parsed_content.includes('正在解析') && (
+                          <p className="text-xs md:text-sm text-muted-foreground mt-2 line-clamp-2 hidden md:block">
+                            {resume.parsed_content.substring(0, 150)}...
+                          </p>
                         )}
-                        <Button
-                          variant={selectedResume?.id === resume.id ? 'default' : 'outline'}
-                          size="sm"
-                          className="text-xs h-8"
-                          onClick={() => {
-                            setSelectedResume(resume);
-                            setEditedFields(resume.parsed_fields || null);
-                          }}
-                        >
-                          {selectedResume?.id === resume.id ? '已选中' : '选择'}
-                        </Button>
-                        <Button variant="ghost" size="sm" className="text-xs h-8 text-destructive" onClick={() => deleteResume(resume.id)}>
-                          <Trash2 className="h-3.5 w-3.5" />
-                        </Button>
                       </div>
                     </div>
+                    
+                    {/* 操作按钮 - 手机端换行显示 */}
+                    <div className="flex flex-wrap gap-2 md:gap-2 pl-0 md:pl-[52px]">
+                      {resume.parsed_content && !resume.parsed_content.includes('正在解析') && (
+                        <Button 
+                          variant="outline" 
+                          size="sm"
+                          className="text-xs h-8"
+                          onClick={() => extractFields(resume)}
+                          disabled={extractingId === resume.id}
+                        >
+                          {extractingId === resume.id ? (
+                            <>
+                              <Loader2 className="h-3 w-3 mr-1 animate-spin" />
+                              提取中
+                            </>
+                          ) : resume.parsed_fields ? (
+                            <>
+                              <CheckCircle className="h-3 w-3 mr-1 text-green-600" />
+                              已提取
+                            </>
+                          ) : (
+                            <>
+                              <Sparkles className="h-3 w-3 mr-1" />
+                              提取字段
+                            </>
+                          )}
+                        </Button>
+                      )}
+                      <Button 
+                        variant="outline" 
+                        size="sm"
+                        className="text-xs h-8"
+                        onClick={() => translateResume(resume)}
+                        disabled={translatingId === resume.id}
+                      >
+                        {translatingId === resume.id ? (
+                          <>
+                            <Loader2 className="h-3 w-3 mr-1 animate-spin" />
+                            翻译中
+                          </>
+                        ) : (
+                          <>
+                            <Languages className="h-3 w-3 mr-1" />
+                            翻译
+                          </>
+                        )}
+                      </Button>
+                      <Link href="/field-mappings" className="hidden sm:block">
+                        <Button variant="outline" size="sm" className="text-xs h-8">
+                          <Map className="h-3 w-3 mr-1" />
+                          字段映射
+                        </Button>
+                      </Link>
+                      <Dialog>
+                        <DialogTrigger asChild>
+                          <Button 
+                            variant="outline" 
+                            size="sm"
+                            className="text-xs h-8"
+                            onClick={() => setSelectedResume(resume)}
+                          >
+                            查看详情
+                          </Button>
+                        </DialogTrigger>
+                        <DialogContent className="max-w-2xl max-h-[85vh] md:max-h-[80vh] overflow-y-auto">
+                          <DialogHeader>
+                            <DialogTitle className="text-base md:text-lg truncate pr-6">{resume.file_name}</DialogTitle>
+                            <DialogDescription className="text-xs md:text-sm">
+                              简历解析结果
+                            </DialogDescription>
+                          </DialogHeader>
+                          <div className="space-y-4">
+                            {/* 结构化字段 (AI提取) */}
+                            {resume.parsed_fields && (
+                              <div className="bg-gradient-to-r from-purple-50 to-pink-50 dark:from-purple-950/30 dark:to-pink-950/30 p-3 md:p-4 rounded-lg">
+                                <div className="flex items-center gap-2 mb-3">
+                                  <Sparkles className="h-4 w-4 text-purple-600" />
+                                  <h4 className="font-semibold text-sm md:text-base">结构化字段</h4>
+                                  <Badge variant="secondary" className="text-xs">AI 提取</Badge>
+                                </div>
+                                
+                                <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 text-sm">
+                                  {resume.parsed_fields.name && (
+                                    <div>
+                                      <span className="text-muted-foreground">姓名:</span>
+                                      <p className="font-medium">{resume.parsed_fields.name}</p>
+                                    </div>
+                                  )}
+                                  {resume.parsed_fields.email && (
+                                    <div>
+                                      <span className="text-muted-foreground">邮箱:</span>
+                                      <p className="font-medium break-all">{resume.parsed_fields.email}</p>
+                                    </div>
+                                  )}
+                                  {resume.parsed_fields.phone && (
+                                    <div>
+                                      <span className="text-muted-foreground">电话:</span>
+                                      <p className="font-medium">{resume.parsed_fields.phone}</p>
+                                    </div>
+                                  )}
+                                  {resume.parsed_fields.location && (
+                                    <div>
+                                      <span className="text-muted-foreground">地址:</span>
+                                      <p className="font-medium">{resume.parsed_fields.location}</p>
+                                    </div>
+                                  )}
+                                </div>
 
-                    {/* Selected resume: show editable fields */}
-                    {selectedResume?.id === resume.id && editedFields && (
-                      <div className="mt-2 pt-3 border-t bg-gradient-to-r from-primary/5 to-transparent p-3 rounded-lg">
-                        <div className="flex items-center gap-2 mb-3">
-                          <Sparkles className="h-4 w-4 text-primary" />
-                          <span className="font-medium text-sm">AI 解析结果（可编辑）</span>
-                          <Badge variant="secondary" className="text-xs">点击编辑</Badge>
-                        </div>
-                        <EditableParsedFields
-                          fields={editedFields}
-                          onChange={setEditedFields}
-                          onSave={saveParsedFields}
-                          saving={savingFields}
-                        />
-                      </div>
-                    )}
+                                {resume.parsed_fields.education && resume.parsed_fields.education.length > 0 && (
+                                  <div className="mt-3">
+                                    <span className="text-sm text-muted-foreground">教育背景:</span>
+                                    <ul className="mt-1 space-y-1">
+                                      {resume.parsed_fields.education.map((edu, i) => (
+                                        <li key={i} className="text-sm">
+                                          <strong>{edu.school}</strong> - {edu.degree} {edu.major}
+                                          {edu.duration && <span className="text-muted-foreground"> ({edu.duration})</span>}
+                                        </li>
+                                      ))}
+                                    </ul>
+                                  </div>
+                                )}
+
+                                {resume.parsed_fields.experience && resume.parsed_fields.experience.length > 0 && (
+                                  <div className="mt-3">
+                                    <span className="text-sm text-muted-foreground">工作经历:</span>
+                                    <ul className="mt-1 space-y-2">
+                                      {resume.parsed_fields.experience.map((exp, i) => (
+                                        <li key={i} className="text-sm">
+                                          <strong>{exp.company}</strong> - {exp.title}
+                                          {exp.duration && <span className="text-muted-foreground"> ({exp.duration})</span>}
+                                        </li>
+                                      ))}
+                                    </ul>
+                                  </div>
+                                )}
+
+                                {resume.parsed_fields.skills && (
+                                  <div className="mt-3 flex flex-wrap gap-2">
+                                    {resume.parsed_fields.skills.technical?.map((skill, i) => (
+                                      <Badge key={`tech-${i}`} variant="secondary">{skill}</Badge>
+                                    ))}
+                                    {resume.parsed_fields.skills.languages?.map((skill, i) => (
+                                      <Badge key={`lang-${i}`} variant="outline">{skill}</Badge>
+                                    ))}
+                                  </div>
+                                )}
+
+                                <div className="mt-3 pt-3 border-t">
+                                  <Link href="/field-mappings">
+                                    <Button variant="outline" size="sm" className="w-full">
+                                      <Map className="h-4 w-4 mr-2" />
+                                      配置字段映射
+                                    </Button>
+                                  </Link>
+                                </div>
+                              </div>
+                            )}
+
+                            {/* 原始解析信息 */}
+                            {resume.user_info?.name && (
+                              <div>
+                                <h4 className="font-semibold text-sm md:text-base mb-2">基本信息</h4>
+                                <div className="grid grid-cols-1 sm:grid-cols-2 gap-2 text-sm">
+                                  {resume.user_info.name && <p><strong>姓名:</strong> {resume.user_info.name}</p>}
+                                  {resume.user_info.email && <p className="break-all"><strong>邮箱:</strong> {resume.user_info.email}</p>}
+                                  {resume.user_info.phone && <p><strong>电话:</strong> {resume.user_info.phone}</p>}
+                                </div>
+                              </div>
+                            )}
+                            {resume.user_info?.education && resume.user_info.education.length > 0 && (
+                              <div>
+                                <h4 className="font-semibold text-sm md:text-base mb-2">教育背景</h4>
+                                <ul className="list-disc list-inside text-sm space-y-1">
+                                  {resume.user_info.education.map((edu, i) => (
+                                    <li key={i}>{edu}</li>
+                                  ))}
+                                </ul>
+                              </div>
+                            )}
+                            {resume.user_info?.experience && resume.user_info.experience.length > 0 && (
+                              <div>
+                                <h4 className="font-semibold text-sm md:text-base mb-2">工作经历</h4>
+                                <ul className="list-disc list-inside text-sm space-y-1">
+                                  {resume.user_info.experience.map((exp, i) => (
+                                    <li key={i}>{exp}</li>
+                                  ))}
+                                </ul>
+                              </div>
+                            )}
+                            {resume.user_info?.skills && resume.user_info.skills.length > 0 && (
+                              <div>
+                                <h4 className="font-semibold text-sm md:text-base mb-2">技能标签</h4>
+                                <div className="flex flex-wrap gap-1.5 md:gap-2">
+                                  {resume.user_info.skills.map((skill, i) => (
+                                    <Badge key={i} variant="secondary" className="text-xs">{skill}</Badge>
+                                  ))}
+                                </div>
+                              </div>
+                            )}
+                          </div>
+                        </DialogContent>
+                      </Dialog>
+                      <Button 
+                        variant="destructive" 
+                        size="sm"
+                        className="text-xs h-8 px-2"
+                        onClick={() => deleteResume(resume.id)}
+                      >
+                        <Trash2 className="h-3 w-3 md:h-4 md:w-4" />
+                      </Button>
+                    </div>
                   </div>
                 </CardContent>
               </Card>
-            ))}
-          </div>
-        )}
-
-        {/* Next Step Button */}
-        {hasActiveResume && (
-          <div className="mt-6 flex justify-end">
-            <Button
-              size="lg"
-              className="bg-gradient-to-r from-primary to-primary/80 shadow-lg shadow-primary/20 group"
-              onClick={() => router.push('/ai-match')}
-            >
-              下一步：AI选岗
-              <ArrowRight className="ml-2 h-5 w-5 group-hover:translate-x-1 transition-transform" />
-            </Button>
-          </div>
-        )}
+            ))
+          )}
+        </div>
       </main>
     </div>
   );
 }
 
+// 主组件 - 使用 AccessGuard 包裹内部组件
 export default function ResumePage() {
   return (
     <AccessGuard>

@@ -1,59 +1,112 @@
 import Link from 'next/link';
 import Image from 'next/image';
 import { Button } from '@/components/ui/button';
+import { Card, CardContent } from '@/components/ui/card';
 import { JobStatsWidget } from '@/components/job-stats-widget';
 import {
+  Briefcase,
   FileText,
-  Brain,
-  CheckCircle,
+  Sparkles,
   Send,
-  Mail,
+  Search,
+  Brain,
+  Upload,
+  ChevronRight,
+  MapPin,
   ArrowRight,
   Zap,
+  Crosshair,
   Rocket,
-  Sparkles,
+  Layers,
+  Wand2,
+  Puzzle,
 } from 'lucide-react';
+import { ScrollCard } from '@/components/scroll-card';
 
-const steps = [
+const features = [
   {
-    step: '01',
-    title: '提供简历',
-    description: '上传 PDF 或 Word 简历，AI 自动解析关键信息，支持手动编辑',
-    icon: FileText,
-    href: '/resume',
+    title: '岗位开放',
+    description: '按地区、方向、受众筛选海量海外岗位',
+    detail: '支持多维度筛选，一键收藏心仪机会',
+    icon: Search,
+    href: '/jobs',
     gradient: 'from-blue-600 via-blue-500 to-cyan-500',
+    pattern: 'dots',
+
   },
   {
-    step: '02',
-    title: 'AI选岗',
-    description: '基于简历深度分析，精准匹配最适合你的岗位',
+    title: 'AI智能选岗',
+    description: '基于简历深度分析，精准匹配岗位',
+    detail: 'AI驱动智能推荐，找到最适合你的机会',
     icon: Brain,
     href: '/ai-match',
     gradient: 'from-violet-600 via-purple-500 to-fuchsia-500',
+    pattern: 'grid',
+
   },
   {
-    step: '03',
-    title: '确认岗位',
-    description: 'AI 自动优化简历适配 ATS 系统，确认后一键生成投递清单',
-    icon: CheckCircle,
-    href: '/confirm',
+    title: '简历管理',
+    description: '智能解析简历，一键管理',
+    detail: '支持 PDF、Word 多格式上传',
+    icon: FileText,
+    href: '/resume',
     gradient: 'from-emerald-600 via-green-500 to-teal-500',
+    pattern: 'dots',
+
   },
   {
-    step: '04',
-    title: '投递',
-    description: '浏览器扩展自动填表 或 跳转官网手动提交，实时跟踪进度',
-    icon: Send,
-    href: '/submit',
+    title: 'ATS简历优化',
+    description: '针对招聘系统优化简历',
+    detail: '提高简历通过率，让 HR 更容易看到你',
+    icon: Wand2,
+    href: '/optimize',
     gradient: 'from-orange-600 via-amber-500 to-yellow-500',
+    pattern: 'grid',
+
   },
   {
-    step: '05',
-    title: '邮箱回执',
-    description: '每次投递后邮箱收到确认邮件，汇总页展示所有投递记录',
-    icon: Mail,
+    title: '投递数据',
+    description: '追踪网申进度，管理投递状态',
+    detail: '实时查看投递记录，掌握求职进展',
+    icon: Send,
     href: '/applications',
     gradient: 'from-pink-600 via-rose-500 to-red-500',
+    pattern: 'dots',
+
+  },
+  {
+    title: 'AutoFill一键填写',
+    description: '智能填写企业网申表单',
+    detail: '浏览器扩展一键填充，高效完成投递',
+    icon: Puzzle,
+    href: '/extension',
+    gradient: 'from-cyan-600 via-teal-500 to-emerald-500',
+    pattern: 'grid',
+
+  },
+];
+
+const advantages = [
+  {
+    icon: MapPin,
+    title: '全球岗位覆盖',
+    description: '覆盖美国、英国、新加坡、香港等主流留学地区',
+    iconBg: 'bg-sky-100',
+    iconColor: 'text-sky-600',
+  },
+  {
+    icon: Crosshair,
+    title: '精准智能匹配',
+    description: 'AI深度分析简历与岗位匹配度',
+    iconBg: 'bg-violet-100',
+    iconColor: 'text-violet-600',
+  },
+  {
+    icon: Rocket,
+    title: '高效求职工具',
+    description: '一站式完成简历优化、岗位筛选、网申投递',
+    iconBg: 'bg-amber-100',
+    iconColor: 'text-amber-600',
   },
 ];
 
@@ -75,10 +128,28 @@ export default function Home() {
             <span className="font-bold text-lg md:text-xl">Rising Path</span>
           </Link>
           
-          <div className="flex items-center gap-2">
+          {/* Desktop Nav */}
+          <div className="hidden md:flex items-center gap-2">
             <Link href="/jobs">
               <Button variant="ghost" size="sm" className="text-muted-foreground hover:text-foreground">
-                浏览岗位
+                岗位开放
+              </Button>
+            </Link>
+            <Link href="/submit-job">
+              <Button variant="ghost" size="sm" className="text-muted-foreground hover:text-foreground">
+                <span className="mr-1">+</span>
+                贡献岗位
+              </Button>
+            </Link>
+            <Link href="/resume">
+              <Button variant="ghost" size="sm" className="text-muted-foreground hover:text-foreground">
+                简历管理
+              </Button>
+            </Link>
+            <Link href="/extension">
+              <Button variant="ghost" size="sm" className="text-muted-foreground hover:text-foreground">
+                <Puzzle className="h-4 w-4 mr-1" />
+                AutoFill一键填写
               </Button>
             </Link>
             <Link href="/login">
@@ -87,89 +158,187 @@ export default function Home() {
               </Button>
             </Link>
           </div>
+          
+          {/* Mobile Nav - Simplified */}
+          <div className="flex md:hidden items-center gap-2">
+            <Link href="/jobs">
+              <Button variant="ghost" size="sm" className="text-muted-foreground hover:text-foreground px-2">
+                岗位
+              </Button>
+            </Link>
+            <Link href="/login">
+              <Button size="sm" className="bg-gradient-to-r from-primary to-primary/80 hover:opacity-90">
+                登录
+              </Button>
+            </Link>
+          </div>
         </div>
       </nav>
 
       {/* Hero Section */}
-      <section className="container mx-auto px-4 md:px-6 pt-12 pb-10 md:pt-20 md:pb-16">
+      <section className="container mx-auto px-4 md:px-6 pt-16 pb-16 md:pt-28 md:pb-24">
         <div className="max-w-4xl mx-auto text-center">
           <div className="inline-flex items-center gap-2 px-3 py-1.5 md:px-4 md:py-2 rounded-full bg-primary/5 border border-primary/10 mb-6 md:mb-10">
             <div className="w-2 h-2 rounded-full bg-primary animate-pulse" />
             <span className="text-xs md:text-sm font-medium text-primary">专为海外留学生打造的智能求职平台</span>
           </div>
           
-          <h1 className="text-3xl sm:text-4xl md:text-6xl font-bold tracking-tight mb-4 md:mb-6 leading-[1.1]">
-            <span className="block mb-1 md:mb-2">上传简历，五步搞定</span>
+          <h1 className="text-3xl sm:text-4xl md:text-7xl font-bold tracking-tight mb-4 md:mb-8 leading-[1.1]">
+            <span className="block mb-1 md:mb-2">智能求职</span>
             <span className="bg-gradient-to-r from-primary via-primary/80 to-primary/60 bg-clip-text text-transparent">
-              从选岗到投递全自动化
+              一步到位
             </span>
           </h1>
           
-          <p className="text-base md:text-lg text-muted-foreground max-w-2xl mx-auto mb-6 leading-relaxed">
-            AI 驱动的求职助手：智能匹配岗位 → ATS优化简历 → 一键投递 → 邮箱回执
+          <p className="text-base md:text-xl text-muted-foreground max-w-2xl mx-auto mb-6 leading-relaxed">
+            AI驱动的求职助手，从简历优化到岗位匹配
             <br className="hidden sm:block" />
-            让你的求职效率提升10倍
+            让每一步都更精准、更高效
           </p>
-
-          <div className="flex flex-col sm:flex-row gap-3 justify-center mb-8">
-            <Link href="/resume">
-              <Button size="lg" className="h-14 px-10 text-lg bg-gradient-to-r from-primary to-primary/80 hover:opacity-90 shadow-2xl shadow-primary/20 rounded-2xl group">
-                <FileText className="mr-2 h-5 w-5" />
-                从上传简历开始
-                <ArrowRight className="ml-2 h-5 w-5 group-hover:translate-x-1 transition-transform" />
-              </Button>
-            </Link>
-            <Link href="/jobs">
-              <Button size="lg" variant="outline" className="h-14 px-10 text-lg rounded-2xl border-2">
-                先看看岗位
-              </Button>
-            </Link>
-          </div>
-
           <div className="max-w-xl mx-auto">
             <JobStatsWidget />
           </div>
         </div>
       </section>
 
-      {/* 5-Step Flow Section */}
-      <section className="container mx-auto px-4 md:px-6 py-10 md:py-20">
-        <div className="text-center mb-8 md:mb-14">
-          <div className="inline-flex items-center gap-2 px-3 py-1.5 md:px-4 md:py-2 rounded-full bg-primary/5 border border-primary/10 mb-3 md:mb-8">
-            <Zap className="h-4 w-4 md:h-5 md:w-5 text-primary" />
-            <span className="text-sm md:text-base font-medium">五步流程</span>
+      {/* Advantages Section - Premium Style */}
+      <section className="container mx-auto px-4 md:px-6">
+        <div className="grid grid-cols-1 md:grid-cols-3 gap-4 md:gap-8">
+          <ScrollCard
+            iconName="MapPin"
+            title="全球岗位覆盖"
+            description="覆盖美国、英国、新加坡、香港等主流留学地区"
+            iconColor="text-sky-600"
+            scrollTo="features"
+          />
+          <ScrollCard
+            iconName="Crosshair"
+            title="精准智能匹配"
+            description="AI深度分析简历与岗位匹配度"
+            iconColor="text-violet-600"
+            scrollTo="features"
+          />
+          <ScrollCard
+            iconName="Rocket"
+            title="高效求职工具"
+            description="一站式完成简历优化、岗位筛选、网申投递"
+            iconColor="text-amber-600"
+            scrollTo="features"
+          />
+        </div>
+      </section>
+
+      {/* Features Section - Bento Grid Style */}
+      <section id="features" className="container mx-auto px-4 md:px-6 py-12 md:py-24">
+        <div className="text-center mb-6 md:mb-20">
+          <div className="inline-flex items-center gap-2 px-3 py-1.5 md:px-4 md:py-2 rounded-full bg-muted/50 border border-muted/50 mb-3 md:mb-8">
+            <Layers className="h-4 w-4 md:h-5 md:w-5 text-primary" />
+            <span className="text-sm md:text-base font-medium">六大核心能力</span>
           </div>
-          <h2 className="text-2xl sm:text-3xl md:text-5xl font-bold mb-2 md:mb-6">
-            从简历到Offer，<span className="bg-gradient-to-r from-primary to-primary/60 bg-clip-text text-transparent ml-1 md:ml-3">一站直达</span>
+          <h2 className="text-2xl sm:text-3xl md:text-6xl font-bold mb-2 md:mb-6">
+            为求职而生的
+            <span className="bg-gradient-to-r from-primary to-primary/60 bg-clip-text text-transparent ml-1 md:ml-3">超级工具</span>
           </h2>
-          <p className="text-muted-foreground text-sm md:text-lg max-w-xl mx-auto">
-            每一步都有AI助力，让求职不再是漫漫长路
+          <p className="text-muted-foreground text-sm md:text-xl max-w-xl mx-auto hidden md:block">
+            每一个功能都经过精心设计，让求职之路更加顺畅
           </p>
         </div>
+        
+        {/* Mobile: Horizontal Card Layout / Desktop: Bento Grid */}
+        <div className="grid grid-cols-1 md:grid-cols-3 gap-3 md:gap-6">
+          {features.map((feature) => (
+            <Link 
+              href={feature.href} 
+              key={feature.title}
+              className="group relative overflow-hidden rounded-2xl md:rounded-3xl transition-all duration-300 md:duration-500 hover:-translate-y-1 active:scale-[0.98] md:active:scale-100"
+            >
+              {/* Background */}
+              <div className="absolute inset-0 bg-gradient-to-br from-muted/30 to-muted/10" />
+              
+              {/* Pattern - Desktop only */}
+              <div className="absolute inset-0 opacity-30 hidden md:block">
+                {feature.pattern === 'dots' && (
+                  <div className="w-full h-full bg-[radial-gradient(circle,_hsl(var(--muted-foreground))_1px,_transparent_1px)] bg-[size:16px_16px]" />
+                )}
+                {feature.pattern === 'grid' && (
+                  <div className="w-full h-full bg-[linear-gradient(to_right,_hsl(var(--muted-foreground))_1px,_transparent_1px),linear-gradient(to_bottom,_hsl(var(--muted-foreground))_1px,_transparent_1px)] bg-[size:24px_24px]" />
+                )}
+              </div>
+              
+              {/* Gradient overlay on hover */}
+              <div className={`absolute inset-0 bg-gradient-to-br ${feature.gradient} opacity-0 group-hover:opacity-5 transition-opacity duration-500`} />
+              
+              {/* Mobile: Horizontal Layout / Desktop: Vertical Layout */}
+              <div className="relative h-full p-4 md:p-9 flex flex-row md:flex-col items-center gap-4 md:gap-6 min-h-[auto] md:min-h-[280px]">
+                {/* Icon */}
+                <div className={`w-14 h-14 md:w-16 md:h-16 rounded-2xl bg-gradient-to-br ${feature.gradient} flex items-center justify-center shadow-lg md:shadow-xl group-hover:scale-110 md:group-hover:rotate-3 transition-all duration-300 md:duration-500 flex-shrink-0`}>
+                  <feature.icon className="h-7 w-7 md:h-8 md:w-8 text-white" />
+                </div>
+                
+                {/* Text */}
+                <div className="flex-1 text-left md:text-center">
+                  <h3 className="font-bold text-base md:text-2xl mb-1 md:mb-3 group-hover:text-primary transition-colors">
+                    {feature.title}
+                  </h3>
+                  <p className="text-muted-foreground text-xs md:text-base leading-relaxed line-clamp-2 md:line-clamp-none">
+                    {feature.description}
+                  </p>
+                </div>
+                
+                {/* Arrow - Mobile */}
+                <ChevronRight className="h-5 w-5 text-muted-foreground md:hidden flex-shrink-0" />
+                
+                {/* Arrow - Desktop */}
+                <div className="hidden md:flex absolute bottom-9 right-9 w-12 h-12 rounded-xl bg-muted/50 items-center justify-center opacity-0 group-hover:opacity-100 transition-all duration-300 group-hover:translate-x-1">
+                  <ArrowRight className="h-6 w-6 text-primary" />
+                </div>
+              </div>
+            </Link>
+          ))}
+        </div>
+      </section>
 
-        {/* Steps Timeline */}
-        <div className="max-w-5xl mx-auto">
+      {/* How it works */}
+      <section className="container mx-auto px-4 md:px-6 py-10 md:py-20">
+        <div className="relative rounded-2xl md:rounded-3xl bg-gradient-to-br from-muted/60 via-muted/30 to-muted/10 border border-muted/30 p-8 md:p-12 lg:p-16 overflow-hidden">
+          {/* Decorative elements */}
+          <div className="absolute top-0 right-0 w-60 md:w-80 h-60 md:h-80 bg-gradient-to-br from-primary/5 to-transparent rounded-full blur-3xl" />
+          <div className="absolute bottom-0 left-0 w-40 md:w-60 h-40 md:h-60 bg-gradient-to-tr from-purple-500/5 to-transparent rounded-full blur-3xl" />
+          
           <div className="relative">
-            {/* Connector line - Desktop */}
-            <div className="hidden md:block absolute top-12 left-[10%] right-[10%] h-[2px] bg-gradient-to-r from-primary/20 via-primary/40 to-primary/20" />
-
-            <div className="grid grid-cols-1 md:grid-cols-5 gap-4 md:gap-6">
-              {steps.map((item, index) => (
-                <Link
-                  key={item.step}
-                  href={item.href}
-                  className="group relative"
-                >
-                  {/* Mobile connector line */}
-                  {index < steps.length - 1 && (
-                    <div className="md:hidden absolute left-[31px] top-[68px] w-[2px] h-[calc(100%+4px)] bg-gradient-to-b from-primary/30 to-transparent" />
+            <div className="text-center mb-10 md:mb-14">
+              <div className="inline-flex items-center gap-2 px-3 py-1.5 md:px-4 md:py-2 rounded-full bg-primary/5 border border-primary/10 mb-4 md:mb-8">
+                <Zap className="h-4 w-4 md:h-5 md:w-5 text-primary" />
+                <span className="text-sm md:text-base font-medium">简单三步</span>
+              </div>
+              <h2 className="text-2xl md:text-5xl lg:text-6xl font-bold mb-3 md:mb-6">开启求职之旅</h2>
+              <p className="text-muted-foreground text-sm md:text-xl">让AI帮你找到理想工作</p>
+            </div>
+            
+            {/* Mobile: Vertical Timeline / Desktop: Horizontal Cards */}
+            <div className="flex flex-col md:grid md:grid-cols-3 gap-6 md:gap-10">
+              {[
+                { step: '01', title: '上传简历', desc: '上传 PDF 或 Word 简历，系统自动解析关键信息', icon: Upload },
+                { step: '02', title: '智能匹配', desc: 'AI 分析简历内容，精准推荐匹配岗位', icon: Brain },
+                { step: '03', title: '一键投递', desc: '优化简历并自动填写，高效完成网申投递', icon: Send },
+              ].map((item, index) => (
+                <div key={item.step} className="relative group">
+                  {/* Mobile: Vertical connector line */}
+                  {index < 2 && (
+                    <div className="md:hidden absolute left-[31px] top-[80px] w-[2px] h-[calc(100%+8px)] bg-gradient-to-b from-primary/40 to-transparent" />
                   )}
-
-                  <div className="flex md:flex-col items-start md:items-center gap-4 md:gap-0 p-4 md:p-0 rounded-xl md:rounded-none bg-muted/20 md:bg-transparent hover:bg-muted/30 md:hover:bg-transparent transition-colors">
-                    {/* Step circle */}
-                    <div className="relative flex-shrink-0 md:mb-4">
-                      <div className={`w-16 h-16 md:w-20 md:h-20 rounded-xl md:rounded-2xl bg-gradient-to-br ${item.gradient} flex items-center justify-center shadow-lg md:shadow-2xl group-hover:scale-105 transition-transform duration-300`}>
-                        <item.icon className="h-7 w-7 md:h-8 md:w-8 text-white" />
+                  
+                  {/* Desktop: Horizontal connector line */}
+                  {index < 2 && (
+                    <div className="hidden md:block absolute top-10 left-[60%] w-[80%] h-[2px] bg-gradient-to-r from-primary/30 to-transparent" />
+                  )}
+                  
+                  {/* Mobile: Horizontal card layout */}
+                  <div className="flex md:flex-col items-start md:items-center gap-4 md:gap-0 py-4 px-4 md:p-0 rounded-xl md:rounded-none bg-muted/20 md:bg-transparent">
+                    {/* Step number with icon */}
+                    <div className="relative flex-shrink-0 md:mb-6">
+                      <div className="w-16 h-16 md:w-20 md:h-20 rounded-xl md:rounded-2xl bg-gradient-to-br from-primary to-primary/70 flex items-center justify-center shadow-lg md:shadow-2xl shadow-primary/20 group-hover:scale-105 transition-transform duration-300">
+                        <item.icon className="h-7 w-7 md:h-8 md:w-8 text-primary-foreground" />
                       </div>
                       <div className="absolute -top-1.5 -right-1.5 md:-top-2 md:-right-2 w-6 h-6 md:w-7 md:h-7 rounded-full bg-background border-2 border-primary flex items-center justify-center text-[10px] md:text-xs font-bold text-primary">
                         {item.step}
@@ -178,15 +347,11 @@ export default function Home() {
                     
                     {/* Text */}
                     <div className="flex-1 md:text-center pt-1">
-                      <h3 className="font-semibold text-lg md:text-xl mb-1 md:mb-2 group-hover:text-primary transition-colors">
-                        {item.title}
-                      </h3>
-                      <p className="text-muted-foreground text-sm md:text-base leading-relaxed">
-                        {item.description}
-                      </p>
+                      <h3 className="font-semibold text-lg md:text-xl mb-2 md:mb-3">{item.title}</h3>
+                      <p className="text-muted-foreground text-sm md:text-base leading-relaxed">{item.desc}</p>
                     </div>
                   </div>
-                </Link>
+                </div>
               ))}
             </div>
           </div>
@@ -194,30 +359,33 @@ export default function Home() {
       </section>
 
       {/* CTA Section */}
-      <section className="container mx-auto px-6 py-16 md:py-24">
+      <section id="cta" className="container mx-auto px-6 py-24">
         <div className="relative text-center">
+          {/* Background glow */}
           <div className="absolute inset-0 flex items-center justify-center">
             <div className="w-[400px] h-[400px] bg-gradient-to-r from-primary/10 to-purple-500/10 rounded-full blur-3xl" />
           </div>
           
           <div className="relative">
-            <div className="inline-flex items-center gap-2 px-4 py-2 rounded-full bg-primary/5 border border-primary/10 mb-6">
-              <Rocket className="h-4 w-4 text-primary" />
-              <span className="text-sm font-medium">开始你的求职之旅</span>
-            </div>
-            <h2 className="text-3xl md:text-5xl font-bold mb-4">
+            <h2 className="text-4xl md:text-5xl font-bold mb-6">
               准备好开始了吗？
             </h2>
-            <p className="text-muted-foreground text-base md:text-lg mb-8 max-w-md mx-auto">
-              加入 Rising Path，五步从简历到Offer
+            <p className="text-muted-foreground text-lg mb-10 max-w-md mx-auto">
+              加入 Rising Path，让求职变得更简单
             </p>
-            <Link href="/resume">
-              <Button size="lg" className="h-16 px-12 text-lg bg-gradient-to-r from-primary to-primary/80 hover:opacity-90 shadow-2xl shadow-primary/20 rounded-2xl group">
-                <Sparkles className="mr-2 h-5 w-5" />
-                立即开始
-                <ArrowRight className="ml-2 h-5 w-5 group-hover:translate-x-1 transition-transform" />
-              </Button>
-            </Link>
+            <div className="flex flex-col sm:flex-row gap-4 justify-center">
+              <Link href="/resume">
+                <Button size="lg" className="h-16 px-12 text-lg bg-gradient-to-r from-primary to-primary/80 hover:opacity-90 shadow-2xl shadow-primary/20 rounded-2xl group">
+                  从上传简历开始
+                  <ArrowRight className="ml-2 h-5 w-5 group-hover:translate-x-1 transition-transform" />
+                </Button>
+              </Link>
+              <Link href="/jobs">
+                <Button size="lg" variant="outline" className="h-16 px-12 text-lg rounded-2xl border-2">
+                  浏览岗位
+                </Button>
+              </Link>
+            </div>
           </div>
         </div>
       </section>

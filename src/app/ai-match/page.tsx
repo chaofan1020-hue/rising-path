@@ -1,33 +1,49 @@
 'use client';
 
 import { useState, useEffect } from 'react';
-import Link from 'next/link';
-import Image from 'next/image';
-import { useRouter } from 'next/navigation';
-import { useAccessCode } from '@/components/access-guard';
-import { AccessGuard } from '@/components/access-guard';
-import { StepProgressBar } from '@/components/step-progress-bar';
 import { Button } from '@/components/ui/button';
-import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card';
+import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Progress } from '@/components/ui/progress';
 import { Checkbox } from '@/components/ui/checkbox';
-import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover';
 import {
-  Brain, Sparkles, Target, MapPin, Compass, ChevronDown,
-  CheckCircle, TrendingUp, Loader2, X, ArrowRight, FileText
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from '@/components/ui/select';
+import {
+  Popover,
+  PopoverContent,
+  PopoverTrigger,
+} from '@/components/ui/popover';
+import { 
+  Brain, 
+  Target, 
+  Loader2, 
+  CheckCircle, 
+  ArrowRight,
+  Briefcase,
+  Sparkles,
+  TrendingUp,
+  MapPin,
+  Compass,
+  ChevronDown,
+  X,
+  Wand2,
 } from 'lucide-react';
+import Link from 'next/link';
+import Image from 'next/image';
+import { AccessGuard, useAccessCode } from '@/components/access-guard';
 
 interface Resume {
   id: number;
   file_name: string;
-  user_info?: { name?: string };
-}
-
-interface JobConfig {
-  id: number;
-  config_value: string;
+  user_info: {
+    name?: string;
+    skills?: string[];
+  };
 }
 
 interface MatchResult {
@@ -36,16 +52,30 @@ interface MatchResult {
   company: string;
   match_score: number;
   match_reason: string;
-  suggestions?: string;
+  suggestions: string;
+}
+
+interface JobConfig {
+  id: number;
+  config_type: string;
+  config_value: string;
+  sort_order: number;
+  is_active: boolean;
 }
 
 // 多选筛选器组件
-function MultiSelectFilter({ label, icon: Icon, options, selected, onChange }: {
+function MultiSelectFilter({
+  label,
+  icon: Icon,
+  options,
+  selected,
+  onChange,
+}: {
   label: string;
   icon: React.ElementType;
   options: JobConfig[];
   selected: string[];
-  onChange: (val: string[]) => void;
+  onChange: (values: string[]) => void;
 }) {
   const handleToggle = (value: string) => {
     if (selected.includes(value)) {
@@ -58,9 +88,9 @@ function MultiSelectFilter({ label, icon: Icon, options, selected, onChange }: {
   return (
     <Popover>
       <PopoverTrigger asChild>
-        <button className="flex items-center gap-1.5 px-3 py-2 border rounded-md text-sm hover:bg-muted transition-colors h-10">
-          <Icon className="h-3.5 w-3.5 text-muted-foreground" />
-          <span>{label}</span>
+        <button className="inline-flex items-center gap-1.5 md:gap-2 px-2.5 py-1.5 md:px-3 md:py-2 rounded-full border border-input bg-background hover:bg-accent hover:text-accent-foreground transition-colors text-xs md:text-sm">
+          <Icon className="h-3.5 w-3.5 md:h-4 md:w-4 text-muted-foreground" />
+          <span className="font-medium">{label}</span>
           {selected.length > 0 && (
             <Badge variant="secondary" className="ml-0.5 h-4 md:h-5 px-1 md:px-1.5 rounded-full text-[10px] md:text-xs">
               {selected.length}
@@ -110,13 +140,11 @@ function MultiSelectFilter({ label, icon: Icon, options, selected, onChange }: {
 
 // 内部组件
 function AIMatchContent() {
-  const router = useRouter();
   const [resumes, setResumes] = useState<Resume[]>([]);
   const [selectedResumeId, setSelectedResumeId] = useState<string>('');
   const [matching, setMatching] = useState(false);
   const [matchProgress, setMatchProgress] = useState(0);
   const [matchResults, setMatchResults] = useState<MatchResult[]>([]);
-  const [selectedJobs, setSelectedJobs] = useState<Set<number>>(new Set());
   const { accessCodeId } = useAccessCode();
   
   // 筛选相关状态
@@ -125,55 +153,12 @@ function AIMatchContent() {
   const [selectedRegions, setSelectedRegions] = useState<string[]>([]);
   const [selectedDirections, setSelectedDirections] = useState<string[]>([]);
 
-  // 从 localStorage 恢复数据
-  useEffect(() => {
-    const saved = localStorage.getItem('risingpath_step2_data');
-    if (saved) {
-      try {
-        const data = JSON.parse(saved);
-        if (data.selectedResumeId) setSelectedResumeId(data.selectedResumeId);
-        if (data.matchResults) setMatchResults(data.matchResults);
-        if (data.selectedJobs) setSelectedJobs(new Set(data.selectedJobs));
-        if (data.selectedRegions) setSelectedRegions(data.selectedRegions);
-        if (data.selectedDirections) setSelectedDirections(data.selectedDirections);
-      } catch (e) {
-        console.error('Failed to restore step2 data:', e);
-      }
-    }
-  }, []);
-
-  // 保存数据到 localStorage
-  useEffect(() => {
-    if (matchResults.length > 0 || selectedResumeId) {
-      localStorage.setItem('risingpath_step2_data', JSON.stringify({
-        selectedResumeId,
-        matchResults,
-        selectedJobs: Array.from(selectedJobs),
-        selectedRegions,
-        selectedDirections,
-      }));
-    }
-  }, [selectedResumeId, matchResults, selectedJobs, selectedRegions, selectedDirections]);
-
   useEffect(() => {
     if (accessCodeId) {
       fetchResumes();
       fetchJobConfigs();
     }
   }, [accessCodeId]);
-
-  // 恢复 step1 选中的简历
-  useEffect(() => {
-    const step1Data = localStorage.getItem('risingpath_step1_data');
-    if (step1Data && !selectedResumeId) {
-      try {
-        const data = JSON.parse(step1Data);
-        if (data.resumeId) {
-          setSelectedResumeId(data.resumeId.toString());
-        }
-      } catch (e) {}
-    }
-  }, []);
 
   const fetchResumes = async () => {
     if (!accessCodeId) return;
@@ -207,9 +192,9 @@ function AIMatchContent() {
     setMatching(true);
     setMatchProgress(0);
     setMatchResults([]);
-    setSelectedJobs(new Set());
 
     try {
+      // Simulate progress
       const progressInterval = setInterval(() => {
         setMatchProgress((prev) => Math.min(prev + 5, 90));
       }, 100);
@@ -241,45 +226,6 @@ function AIMatchContent() {
     }
   };
 
-  const toggleJobSelection = (jobId: number) => {
-    setSelectedJobs(prev => {
-      const newSet = new Set(prev);
-      if (newSet.has(jobId)) {
-        newSet.delete(jobId);
-      } else {
-        newSet.add(jobId);
-      }
-      return newSet;
-    });
-  };
-
-  const selectAllJobs = () => {
-    setSelectedJobs(new Set(matchResults.map(r => r.job_id)));
-  };
-
-  const deselectAllJobs = () => {
-    setSelectedJobs(new Set());
-  };
-
-  const handleConfirmAndNext = () => {
-    if (selectedJobs.size === 0) return;
-    
-    // 保存选中岗位信息
-    const selectedJobDetails = matchResults
-      .filter(r => selectedJobs.has(r.job_id))
-      .map(r => ({
-        job_id: r.job_id,
-        job_title: r.job_title,
-        company: r.company,
-        match_score: r.match_score,
-        match_reason: r.match_reason,
-        suggestions: r.suggestions,
-      }));
-    
-    localStorage.setItem('risingpath_step3_jobs', JSON.stringify(selectedJobDetails));
-    router.push('/optimize?step=3');
-  };
-
   const getScoreColor = (score: number) => {
     if (score >= 80) return 'text-green-600';
     if (score >= 60) return 'text-yellow-600';
@@ -301,17 +247,18 @@ function AIMatchContent() {
             <Image src="/logo.svg" alt="Rising Path" width={28} height={28} className="rounded" />
             <span className="font-bold text-lg md:text-xl">Rising Path</span>
           </Link>
+          <nav className="flex items-center gap-2 md:gap-4">
+            <Link href="/jobs">
+              <Button variant="ghost" size="sm" className="text-xs md:text-sm">岗位查询</Button>
+            </Link>
+            <Link href="/resume">
+              <Button variant="ghost" size="sm" className="text-xs md:text-sm">简历管理</Button>
+            </Link>
+          </nav>
         </div>
       </header>
 
-      {/* Step Progress Bar */}
-      <div className="border-b bg-muted/30">
-        <div className="container mx-auto px-4 py-3">
-          <StepProgressBar currentStep={2} />
-        </div>
-      </div>
-
-      <main className="container mx-auto px-4 py-4 md:py-8 max-w-5xl">
+      <main className="container mx-auto px-4 py-4 md:py-8">
         {/* Page Title */}
         <div className="mb-6 md:mb-8">
           <h1 className="text-2xl md:text-3xl font-bold mb-1 md:mb-2 flex items-center gap-2 md:gap-3">
@@ -319,7 +266,7 @@ function AIMatchContent() {
             AI智能选岗
           </h1>
           <p className="text-sm md:text-base text-muted-foreground">
-            基于你的简历，AI将智能分析并推荐最匹配的岗位，勾选你感兴趣的岗位进入下一步
+            基于你的简历，AI将智能分析并推荐最匹配的岗位
           </p>
         </div>
 
@@ -336,6 +283,7 @@ function AIMatchContent() {
           </CardHeader>
           <CardContent>
             <div className="flex flex-wrap items-end gap-3">
+              {/* 简历选择 */}
               <div className="w-full md:w-auto">
                 <label className="text-xs md:text-sm font-medium mb-1.5 block">选择简历</label>
                 <Select value={selectedResumeId} onValueChange={setSelectedResumeId}>
@@ -353,6 +301,7 @@ function AIMatchContent() {
                 </Select>
               </div>
 
+              {/* 筛选器 - 推到右边 */}
               <div className="flex items-center gap-3 md:ml-auto">
                 <MultiSelectFilter
                   label="地区"
@@ -388,28 +337,49 @@ function AIMatchContent() {
               </div>
             </div>
 
+            {/* 已选择的筛选条件显示 */}
             {(selectedRegions.length > 0 || selectedDirections.length > 0) && (
               <div className="mt-4 flex flex-wrap gap-1.5 md:gap-2 items-center">
                 <span className="text-xs md:text-sm text-muted-foreground">已选择：</span>
                 {selectedRegions.map((region) => (
-                  <Badge key={region} variant="secondary" className="flex items-center gap-1 pr-1 text-xs">
+                  <Badge 
+                    key={region} 
+                    variant="secondary" 
+                    className="flex items-center gap-1 pr-1 text-xs"
+                  >
                     <MapPin className="h-3 w-3" />
                     {region}
-                    <button onClick={() => setSelectedRegions(selectedRegions.filter(r => r !== region))} className="ml-1 hover:bg-muted-foreground/20 rounded-full p-0.5">
+                    <button
+                      onClick={() => setSelectedRegions(selectedRegions.filter(r => r !== region))}
+                      className="ml-1 hover:bg-muted-foreground/20 rounded-full p-0.5"
+                    >
                       <X className="h-3 w-3" />
                     </button>
                   </Badge>
                 ))}
                 {selectedDirections.map((direction) => (
-                  <Badge key={direction} variant="secondary" className="flex items-center gap-1 pr-1 text-xs">
+                  <Badge 
+                    key={direction} 
+                    variant="secondary" 
+                    className="flex items-center gap-1 pr-1 text-xs"
+                  >
                     <Compass className="h-3 w-3" />
                     {direction}
-                    <button onClick={() => setSelectedDirections(selectedDirections.filter(d => d !== direction))} className="ml-1 hover:bg-muted-foreground/20 rounded-full p-0.5">
+                    <button
+                      onClick={() => setSelectedDirections(selectedDirections.filter(d => d !== direction))}
+                      className="ml-1 hover:bg-muted-foreground/20 rounded-full p-0.5"
+                    >
                       <X className="h-3 w-3" />
                     </button>
                   </Badge>
                 ))}
-                <button onClick={() => { setSelectedRegions([]); setSelectedDirections([]); }} className="text-xs text-muted-foreground hover:text-foreground transition-colors">
+                <button
+                  onClick={() => {
+                    setSelectedRegions([]);
+                    setSelectedDirections([]);
+                  }}
+                  className="text-xs text-muted-foreground hover:text-foreground transition-colors"
+                >
                   清除全部
                 </button>
               </div>
@@ -430,48 +400,20 @@ function AIMatchContent() {
         {/* Match Results */}
         {matchResults.length > 0 && (
           <div className="space-y-3 md:space-y-4">
-            {/* Selection Controls */}
-            <div className="flex items-center justify-between flex-wrap gap-2">
-              <div className="flex items-center gap-3">
-                <h2 className="text-lg md:text-xl font-semibold flex items-center gap-2">
-                  <CheckCircle className="h-4 w-4 md:h-5 md:w-5 text-green-600" />
-                  匹配结果
-                </h2>
-                <Badge variant="secondary" className="text-xs">共 {matchResults.length} 个推荐</Badge>
-                {selectedJobs.size > 0 && (
-                  <Badge className="bg-purple-600 text-xs">已选 {selectedJobs.size} 个</Badge>
-                )}
-              </div>
-              <div className="flex items-center gap-2">
-                <Button variant="outline" size="sm" onClick={selectAllJobs} className="text-xs h-8">
-                  全选
-                </Button>
-                <Button variant="outline" size="sm" onClick={deselectAllJobs} className="text-xs h-8">
-                  取消全选
-                </Button>
-              </div>
+            <div className="flex items-center justify-between">
+              <h2 className="text-lg md:text-xl font-semibold flex items-center gap-2">
+                <CheckCircle className="h-4 w-4 md:h-5 md:w-5 text-green-600" />
+                匹配结果
+              </h2>
+              <Badge variant="secondary" className="text-xs">共 {matchResults.length} 个推荐</Badge>
             </div>
 
-            {matchResults.map((result) => (
-              <Card 
-                key={result.job_id} 
-                className={`hover:shadow-lg transition-all cursor-pointer ${
-                  selectedJobs.has(result.job_id) ? 'ring-2 ring-purple-500 bg-purple-50/50 dark:bg-purple-950/20' : ''
-                }`}
-                onClick={() => toggleJobSelection(result.job_id)}
-              >
+            {matchResults.map((result, index) => (
+              <Card key={result.job_id} className="hover:shadow-lg transition-all">
                 <CardContent className="pt-4 md:pt-6">
+                  {/* 手机端：纵向布局，桌面端：横向布局 */}
                   <div className="flex flex-col md:flex-row gap-4 md:gap-6">
-                    {/* Checkbox */}
-                    <div className="flex items-start pt-1">
-                      <Checkbox
-                        checked={selectedJobs.has(result.job_id)}
-                        onCheckedChange={() => toggleJobSelection(result.job_id)}
-                        className="data-[state=checked]:bg-purple-600 data-[state=checked]:border-purple-600 h-5 w-5"
-                      />
-                    </div>
-
-                    {/* Score */}
+                    {/* Score - 手机端横向紧凑，桌面端纵向带背景 */}
                     <div className="flex items-center gap-3 md:flex-col md:items-center md:justify-center md:p-4 md:rounded-lg md:bg-gradient-to-br md:from-purple-50 md:to-blue-50 dark:md:from-purple-950 dark:md:to-blue-950 flex-shrink-0">
                       <div className={`text-3xl md:text-4xl font-bold ${getScoreColor(result.match_score)}`}>
                         {result.match_score}
@@ -513,11 +455,16 @@ function AIMatchContent() {
                         </div>
                       )}
 
-                      <div className="flex gap-2" onClick={(e) => e.stopPropagation()}>
+                      <div className="flex gap-2">
+                        <Button size="sm" asChild className="h-8 text-xs">
+                          <Link href={`/optimize?resumeId=${selectedResumeId}&company=${encodeURIComponent(result.company)}&position=${encodeURIComponent(result.job_title)}&suggestions=${encodeURIComponent(result.suggestions || '')}`}>
+                            <Wand2 className="mr-1 h-3 w-3" />
+                            优化简历
+                          </Link>
+                        </Button>
                         <Button size="sm" variant="outline" asChild className="h-8 text-xs">
                           <Link href={`/jobs/${result.job_id}`}>
-                            <FileText className="mr-1 h-3 w-3" />
-                            查看详情
+                            查看岗位
                           </Link>
                         </Button>
                       </div>
@@ -526,28 +473,6 @@ function AIMatchContent() {
                 </CardContent>
               </Card>
             ))}
-
-            {/* Confirm & Next Button */}
-            <div className="sticky bottom-0 bg-background/95 backdrop-blur border-t py-4 -mx-4 px-4">
-              <div className="flex items-center justify-between">
-                <div className="text-sm text-muted-foreground">
-                  {selectedJobs.size > 0 ? (
-                    <span>已选择 <strong className="text-foreground">{selectedJobs.size}</strong> 个岗位</span>
-                  ) : (
-                    <span>请勾选你感兴趣的岗位</span>
-                  )}
-                </div>
-                <Button
-                  onClick={handleConfirmAndNext}
-                  disabled={selectedJobs.size === 0}
-                  className="bg-gradient-to-r from-purple-600 to-blue-600 hover:from-purple-700 hover:to-blue-700"
-                  size="lg"
-                >
-                  确认选岗，进入ATS优化
-                  <ArrowRight className="ml-2 h-4 w-4" />
-                </Button>
-              </div>
-            </div>
           </div>
         )}
 
@@ -568,6 +493,7 @@ function AIMatchContent() {
   );
 }
 
+// 主组件
 export default function AIMatchPage() {
   return (
     <AccessGuard>
