@@ -42,6 +42,8 @@ import {
   Save,
   Clock,
   Trash2,
+  Pencil,
+  Eye,
 } from 'lucide-react';
 import Link from 'next/link';
 import Image from 'next/image';
@@ -282,6 +284,8 @@ function OptimizeContent() {
   const [isEnglishVersion, setIsEnglishVersion] = useState(false);
   const [downloading, setDownloading] = useState(false);
   const [savedRecords, setSavedRecords] = useState<OptimizedRecord[]>([]);
+  const [isEditing, setIsEditing] = useState(false);
+  const [editedContent, setEditedContent] = useState('');
   const [showSavedToast, setShowSavedToast] = useState(false);
   const { accessCodeId } = useAccessCode();
 
@@ -548,7 +552,7 @@ function OptimizeContent() {
       
       navigator.clipboard.writeText(text.trim());
     } else {
-      navigator.clipboard.writeText(optimizedContent);
+      navigator.clipboard.writeText(isEditing ? editedContent : optimizedContent);
     }
   };
 
@@ -1139,6 +1143,33 @@ function OptimizeContent() {
           
           {/* 操作按钮 */}
           <div className="flex flex-wrap justify-end gap-2 mb-2 flex-shrink-0">
+            <Button
+              variant={isEditing ? "default" : "outline"}
+              size="sm"
+              onClick={() => {
+                if (isEditing) {
+                  // 保存编辑内容到 optimizedContent
+                  setOptimizedContent(editedContent);
+                } else {
+                  // 进入编辑模式
+                  setEditedContent(optimizedContent);
+                }
+                setIsEditing(!isEditing);
+              }}
+              className="h-9 text-xs items-center"
+            >
+              {isEditing ? (
+                <>
+                  <Eye className="mr-1.5 h-3.5 w-3.5" />
+                  预览
+                </>
+              ) : (
+                <>
+                  <Pencil className="mr-1.5 h-3.5 w-3.5" />
+                  编辑
+                </>
+              )}
+            </Button>
             <Button variant="outline" size="sm" onClick={handleCopy} className="h-9 text-xs items-center">
               <Copy className="mr-1.5 h-3.5 w-3.5" />
               复制
@@ -1229,7 +1260,13 @@ function OptimizeContent() {
                 <Badge variant="secondary" className="ml-0.5 text-[10px] md:text-xs h-4 md:h-5">ATS优化</Badge>
               </div>
               <div className="bg-gray-100 p-2 md:p-3 rounded-lg flex-1 overflow-y-auto min-h-[200px] md:min-h-0">
-                {resumeData ? (
+                {isEditing ? (
+                  <textarea
+                    className="w-full h-full min-h-[300px] bg-white p-3 md:p-6 rounded-lg text-xs md:text-sm text-gray-700 leading-relaxed resize-none focus:outline-none focus:ring-2 focus:ring-primary/30 font-mono"
+                    value={editedContent}
+                    onChange={(e) => setEditedContent(e.target.value)}
+                  />
+                ) : resumeData ? (
                   <div className="md:scale-100 w-full">
                     <ResumePreview data={resumeData} isEnglish={isEnglishVersion} />
                   </div>
