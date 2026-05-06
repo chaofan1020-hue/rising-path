@@ -298,9 +298,12 @@ function OptimizeContent() {
     { value: 'jp', label: '日本' },
   ];
 
-  // 加载历史记录
+  // 获取当前访问码的存储key
+  const getStorageKey = () => `optimized_records_${accessCodeId || 'default'}`;
+
+  // 加载历史记录（按访问码隔离）
   useEffect(() => {
-    const saved = localStorage.getItem('optimized_records');
+    const saved = localStorage.getItem(getStorageKey());
     if (saved) {
       try {
         setSavedRecords(JSON.parse(saved));
@@ -308,7 +311,7 @@ function OptimizeContent() {
         console.error('Failed to parse saved records:', e);
       }
     }
-  }, []);
+  }, [accessCodeId]);
 
   // 保存到本地存储
   const handleSave = () => {
@@ -327,7 +330,7 @@ function OptimizeContent() {
     
     const newRecords = [record, ...savedRecords].slice(0, 20); // 最多保存20条
     setSavedRecords(newRecords);
-    localStorage.setItem('optimized_records', JSON.stringify(newRecords));
+    localStorage.setItem(getStorageKey(), JSON.stringify(newRecords));
     setShowSavedToast(true);
     setTimeout(() => setShowSavedToast(false), 2000);
   };
@@ -388,7 +391,7 @@ function OptimizeContent() {
   const deleteRecord = (id: string) => {
     const newRecords = savedRecords.filter(r => r.id !== id);
     setSavedRecords(newRecords);
-    localStorage.setItem('optimized_records', JSON.stringify(newRecords));
+    localStorage.setItem(getStorageKey(), JSON.stringify(newRecords));
   };
 
   useEffect(() => {
@@ -473,7 +476,7 @@ function OptimizeContent() {
         };
         const newRecords = [record, ...savedRecords].slice(0, 20);
         setSavedRecords(newRecords);
-        localStorage.setItem('optimized_records', JSON.stringify(newRecords));
+        localStorage.setItem(getStorageKey(), JSON.stringify(newRecords));
       }
 
       setTimeout(() => {
