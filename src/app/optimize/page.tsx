@@ -104,6 +104,65 @@ interface ResumeData {
   certifications?: string[];
 }
 
+// 将 ResumeData 转换为可读的纯文本
+const resumeDataToText = (data: ResumeData, isEnglish?: boolean): string => {
+  const labels = {
+    summary: isEnglish ? 'Summary' : '个人简介',
+    skills: isEnglish ? 'Skills' : '专业技能',
+    experience: isEnglish ? 'Experience' : '工作经历',
+    education: isEnglish ? 'Education' : '教育背景',
+    projects: isEnglish ? 'Projects' : '项目经历',
+    certifications: isEnglish ? 'Certifications' : '证书资质',
+  };
+  
+  let text = '';
+  text += `${data.name}\n`;
+  const contacts: string[] = [];
+  if (data.contact.email) contacts.push(data.contact.email);
+  if (data.contact.phone) contacts.push(data.contact.phone);
+  if (data.contact.location) contacts.push(data.contact.location);
+  if (data.contact.linkedin) contacts.push(data.contact.linkedin);
+  if (contacts.length > 0) text += `${contacts.join(' | ')}\n`;
+  text += '\n';
+
+  if (data.summary) {
+    text += `【${labels.summary}】\n${data.summary}\n\n`;
+  }
+  if (data.skills && data.skills.length > 0) {
+    text += `【${labels.skills}】\n${data.skills.join('、')}\n\n`;
+  }
+  if (data.experience && data.experience.length > 0) {
+    text += `【${labels.experience}】\n`;
+    data.experience.forEach(exp => {
+      text += `${exp.title} | ${exp.company}${exp.location ? ` | ${exp.location}` : ''} | ${exp.period}\n`;
+      exp.highlights.forEach(h => { text += `  • ${h}\n`; });
+      text += '\n';
+    });
+  }
+  if (data.education && data.education.length > 0) {
+    text += `【${labels.education}】\n`;
+    data.education.forEach(edu => {
+      text += `${edu.degree} | ${edu.school}${edu.major ? ` | ${edu.major}` : ''} | ${edu.period}`;
+      if (edu.gpa) text += ` | GPA: ${edu.gpa}`;
+      text += '\n';
+    });
+    text += '\n';
+  }
+  if (data.projects && data.projects.length > 0) {
+    text += `【${labels.projects}】\n`;
+    data.projects.forEach(proj => {
+      text += `${proj.name}${proj.role ? ` | ${proj.role}` : ''}${proj.period ? ` | ${proj.period}` : ''}\n`;
+      if (proj.description) text += `  ${proj.description}\n`;
+      proj.highlights.forEach(h => { text += `  • ${h}\n`; });
+      text += '\n';
+    });
+  }
+  if (data.certifications && data.certifications.length > 0) {
+    text += `【${labels.certifications}】\n${data.certifications.join('\n')}\n`;
+  }
+  return text.trim();
+};
+
 // 简历预览组件
 const ResumePreview = ({ data, isEnglish }: { data: ResumeData; isEnglish?: boolean }) => {
   const labels = {
@@ -1148,11 +1207,14 @@ function OptimizeContent() {
               size="sm"
               onClick={() => {
                 if (isEditing) {
-                  // 保存编辑内容到 optimizedContent
+                  // 保存编辑内容
                   setOptimizedContent(editedContent);
                 } else {
-                  // 进入编辑模式
-                  setEditedContent(optimizedContent);
+                  // 进入编辑模式 - 使用可读文本格式
+                  const readableText = resumeData
+                    ? resumeDataToText(resumeData, isEnglishVersion)
+                    : optimizedContent;
+                  setEditedContent(readableText);
                 }
                 setIsEditing(!isEditing);
               }}
@@ -1262,7 +1324,7 @@ function OptimizeContent() {
               <div className="bg-gray-100 p-2 md:p-3 rounded-lg flex-1 overflow-y-auto min-h-[200px] md:min-h-0">
                 {isEditing ? (
                   <textarea
-                    className="w-full h-full min-h-[300px] bg-white p-3 md:p-6 rounded-lg text-xs md:text-sm text-gray-700 leading-relaxed resize-none focus:outline-none focus:ring-2 focus:ring-primary/30 font-mono"
+                    className="w-full h-full min-h-[300px] bg-white p-3 md:p-6 rounded-lg text-xs md:text-sm text-gray-700 leading-relaxed resize-none focus:outline-none focus:ring-2 focus:ring-primary/30"
                     value={editedContent}
                     onChange={(e) => setEditedContent(e.target.value)}
                   />
