@@ -33,6 +33,7 @@ import {
 import Link from 'next/link';
 import Image from 'next/image';
 import { AccessGuard, useAccessCode } from '@/components/access-guard';
+import { Header1 } from '@/components/header1';
 import { Target, Wand2, Send, CheckCircle2 } from 'lucide-react';
 
 interface ParsedFields {
@@ -251,17 +252,8 @@ function ResumeContent() {
 
   return (
     <div className="min-h-screen bg-background">
-      {/* Header */}
-      <header className="border-b sticky top-0 bg-background/95 backdrop-blur z-50">
-        <div className="container mx-auto px-4 h-16 flex items-center justify-between">
-          <Link href="/" className="flex items-center gap-2">
-            <Image src="/logo.svg" alt="Rising Path" width={28} height={28} className="rounded" />
-            <span className="font-bold text-lg md:text-xl">Rising Path</span>
-          </Link>
-        </div>
-      </header>
-
-      <main className="container mx-auto px-4 py-4 md:py-8">
+      <Header1 />
+      <main className="container mx-auto px-4 py-4 md:py-8 pt-20">
         {/* Page Title */}
         <div className="mb-4 md:mb-8">
           <h1 className="text-2xl md:text-3xl font-bold mb-1 md:mb-2">简历管理</h1>

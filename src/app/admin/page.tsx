@@ -36,6 +36,7 @@ import {
 import { Label } from '@/components/ui/label';
 import { Switch } from '@/components/ui/switch';
 import { AdminAuthGuard } from '@/components/admin-auth-guard';
+import { Header1 } from '@/components/header1';
 import { LogoUploadDialog } from '@/components/logo-upload-dialog';
 import Image from 'next/image';
 import { 
@@ -1028,9 +1029,10 @@ export default function AdminPage() {
   return (
     <AdminAuthGuard>
       <div className="min-h-screen bg-muted/30">
-        {/* Header */}
-        <header className="border-b bg-background sticky top-0 z-50">
-          <div className="container mx-auto px-4 h-14 md:h-16 flex items-center justify-between">
+        <Header1 />
+        {/* Admin Toolbar */}
+        <div className="border-b bg-background sticky top-14 z-40">
+          <div className="container mx-auto px-4 h-12 flex items-center justify-between">
             <div className="flex items-center gap-2 md:gap-3">
               <LayoutDashboard className="h-5 w-5 md:h-6 md:w-6 text-primary" />
               <span className="font-bold text-lg md:text-xl">管理后台</span>
@@ -1135,7 +1137,7 @@ export default function AdminPage() {
               </Button>
             </div>
           </div>
-        </header>
+        </div>
 
         <main className="container mx-auto px-4 py-4 md:py-8">
         {loading ? (

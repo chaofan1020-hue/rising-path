@@ -37,6 +37,7 @@ import {
 import Link from 'next/link';
 import Image from 'next/image';
 import { AccessGuard, useAccessCode } from '@/components/access-guard';
+import { Header1 } from '@/components/header1';
 
 interface Application {
   id: number;
@@ -204,25 +205,8 @@ function ApplicationsContent() {
 
   return (
     <div className="min-h-screen bg-background">
-      {/* Header */}
-      <header className="border-b sticky top-0 bg-background/95 backdrop-blur z-50">
-        <div className="container mx-auto px-4 h-14 md:h-16 flex items-center justify-between">
-          <Link href="/" className="flex items-center gap-2">
-            <Image src="/logo.svg" alt="Rising Path" width={28} height={28} className="rounded" />
-            <span className="font-bold text-lg md:text-xl">Rising Path</span>
-          </Link>
-          <nav className="flex items-center gap-2 md:gap-4">
-            <Link href="/jobs">
-              <Button variant="ghost" size="sm" className="text-xs md:text-sm">岗位查询</Button>
-            </Link>
-            <Link href="/ai-match">
-              <Button size="sm" className="text-xs md:text-sm">AI选岗</Button>
-            </Link>
-          </nav>
-        </div>
-      </header>
-
-      <main className="container mx-auto px-4 py-4 md:py-8">
+      <Header1 />
+      <main className="container mx-auto px-4 py-4 md:py-8 pt-20">
         {/* Page Title */}
         <div className="mb-6 md:mb-8">
           <h1 className="text-2xl md:text-3xl font-bold mb-1 md:mb-2 flex items-center gap-2 md:gap-3">

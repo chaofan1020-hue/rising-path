@@ -34,6 +34,7 @@ import {
 } from 'lucide-react';
 import Link from 'next/link';
 import { AccessGuard, useAccessCode } from '@/components/access-guard';
+import { Header1 } from '@/components/header1';
 
 interface FieldMapping {
   id?: number;
@@ -180,25 +181,8 @@ function FieldMappingsContent() {
 
   return (
     <div className="min-h-screen bg-background">
-      {/* Header */}
-      <header className="border-b sticky top-0 bg-background/95 backdrop-blur z-50">
-        <div className="container mx-auto px-4 h-16 flex items-center justify-between">
-          <Link href="/" className="flex items-center gap-2">
-            <Settings className="h-6 w-6 text-primary" />
-            <span className="font-bold text-xl">Rising Path</span>
-          </Link>
-          <nav className="flex items-center gap-4">
-            <Link href="/resume">
-              <Button variant="ghost" size="sm">简历管理</Button>
-            </Link>
-            <Link href="/jobs">
-              <Button variant="ghost" size="sm">岗位查询</Button>
-            </Link>
-          </nav>
-        </div>
-      </header>
-
-      <main className="container mx-auto px-4 py-8">
+      <Header1 />
+      <main className="container mx-auto px-4 py-8 pt-20">
         {/* Page Title */}
         <div className="mb-8">
           <h1 className="text-3xl font-bold mb-2 flex items-center gap-3">
