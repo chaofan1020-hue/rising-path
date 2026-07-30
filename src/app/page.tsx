@@ -194,12 +194,12 @@ export default function Home() {
           {/* Badge */}
           <div className="inline-flex items-center gap-2 px-4 py-2 rounded-full bg-gradient-to-r from-[#C46A4A]/10 to-[#B5BEB0]/10 border border-[#C46A4A]/20 mb-8 backdrop-blur-sm">
             <div className="w-2 h-2 rounded-full bg-[#C46A4A] animate-pulse" />
-            <span className="text-sm font-medium text-[#C46A4A]">专为海外留学生打造的yes！求职平台</span>
+            <span className="text-sm font-medium text-[#C46A4A]">专为海外留学生打造的<span className="text-[#E2D0B8]">y</span><span className="text-[#B5BEB0]">e</span><span className="text-[#C46A4A]">s</span><span className="text-[#C5C9CE]">！</span>求职平台</span>
           </div>
           
           {/* Main Heading */}
           <h1 className="text-4xl sm:text-5xl md:text-7xl lg:text-8xl font-bold tracking-tight mb-6 md:mb-8 leading-[1.1]">
-            <span className="block mb-2">yes！求职</span>
+            <span className="block mb-2"><span className="text-[#E2D0B8]">y</span><span className="text-[#B5BEB0]">e</span><span className="text-[#C46A4A]">s</span><span className="text-[#C5C9CE]">！</span>求职</span>
             <span className="bg-gradient-to-r from-[#C46A4A] via-[#B5BEB0] to-[#E2D0B8] bg-clip-text text-transparent">
               一步到位
             </span>
@@ -410,7 +410,7 @@ export default function Home() {
               <span className="font-semibold text-lg bg-gradient-to-r from-[#C46A4A] to-[#B5BEB0] bg-clip-text text-transparent">Rising Path</span>
             </Link>
             <p className="text-muted-foreground text-sm">
-              © 2025 Rising Path. 专为海外留学生打造的yes！求职平台
+              © 2025 Rising Path. 专为海外留学生打造的<span className="text-[#E2D0B8]">y</span><span className="text-[#B5BEB0]">e</span><span className="text-[#C46A4A]">s</span><span className="text-[#C5C9CE]">！</span>求职平台
             </p>
           </div>
         </div>
