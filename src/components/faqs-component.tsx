@@ -33,32 +33,32 @@ export default function FAQs() {
     ]
 
     return (
-        <section className="bg-[#0f0f14] py-16 md:py-24">
+        <section className="bg-white py-16 md:py-24">
             <div className="mx-auto max-w-5xl px-4 md:px-6">
                 <div>
-                    <h2 className="text-white text-4xl font-semibold">常见问题</h2>
-                    <p className="text-gray-400 mt-4 text-balance text-lg">快速了解 Rising Path 平台的功能和使用方法</p>
+                    <h2 className="text-gray-900 text-4xl font-semibold">常见问题</h2>
+                    <p className="text-gray-600 mt-4 text-balance text-lg">快速了解 Rising Path 平台的功能和使用方法</p>
                 </div>
 
                 <div className="mt-12">
                     <Accordion
                         type="single"
                         collapsible
-                        className="bg-[#1a1a24] ring-white/5 rounded-lg w-full border border-transparent px-8 py-3 shadow ring-1">
+                        className="bg-white ring-gray-200 rounded-lg w-full border border-gray-200 px-8 py-3 shadow ring-1">
                         {faqItems.map((item) => (
                             <AccordionItem
                                 key={item.id}
                                 value={item.id}
-                                className="border-b border-gray-700">
-                                <AccordionTrigger className="cursor-pointer text-base hover:no-underline text-white">{item.question}</AccordionTrigger>
+                                className="border-b border-gray-200">
+                                <AccordionTrigger className="cursor-pointer text-base hover:no-underline text-gray-900">{item.question}</AccordionTrigger>
                                 <AccordionContent>
-                                    <p className="text-base text-gray-400">{item.answer}</p>
+                                    <p className="text-base text-gray-600">{item.answer}</p>
                                 </AccordionContent>
                             </AccordionItem>
                         ))}
                     </Accordion>
 
-                    <p className="text-gray-400 mt-6">
+                    <p className="text-gray-600 mt-6">
                         没有找到您想要的答案？联系我们的{' '}
                         <Link
                             href="#"
