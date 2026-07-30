@@ -36,7 +36,7 @@ export default function FAQs() {
     ]
 
     return (
-        <section className="bg-white py-16 md:py-24">
+        <section className="bg-white py-16 md:py-24 rounded-t-[3rem]">
             <div className="mx-auto max-w-5xl px-4 md:px-6">
                 <div>
                     <h2 className="text-gray-900 text-4xl font-semibold">{t("faqs.title")}</h2>

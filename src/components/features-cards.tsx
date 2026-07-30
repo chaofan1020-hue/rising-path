@@ -144,7 +144,7 @@ export default function FeaturesCards() {
   }
 
   return (
-    <section className="min-h-screen py-20 px-4 bg-white dark:bg-black">
+    <section className="min-h-screen py-20 px-4 bg-white dark:bg-black rounded-b-[3rem]">
       <div className="max-w-7xl mx-auto">
         <div className="text-center mb-16">
           <h2 className="text-4xl md:text-5xl font-light text-foreground mb-6">{t("features.title")}</h2>
