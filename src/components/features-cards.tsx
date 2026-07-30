@@ -1,13 +1,14 @@
 "use client"
 
 import type React from "react"
-
+import Link from "next/link"
 import { Warp } from "@paper-design/shaders-react"
 
 interface Feature {
   title: string
   description: string
   icon: React.ReactNode
+  href: string
 }
 
 const features: Feature[] = [
@@ -20,6 +21,7 @@ const features: Feature[] = [
         <path d="M12 2l3.09 6.26L22 9.27l-5 4.87 1.18 6.88L12 17.77l-6.18 3.25L7 14.14 2 9.27l6.91-1.01L12 2z" />
       </svg>
     ),
+    href: "/ai-match",
   },
   {
     title: "ATS 简历优化",
@@ -29,6 +31,7 @@ const features: Feature[] = [
         <path d="M7 2v11h3v9l7-12h-4l4-8z" />
       </svg>
     ),
+    href: "/optimize",
   },
   {
     title: "自动网申填写",
@@ -38,6 +41,7 @@ const features: Feature[] = [
         <path d="M22.7 19l-9.1-9.1c.9-2.3.4-5-1.5-6.9-2-2-5-2.4-7.4-1.3L9 6 6 9 1.6 4.7C.4 7.1.9 10.1 2.9 12.1c1.9 1.9 4.6 2.4 6.9 1.5l9.1 9.1c.4.4 1 .4 1.4 0l2.3-2.3c.5-.4.5-1.1.1-1.4z" />
       </svg>
     ),
+    href: "/extension",
   },
   {
     title: "海量岗位资源",
@@ -47,6 +51,7 @@ const features: Feature[] = [
         <path d="M12 2l3.09 6.26L22 9.27l-5 4.87 1.18 6.88L12 17.77l-6.18 3.25L7 14.14 2 9.27l6.91-1.01L12 2z" />
       </svg>
     ),
+    href: "/jobs",
   },
   {
     title: "求职进度追踪",
@@ -56,6 +61,7 @@ const features: Feature[] = [
         <path d="M17 1H7c-1.1 0-2 .9-2 2v18c0 1.1.9 2 2 2h10c1.1 0 2-.9 2-2V3c0-1.1-.9-2-2-2zM7 4V3h10v1H7zM7 18V6h10v12H7z" />
       </svg>
     ),
+    href: "/applications",
   },
   {
     title: "专属访问码",
@@ -65,6 +71,7 @@ const features: Feature[] = [
         <path d="M12 2C6.48 2 2 6.48 2 12s4.48 10 10 10 10-4.48 10-10S17.52 2 12 2zm-2 15l-5-5 1.41-1.41L10 14.17l7.59-7.59L19 8l-9 9z" />
       </svg>
     ),
+    href: "/resume",
   },
 ]
 
@@ -149,28 +156,30 @@ export default function FeaturesCards() {
           {features.map((feature, index) => {
             const shaderConfig = getShaderConfig(index)
             return (
-              <div key={index} className="relative h-80">
-                <div className="absolute inset-0 rounded-3xl overflow-hidden">
-                  <Warp
-                    style={{ height: "100%", width: "100%" }}
-                    proportion={shaderConfig.proportion}
-                    softness={shaderConfig.softness}
-                    distortion={shaderConfig.distortion}
-                    swirl={shaderConfig.swirl}
-                    swirlIterations={shaderConfig.swirlIterations}
-                    shape={shaderConfig.shape}
-                    shapeScale={shaderConfig.shapeScale}
-                    colors={shaderConfig.colors}
-                  />
-                </div>
-                <div className="relative z-10 flex flex-col items-center justify-center h-full px-6 text-center">
-                  <div className="mb-4 p-3 rounded-2xl bg-white/10 backdrop-blur-sm">
-                    {feature.icon}
+              <Link key={index} href={feature.href} className="block group cursor-pointer">
+                <div className="relative h-80 transition-transform duration-300 group-hover:scale-105">
+                  <div className="absolute inset-0 rounded-3xl overflow-hidden">
+                    <Warp
+                      style={{ height: "100%", width: "100%" }}
+                      proportion={shaderConfig.proportion}
+                      softness={shaderConfig.softness}
+                      distortion={shaderConfig.distortion}
+                      swirl={shaderConfig.swirl}
+                      swirlIterations={shaderConfig.swirlIterations}
+                      shape={shaderConfig.shape}
+                      shapeScale={shaderConfig.shapeScale}
+                      colors={shaderConfig.colors}
+                    />
                   </div>
-                  <h3 className="text-2xl font-semibold text-white mb-3">{feature.title}</h3>
-                  <p className="text-white/80 leading-relaxed">{feature.description}</p>
+                  <div className="relative z-10 flex flex-col items-center justify-center h-full px-6 text-center">
+                    <div className="mb-4 p-3 rounded-2xl bg-white/10 backdrop-blur-sm transition-transform duration-300 group-hover:scale-110">
+                      {feature.icon}
+                    </div>
+                    <h3 className="text-2xl font-semibold text-white mb-3">{feature.title}</h3>
+                    <p className="text-white/80 leading-relaxed">{feature.description}</p>
+                  </div>
                 </div>
-              </div>
+              </Link>
             )
           })}
         </div>
