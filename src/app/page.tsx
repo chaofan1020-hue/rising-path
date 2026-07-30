@@ -1,8 +1,12 @@
+'use client';
+
 import Link from 'next/link';
 import Image from 'next/image';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent } from '@/components/ui/card';
 import { JobStatsWidget } from '@/components/job-stats-widget';
+import { AuroraBackground } from '@/components/ui/aurora-background';
+import { motion } from 'framer-motion';
 import {
   Briefcase,
   FileText,
@@ -116,7 +120,8 @@ const advantages = [
 
 export default function Home() {
   return (
-    <div className="min-h-screen bg-[#F5F0EB] relative overflow-hidden">
+    <AuroraBackground className="h-auto min-h-screen">
+      <div className="min-h-screen bg-transparent relative overflow-hidden w-full">
       {/* Animated Background */}
       <div className="absolute inset-0 -z-10">
         {/* Large gradient blobs */}
@@ -190,7 +195,12 @@ export default function Home() {
 
       {/* Hero Section */}
       <section className="container mx-auto px-4 md:px-6 pt-16 pb-16 md:pt-28 md:pb-24">
-        <div className="max-w-5xl mx-auto text-center">
+        <motion.div
+          initial={{ opacity: 0, y: 40 }}
+          whileInView={{ opacity: 1, y: 0 }}
+          transition={{ delay: 0.3, duration: 0.8, ease: "easeInOut" }}
+          className="max-w-5xl mx-auto text-center"
+        >
           {/* Badge */}
           <div className="inline-flex items-center gap-2 px-4 py-2 rounded-full bg-gradient-to-r from-[#C46A4A]/10 to-[#B5BEB0]/10 border border-[#C46A4A]/20 mb-8 backdrop-blur-sm">
             <div className="w-2 h-2 rounded-full bg-[#C46A4A] animate-pulse" />
@@ -231,7 +241,7 @@ export default function Home() {
               </Button>
             </Link>
           </div>
-        </div>
+        </motion.div>
       </section>
 
       {/* Advantages Section */}
@@ -416,5 +426,6 @@ export default function Home() {
         </div>
       </footer>
     </div>
+    </AuroraBackground>
   );
 }
