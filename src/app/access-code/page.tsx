@@ -43,7 +43,7 @@ export default function AccessCodePage() {
 
   return (
     <div className="min-h-screen bg-white dark:bg-black flex items-center justify-center p-4">
-      <div className="w-full max-w-5xl">
+      <div className="w-full max-w-4xl">
         <CtaCard
           title="欢迎使用 Rising Path"
           description="输入您的专属访问码，开启智能求职之旅。AI 智能选岗、简历优化、自动网申，助力海外留学生拿到理想 Offer。"
@@ -51,6 +51,7 @@ export default function AccessCodePage() {
           inputPlaceholder="请输入访问码"
           imageSrc="https://images.unsplash.com/photo-1478760329108-5c3ed9d495a0?ixlib=rb-4.1.0&ixid=M3wxMjA3fDB8MHxzZWFyY2h8M3x8YmFja2dyb3VuZHxlbnwwfHwwfHx8MA%3D%3D&auto=format&fit=crop&q=60&w=900&q=80&w=2574&auto=format&fit=crop"
           onButtonClick={handleAccessCode}
+          className="min-h-[500px] md:min-h-[600px]"
         />
         {error && (
           <div className="mt-4 text-center text-red-500 text-sm">
