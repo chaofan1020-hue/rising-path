@@ -82,7 +82,7 @@ export function PlatformLayout({ children }: PlatformLayoutProps) {
   };
 
   return (
-    <div className="flex h-screen bg-[#0f0f14]">
+    <div className="flex h-screen bg-neutral-950">
       <Sidebar open={open} setOpen={setOpen}>
         <SidebarBody className="justify-between gap-10">
           <div className="flex flex-col flex-1 overflow-y-auto overflow-x-hidden">
@@ -94,8 +94,8 @@ export function PlatformLayout({ children }: PlatformLayoutProps) {
                   link={link}
                   className={
                     pathname === link.href
-                      ? "bg-[#8b5cf6]/10 rounded-lg px-2 text-[#8b5cf6]"
-                      : "hover:bg-white/5 rounded-lg px-2"
+                      ? "bg-neutral-800 rounded-lg px-2 text-white"
+                      : "hover:bg-neutral-800/50 rounded-lg px-2"
                   }
                 />
               ))}
@@ -104,7 +104,7 @@ export function PlatformLayout({ children }: PlatformLayoutProps) {
           <div className="flex flex-col gap-2">
             <button
               onClick={handleLogout}
-              className="flex items-center justify-start gap-2 group/sidebar py-2 hover:bg-white/5 rounded-lg px-2"
+              className="flex items-center justify-start gap-2 group/sidebar py-2 hover:bg-neutral-800/50 rounded-lg px-2"
             >
               <LogOut className="text-neutral-200 h-5 w-5 flex-shrink-0" />
               {open && (
@@ -127,7 +127,7 @@ export const Logo = () => {
       href="/platform"
       className="font-normal flex space-x-2 items-center text-sm text-white py-1 relative z-20"
     >
-      <div className="h-8 w-8 rounded-lg bg-gradient-to-br from-[#8b5cf6] to-[#6366f1] flex items-center justify-center flex-shrink-0">
+      <div className="h-8 w-8 rounded-lg bg-neutral-700 flex items-center justify-center flex-shrink-0">
         <span className="text-white font-bold text-sm">RP</span>
       </div>
       <motion.span
@@ -147,7 +147,7 @@ export const LogoIcon = () => {
       href="/platform"
       className="font-normal flex space-x-2 items-center text-sm text-white py-1 relative z-20"
     >
-      <div className="h-8 w-8 rounded-lg bg-gradient-to-br from-[#8b5cf6] to-[#6366f1] flex items-center justify-center flex-shrink-0">
+      <div className="h-8 w-8 rounded-lg bg-neutral-700 flex items-center justify-center flex-shrink-0">
         <span className="text-white font-bold text-sm">RP</span>
       </div>
     </Link>
