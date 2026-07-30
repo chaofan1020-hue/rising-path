@@ -26,7 +26,7 @@ import {
   X,
 } from 'lucide-react';
 import { useState } from 'react';
-import { FeaturesCards } from '@/components/features-cards';
+import FeaturesCards from '@/components/features-cards';
 
 const features = [
   {
