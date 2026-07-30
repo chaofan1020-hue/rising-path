@@ -3,7 +3,6 @@
 import Link from 'next/link';
 import Image from 'next/image';
 import { Button } from '@/components/ui/button';
-import { Card, CardContent } from '@/components/ui/card';
 import { JobStatsWidget } from '@/components/job-stats-widget';
 import { AuroraBackground } from '@/components/ui/aurora-background';
 import { motion } from 'framer-motion';
@@ -40,7 +39,6 @@ const features = [
     href: '/jobs',
     gradient: 'from-[#C46A4A] via-[#B5BEB0] to-[#E2D0B8]',
     iconBg: 'bg-[#C46A4A]',
-    pattern: 'dots',
   },
   {
     title: 'AI智能选岗',
@@ -50,7 +48,6 @@ const features = [
     href: '/ai-match',
     gradient: 'from-[#B5BEB0] via-[#E2D0B8] to-[#C46A4A]',
     iconBg: 'bg-[#B5BEB0]',
-    pattern: 'grid',
   },
   {
     title: '简历管理',
@@ -60,7 +57,6 @@ const features = [
     href: '/resume',
     gradient: 'from-[#E2D0B8] via-[#C46A4A] to-[#B5BEB0]',
     iconBg: 'bg-[#E2D0B8]',
-    pattern: 'dots',
   },
   {
     title: 'ATS简历优化',
@@ -70,7 +66,6 @@ const features = [
     href: '/optimize',
     gradient: 'from-[#C46A4A] via-[#E2D0B8] to-[#B5BEB0]',
     iconBg: 'bg-[#C46A4A]',
-    pattern: 'grid',
   },
   {
     title: '投递数据',
@@ -80,7 +75,6 @@ const features = [
     href: '/applications',
     gradient: 'from-[#B5BEB0] via-[#C46A4A] to-[#E2D0B8]',
     iconBg: 'bg-[#B5BEB0]',
-    pattern: 'dots',
   },
   {
     title: 'AutoFill一键填写',
@@ -90,7 +84,6 @@ const features = [
     href: '/extension',
     gradient: 'from-[#E2D0B8] via-[#B5BEB0] to-[#C46A4A]',
     iconBg: 'bg-[#E2D0B8]',
-    pattern: 'grid',
   },
 ];
 
@@ -121,25 +114,16 @@ const advantages = [
 export default function Home() {
   return (
     <AuroraBackground className="h-auto min-h-screen">
-      <div className="min-h-screen bg-transparent relative overflow-hidden w-full">
-      {/* Animated Background */}
-      <div className="absolute inset-0 -z-10">
-        {/* Large gradient blobs */}
-        <div className="absolute top-0 left-1/4 w-[800px] h-[800px] bg-gradient-to-br from-[#C46A4A]/20 via-[#B5BEB0]/10 to-transparent rounded-full blur-3xl animate-pulse" />
-        <div className="absolute bottom-1/4 right-1/4 w-[600px] h-[600px] bg-gradient-to-tr from-[#E2D0B8]/30 via-[#C46A4A]/10 to-transparent rounded-full blur-3xl animate-pulse [animation-delay:2s]" />
-        <div className="absolute top-1/2 left-1/2 w-[500px] h-[500px] bg-gradient-to-r from-[#B5BEB0]/15 to-[#E2D0B8]/10 rounded-full blur-3xl animate-pulse [animation-delay:4s]" />
-        
-        {/* Grid pattern */}
-        <div className="absolute inset-0 bg-[linear-gradient(to_right,#C46A4A08_1px,transparent_1px),linear-gradient(to_bottom,#C46A4A08_1px,transparent_1px)] bg-[size:40px_40px]" />
-        
-        {/* Floating shapes */}
-        <div className="absolute top-20 left-10 w-20 h-20 bg-[#C46A4A]/10 rounded-full blur-xl animate-bounce [animation-duration:8s]" />
-        <div className="absolute top-40 right-20 w-16 h-16 bg-[#B5BEB0]/15 rounded-full blur-xl animate-bounce [animation-duration:10s] [animation-delay:1s]" />
-        <div className="absolute bottom-40 left-1/3 w-24 h-24 bg-[#E2D0B8]/20 rounded-full blur-xl animate-bounce [animation-duration:12s] [animation-delay:2s]" />
+      <div className="min-h-screen relative overflow-hidden w-full">
+      {/* Animated Background Blobs */}
+      <div className="fixed inset-0 -z-10 overflow-hidden">
+        <div className="absolute top-0 left-1/4 w-[800px] h-[800px] bg-gradient-to-br from-[#C46A4A]/30 via-[#B5BEB0]/20 to-transparent rounded-full blur-3xl animate-pulse" />
+        <div className="absolute bottom-1/4 right-1/4 w-[600px] h-[600px] bg-gradient-to-tr from-[#E2D0B8]/40 via-[#C46A4A]/20 to-transparent rounded-full blur-3xl animate-pulse [animation-delay:2s]" />
+        <div className="absolute top-1/2 left-1/2 w-[500px] h-[500px] bg-gradient-to-r from-[#B5BEB0]/25 to-[#E2D0B8]/20 rounded-full blur-3xl animate-pulse [animation-delay:4s]" />
       </div>
 
-      {/* Navigation */}
-      <nav className="border-b border-[#C46A4A]/10 bg-white/60 backdrop-blur-2xl sticky top-0 z-50">
+      {/* Navigation - Glass Effect */}
+      <nav className="sticky top-0 z-50 border-b border-white/20 bg-white/10 backdrop-blur-2xl">
         <div className="container mx-auto px-4 md:px-6 h-16 flex items-center justify-between">
           <Link href="/" className="flex items-center gap-2 md:gap-3 group">
             <Image src="/logo.svg" alt="Rising Path" width={36} height={36} className="rounded-lg transition-transform group-hover:scale-110" />
@@ -149,43 +133,43 @@ export default function Home() {
           {/* Desktop Nav */}
           <div className="hidden md:flex items-center gap-2">
             <Link href="/jobs">
-              <Button variant="ghost" size="sm" className="text-muted-foreground hover:text-[#C46A4A] hover:bg-[#C46A4A]/5 transition-all">
+              <Button variant="ghost" size="sm" className="text-white/80 hover:text-white hover:bg-white/10 transition-all">
                 岗位开放
               </Button>
             </Link>
             <Link href="/submit-job">
-              <Button variant="ghost" size="sm" className="text-muted-foreground hover:text-[#C46A4A] hover:bg-[#C46A4A]/5 transition-all">
+              <Button variant="ghost" size="sm" className="text-white/80 hover:text-white hover:bg-white/10 transition-all">
                 <span className="mr-1">+</span>
                 贡献岗位
               </Button>
             </Link>
             <Link href="/resume">
-              <Button variant="ghost" size="sm" className="text-muted-foreground hover:text-[#C46A4A] hover:bg-[#C46A4A]/5 transition-all">
+              <Button variant="ghost" size="sm" className="text-white/80 hover:text-white hover:bg-white/10 transition-all">
                 简历管理
               </Button>
             </Link>
             <Link href="/extension">
-              <Button variant="ghost" size="sm" className="text-muted-foreground hover:text-[#C46A4A] hover:bg-[#C46A4A]/5 transition-all">
+              <Button variant="ghost" size="sm" className="text-white/80 hover:text-white hover:bg-white/10 transition-all">
                 <Puzzle className="h-4 w-4 mr-1" />
                 AutoFill一键填写
               </Button>
             </Link>
             <Link href="/login">
-              <Button size="sm" className="bg-gradient-to-r from-[#C46A4A] to-[#B5BEB0] hover:opacity-90 shadow-lg shadow-[#C46A4A]/25 text-white font-medium transition-all hover:scale-105">
+              <Button size="sm" className="bg-white/20 hover:bg-white/30 backdrop-blur-xl border border-white/30 text-white font-medium transition-all hover:scale-105">
                 登录使用
               </Button>
             </Link>
           </div>
           
-          {/* Mobile Nav - Simplified */}
+          {/* Mobile Nav */}
           <div className="flex md:hidden items-center gap-2">
             <Link href="/jobs">
-              <Button variant="ghost" size="sm" className="text-muted-foreground hover:text-[#C46A4A] px-2">
+              <Button variant="ghost" size="sm" className="text-white/80 hover:text-white px-2">
                 岗位
               </Button>
             </Link>
             <Link href="/login">
-              <Button size="sm" className="bg-gradient-to-r from-[#C46A4A] to-[#B5BEB0] hover:opacity-90 text-white">
+              <Button size="sm" className="bg-white/20 hover:bg-white/30 backdrop-blur-xl border border-white/30 text-white">
                 登录
               </Button>
             </Link>
@@ -201,22 +185,22 @@ export default function Home() {
           transition={{ delay: 0.3, duration: 0.8, ease: "easeInOut" }}
           className="max-w-5xl mx-auto text-center"
         >
-          {/* Badge */}
-          <div className="inline-flex items-center gap-2 px-4 py-2 rounded-full bg-gradient-to-r from-[#C46A4A]/10 to-[#B5BEB0]/10 border border-[#C46A4A]/20 mb-8 backdrop-blur-sm">
+          {/* Badge - Glass Effect */}
+          <div className="inline-flex items-center gap-2 px-4 py-2 rounded-full bg-white/10 backdrop-blur-xl border border-white/20 mb-8">
             <div className="w-2 h-2 rounded-full bg-[#C46A4A] animate-pulse" />
-            <span className="text-sm font-medium text-[#C46A4A]">专为海外留学生打造的<span className="text-[#E2D0B8]">y</span><span className="text-[#B5BEB0]">e</span><span className="text-[#C46A4A]">s</span><span className="text-[#C5C9CE]">！</span>求职平台</span>
+            <span className="text-sm font-medium text-white/90">专为海外留学生打造的<span className="text-[#E2D0B8]">y</span><span className="text-[#B5BEB0]">e</span><span className="text-[#C46A4A]">s</span><span className="text-[#C5C9CE]">！</span>求职平台</span>
           </div>
           
           {/* Main Heading */}
           <h1 className="text-4xl sm:text-5xl md:text-7xl lg:text-8xl font-bold tracking-tight mb-6 md:mb-8 leading-[1.1]">
-            <span className="block mb-2"><span className="text-[#E2D0B8]">y</span><span className="text-[#B5BEB0]">e</span><span className="text-[#C46A4A]">s</span><span className="text-[#C5C9CE]">！</span>求职</span>
+            <span className="block mb-2 text-white"><span className="text-[#E2D0B8]">y</span><span className="text-[#B5BEB0]">e</span><span className="text-[#C46A4A]">s</span><span className="text-[#C5C9CE]">！</span>求职</span>
             <span className="bg-gradient-to-r from-[#C46A4A] via-[#B5BEB0] to-[#E2D0B8] bg-clip-text text-transparent">
               一步到位
             </span>
           </h1>
           
           {/* Subtitle */}
-          <p className="text-lg md:text-2xl text-muted-foreground max-w-3xl mx-auto mb-8 leading-relaxed">
+          <p className="text-lg md:text-2xl text-white/70 max-w-3xl mx-auto mb-8 leading-relaxed">
             AI驱动的求职助手，从简历优化到岗位匹配
             <br className="hidden sm:block" />
             让每一步都更精准、更高效
@@ -230,13 +214,13 @@ export default function Home() {
           {/* CTA Buttons */}
           <div className="flex flex-col sm:flex-row gap-4 justify-center">
             <Link href="/resume">
-              <Button size="lg" className="h-14 px-8 text-lg bg-gradient-to-r from-[#C46A4A] to-[#B5BEB0] hover:opacity-90 shadow-2xl shadow-[#C46A4A]/30 text-white font-medium rounded-xl group transition-all hover:scale-105">
+              <Button size="lg" className="h-14 px-8 text-lg bg-white/20 hover:bg-white/30 backdrop-blur-xl border border-white/30 text-white font-medium rounded-xl group transition-all hover:scale-105">
                 从上传简历开始
                 <ArrowRight className="ml-2 h-5 w-5 group-hover:translate-x-1 transition-transform" />
               </Button>
             </Link>
             <Link href="/jobs">
-              <Button size="lg" variant="outline" className="h-14 px-8 text-lg rounded-xl border-2 border-[#C46A4A]/20 hover:border-[#C46A4A]/40 hover:bg-[#C46A4A]/5 transition-all">
+              <Button size="lg" variant="outline" className="h-14 px-8 text-lg rounded-xl border-2 border-white/30 hover:border-white/50 hover:bg-white/10 text-white transition-all">
                 浏览岗位
               </Button>
             </Link>
@@ -244,33 +228,33 @@ export default function Home() {
         </motion.div>
       </section>
 
-      {/* Advantages Section */}
+      {/* Advantages Section - Glass Cards */}
       <section className="container mx-auto px-4 md:px-6 mb-16">
         <div className="grid grid-cols-1 md:grid-cols-3 gap-4 md:gap-8">
           {advantages.map((adv, index) => (
-            <div key={adv.title} className="group relative overflow-hidden rounded-2xl bg-white/60 backdrop-blur-sm border border-[#C46A4A]/10 p-6 md:p-8 hover:shadow-xl hover:shadow-[#C46A4A]/10 transition-all duration-300 hover:-translate-y-1">
+            <div key={adv.title} className="group relative overflow-hidden rounded-2xl bg-white/10 backdrop-blur-xl border border-white/20 p-6 md:p-8 hover:bg-white/15 transition-all duration-300 hover:-translate-y-1">
               <div className={`w-12 h-12 md:w-14 md:h-14 rounded-xl ${adv.iconBg} flex items-center justify-center mb-4 group-hover:scale-110 transition-transform duration-300`}>
                 <adv.icon className={`h-6 w-6 md:h-7 md:w-7 ${adv.iconColor}`} />
               </div>
-              <h3 className="font-bold text-lg md:text-xl mb-2">{adv.title}</h3>
-              <p className="text-muted-foreground text-sm md:text-base leading-relaxed">{adv.description}</p>
+              <h3 className="font-bold text-lg md:text-xl mb-2 text-white">{adv.title}</h3>
+              <p className="text-white/60 text-sm md:text-base leading-relaxed">{adv.description}</p>
             </div>
           ))}
         </div>
       </section>
 
-      {/* Features Section */}
+      {/* Features Section - Glass Cards */}
       <section id="features" className="container mx-auto px-4 md:px-6 py-12 md:py-24">
         <div className="text-center mb-12 md:mb-20">
-          <div className="inline-flex items-center gap-2 px-4 py-2 rounded-full bg-gradient-to-r from-[#C46A4A]/10 to-[#B5BEB0]/10 border border-[#C46A4A]/20 mb-6">
+          <div className="inline-flex items-center gap-2 px-4 py-2 rounded-full bg-white/10 backdrop-blur-xl border border-white/20 mb-6">
             <Layers className="h-5 w-5 text-[#C46A4A]" />
-            <span className="text-sm md:text-base font-medium text-[#C46A4A]">六大核心能力</span>
+            <span className="text-sm md:text-base font-medium text-white/90">六大核心能力</span>
           </div>
-          <h2 className="text-3xl sm:text-4xl md:text-6xl font-bold mb-4 md:mb-6">
+          <h2 className="text-3xl sm:text-4xl md:text-6xl font-bold mb-4 md:mb-6 text-white">
             为求职而生的
             <span className="bg-gradient-to-r from-[#C46A4A] via-[#B5BEB0] to-[#E2D0B8] bg-clip-text text-transparent ml-2 md:ml-3">超级工具</span>
           </h2>
-          <p className="text-muted-foreground text-base md:text-xl max-w-2xl mx-auto">
+          <p className="text-white/60 text-base md:text-xl max-w-2xl mx-auto">
             每一个功能都经过精心设计，让求职之路更加顺畅
           </p>
         </div>
@@ -281,23 +265,13 @@ export default function Home() {
             <Link 
               href={feature.href} 
               key={feature.title}
-              className="group relative overflow-hidden rounded-2xl md:rounded-3xl transition-all duration-300 md:duration-500 hover:-translate-y-2 hover:shadow-2xl hover:shadow-[#C46A4A]/15 active:scale-[0.98]"
+              className="group relative overflow-hidden rounded-2xl md:rounded-3xl transition-all duration-300 md:duration-500 hover:-translate-y-2 hover:shadow-2xl hover:shadow-[#C46A4A]/20 active:scale-[0.98]"
             >
-              {/* Background */}
-              <div className="absolute inset-0 bg-gradient-to-br from-white/80 to-white/40 backdrop-blur-sm" />
-              
-              {/* Pattern */}
-              <div className="absolute inset-0 opacity-20">
-                {feature.pattern === 'dots' && (
-                  <div className="w-full h-full bg-[radial-gradient(circle,_#C46A4A_1px,_transparent_1px)] bg-[size:20px_20px]" />
-                )}
-                {feature.pattern === 'grid' && (
-                  <div className="w-full h-full bg-[linear-gradient(to_right,_#B5BEB0_1px,_transparent_1px),linear-gradient(to_bottom,_#B5BEB0_1px,_transparent_1px)] bg-[size:28px_28px]" />
-                )}
-              </div>
+              {/* Glass Background */}
+              <div className="absolute inset-0 bg-white/10 backdrop-blur-xl border border-white/20 rounded-2xl md:rounded-3xl" />
               
               {/* Gradient overlay on hover */}
-              <div className={`absolute inset-0 bg-gradient-to-br ${feature.gradient} opacity-0 group-hover:opacity-10 transition-opacity duration-500`} />
+              <div className={`absolute inset-0 bg-gradient-to-br ${feature.gradient} opacity-0 group-hover:opacity-20 transition-opacity duration-500 rounded-2xl md:rounded-3xl`} />
               
               {/* Content */}
               <div className="relative h-full p-6 md:p-8 flex flex-col items-start gap-4 min-h-[200px]">
@@ -308,16 +282,16 @@ export default function Home() {
                 
                 {/* Text */}
                 <div className="flex-1">
-                  <h3 className="font-bold text-xl md:text-2xl mb-2 group-hover:text-[#C46A4A] transition-colors">
+                  <h3 className="font-bold text-xl md:text-2xl mb-2 text-white group-hover:text-[#E2D0B8] transition-colors">
                     {feature.title}
                   </h3>
-                  <p className="text-muted-foreground text-sm md:text-base leading-relaxed">
+                  <p className="text-white/60 text-sm md:text-base leading-relaxed">
                     {feature.description}
                   </p>
                 </div>
                 
                 {/* Arrow */}
-                <div className="flex items-center gap-2 text-[#C46A4A] opacity-0 group-hover:opacity-100 transition-all duration-300 group-hover:translate-x-1">
+                <div className="flex items-center gap-2 text-[#E2D0B8] opacity-0 group-hover:opacity-100 transition-all duration-300 group-hover:translate-x-1">
                   <span className="text-sm font-medium">了解更多</span>
                   <ArrowRight className="h-4 w-4" />
                 </div>
@@ -327,21 +301,21 @@ export default function Home() {
         </div>
       </section>
 
-      {/* How it works */}
+      {/* How it works - Glass Container */}
       <section className="container mx-auto px-4 md:px-6 py-12 md:py-20">
-        <div className="relative rounded-3xl bg-gradient-to-br from-white/80 via-[#F5F0EB]/50 to-white/60 backdrop-blur-sm border border-[#C46A4A]/10 p-8 md:p-12 lg:p-16 overflow-hidden">
+        <div className="relative rounded-3xl bg-white/10 backdrop-blur-xl border border-white/20 p-8 md:p-12 lg:p-16 overflow-hidden">
           {/* Decorative elements */}
-          <div className="absolute top-0 right-0 w-80 h-80 bg-gradient-to-br from-[#C46A4A]/10 to-transparent rounded-full blur-3xl" />
-          <div className="absolute bottom-0 left-0 w-60 h-60 bg-gradient-to-tr from-[#B5BEB0]/10 to-transparent rounded-full blur-3xl" />
+          <div className="absolute top-0 right-0 w-80 h-80 bg-gradient-to-br from-[#C46A4A]/20 to-transparent rounded-full blur-3xl" />
+          <div className="absolute bottom-0 left-0 w-60 h-60 bg-gradient-to-tr from-[#B5BEB0]/20 to-transparent rounded-full blur-3xl" />
           
           <div className="relative">
             <div className="text-center mb-12 md:mb-16">
-              <div className="inline-flex items-center gap-2 px-4 py-2 rounded-full bg-gradient-to-r from-[#C46A4A]/10 to-[#B5BEB0]/10 border border-[#C46A4A]/20 mb-6">
+              <div className="inline-flex items-center gap-2 px-4 py-2 rounded-full bg-white/10 backdrop-blur-xl border border-white/20 mb-6">
                 <Zap className="h-5 w-5 text-[#C46A4A]" />
-                <span className="text-sm md:text-base font-medium text-[#C46A4A]">简单三步</span>
+                <span className="text-sm md:text-base font-medium text-white/90">简单三步</span>
               </div>
-              <h2 className="text-3xl md:text-5xl lg:text-6xl font-bold mb-4">开启求职之旅</h2>
-              <p className="text-muted-foreground text-lg md:text-xl">让AI帮你找到理想工作</p>
+              <h2 className="text-3xl md:text-5xl lg:text-6xl font-bold mb-4 text-white">开启求职之旅</h2>
+              <p className="text-white/60 text-lg md:text-xl">让AI帮你找到理想工作</p>
             </div>
             
             {/* Steps */}
@@ -354,23 +328,23 @@ export default function Home() {
                 <div key={item.step} className="relative group">
                   {/* Connector line */}
                   {index < 2 && (
-                    <div className="hidden md:block absolute top-12 left-[60%] w-[80%] h-[2px] bg-gradient-to-r from-[#C46A4A]/30 to-transparent" />
+                    <div className="hidden md:block absolute top-12 left-[60%] w-[80%] h-[2px] bg-gradient-to-r from-white/30 to-transparent" />
                   )}
                   
                   <div className="flex flex-col items-center text-center">
                     {/* Step number with icon */}
                     <div className="relative mb-6">
-                      <div className="w-20 h-20 md:w-24 md:h-24 rounded-2xl bg-gradient-to-br from-[#C46A4A] to-[#B5BEB0] flex items-center justify-center shadow-xl shadow-[#C46A4A]/20 group-hover:scale-110 transition-transform duration-300">
+                      <div className="w-20 h-20 md:w-24 md:h-24 rounded-2xl bg-gradient-to-br from-[#C46A4A] to-[#B5BEB0] flex items-center justify-center shadow-xl group-hover:scale-110 transition-transform duration-300">
                         <item.icon className="h-9 w-9 md:h-10 md:w-10 text-white" />
                       </div>
-                      <div className="absolute -top-2 -right-2 w-8 h-8 rounded-full bg-white border-2 border-[#C46A4A] flex items-center justify-center text-sm font-bold text-[#C46A4A]">
+                      <div className="absolute -top-2 -right-2 w-8 h-8 rounded-full bg-white/20 backdrop-blur-xl border border-white/30 flex items-center justify-center text-sm font-bold text-white">
                         {item.step}
                       </div>
                     </div>
                     
                     {/* Text */}
-                    <h3 className="font-bold text-xl md:text-2xl mb-3">{item.title}</h3>
-                    <p className="text-muted-foreground text-sm md:text-base leading-relaxed">{item.desc}</p>
+                    <h3 className="font-bold text-xl md:text-2xl mb-3 text-white">{item.title}</h3>
+                    <p className="text-white/60 text-sm md:text-base leading-relaxed">{item.desc}</p>
                   </div>
                 </div>
               ))}
@@ -384,25 +358,25 @@ export default function Home() {
         <div className="relative text-center">
           {/* Background glow */}
           <div className="absolute inset-0 flex items-center justify-center">
-            <div className="w-[600px] h-[600px] bg-gradient-to-r from-[#C46A4A]/15 via-[#B5BEB0]/10 to-[#E2D0B8]/15 rounded-full blur-3xl" />
+            <div className="w-[600px] h-[600px] bg-gradient-to-r from-[#C46A4A]/20 via-[#B5BEB0]/15 to-[#E2D0B8]/20 rounded-full blur-3xl" />
           </div>
           
           <div className="relative">
-            <h2 className="text-4xl md:text-6xl font-bold mb-6">
+            <h2 className="text-4xl md:text-6xl font-bold mb-6 text-white">
               准备好开始了吗？
             </h2>
-            <p className="text-muted-foreground text-lg md:text-xl mb-10 max-w-lg mx-auto">
+            <p className="text-white/60 text-lg md:text-xl mb-10 max-w-lg mx-auto">
               加入 Rising Path，让求职变得更简单
             </p>
             <div className="flex flex-col sm:flex-row gap-4 justify-center">
               <Link href="/resume">
-                <Button size="lg" className="h-16 px-12 text-lg bg-gradient-to-r from-[#C46A4A] to-[#B5BEB0] hover:opacity-90 shadow-2xl shadow-[#C46A4A]/30 text-white font-medium rounded-2xl group transition-all hover:scale-105">
+                <Button size="lg" className="h-16 px-12 text-lg bg-white/20 hover:bg-white/30 backdrop-blur-xl border border-white/30 text-white font-medium rounded-2xl group transition-all hover:scale-105">
                   从上传简历开始
                   <ArrowRight className="ml-2 h-5 w-5 group-hover:translate-x-1 transition-transform" />
                 </Button>
               </Link>
               <Link href="/jobs">
-                <Button size="lg" variant="outline" className="h-16 px-12 text-lg rounded-2xl border-2 border-[#C46A4A]/20 hover:border-[#C46A4A]/40 hover:bg-[#C46A4A]/5 transition-all">
+                <Button size="lg" variant="outline" className="h-16 px-12 text-lg rounded-2xl border-2 border-white/30 hover:border-white/50 hover:bg-white/10 text-white transition-all">
                   浏览岗位
                 </Button>
               </Link>
@@ -411,15 +385,15 @@ export default function Home() {
         </div>
       </section>
 
-      {/* Footer */}
-      <footer className="border-t border-[#C46A4A]/10 bg-white/40 backdrop-blur-sm">
+      {/* Footer - Glass Effect */}
+      <footer className="border-t border-white/20 bg-white/5 backdrop-blur-xl">
         <div className="container mx-auto px-6 py-10">
           <div className="flex flex-col md:flex-row items-center justify-between gap-4">
             <Link href="/" className="flex items-center gap-2.5">
               <Image src="/logo.svg" alt="Rising Path" width={32} height={32} className="rounded-lg" />
               <span className="font-semibold text-lg bg-gradient-to-r from-[#C46A4A] to-[#B5BEB0] bg-clip-text text-transparent">Rising Path</span>
             </Link>
-            <p className="text-muted-foreground text-sm">
+            <p className="text-white/50 text-sm">
               © 2025 Rising Path. 专为海外留学生打造的<span className="text-[#E2D0B8]">y</span><span className="text-[#B5BEB0]">e</span><span className="text-[#C46A4A]">s</span><span className="text-[#C5C9CE]">！</span>求职平台
             </p>
           </div>
