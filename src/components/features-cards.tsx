@@ -79,7 +79,7 @@ export default function FeaturesCards() {
         swirlIterations: 8,
         shape: "checks" as const,
         shapeScale: 0.08,
-        colors: ["hsl(320, 60%, 20%)", "hsl(330, 70%, 30%)", "hsl(310, 50%, 15%)", "hsl(325, 65%, 25%)"],
+        colors: ["hsl(320, 60%, 12%)", "hsl(330, 70%, 18%)", "hsl(310, 50%, 8%)", "hsl(325, 65%, 15%)"],
       },
       {
         proportion: 0.4,
@@ -89,7 +89,7 @@ export default function FeaturesCards() {
         swirlIterations: 12,
         shape: "dots" as const,
         shapeScale: 0.12,
-        colors: ["hsl(170, 60%, 15%)", "hsl(180, 70%, 25%)", "hsl(160, 50%, 10%)", "hsl(175, 65%, 20%)"],
+        colors: ["hsl(170, 60%, 8%)", "hsl(180, 70%, 15%)", "hsl(160, 50%, 5%)", "hsl(175, 65%, 12%)"],
       },
       {
         proportion: 0.35,
@@ -99,7 +99,7 @@ export default function FeaturesCards() {
         swirlIterations: 10,
         shape: "checks" as const,
         shapeScale: 0.1,
-        colors: ["hsl(150, 70%, 12%)", "hsl(160, 80%, 20%)", "hsl(140, 60%, 8%)", "hsl(155, 75%, 16%)"],
+        colors: ["hsl(150, 70%, 7%)", "hsl(160, 80%, 12%)", "hsl(140, 60%, 4%)", "hsl(155, 75%, 10%)"],
       },
       {
         proportion: 0.45,
@@ -109,7 +109,7 @@ export default function FeaturesCards() {
         swirlIterations: 15,
         shape: "dots" as const,
         shapeScale: 0.09,
-        colors: ["hsl(70, 50%, 15%)", "hsl(80, 60%, 22%)", "hsl(60, 40%, 10%)", "hsl(75, 55%, 18%)"],
+        colors: ["hsl(70, 50%, 8%)", "hsl(80, 60%, 14%)", "hsl(60, 40%, 5%)", "hsl(75, 55%, 11%)"],
       },
       {
         proportion: 0.38,
@@ -119,7 +119,7 @@ export default function FeaturesCards() {
         swirlIterations: 11,
         shape: "checks" as const,
         shapeScale: 0.11,
-        colors: ["hsl(270, 50%, 15%)", "hsl(280, 60%, 25%)", "hsl(260, 40%, 10%)", "hsl(275, 55%, 20%)"],
+        colors: ["hsl(270, 50%, 8%)", "hsl(280, 60%, 15%)", "hsl(260, 40%, 5%)", "hsl(275, 55%, 12%)"],
       },
       {
         proportion: 0.42,
@@ -129,7 +129,7 @@ export default function FeaturesCards() {
         swirlIterations: 9,
         shape: "dots" as const,
         shapeScale: 0.13,
-        colors: ["hsl(350, 60%, 15%)", "hsl(360, 70%, 25%)", "hsl(340, 50%, 10%)", "hsl(355, 65%, 20%)"],
+        colors: ["hsl(350, 60%, 8%)", "hsl(360, 70%, 15%)", "hsl(340, 50%, 5%)", "hsl(355, 65%, 12%)"],
       },
     ]
     return configs[index % configs.length]
