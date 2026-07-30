@@ -156,7 +156,14 @@ export default function FeaturesCards() {
           {features.map((feature, index) => {
             const shaderConfig = getShaderConfig(index)
             return (
-              <Link key={index} href={feature.href} className="block group cursor-pointer">
+              <div
+                key={index}
+                onClick={() => {
+                  localStorage.setItem("redirect_path", feature.href)
+                  window.location.href = "/access-code"
+                }}
+                className="block group cursor-pointer"
+              >
                 <div className="relative h-80 transition-transform duration-300 group-hover:scale-105">
                   <div className="absolute inset-0 rounded-3xl overflow-hidden">
                     <Warp
