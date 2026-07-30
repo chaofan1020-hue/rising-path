@@ -82,9 +82,9 @@ export function PlatformLayout({ children }: PlatformLayoutProps) {
   };
 
   return (
-    <div className="flex h-screen bg-neutral-950">
+    <div className="flex h-screen bg-neutral-950 p-2 gap-2">
       <Sidebar open={open} setOpen={setOpen}>
-        <SidebarBody className="justify-between gap-10">
+        <SidebarBody className="justify-between gap-10 rounded-2xl">
           <div className="flex flex-col flex-1 overflow-y-auto overflow-x-hidden">
             {open ? <Logo /> : <LogoIcon />}
             <div className="mt-8 flex flex-col gap-2">
@@ -116,7 +116,7 @@ export function PlatformLayout({ children }: PlatformLayoutProps) {
           </div>
         </SidebarBody>
       </Sidebar>
-      <main className="flex-1 overflow-y-auto p-6">{children}</main>
+      <main className="flex-1 overflow-y-auto p-6 bg-neutral-900 rounded-2xl border border-neutral-800">{children}</main>
     </div>
   );
 }
