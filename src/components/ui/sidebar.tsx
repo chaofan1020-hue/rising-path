@@ -49,28 +49,28 @@ export function Sidebar({ children }: SidebarProps) {
       {/* Sidebar */}
       <aside
         className={cn(
-          'fixed left-0 top-0 z-40 flex h-screen flex-col border-r border-gray-800 bg-[#1a1a24] transition-all duration-300',
+          'fixed left-0 top-0 z-40 flex h-screen flex-col border-r border-white/5 bg-[#1a1a24] transition-all duration-300',
           collapsed ? 'w-20' : 'w-64'
         )}
       >
         {/* Logo */}
-        <div className="flex h-16 items-center justify-between border-b border-gray-800 px-4">
+        <div className="flex h-16 items-center justify-between border-b border-white/5 px-4">
           {!collapsed && (
             <div className="flex items-center gap-2">
-              <div className="flex h-8 w-8 items-center justify-center rounded-lg bg-gradient-to-br from-purple-500 to-indigo-600">
+              <div className="flex h-8 w-8 items-center justify-center rounded-lg bg-gradient-to-br from-[#8b5cf6] to-[#6366f1]">
                 <span className="text-sm font-bold text-white">RP</span>
               </div>
               <span className="text-lg font-semibold text-white">Rising Path</span>
             </div>
           )}
           {collapsed && (
-            <div className="mx-auto flex h-8 w-8 items-center justify-center rounded-lg bg-gradient-to-br from-purple-500 to-indigo-600">
+            <div className="mx-auto flex h-8 w-8 items-center justify-center rounded-lg bg-gradient-to-br from-[#8b5cf6] to-[#6366f1]">
               <span className="text-sm font-bold text-white">RP</span>
             </div>
           )}
           <button
             onClick={() => setCollapsed(!collapsed)}
-            className="rounded-lg p-1.5 text-gray-400 hover:bg-gray-800 hover:text-white"
+            className="rounded-lg p-1.5 text-gray-400 hover:bg-white/5 hover:text-white"
           >
             {collapsed ? <ChevronRight className="h-4 w-4" /> : <ChevronLeft className="h-4 w-4" />}
           </button>
@@ -86,10 +86,10 @@ export function Sidebar({ children }: SidebarProps) {
                 key={item.href}
                 href={item.href}
                 className={cn(
-                  'flex items-center gap-3 rounded-lg px-3 py-2.5 text-sm font-medium transition-colors',
+                  'flex items-center gap-3 rounded-lg px-3 py-2.5 text-sm font-medium transition-all',
                   isActive
-                    ? 'bg-purple-600 text-white'
-                    : 'text-gray-400 hover:bg-gray-800 hover:text-white',
+                    ? 'bg-[#8b5cf6]/10 text-[#8b5cf6]'
+                    : 'text-gray-400 hover:bg-white/5 hover:text-white',
                   collapsed && 'justify-center'
                 )}
               >
@@ -103,7 +103,7 @@ export function Sidebar({ children }: SidebarProps) {
         {/* Upgrade Button */}
         {!collapsed && (
           <div className="px-3 pb-4">
-            <button className="flex w-full items-center justify-center gap-2 rounded-lg bg-gradient-to-r from-purple-600 to-indigo-600 px-4 py-2.5 text-sm font-medium text-white hover:from-purple-700 hover:to-indigo-700">
+            <button className="flex w-full items-center justify-center gap-2 rounded-lg bg-gradient-to-r from-[#8b5cf6] to-[#6366f1] px-4 py-2.5 text-sm font-medium text-white hover:opacity-90 transition-opacity">
               <Crown className="h-4 w-4" />
               Upgrade Plan
             </button>
@@ -111,14 +111,14 @@ export function Sidebar({ children }: SidebarProps) {
         )}
 
         {/* Logout */}
-        <div className="border-t border-gray-800 px-3 py-4">
+        <div className="border-t border-white/5 px-3 py-4">
           <button
             onClick={() => {
               localStorage.removeItem('access_code')
               window.location.href = '/'
             }}
             className={cn(
-              'flex items-center gap-3 rounded-lg px-3 py-2.5 text-sm font-medium text-gray-400 hover:bg-gray-800 hover:text-white',
+              'flex items-center gap-3 rounded-lg px-3 py-2.5 text-sm font-medium text-gray-400 hover:bg-white/5 hover:text-white',
               collapsed && 'justify-center'
             )}
           >
@@ -129,7 +129,7 @@ export function Sidebar({ children }: SidebarProps) {
       </aside>
 
       {/* Main Content */}
-      <main className={cn('flex-1 transition-all duration-300', collapsed ? 'ml-20' : 'ml-64')}>
+      <main className={cn('min-h-screen bg-[#0f0f14] transition-all duration-300', collapsed ? 'ml-20' : 'ml-64')}>
         {children}
       </main>
     </div>
