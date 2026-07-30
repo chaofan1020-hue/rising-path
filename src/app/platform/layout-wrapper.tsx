@@ -35,43 +35,43 @@ export function PlatformLayout({ children }: PlatformLayoutProps) {
       label: "Dashboard",
       href: "/platform",
       icon: (
-        <LayoutDashboard className="text-neutral-200 h-5 w-5 flex-shrink-0" />
+        <LayoutDashboard className="text-neutral-400 h-5 w-5 flex-shrink-0" />
       ),
     },
     {
       label: "岗位查询",
       href: "/platform/jobs",
-      icon: <Briefcase className="text-neutral-200 h-5 w-5 flex-shrink-0" />,
+      icon: <Briefcase className="text-neutral-400 h-5 w-5 flex-shrink-0" />,
     },
     {
       label: "AI 选岗",
       href: "/platform/ai-match",
-      icon: <Brain className="text-neutral-200 h-5 w-5 flex-shrink-0" />,
+      icon: <Brain className="text-neutral-400 h-5 w-5 flex-shrink-0" />,
     },
     {
       label: "简历管理",
       href: "/platform/resume",
-      icon: <FileText className="text-neutral-200 h-5 w-5 flex-shrink-0" />,
+      icon: <FileText className="text-neutral-400 h-5 w-5 flex-shrink-0" />,
     },
     {
       label: "简历优化",
       href: "/platform/optimize",
-      icon: <Wand2 className="text-neutral-200 h-5 w-5 flex-shrink-0" />,
+      icon: <Wand2 className="text-neutral-400 h-5 w-5 flex-shrink-0" />,
     },
     {
       label: "网申管理",
       href: "/platform/applications",
-      icon: <ClipboardList className="text-neutral-200 h-5 w-5 flex-shrink-0" />,
+      icon: <ClipboardList className="text-neutral-400 h-5 w-5 flex-shrink-0" />,
     },
     {
       label: "扩展程序",
       href: "/platform/extension",
-      icon: <Puzzle className="text-neutral-200 h-5 w-5 flex-shrink-0" />,
+      icon: <Puzzle className="text-neutral-400 h-5 w-5 flex-shrink-0" />,
     },
     {
       label: "设置",
       href: "/platform/settings",
-      icon: <Settings className="text-neutral-200 h-5 w-5 flex-shrink-0" />,
+      icon: <Settings className="text-neutral-400 h-5 w-5 flex-shrink-0" />,
     },
   ];
 
@@ -82,37 +82,39 @@ export function PlatformLayout({ children }: PlatformLayoutProps) {
   };
 
   return (
-    <div className="flex h-screen bg-neutral-950">
-      <Sidebar open={open} setOpen={setOpen}>
-        <SidebarBody className="justify-between gap-10">
+    <div className="flex h-screen bg-[#1a1a1a]">
+      <Sidebar open={open} setOpen={setOpen} animate={false}>
+        <SidebarBody className="justify-between gap-10 py-6">
           <div className="flex flex-col flex-1 overflow-y-auto overflow-x-hidden">
-            {open ? <Logo /> : <LogoIcon />}
-            <div className="mt-8 flex flex-col gap-2">
+            <LogoIcon />
+            <div className="mt-8 flex flex-col gap-4 items-center">
               {links.map((link, idx) => (
                 <SidebarLink
                   key={idx}
                   link={link}
                   className={
                     pathname === link.href
-                      ? "bg-neutral-800 rounded-lg px-2 text-white"
-                      : "hover:bg-neutral-800/50 rounded-lg px-2"
+                      ? "p-2 rounded-lg bg-neutral-800"
+                      : "p-2 rounded-lg hover:bg-neutral-800/50"
                   }
                 />
               ))}
             </div>
           </div>
-          <div className="flex flex-col gap-2">
+          <div className="flex flex-col gap-4 items-center">
             <button
               onClick={handleLogout}
-              className="flex items-center justify-start gap-2 group/sidebar py-2 hover:bg-neutral-800/50 rounded-lg px-2"
+              className="p-2 rounded-lg hover:bg-neutral-800/50"
             >
-              <LogOut className="text-neutral-200 h-5 w-5 flex-shrink-0" />
-              {open && (
-                <span className="text-neutral-200 text-sm group-hover/sidebar:translate-x-1 transition duration-150 whitespace-pre">
-                  退出登录
-                </span>
-              )}
+              <LogOut className="text-neutral-400 h-5 w-5 flex-shrink-0" />
             </button>
+            <div className="w-8 h-8 rounded-full bg-blue-500 flex items-center justify-center overflow-hidden">
+              <img
+                src="https://api.dicebear.com/7.x/avataaars/svg?seed=user"
+                alt="User"
+                className="w-full h-full"
+              />
+            </div>
           </div>
         </SidebarBody>
       </Sidebar>
@@ -121,34 +123,14 @@ export function PlatformLayout({ children }: PlatformLayoutProps) {
   );
 }
 
-export const Logo = () => {
-  return (
-    <Link
-      href="/platform"
-      className="font-normal flex space-x-2 items-center text-sm text-white py-1 relative z-20"
-    >
-      <div className="h-8 w-8 rounded-lg bg-neutral-700 flex items-center justify-center flex-shrink-0">
-        <span className="text-white font-bold text-sm">RP</span>
-      </div>
-      <motion.span
-        initial={{ opacity: 0 }}
-        animate={{ opacity: 1 }}
-        className="font-medium text-white whitespace-pre"
-      >
-        Rising Path
-      </motion.span>
-    </Link>
-  );
-};
-
 export const LogoIcon = () => {
   return (
     <Link
       href="/platform"
-      className="font-normal flex space-x-2 items-center text-sm text-white py-1 relative z-20"
+      className="font-normal flex items-center justify-center py-1 relative z-20"
     >
-      <div className="h-8 w-8 rounded-lg bg-neutral-700 flex items-center justify-center flex-shrink-0">
-        <span className="text-white font-bold text-sm">RP</span>
+      <div className="h-8 w-8 rounded-lg bg-white flex items-center justify-center flex-shrink-0">
+        <span className="text-black font-bold text-sm">RP</span>
       </div>
     </Link>
   );
