@@ -3,8 +3,8 @@
 import { createContext, useContext, useEffect, useState, ReactNode } from 'react';
 import { useRouter } from 'next/navigation';
 import { Button } from '@/components/ui/button';
-import { Briefcase, Loader2 } from 'lucide-react';
-import Link from 'next/link';
+import { Loader2 } from 'lucide-react';
+import { CtaCard } from '@/components/ui/cta-card';
 
 interface AccessCode {
   id: number;
@@ -118,23 +118,34 @@ export function AccessGuard({ children }: { children: ReactNode }) {
 
   if (!authorized) {
     return (
-      <div className="min-h-screen flex items-center justify-center bg-background p-4">
-        <div className="text-center max-w-md">
-          <div className="w-20 h-20 bg-muted rounded-full flex items-center justify-center mx-auto mb-6">
-            <Briefcase className="h-10 w-10 text-muted-foreground" />
-          </div>
-          <h1 className="text-2xl font-bold mb-2">需要访问权限</h1>
-          <p className="text-muted-foreground mb-6">
-            请先输入有效的访问码以使用平台功能
-          </p>
-          <div className="flex flex-col sm:flex-row gap-3 justify-center">
-            <Button onClick={() => router.push('/login')}>
-              输入访问码
-            </Button>
-            <Button variant="outline" asChild>
-              <Link href="/">返回首页</Link>
-            </Button>
-          </div>
+      <div className="min-h-screen bg-white dark:bg-black flex items-center justify-center p-4">
+        <div className="w-full max-w-6xl">
+          <CtaCard
+            title="欢迎使用 Rising Path"
+            description="输入您的专属访问码，开启智能求职之旅。AI 智能选岗、简历优化、自动网申，助力海外留学生拿到理想 Offer。"
+            buttonText="进入平台"
+            inputPlaceholder="请输入访问码"
+            imageSrc="https://images.unsplash.com/photo-1478760329108-5c3ed9d495a0?ixlib=rb-4.1.0&ixid=M3wxMjA3fDB8MHxzZWFyY2h8M3x8YmFja2dyb3VuZHxlbnwwfHwwfHx8MA%3D%3D&auto=format&fit=crop&q=60&w=900&q=80&w=2574&auto=format&fit=crop"
+            onButtonClick={async (code) => {
+              if (!code.trim()) return;
+              try {
+                const response = await fetch('/api/access-codes/verify', {
+                  method: 'POST',
+                  headers: { 'Content-Type': 'application/json' },
+                  body: JSON.stringify({ code: code.trim() }),
+                });
+                const data = await response.json();
+                if (response.ok && data.valid) {
+                  localStorage.setItem('access_code', JSON.stringify(data.code));
+                  localStorage.setItem('access_code_id', String(data.access_code_id));
+                  window.location.reload();
+                }
+              } catch (err) {
+                console.error('Access code verification failed:', err);
+              }
+            }}
+            className="min-h-[200px] md:min-h-[250px]"
+          />
         </div>
       </div>
     );
