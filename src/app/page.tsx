@@ -24,7 +24,7 @@ import {
   TrendingUp,
   Globe,
   Target,
-  Lightning,
+  Zap,
 } from 'lucide-react';
 import { ScrollCard } from '@/components/scroll-card';
 
@@ -107,7 +107,7 @@ const advantages = [
     iconColor: 'text-white',
   },
   {
-    icon: Lightning,
+    icon: Zap,
     title: '高效求职工具',
     description: '一站式完成简历优化、岗位筛选、网申投递',
     iconBg: 'bg-[#E2D0B8]',
