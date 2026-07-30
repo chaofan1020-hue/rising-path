@@ -24,7 +24,6 @@ import {
   TrendingUp,
   Globe,
   Target,
-  Zap,
 } from 'lucide-react';
 import { ScrollCard } from '@/components/scroll-card';
 
