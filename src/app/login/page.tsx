@@ -2,13 +2,7 @@
 
 import { useState } from 'react';
 import { useRouter } from 'next/navigation';
-import { Button } from '@/components/ui/button';
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
-import { Input } from '@/components/ui/input';
-import { Label } from '@/components/ui/label';
-import { Briefcase, Key, Loader2 } from 'lucide-react';
-import Link from 'next/link';
-import Image from 'next/image';
+import { CtaCard } from '@/components/ui/cta-card';
 
 export default function LoginPage() {
   const router = useRouter();
@@ -36,7 +30,6 @@ export default function LoginPage() {
       const data = await response.json();
 
       if (data.valid) {
-        // 保存访问码到 localStorage
         localStorage.setItem('access_code', JSON.stringify(data.code));
         router.push('/');
       } else {
@@ -50,71 +43,26 @@ export default function LoginPage() {
   };
 
   return (
-    <div className="min-h-screen bg-gradient-to-br from-background via-muted/20 to-background flex items-center justify-center p-4">
-      <div className="w-full max-w-md">
-        {/* Logo */}
-        <div className="text-center mb-8">
-          <Link href="/" className="inline-flex items-center gap-3 mb-4">
-            <Image src="/logo.svg" alt="Rising Path" width={48} height={48} />
-            <span className="font-bold text-3xl">Rising Path</span>
-          </Link>
-          <p className="text-muted-foreground">海外留学生求职平台</p>
-        </div>
-
-        {/* Login Card */}
-        <Card className="border-0 shadow-xl">
-          <CardHeader className="text-center">
-            <div className="w-16 h-16 bg-primary/10 rounded-full flex items-center justify-center mx-auto mb-4">
-              <Key className="h-8 w-8 text-primary" />
-            </div>
-            <CardTitle className="text-xl">输入访问码</CardTitle>
-            <CardDescription>
-              请输入管理员提供的访问码以使用平台功能
-            </CardDescription>
-          </CardHeader>
-          <CardContent>
-            <form onSubmit={handleSubmit} className="space-y-4">
-              <div className="space-y-2">
-                <Label htmlFor="code">访问码</Label>
-                <Input
-                  id="code"
-                  type="text"
-                  placeholder="请输入8位访问码"
-                  value={code}
-                  onChange={(e) => {
-                    setCode(e.target.value.toUpperCase());
-                    setError('');
-                  }}
-                  className="text-center text-lg tracking-widest font-mono"
-                  maxLength={8}
-                  disabled={loading}
-                />
-                {error && (
-                  <p className="text-sm text-destructive">{error}</p>
-                )}
-              </div>
-              <Button 
-                type="submit" 
-                className="w-full" 
-                disabled={loading || code.length < 4}
-              >
-                {loading ? (
-                  <>
-                    <Loader2 className="h-4 w-4 mr-2 animate-spin" />
-                    验证中...
-                  </>
-                ) : (
-                  '验证并进入'
-                )}
-              </Button>
-            </form>
-
-            <div className="mt-6 pt-6 border-t text-center text-sm text-muted-foreground">
-              <p>没有访问码？</p>
-              <p className="mt-1">请联系管理员获取</p>
-            </div>
-          </CardContent>
-        </Card>
+    <div className="min-h-screen bg-white dark:bg-black flex items-center justify-center p-4">
+      <div className="w-full max-w-6xl">
+        <CtaCard
+          imageSrc="https://images.unsplash.com/photo-1497366216548-37526070297c?auto=format&fit=crop&q=80&w=2000"
+          title="欢迎使用 Rising Path"
+          description="专为海外留学生打造的一站式求职平台。输入访问码开始您的求职之旅。"
+          inputPlaceholder="请输入访问码"
+          buttonText="进入平台"
+          onButtonClick={(inputCode) => {
+            setCode(inputCode);
+            // 触发登录
+            const form = document.querySelector('form');
+            if (form) form.requestSubmit();
+          }}
+        />
+        {error && (
+          <div className="mt-4 text-center text-red-500">
+            {error}
+          </div>
+        )}
       </div>
     </div>
   );
