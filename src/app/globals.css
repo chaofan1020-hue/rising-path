@@ -1,18 +1,8 @@
 @import 'tailwindcss';
 @import 'tw-animate-css';
 
-/* 主题变量 */
+/* 主题变量 - 默认浅色模式 */
 :root {
-  --background: 240 10% 4%;
-  --foreground: 0 0% 100%;
-  --card: 240 10% 8%;
-  --card-foreground: 0 0% 100%;
-  --border: 0 0% 20%;
-  --muted: 240 10% 15%;
-  --muted-foreground: 0 0% 60%;
-}
-
-.light {
   --background: 0 0% 100%;
   --foreground: 240 10% 4%;
   --card: 0 0% 98%;
@@ -20,6 +10,17 @@
   --border: 240 10% 90%;
   --muted: 240 10% 95%;
   --muted-foreground: 240 10% 40%;
+}
+
+/* 深色模式 */
+.dark {
+  --background: 240 10% 4%;
+  --foreground: 0 0% 100%;
+  --card: 240 10% 8%;
+  --card-foreground: 0 0% 100%;
+  --border: 0 0% 20%;
+  --muted: 240 10% 15%;
+  --muted-foreground: 0 0% 60%;
 }
 
 /* Tailwind v4 Safelist - 强制生成动态使用的渐变类 */
