@@ -1208,7 +1208,7 @@ export default function AdminPage() {
                   <Card className="flex-shrink-0 w-28 md:w-auto">
                     <CardContent className="pt-4 md:pt-6 pb-3 md:pb-6 text-center">
                       <div className="flex items-center justify-center gap-1 md:gap-2">
-                        <Send className="h-4 w-4 md:h-5 md:w-5 text-purple-600" />
+                        <Send className="h-4 w-4 md:h-5 md:w-5 text-terracotta-600" />
                         <span className="text-xl md:text-2xl font-bold">{stats.totalApplications}</span>
                       </div>
                       <p className="text-xs md:text-sm text-muted-foreground mt-1">网申总数</p>
@@ -1235,7 +1235,7 @@ export default function AdminPage() {
                   <Card className="flex-shrink-0 w-28 md:w-auto">
                     <CardContent className="pt-4 md:pt-6 pb-3 md:pb-6 text-center">
                       <div className="flex items-center justify-center gap-1 md:gap-2">
-                        <Calendar className="h-4 w-4 md:h-5 md:w-5 text-purple-600" />
+                        <Calendar className="h-4 w-4 md:h-5 md:w-5 text-terracotta-600" />
                         <span className="text-xl md:text-2xl font-bold">{stats.interviewApps}</span>
                       </div>
                       <p className="text-xs md:text-sm text-muted-foreground mt-1">面试中</p>
@@ -1369,7 +1369,7 @@ export default function AdminPage() {
                       <Card className="flex-shrink-0 w-32 md:w-auto">
                         <CardContent className="pt-4 md:pt-6 pb-3 md:pb-6">
                           <div className="flex items-center gap-1 md:gap-2">
-                            <FileText className="h-4 w-4 md:h-5 md:w-5 text-purple-600" />
+                            <FileText className="h-4 w-4 md:h-5 md:w-5 text-terracotta-600" />
                             <div>
                               <span className="text-lg md:text-2xl font-bold">{analytics.overview.recentResumes}</span>
                               <span className="text-xs md:text-sm text-muted-foreground">/{analytics.overview.totalResumes}</span>
@@ -1475,7 +1475,7 @@ export default function AdminPage() {
                                     </div>
                                     <div className="h-2 bg-muted rounded-full overflow-hidden">
                                       <div 
-                                        className="h-full bg-purple-500 rounded-full transition-all"
+                                        className="h-full bg-terracotta-500 rounded-full transition-all"
                                         style={{ width: `${percentage}%` }}
                                       />
                                     </div>
@@ -1503,7 +1503,7 @@ export default function AdminPage() {
                                 const statusColors: Record<string, string> = {
                                   pending: 'bg-yellow-500',
                                   submitted: 'bg-blue-500',
-                                  interview: 'bg-purple-500',
+                                  interview: 'bg-terracotta-500',
                                   rejected: 'bg-red-500',
                                   offer: 'bg-green-500',
                                 };
@@ -1579,7 +1579,7 @@ export default function AdminPage() {
                             <Card>
                               <CardHeader className="pb-2">
                                 <CardTitle className="text-base flex items-center gap-2">
-                                  <GraduationCap className="h-4 w-4 text-purple-500" />
+                                  <GraduationCap className="h-4 w-4 text-terracotta-500" />
                                   学校分布
                                 </CardTitle>
                               </CardHeader>
@@ -1599,7 +1599,7 @@ export default function AdminPage() {
                                           </div>
                                           <div className="h-2 bg-muted rounded-full overflow-hidden">
                                             <div 
-                                              className="h-full bg-gradient-to-r from-purple-400 to-purple-600 rounded-full transition-all"
+                                              className="h-full bg-gradient-to-r from-terracotta-400 to-terracotta-600 rounded-full transition-all"
                                               style={{ width: `${percentage}%` }}
                                             />
                                           </div>
@@ -1631,7 +1631,7 @@ export default function AdminPage() {
                                       const degreeColors: Record<string, string> = {
                                         '本科': 'from-green-400 to-green-600',
                                         '硕士': 'from-blue-400 to-blue-600',
-                                        '博士': 'from-purple-400 to-purple-600',
+                                        '博士': 'from-terracotta-400 to-terracotta-600',
                                         '大专': 'from-gray-400 to-gray-600',
                                       };
                                       return (
@@ -1685,7 +1685,7 @@ export default function AdminPage() {
                                     title={`网申: ${day.applications}`}
                                   />
                                   <div 
-                                    className="w-3 bg-purple-500 rounded-t transition-all"
+                                    className="w-3 bg-terracotta-500 rounded-t transition-all"
                                     style={{ height: `${(day.aiMatches / max) * 100}%`, minHeight: day.aiMatches > 0 ? '4px' : '0' }}
                                     title={`AI选岗: ${day.aiMatches}`}
                                   />
@@ -1707,7 +1707,7 @@ export default function AdminPage() {
                             网申
                           </div>
                           <div className="flex items-center gap-1">
-                            <div className="w-3 h-3 bg-purple-500 rounded" />
+                            <div className="w-3 h-3 bg-terracotta-500 rounded" />
                             AI选岗
                           </div>
                         </div>

@@ -30,7 +30,7 @@ const features = [
     detail: '支持多维度筛选，一键收藏心仪机会',
     icon: Search,
     href: '/jobs',
-    gradient: 'from-blue-600 via-blue-500 to-cyan-500',
+    gradient: 'from-terracotta-600 via-sage-500 to-beige-500',
     pattern: 'dots',
 
   },
@@ -40,7 +40,7 @@ const features = [
     detail: 'AI驱动智能推荐，找到最适合你的机会',
     icon: Brain,
     href: '/ai-match',
-    gradient: 'from-violet-600 via-purple-500 to-fuchsia-500',
+    gradient: 'from-terracotta-600 via-sage-500 to-beige-500',
     pattern: 'grid',
 
   },
@@ -50,7 +50,7 @@ const features = [
     detail: '支持 PDF、Word 多格式上传',
     icon: FileText,
     href: '/resume',
-    gradient: 'from-emerald-600 via-green-500 to-teal-500',
+    gradient: 'from-sage-600 via-beige-500 to-gray-500',
     pattern: 'dots',
 
   },
@@ -60,7 +60,7 @@ const features = [
     detail: '提高简历通过率，让 HR 更容易看到你',
     icon: Wand2,
     href: '/optimize',
-    gradient: 'from-orange-600 via-amber-500 to-yellow-500',
+    gradient: 'from-beige-600 via-terracotta-500 to-sage-500',
     pattern: 'grid',
 
   },
@@ -70,7 +70,7 @@ const features = [
     detail: '实时查看投递记录，掌握求职进展',
     icon: Send,
     href: '/applications',
-    gradient: 'from-pink-600 via-rose-500 to-red-500',
+    gradient: 'from-gray-600 via-terracotta-500 to-beige-500',
     pattern: 'dots',
 
   },
@@ -98,8 +98,8 @@ const advantages = [
     icon: Crosshair,
     title: '精准智能匹配',
     description: 'AI深度分析简历与岗位匹配度',
-    iconBg: 'bg-violet-100',
-    iconColor: 'text-violet-600',
+    iconBg: 'bg-terracotta-100',
+    iconColor: 'text-terracotta-600',
   },
   {
     icon: Rocket,
@@ -116,7 +116,7 @@ export default function Home() {
       {/* Background Decoration */}
       <div className="absolute inset-0 -z-10">
         <div className="absolute top-0 left-1/4 w-[600px] h-[600px] bg-gradient-to-r from-blue-500/10 to-purple-500/10 rounded-full blur-3xl" />
-        <div className="absolute bottom-1/4 right-1/4 w-[500px] h-[500px] bg-gradient-to-r from-pink-500/10 to-orange-500/10 rounded-full blur-3xl" />
+        <div className="absolute bottom-1/4 right-1/4 w-[500px] h-[500px] bg-gradient-to-r from-terracotta-500/10 to-beige-500/10 rounded-full blur-3xl" />
         <div className="absolute inset-0 bg-[linear-gradient(to_right,#80808005_1px,transparent_1px),linear-gradient(to_bottom,#80808005_1px,transparent_1px)] bg-[size:32px_32px]" />
       </div>
 
@@ -215,7 +215,7 @@ export default function Home() {
             iconName="Crosshair"
             title="精准智能匹配"
             description="AI深度分析简历与岗位匹配度"
-            iconColor="text-violet-600"
+            iconColor="text-terracotta-600"
             scrollTo="features"
           />
           <ScrollCard
@@ -303,7 +303,7 @@ export default function Home() {
         <div className="relative rounded-2xl md:rounded-3xl bg-gradient-to-br from-muted/60 via-muted/30 to-muted/10 border border-muted/30 p-8 md:p-12 lg:p-16 overflow-hidden">
           {/* Decorative elements */}
           <div className="absolute top-0 right-0 w-60 md:w-80 h-60 md:h-80 bg-gradient-to-br from-primary/5 to-transparent rounded-full blur-3xl" />
-          <div className="absolute bottom-0 left-0 w-40 md:w-60 h-40 md:h-60 bg-gradient-to-tr from-purple-500/5 to-transparent rounded-full blur-3xl" />
+          <div className="absolute bottom-0 left-0 w-40 md:w-60 h-40 md:h-60 bg-gradient-to-tr from-terracotta-500/5 to-transparent rounded-full blur-3xl" />
           
           <div className="relative">
             <div className="text-center mb-10 md:mb-14">

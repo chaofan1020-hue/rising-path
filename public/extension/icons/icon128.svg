@@ -1,6 +1,7 @@
-<svg width="128" height="128" viewBox="0 0 128 128" fill="none" xmlns="http://www.w3.org/2000/svg">
-  <!-- Clean dark background -->
-  <rect width="128" height="128" rx="20" fill="#1a1a2e"/>
-  <!-- RP letters - larger and bolder -->
-  <text x="64" y="86" font-family="system-ui, -apple-system, sans-serif" font-size="64" font-weight="700" fill="#ffffff" text-anchor="middle" letter-spacing="4">RP</text>
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 128 128">
+  <rect width="128" height="128" rx="24" fill="#F5F0EB"/>
+  <text x="20" y="82" font-family="Arial, sans-serif" font-size="48" font-weight="700" fill="#E2D0B8">y</text>
+  <text x="48" y="82" font-family="Arial, sans-serif" font-size="48" font-weight="700" fill="#B5BEB0">e</text>
+  <text x="72" y="82" font-family="Arial, sans-serif" font-size="48" font-weight="700" fill="#C46A4A">s</text>
+  <text x="96" y="82" font-family="Arial, sans-serif" font-size="48" font-weight="700" fill="#C5C9CE">!</text>
 </svg>

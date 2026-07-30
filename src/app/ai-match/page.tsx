@@ -262,7 +262,7 @@ function AIMatchContent() {
         {/* Page Title */}
         <div className="mb-6 md:mb-8">
           <h1 className="text-2xl md:text-3xl font-bold mb-1 md:mb-2 flex items-center gap-2 md:gap-3">
-            <Brain className="h-6 w-6 md:h-8 md:w-8 text-purple-600" />
+            <Brain className="h-6 w-6 md:h-8 md:w-8 text-terracotta-600" />
             AI智能选岗
           </h1>
           <p className="text-sm md:text-base text-muted-foreground">
@@ -320,7 +320,7 @@ function AIMatchContent() {
                 <Button
                   onClick={handleMatch}
                   disabled={!selectedResumeId || matching}
-                  className="bg-gradient-to-r from-purple-600 to-blue-600 hover:from-purple-700 hover:to-blue-700 h-10"
+                  className="bg-gradient-to-r from-terracotta-600 to-sage-600 hover:from-terracotta-700 hover:to-sage-700 h-10"
                 >
                   {matching ? (
                     <>
@@ -414,7 +414,7 @@ function AIMatchContent() {
                   {/* 手机端：纵向布局，桌面端：横向布局 */}
                   <div className="flex flex-col md:flex-row gap-4 md:gap-6">
                     {/* Score - 手机端横向紧凑，桌面端纵向带背景 */}
-                    <div className="flex items-center gap-3 md:flex-col md:items-center md:justify-center md:p-4 md:rounded-lg md:bg-gradient-to-br md:from-purple-50 md:to-blue-50 dark:md:from-purple-950 dark:md:to-blue-950 flex-shrink-0">
+                    <div className="flex items-center gap-3 md:flex-col md:items-center md:justify-center md:p-4 md:rounded-lg md:bg-gradient-to-br md:from-terracotta-50 md:to-beige-50 dark:md:from-terracotta-950 dark:md:to-beige-950 flex-shrink-0">
                       <div className={`text-3xl md:text-4xl font-bold ${getScoreColor(result.match_score)}`}>
                         {result.match_score}
                       </div>

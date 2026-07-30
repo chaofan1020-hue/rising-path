@@ -511,9 +511,9 @@ function ResumeContent() {
                           <div className="space-y-4">
                             {/* 结构化字段 (AI提取) */}
                             {resume.parsed_fields && (
-                              <div className="bg-gradient-to-r from-purple-50 to-pink-50 dark:from-purple-950/30 dark:to-pink-950/30 p-3 md:p-4 rounded-lg">
+                              <div className="bg-gradient-to-r from-terracotta-50 to-beige-50 dark:from-terracotta-950/30 dark:to-beige-950/30 p-3 md:p-4 rounded-lg">
                                 <div className="flex items-center gap-2 mb-3">
-                                  <Sparkles className="h-4 w-4 text-purple-600" />
+                                  <Sparkles className="h-4 w-4 text-terracotta-600" />
                                   <h4 className="font-semibold text-sm md:text-base">结构化字段</h4>
                                   <Badge variant="secondary" className="text-xs">AI 提取</Badge>
                                 </div>

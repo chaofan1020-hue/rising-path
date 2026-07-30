@@ -1044,7 +1044,7 @@ function OptimizeContent() {
               <Button 
                 onClick={handleOptimize}
                 disabled={!selectedResumeId || !targetPosition || optimizing}
-                className="bg-gradient-to-r from-orange-600 to-red-600 hover:from-orange-700 hover:to-red-700 h-9 md:h-10"
+                className="bg-gradient-to-r from-terracotta-600 to-sage-600 hover:from-terracotta-700 hover:to-sage-700 h-9 md:h-10"
               >
                 {optimizing ? (
                   <>
@@ -1110,14 +1110,14 @@ function OptimizeContent() {
 
             {/* AI匹配优化建议 */}
             {suggestions && (
-              <div className="mt-3 md:mt-4 p-3 md:p-4 rounded-lg bg-purple-50 dark:bg-purple-950/30 border border-purple-200 dark:border-purple-800">
+              <div className="mt-3 md:mt-4 p-3 md:p-4 rounded-lg bg-terracotta-50 dark:bg-terracotta-950/30 border border-terracotta-200 dark:border-terracotta-800">
                 <div className="flex items-start gap-2 md:gap-3">
-                  <Sparkles className="h-4 w-4 md:h-5 md:w-5 text-purple-600 mt-0.5 flex-shrink-0" />
+                  <Sparkles className="h-4 w-4 md:h-5 md:w-5 text-terracotta-600 mt-0.5 flex-shrink-0" />
                   <div className="flex-1">
-                    <h4 className="font-medium text-purple-700 dark:text-purple-300 mb-1.5 md:mb-2 text-sm md:text-base">
+                    <h4 className="font-medium text-terracotta-700 dark:text-terracotta-300 mb-1.5 md:mb-2 text-sm md:text-base">
                       来自AI智能选岗的优化建议
                     </h4>
-                    <p className="text-xs md:text-sm text-purple-600 dark:text-purple-400 whitespace-pre-wrap">
+                    <p className="text-xs md:text-sm text-terracotta-600 dark:text-terracotta-400 whitespace-pre-wrap">
                       {suggestions}
                     </p>
                   </div>
@@ -1159,7 +1159,7 @@ function OptimizeContent() {
           </Card>
           <Card>
             <CardContent className="pt-4 md:pt-6">
-              <Sparkles className="h-8 w-8 md:h-10 md:w-10 text-purple-600 mb-3 md:mb-4" />
+              <Sparkles className="h-8 w-8 md:h-10 md:w-10 text-terracotta-600 mb-3 md:mb-4" />
               <h3 className="font-semibold mb-1.5 md:mb-2 text-sm md:text-base">内容增强</h3>
               <p className="text-xs md:text-sm text-muted-foreground">
                 使用专业术语增强简历描述

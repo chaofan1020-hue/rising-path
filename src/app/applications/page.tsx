@@ -169,7 +169,7 @@ function ApplicationsContent() {
     statusDistribution: [
       { label: '待投递', count: stats.pending, color: 'bg-yellow-500', percent: stats.total > 0 ? (stats.pending / stats.total * 100).toFixed(0) : 0 },
       { label: '已投递', count: stats.submitted, color: 'bg-blue-500', percent: stats.total > 0 ? (stats.submitted / stats.total * 100).toFixed(0) : 0 },
-      { label: '面试中', count: stats.interview, color: 'bg-purple-500', percent: stats.total > 0 ? (stats.interview / stats.total * 100).toFixed(0) : 0 },
+      { label: '面试中', count: stats.interview, color: 'bg-terracotta-500', percent: stats.total > 0 ? (stats.interview / stats.total * 100).toFixed(0) : 0 },
       { label: '简历被拒', count: stats.resume_rejected, color: 'bg-red-400', percent: stats.total > 0 ? (stats.resume_rejected / stats.total * 100).toFixed(0) : 0 },
       { label: '面试未通过', count: stats.interview_rejected, color: 'bg-red-500', percent: stats.total > 0 ? (stats.interview_rejected / stats.total * 100).toFixed(0) : 0 },
       { label: '已录用', count: stats.offer, color: 'bg-green-500', percent: stats.total > 0 ? (stats.offer / stats.total * 100).toFixed(0) : 0 },
@@ -256,7 +256,7 @@ function ApplicationsContent() {
           </Card>
           <Card className="flex-shrink-0 w-28 md:w-auto">
             <CardContent className="pt-3 pb-3 md:pt-4 md:pb-4 text-center">
-              <div className="text-lg md:text-2xl font-bold text-purple-600">{stats.interview}</div>
+              <div className="text-lg md:text-2xl font-bold text-terracotta-600">{stats.interview}</div>
               <div className="text-xs md:text-sm text-muted-foreground">面试中</div>
             </CardContent>
           </Card>
@@ -377,7 +377,7 @@ function ApplicationsContent() {
               <Card className="border-l-4 border-l-purple-500">
                 <CardContent className="pt-3 md:pt-4">
                   <div className="text-xs md:text-sm text-muted-foreground mb-1">Offer转化率</div>
-                  <div className="text-lg md:text-2xl font-bold text-purple-600">
+                  <div className="text-lg md:text-2xl font-bold text-terracotta-600">
                     {analytics.offerRate}%
                   </div>
                   <div className="text-xs text-muted-foreground mt-1">

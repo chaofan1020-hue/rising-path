@@ -1,6 +1,12 @@
-<svg width="40" height="40" viewBox="0 0 40 40" fill="none" xmlns="http://www.w3.org/2000/svg">
-  <!-- Clean dark background -->
-  <rect width="40" height="40" rx="8" fill="#1a1a2e"/>
-  <!-- RP letters - larger and bolder -->
-  <text x="20" y="28" font-family="system-ui, -apple-system, sans-serif" font-size="20" font-weight="700" fill="#ffffff" text-anchor="middle" letter-spacing="1">RP</text>
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 120 120">
+  <!-- 背景圆形 -->
+  <circle cx="60" cy="60" r="56" fill="#F5F0EB"/>
+  <!-- y - 米色 -->
+  <text x="22" y="78" font-family="Arial, sans-serif" font-size="36" font-weight="700" fill="#E2D0B8">y</text>
+  <!-- e - 灰绿色 -->
+  <text x="44" y="78" font-family="Arial, sans-serif" font-size="36" font-weight="700" fill="#B5BEB0">e</text>
+  <!-- s - 赤陶色 -->
+  <text x="64" y="78" font-family="Arial, sans-serif" font-size="36" font-weight="700" fill="#C46A4A">s</text>
+  <!-- ! - 浅灰色 -->
+  <text x="86" y="78" font-family="Arial, sans-serif" font-size="36" font-weight="700" fill="#C5C9CE">!</text>
 </svg>
