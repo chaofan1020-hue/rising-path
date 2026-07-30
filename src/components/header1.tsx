@@ -12,6 +12,7 @@ import {
 import { Menu, MoveRight, X } from "lucide-react";
 import { useState } from "react";
 import Link from "next/link";
+import { ThemeToggle } from "@/components/theme-toggle";
 
 function Header1() {
     const navigationItems = [
@@ -115,7 +116,8 @@ function Header1() {
                 <div className="flex lg:justify-center">
                     <Link href="/" className="font-semibold text-lg">Rising Path</Link>
                 </div>
-                <div className="flex justify-end w-full gap-4">
+                <div className="flex justify-end w-full gap-4 items-center">
+                    <ThemeToggle />
                     <Button variant="ghost" className="hidden md:inline-flex" asChild>
                         <Link href="/login">Log in</Link>
                     </Button>
