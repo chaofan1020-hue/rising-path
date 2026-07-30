@@ -143,7 +143,7 @@ export default function FeaturesCards() {
   }
 
   return (
-    <section className="min-h-screen py-20 px-4 bg-background">
+    <section className="min-h-screen py-20 px-4 bg-white dark:bg-black">
       <div className="max-w-7xl mx-auto">
         <div className="text-center mb-16">
           <h2 className="text-4xl md:text-5xl font-light text-foreground mb-6">核心功能</h2>
