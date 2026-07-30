@@ -26,6 +26,7 @@ import {
   X,
 } from 'lucide-react';
 import { useState } from 'react';
+import { FeaturesCards } from '@/components/features-cards';
 
 const features = [
   {
@@ -300,49 +301,7 @@ export default function Home() {
       </section>
 
       {/* Features Section */}
-      <section className="relative py-20 px-6">
-        <div className="mx-auto max-w-7xl">
-          <motion.div
-            initial={{ opacity: 0, y: 20 }}
-            whileInView={{ opacity: 1, y: 0 }}
-            viewport={{ once: true }}
-            transition={{ duration: 0.6 }}
-            className="text-center mb-16"
-          >
-            <h2 className="text-3xl md:text-4xl font-bold mb-4">
-              一站式求职解决方案
-            </h2>
-            <p className="text-[hsl(var(--muted-foreground))] text-lg max-w-2xl mx-auto">
-              从岗位查询到自动网申，覆盖求职全流程
-            </p>
-          </motion.div>
-
-          <div className="grid md:grid-cols-2 lg:grid-cols-3 gap-6">
-            {features.map((feature, index) => (
-              <motion.div
-                key={feature.title}
-                initial={{ opacity: 0, y: 20 }}
-                whileInView={{ opacity: 1, y: 0 }}
-                viewport={{ once: true }}
-                transition={{ duration: 0.5, delay: index * 0.1 }}
-              >
-                <Link href={feature.href}>
-                  <div className="group relative h-full rounded-2xl bg-[hsl(var(--card))] border border-[hsl(var(--border))] p-6 hover:bg-[hsl(var(--card-hover))] hover:border-white/20 transition-all duration-300">
-                    <div className="w-12 h-12 rounded-xl bg-gradient-to-br from-violet-600 to-indigo-600 flex items-center justify-center mb-4 group-hover:scale-110 transition-transform">
-                      <feature.icon className="h-6 w-6 text-white" />
-                    </div>
-                    <h3 className="text-lg font-semibold text-white mb-2">{feature.title}</h3>
-                    <p className="text-[hsl(var(--muted-foreground))] text-sm">{feature.description}</p>
-                    <div className="absolute top-6 right-6 opacity-0 group-hover:opacity-100 transition-opacity">
-                      <ArrowRight className="h-5 w-5 text-violet-400" />
-                    </div>
-                  </div>
-                </Link>
-              </motion.div>
-            ))}
-          </div>
-        </div>
-      </section>
+      <FeaturesCards />
 
       {/* Footer */}
       <footer className="border-t border-[hsl(var(--border))] py-12 px-6">
