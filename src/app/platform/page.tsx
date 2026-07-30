@@ -1,6 +1,6 @@
 "use client";
 
-import { PlatformLayout } from "@/components/platform-layout";
+import { PlatformLayout } from "@/app/platform/layout-wrapper";
 import { Briefcase, Users, TrendingUp, Target } from "lucide-react";
 
 const stats = [

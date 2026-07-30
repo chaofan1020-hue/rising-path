@@ -1,137 +1,186 @@
-'use client'
+"use client";
 
-import * as React from 'react'
-import Link from 'next/link'
-import { usePathname } from 'next/navigation'
-import { cn } from '@/lib/utils'
-import {
-  LayoutDashboard,
-  Briefcase,
-  Brain,
-  FileText,
-  Sparkles,
-  Send,
-  Puzzle,
-  Settings,
-  ChevronLeft,
-  ChevronRight,
-  LogOut,
-  Crown,
-} from 'lucide-react'
+import { cn } from "@/lib/utils";
+import Link from "next/link";
+import React, { useState, createContext, useContext } from "react";
+import { AnimatePresence, motion } from "framer-motion";
+import { Menu, X } from "lucide-react";
 
-interface SidebarProps {
-  children: React.ReactNode
+interface Links {
+  label: string;
+  href: string;
+  icon: React.JSX.Element | React.ReactNode;
 }
 
-interface NavItem {
-  title: string
-  href: string
-  icon: React.ComponentType<{ className?: string }>
+interface SidebarContextProps {
+  open: boolean;
+  setOpen: React.Dispatch<React.SetStateAction<boolean>>;
+  animate: boolean;
 }
 
-const navItems: NavItem[] = [
-  { title: 'Dashboard', href: '/platform', icon: LayoutDashboard },
-  { title: 'Jobs', href: '/platform/jobs', icon: Briefcase },
-  { title: 'AI Match', href: '/platform/ai-match', icon: Brain },
-  { title: 'Resume', href: '/platform/resume', icon: FileText },
-  { title: 'Optimize', href: '/platform/optimize', icon: Sparkles },
-  { title: 'Applications', href: '/platform/applications', icon: Send },
-  { title: 'Extension', href: '/platform/extension', icon: Puzzle },
-  { title: 'Settings', href: '/platform/settings', icon: Settings },
-]
+const SidebarContext = createContext<SidebarContextProps | undefined>(undefined);
 
-export function Sidebar({ children }: SidebarProps) {
-  const [collapsed, setCollapsed] = React.useState(false)
-  const pathname = usePathname()
+export const useSidebar = () => {
+  const context = useContext(SidebarContext);
+  if (!context) {
+    throw new Error("useSidebar must be used within a SidebarProvider");
+  }
+  return context;
+};
+
+export const SidebarProvider = ({
+  children,
+  open: openProp,
+  setOpen: setOpenProp,
+  animate = true,
+}: {
+  children: React.ReactNode;
+  open?: boolean;
+  setOpen?: React.Dispatch<React.SetStateAction<boolean>>;
+  animate?: boolean;
+}) => {
+  const [openState, setOpenState] = useState(false);
+
+  const open = openProp !== undefined ? openProp : openState;
+  const setOpen = setOpenProp !== undefined ? setOpenProp : setOpenState;
 
   return (
-    <div className="flex min-h-screen">
-      {/* Sidebar */}
-      <aside
+    <SidebarContext.Provider value={{ open, setOpen, animate }}>
+      {children}
+    </SidebarContext.Provider>
+  );
+};
+
+export const Sidebar = ({
+  children,
+  open,
+  setOpen,
+  animate,
+}: {
+  children: React.ReactNode;
+  open?: boolean;
+  setOpen?: React.Dispatch<React.SetStateAction<boolean>>;
+  animate?: boolean;
+}) => {
+  return (
+    <SidebarProvider open={open} setOpen={setOpen} animate={animate}>
+      {children}
+    </SidebarProvider>
+  );
+};
+
+export const SidebarBody = (props: React.ComponentProps<typeof motion.div>) => {
+  return (
+    <>
+      <DesktopSidebar {...props} />
+      <MobileSidebar {...(props as React.ComponentProps<"div">)} />
+    </>
+  );
+};
+
+export const DesktopSidebar = ({
+  className,
+  children,
+  ...props
+}: React.ComponentProps<typeof motion.div>) => {
+  const { open, setOpen, animate } = useSidebar();
+  return (
+    <motion.div
+      className={cn(
+        "h-full px-4 py-4 hidden md:flex md:flex-col bg-[#1a1a24] w-[300px] flex-shrink-0 border-r border-white/5",
+        className
+      )}
+      animate={{
+        width: animate ? (open ? "300px" : "60px") : "300px",
+      }}
+      onMouseEnter={() => setOpen(true)}
+      onMouseLeave={() => setOpen(false)}
+      {...props}
+    >
+      {children}
+    </motion.div>
+  );
+};
+
+export const MobileSidebar = ({
+  className,
+  children,
+  ...props
+}: React.ComponentProps<"div">) => {
+  const { open, setOpen } = useSidebar();
+  return (
+    <>
+      <div
         className={cn(
-          'fixed left-0 top-0 z-40 flex h-screen flex-col border-r border-white/5 bg-[#1a1a24] transition-all duration-300',
-          collapsed ? 'w-20' : 'w-64'
+          "h-10 px-4 py-4 flex flex-row md:hidden items-center justify-between bg-[#1a1a24] w-full border-b border-white/5"
         )}
+        {...props}
       >
-        {/* Logo */}
-        <div className="flex h-16 items-center justify-between border-b border-white/5 px-4">
-          {!collapsed && (
-            <div className="flex items-center gap-2">
-              <div className="flex h-8 w-8 items-center justify-center rounded-lg bg-gradient-to-br from-[#8b5cf6] to-[#6366f1]">
-                <span className="text-sm font-bold text-white">RP</span>
-              </div>
-              <span className="text-lg font-semibold text-white">Rising Path</span>
-            </div>
-          )}
-          {collapsed && (
-            <div className="mx-auto flex h-8 w-8 items-center justify-center rounded-lg bg-gradient-to-br from-[#8b5cf6] to-[#6366f1]">
-              <span className="text-sm font-bold text-white">RP</span>
-            </div>
-          )}
-          <button
-            onClick={() => setCollapsed(!collapsed)}
-            className="rounded-lg p-1.5 text-gray-400 hover:bg-white/5 hover:text-white"
-          >
-            {collapsed ? <ChevronRight className="h-4 w-4" /> : <ChevronLeft className="h-4 w-4" />}
-          </button>
+        <div className="flex justify-end z-20 w-full">
+          <Menu
+            className="text-neutral-200 cursor-pointer"
+            onClick={() => setOpen(!open)}
+          />
         </div>
-
-        {/* Navigation */}
-        <nav className="flex-1 space-y-1 overflow-y-auto px-3 py-4">
-          {navItems.map((item) => {
-            const Icon = item.icon
-            const isActive = pathname === item.href
-            return (
-              <Link
-                key={item.href}
-                href={item.href}
-                className={cn(
-                  'flex items-center gap-3 rounded-lg px-3 py-2.5 text-sm font-medium transition-all',
-                  isActive
-                    ? 'bg-[#8b5cf6]/10 text-[#8b5cf6]'
-                    : 'text-gray-400 hover:bg-white/5 hover:text-white',
-                  collapsed && 'justify-center'
-                )}
+        <AnimatePresence>
+          {open && (
+            <motion.div
+              initial={{ x: "-100%", opacity: 0 }}
+              animate={{ x: 0, opacity: 1 }}
+              exit={{ x: "-100%", opacity: 0 }}
+              transition={{
+                duration: 0.3,
+                ease: "easeInOut",
+              }}
+              className={cn(
+                "fixed h-full w-full inset-0 bg-[#0f0f14] p-10 z-[100] flex flex-col justify-between",
+                className
+              )}
+            >
+              <div
+                className="absolute right-10 top-10 z-50 text-neutral-200 cursor-pointer"
+                onClick={() => setOpen(!open)}
               >
-                <Icon className="h-5 w-5 flex-shrink-0" />
-                {!collapsed && <span>{item.title}</span>}
-              </Link>
-            )
-          })}
-        </nav>
+                <X />
+              </div>
+              {children}
+            </motion.div>
+          )}
+        </AnimatePresence>
+      </div>
+    </>
+  );
+};
 
-        {/* Upgrade Button */}
-        {!collapsed && (
-          <div className="px-3 pb-4">
-            <button className="flex w-full items-center justify-center gap-2 rounded-lg bg-gradient-to-r from-[#8b5cf6] to-[#6366f1] px-4 py-2.5 text-sm font-medium text-white hover:opacity-90 transition-opacity">
-              <Crown className="h-4 w-4" />
-              Upgrade Plan
-            </button>
-          </div>
-        )}
-
-        {/* Logout */}
-        <div className="border-t border-white/5 px-3 py-4">
-          <button
-            onClick={() => {
-              localStorage.removeItem('access_code')
-              window.location.href = '/'
-            }}
-            className={cn(
-              'flex items-center gap-3 rounded-lg px-3 py-2.5 text-sm font-medium text-gray-400 hover:bg-white/5 hover:text-white',
-              collapsed && 'justify-center'
-            )}
-          >
-            <LogOut className="h-5 w-5 flex-shrink-0" />
-            {!collapsed && <span>Logout</span>}
-          </button>
-        </div>
-      </aside>
-
-      {/* Main Content */}
-      <main className={cn('min-h-screen bg-[#0f0f14] transition-all duration-300', collapsed ? 'ml-20' : 'ml-64')}>
-        {children}
-      </main>
-    </div>
-  )
-}
+export const SidebarLink = ({
+  link,
+  className,
+  ...props
+}: {
+  link: Links;
+  className?: string;
+  props?: React.ComponentProps<typeof Link>;
+}) => {
+  const { open, animate } = useSidebar();
+  return (
+    <Link
+      href={link.href}
+      className={cn(
+        "flex items-center justify-start gap-2 group/sidebar py-2",
+        className
+      )}
+      {...props}
+    >
+      {link.icon}
+      <motion.span
+        animate={{
+          display: animate ? (open ? "inline-block" : "none") : "inline-block",
+          opacity: animate ? (open ? 1 : 0) : 1,
+        }}
+        className="text-neutral-200 text-sm group-hover/sidebar:translate-x-1 transition duration-150 whitespace-pre inline-block !p-0 !m-0"
+      >
+        {link.label}
+      </motion.span>
+    </Link>
+  );
+};
