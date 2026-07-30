@@ -1,7 +1,7 @@
 "use client";
 
 import * as React from "react";
-import { motion, type Variants } from "framer-motion";
+import { motion } from "framer-motion";
 import { cn } from "@/lib/utils";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -40,7 +40,7 @@ const CtaCard = React.forwardRef<HTMLDivElement, CtaCardProps>(
       console.log("Email submitted:", email);
     };
 
-    const containerVariants: Variants = {
+    const containerVariants = {
       hidden: { opacity: 0 },
       visible: {
         opacity: 1,
@@ -51,7 +51,7 @@ const CtaCard = React.forwardRef<HTMLDivElement, CtaCardProps>(
       },
     };
 
-    const itemVariants: Variants = {
+    const itemVariants = {
       hidden: { y: 20, opacity: 0 },
       visible: {
         y: 0,
