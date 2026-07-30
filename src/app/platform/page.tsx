@@ -56,7 +56,7 @@ export default function PlatformPage() {
           {stats.map((stat) => (
             <div
               key={stat.label}
-              className="bg-gray-50 rounded-xl p-6 border border-gray-100 hover:border-gray-200 transition-colors"
+              className="bg-gray-100 rounded-xl p-6 border border-gray-200 hover:border-gray-200 transition-colors"
             >
               <div className="flex items-center justify-between mb-4">
                 <div className={`w-12 h-12 rounded-lg bg-gradient-to-br ${stat.color} flex items-center justify-center`}>
@@ -73,7 +73,7 @@ export default function PlatformPage() {
         {/* Charts Section */}
         <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
           {/* Activity Chart */}
-          <div className="bg-gray-50 rounded-xl p-6 border border-gray-100">
+          <div className="bg-gray-100 rounded-xl p-6 border border-gray-200">
             <h3 className="text-lg font-semibold text-gray-900 mb-4">活动趋势</h3>
             <div className="h-64 flex items-end justify-between gap-2">
               {[40, 65, 45, 80, 55, 90, 70, 85, 60, 95, 75, 88].map((height, i) => (
@@ -89,11 +89,11 @@ export default function PlatformPage() {
           </div>
 
           {/* Recent Activity */}
-          <div className="bg-gray-50 rounded-xl p-6 border border-gray-100">
+          <div className="bg-gray-100 rounded-xl p-6 border border-gray-200">
             <h3 className="text-lg font-semibold text-gray-900 mb-4">最近活动</h3>
             <div className="space-y-4">
               {recentActivity.map((activity, i) => (
-                <div key={i} className="flex items-start gap-3 pb-4 border-b border-gray-100 last:border-0 last:pb-0">
+                <div key={i} className="flex items-start gap-3 pb-4 border-b border-gray-200 last:border-0 last:pb-0">
                   <div className="w-2 h-2 rounded-full bg-gray-300 mt-2 flex-shrink-0" />
                   <div className="flex-1 min-w-0">
                     <div className="text-sm text-gray-900 font-medium">{activity.action}</div>
@@ -107,7 +107,7 @@ export default function PlatformPage() {
         </div>
 
         {/* Quick Actions */}
-        <div className="bg-gray-50 rounded-xl p-6 border border-gray-100">
+        <div className="bg-gray-100 rounded-xl p-6 border border-gray-200">
           <h3 className="text-lg font-semibold text-gray-900 mb-4">快速操作</h3>
           <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
             {[

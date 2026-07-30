@@ -35,43 +35,43 @@ export function PlatformLayout({ children }: PlatformLayoutProps) {
       label: "Dashboard",
       href: "/platform",
       icon: (
-        <LayoutDashboard className="text-gray-500 h-5 w-5 flex-shrink-0" />
+        <LayoutDashboard className="text-gray-700 h-5 w-5 flex-shrink-0" />
       ),
     },
     {
       label: "岗位查询",
       href: "/platform/jobs",
-      icon: <Briefcase className="text-gray-500 h-5 w-5 flex-shrink-0" />,
+      icon: <Briefcase className="text-gray-700 h-5 w-5 flex-shrink-0" />,
     },
     {
       label: "AI 选岗",
       href: "/platform/ai-match",
-      icon: <Brain className="text-gray-500 h-5 w-5 flex-shrink-0" />,
+      icon: <Brain className="text-gray-700 h-5 w-5 flex-shrink-0" />,
     },
     {
       label: "简历管理",
       href: "/platform/resume",
-      icon: <FileText className="text-gray-500 h-5 w-5 flex-shrink-0" />,
+      icon: <FileText className="text-gray-700 h-5 w-5 flex-shrink-0" />,
     },
     {
       label: "简历优化",
       href: "/platform/optimize",
-      icon: <Wand2 className="text-gray-500 h-5 w-5 flex-shrink-0" />,
+      icon: <Wand2 className="text-gray-700 h-5 w-5 flex-shrink-0" />,
     },
     {
       label: "网申管理",
       href: "/platform/applications",
-      icon: <ClipboardList className="text-gray-500 h-5 w-5 flex-shrink-0" />,
+      icon: <ClipboardList className="text-gray-700 h-5 w-5 flex-shrink-0" />,
     },
     {
       label: "扩展程序",
       href: "/platform/extension",
-      icon: <Puzzle className="text-gray-500 h-5 w-5 flex-shrink-0" />,
+      icon: <Puzzle className="text-gray-700 h-5 w-5 flex-shrink-0" />,
     },
     {
       label: "设置",
       href: "/platform/settings",
-      icon: <Settings className="text-gray-500 h-5 w-5 flex-shrink-0" />,
+      icon: <Settings className="text-gray-700 h-5 w-5 flex-shrink-0" />,
     },
   ];
 
@@ -95,7 +95,7 @@ export function PlatformLayout({ children }: PlatformLayoutProps) {
                   className={
                     pathname === link.href
                       ? "bg-gray-100 rounded-lg px-2 text-gray-900"
-                      : "hover:bg-gray-50 rounded-lg px-2"
+                      : "hover:bg-gray-100 rounded-lg px-2"
                   }
                 />
               ))}
@@ -104,11 +104,11 @@ export function PlatformLayout({ children }: PlatformLayoutProps) {
           <div className="flex flex-col gap-2">
             <button
               onClick={handleLogout}
-              className="flex items-center justify-start gap-2 group/sidebar py-2 hover:bg-gray-50 rounded-lg px-2"
+              className="flex items-center justify-start gap-2 group/sidebar py-2 hover:bg-gray-100 rounded-lg px-2"
             >
-              <LogOut className="text-gray-500 h-5 w-5 flex-shrink-0" />
+              <LogOut className="text-gray-700 h-5 w-5 flex-shrink-0" />
               {open && (
-                <span className="text-gray-500 text-sm group-hover/sidebar:translate-x-1 transition duration-150 whitespace-pre">
+                <span className="text-gray-700 text-sm group-hover/sidebar:translate-x-1 transition duration-150 whitespace-pre">
                   退出登录
                 </span>
               )}
@@ -116,7 +116,7 @@ export function PlatformLayout({ children }: PlatformLayoutProps) {
           </div>
         </SidebarBody>
       </Sidebar>
-      <main className="flex-1 overflow-y-auto p-6 bg-white rounded-2xl border border-gray-100">{children}</main>
+      <main className="flex-1 overflow-y-auto p-6 bg-white rounded-2xl border border-gray-200">{children}</main>
     </div>
   );
 }
