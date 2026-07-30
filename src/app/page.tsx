@@ -16,7 +16,7 @@ export default function Home() {
         mainLinks={[]}
         legalLinks={[]}
         copyright={{
-          text: "© 2024 Rising Path",
+          text: "© 2026 Rising Path",
           license: "All rights reserved",
         }}
       />
