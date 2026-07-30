@@ -108,7 +108,7 @@ const CtaCard = React.forwardRef<HTMLDivElement, CtaCardProps>(
               className="flex w-full flex-col gap-3 sm:flex-row"
             >
               <Input
-                type="email"
+                type="text"
                 placeholder={inputPlaceholder}
                 value={email}
                 onChange={(e) => setEmail(e.target.value)}
