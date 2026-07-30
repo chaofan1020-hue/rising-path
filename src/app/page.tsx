@@ -4,6 +4,7 @@ import Link from 'next/link';
 import Image from 'next/image';
 import { Button } from '@/components/ui/button';
 import { motion } from 'framer-motion';
+import { ThemeToggle } from '@/components/theme-toggle';
 import {
   Briefcase,
   FileText,
@@ -69,9 +70,9 @@ export default function Home() {
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
 
   return (
-    <div className="min-h-screen bg-[#0a0a0f] text-white">
+    <div className="min-h-screen bg-[hsl(var(--background))] text-[hsl(var(--foreground))]">
       {/* Navigation */}
-      <nav className="fixed top-0 left-0 right-0 z-50 border-b border-white/10 bg-[#0a0a0f]/80 backdrop-blur-xl">
+      <nav className="fixed top-0 left-0 right-0 z-50 border-b border-[hsl(var(--border))] bg-[hsl(var(--background))]/80 backdrop-blur-xl">
         <div className="mx-auto max-w-7xl px-6">
           <div className="flex h-16 items-center justify-between">
             {/* Logo */}
@@ -84,24 +85,27 @@ export default function Home() {
 
             {/* Desktop Navigation */}
             <div className="hidden md:flex items-center gap-8">
-              <Link href="/jobs" className="text-sm text-gray-400 hover:text-white transition-colors">
+              <Link href="/jobs" className="text-sm text-[hsl(var(--muted-foreground))] hover:text-[hsl(var(--foreground))] transition-colors">
                 岗位查询
               </Link>
-              <Link href="/ai-match" className="text-sm text-gray-400 hover:text-white transition-colors">
+              <Link href="/ai-match" className="text-sm text-[hsl(var(--muted-foreground))] hover:text-[hsl(var(--foreground))] transition-colors">
                 AI 选岗
               </Link>
-              <Link href="/resume" className="text-sm text-gray-400 hover:text-white transition-colors">
+              <Link href="/resume" className="text-sm text-[hsl(var(--muted-foreground))] hover:text-[hsl(var(--foreground))] transition-colors">
                 简历管理
               </Link>
-              <Link href="/optimize" className="text-sm text-gray-400 hover:text-white transition-colors">
+              <Link href="/optimize" className="text-sm text-[hsl(var(--muted-foreground))] hover:text-[hsl(var(--foreground))] transition-colors">
                 简历优化
               </Link>
             </div>
 
+            {/* Theme Toggle */}
+            <ThemeToggle />
+
             {/* Desktop Buttons */}
             <div className="hidden md:flex items-center gap-3">
               <Link href="/login">
-                <Button variant="ghost" className="text-gray-300 hover:text-white hover:bg-white/10">
+                <Button variant="ghost" className="text-[hsl(var(--foreground))] hover:text-white hover:bg-[hsl(var(--card-hover))]">
                   登录
                 </Button>
               </Link>
@@ -114,7 +118,7 @@ export default function Home() {
 
             {/* Mobile Menu Button */}
             <button
-              className="md:hidden text-gray-400 hover:text-white"
+              className="md:hidden text-[hsl(var(--muted-foreground))] hover:text-[hsl(var(--foreground))]"
               onClick={() => setMobileMenuOpen(!mobileMenuOpen)}
             >
               {mobileMenuOpen ? <X className="h-6 w-6" /> : <Menu className="h-6 w-6" />}
@@ -124,23 +128,23 @@ export default function Home() {
 
         {/* Mobile Menu */}
         {mobileMenuOpen && (
-          <div className="md:hidden border-t border-white/10 bg-[#0a0a0f]/95 backdrop-blur-xl">
+          <div className="md:hidden border-t border-[hsl(var(--border))] bg-[#0a0a0f]/95 backdrop-blur-xl">
             <div className="px-6 py-4 space-y-3">
-              <Link href="/jobs" className="block text-sm text-gray-400 hover:text-white py-2">
+              <Link href="/jobs" className="block text-sm text-[hsl(var(--muted-foreground))] hover:text-[hsl(var(--foreground))] py-2">
                 岗位查询
               </Link>
-              <Link href="/ai-match" className="block text-sm text-gray-400 hover:text-white py-2">
+              <Link href="/ai-match" className="block text-sm text-[hsl(var(--muted-foreground))] hover:text-[hsl(var(--foreground))] py-2">
                 AI 选岗
               </Link>
-              <Link href="/resume" className="block text-sm text-gray-400 hover:text-white py-2">
+              <Link href="/resume" className="block text-sm text-[hsl(var(--muted-foreground))] hover:text-[hsl(var(--foreground))] py-2">
                 简历管理
               </Link>
-              <Link href="/optimize" className="block text-sm text-gray-400 hover:text-white py-2">
+              <Link href="/optimize" className="block text-sm text-[hsl(var(--muted-foreground))] hover:text-[hsl(var(--foreground))] py-2">
                 简历优化
               </Link>
-              <div className="pt-3 border-t border-white/10 space-y-2">
+              <div className="pt-3 border-t border-[hsl(var(--border))] space-y-2">
                 <Link href="/login">
-                  <Button variant="ghost" className="w-full text-gray-300 hover:text-white hover:bg-white/10">
+                  <Button variant="ghost" className="w-full text-[hsl(var(--foreground))] hover:text-white hover:bg-[hsl(var(--card-hover))]">
                     登录
                   </Button>
                 </Link>
@@ -187,7 +191,7 @@ export default function Home() {
               </h1>
 
               {/* Subtitle */}
-              <p className="text-lg md:text-xl text-gray-400 mb-8 max-w-lg">
+              <p className="text-lg md:text-xl text-[hsl(var(--muted-foreground))] mb-8 max-w-lg">
                 一站式求职平台，AI 智能选岗、简历优化、自动网申，助力海外留学生拿到理想 Offer
               </p>
 
@@ -200,7 +204,7 @@ export default function Home() {
                   </Button>
                 </Link>
                 <Link href="/jobs">
-                  <Button size="lg" variant="outline" className="w-full sm:w-auto border-white/20 text-white hover:bg-white/10 px-8 py-6 text-base">
+                  <Button size="lg" variant="outline" className="w-full sm:w-auto border-white/20 text-white hover:bg-[hsl(var(--card-hover))] px-8 py-6 text-base">
                     浏览岗位
                   </Button>
                 </Link>
@@ -212,12 +216,12 @@ export default function Home() {
                   <div className="text-3xl font-bold text-white">10K+</div>
                   <div className="text-sm text-gray-500">海外岗位</div>
                 </div>
-                <div className="w-px h-12 bg-white/10" />
+                <div className="w-px h-12 bg-[hsl(var(--card-hover))]" />
                 <div>
                   <div className="text-3xl font-bold text-white">5K+</div>
                   <div className="text-sm text-gray-500">成功匹配</div>
                 </div>
-                <div className="w-px h-12 bg-white/10" />
+                <div className="w-px h-12 bg-[hsl(var(--card-hover))]" />
                 <div>
                   <div className="text-3xl font-bold text-white">98%</div>
                   <div className="text-sm text-gray-500">用户满意</div>
@@ -234,9 +238,9 @@ export default function Home() {
             >
               <div className="relative aspect-square max-w-lg mx-auto">
                 {/* Main Card */}
-                <div className="absolute inset-0 rounded-3xl bg-gradient-to-br from-violet-600/30 to-indigo-600/30 border border-white/10 backdrop-blur-sm overflow-hidden">
+                <div className="absolute inset-0 rounded-3xl bg-gradient-to-br from-violet-600/30 to-indigo-600/30 border border-[hsl(var(--border))] backdrop-blur-sm overflow-hidden">
                   {/* Inner Content */}
-                  <div className="absolute inset-4 rounded-2xl bg-[#0a0a0f]/80 border border-white/10 p-6">
+                  <div className="absolute inset-4 rounded-2xl bg-[#0a0a0f]/80 border border-[hsl(var(--border))] p-6">
                     {/* Mock UI */}
                     <div className="space-y-4">
                       <div className="flex items-center gap-3">
@@ -248,20 +252,20 @@ export default function Home() {
                           <div className="text-xs text-gray-500">Google · 美国</div>
                         </div>
                       </div>
-                      <div className="h-px bg-white/10" />
+                      <div className="h-px bg-[hsl(var(--card-hover))]" />
                       <div className="space-y-2">
                         <div className="flex items-center gap-2">
                           <div className="w-2 h-2 rounded-full bg-green-500" />
-                          <span className="text-xs text-gray-400">匹配度 95%</span>
+                          <span className="text-xs text-[hsl(var(--muted-foreground))]">匹配度 95%</span>
                         </div>
-                        <div className="h-2 rounded-full bg-white/10 overflow-hidden">
+                        <div className="h-2 rounded-full bg-[hsl(var(--card-hover))] overflow-hidden">
                           <div className="h-full w-[95%] rounded-full bg-gradient-to-r from-violet-500 to-indigo-500" />
                         </div>
                       </div>
                       <div className="space-y-2 pt-2">
-                        <div className="h-2 w-3/4 rounded-full bg-white/10" />
-                        <div className="h-2 w-1/2 rounded-full bg-white/10" />
-                        <div className="h-2 w-2/3 rounded-full bg-white/10" />
+                        <div className="h-2 w-3/4 rounded-full bg-[hsl(var(--card-hover))]" />
+                        <div className="h-2 w-1/2 rounded-full bg-[hsl(var(--card-hover))]" />
+                        <div className="h-2 w-2/3 rounded-full bg-[hsl(var(--card-hover))]" />
                       </div>
                       <div className="pt-4">
                         <div className="inline-flex items-center gap-2 px-3 py-1.5 rounded-full bg-violet-500/20 border border-violet-500/30">
@@ -308,7 +312,7 @@ export default function Home() {
             <h2 className="text-3xl md:text-4xl font-bold mb-4">
               一站式求职解决方案
             </h2>
-            <p className="text-gray-400 text-lg max-w-2xl mx-auto">
+            <p className="text-[hsl(var(--muted-foreground))] text-lg max-w-2xl mx-auto">
               从岗位查询到自动网申，覆盖求职全流程
             </p>
           </motion.div>
@@ -323,12 +327,12 @@ export default function Home() {
                 transition={{ duration: 0.5, delay: index * 0.1 }}
               >
                 <Link href={feature.href}>
-                  <div className="group relative h-full rounded-2xl bg-white/5 border border-white/10 p-6 hover:bg-white/10 hover:border-white/20 transition-all duration-300">
+                  <div className="group relative h-full rounded-2xl bg-[hsl(var(--card))] border border-[hsl(var(--border))] p-6 hover:bg-[hsl(var(--card-hover))] hover:border-white/20 transition-all duration-300">
                     <div className="w-12 h-12 rounded-xl bg-gradient-to-br from-violet-600 to-indigo-600 flex items-center justify-center mb-4 group-hover:scale-110 transition-transform">
                       <feature.icon className="h-6 w-6 text-white" />
                     </div>
                     <h3 className="text-lg font-semibold text-white mb-2">{feature.title}</h3>
-                    <p className="text-gray-400 text-sm">{feature.description}</p>
+                    <p className="text-[hsl(var(--muted-foreground))] text-sm">{feature.description}</p>
                     <div className="absolute top-6 right-6 opacity-0 group-hover:opacity-100 transition-opacity">
                       <ArrowRight className="h-5 w-5 text-violet-400" />
                     </div>
@@ -341,7 +345,7 @@ export default function Home() {
       </section>
 
       {/* Footer */}
-      <footer className="border-t border-white/10 py-12 px-6">
+      <footer className="border-t border-[hsl(var(--border))] py-12 px-6">
         <div className="mx-auto max-w-7xl">
           <div className="flex flex-col md:flex-row items-center justify-between gap-6">
             <div className="flex items-center gap-3">

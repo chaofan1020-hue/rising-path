@@ -1,6 +1,27 @@
 @import 'tailwindcss';
 @import 'tw-animate-css';
 
+/* 主题变量 */
+:root {
+  --background: 240 10% 4%;
+  --foreground: 0 0% 100%;
+  --card: 240 10% 8%;
+  --card-foreground: 0 0% 100%;
+  --border: 0 0% 20%;
+  --muted: 240 10% 15%;
+  --muted-foreground: 0 0% 60%;
+}
+
+.light {
+  --background: 0 0% 100%;
+  --foreground: 240 10% 4%;
+  --card: 0 0% 98%;
+  --card-foreground: 240 10% 4%;
+  --border: 240 10% 90%;
+  --muted: 240 10% 95%;
+  --muted-foreground: 240 10% 40%;
+}
+
 /* Tailwind v4 Safelist - 强制生成动态使用的渐变类 */
 @utility from-terracotta-500 {
   --tw-gradient-from: #C46A4A var(--tw-gradient-from-position);
