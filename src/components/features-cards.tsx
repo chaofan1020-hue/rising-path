@@ -186,7 +186,6 @@ export default function FeaturesCards() {
                     <p className="text-white/80 leading-relaxed">{feature.description}</p>
                   </div>
                 </div>
-              </Link>
             )
           })}
         </div>
