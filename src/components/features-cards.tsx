@@ -159,7 +159,6 @@ export default function FeaturesCards() {
               <div
                 key={index}
                 onClick={() => {
-                  localStorage.setItem("redirect_path", feature.href)
                   window.location.href = "/access-code"
                 }}
                 className="block group cursor-pointer"

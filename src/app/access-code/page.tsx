@@ -31,10 +31,8 @@ export default function AccessCodePage() {
         // 保存访问码到 localStorage
         localStorage.setItem("access_code", code.trim());
         localStorage.setItem("access_code_id", data.access_code_id);
-        // 读取之前保存的跳转路径
-        const redirectPath = localStorage.getItem("redirect_path") || "/";
-        localStorage.removeItem("redirect_path");
-        router.push(redirectPath);
+        // 跳转到平台首页
+        router.push("/platform");
       } else {
         setError(data.error || "访问码无效或已过期");
       }
