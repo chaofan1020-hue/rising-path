@@ -360,7 +360,7 @@ function JobDetailContent() {
 
         {/* 公司信息卡 */}
         {job.company_info && (
-          <Card className="mb-4 bg-gradient-to-r from-slate-50 to-blue-50 border-slate-200">
+          <Card className="mb-4 bg-gradient-to-r from-[#F5F0EB] to-[#E2D0B8]/30 border-[#C46A4A]/20">
             <CardContent className="pt-4">
               <div className="flex items-start gap-3">
                 <CompanyLogo company={job.company_info.company_name} logoUrl={job.company_info.logo_url} size="md" />
@@ -413,7 +413,7 @@ function JobDetailContent() {
 
         {/* 岗位概述 */}
         {job.overview && (
-          <Card className="mb-4 bg-gradient-to-r from-green-50 to-emerald-50 border-green-200">
+          <Card className="mb-4 bg-gradient-to-r from-[#B5BEB0]/20 to-[#E2D0B8]/20 border-[#B5BEB0]/30">
             <CardContent className="pt-4">
               <div className="flex items-center gap-2 mb-2">
                 <FileText className="h-4 w-4 text-green-600" />

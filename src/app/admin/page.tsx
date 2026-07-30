@@ -1562,7 +1562,7 @@ export default function AdminPage() {
                                           </div>
                                           <div className="h-2 bg-muted rounded-full overflow-hidden">
                                             <div 
-                                              className="h-full bg-gradient-to-r from-blue-400 to-blue-600 rounded-full transition-all"
+                                              className="h-full bg-gradient-to-r from-[#C46A4A] to-[#B5BEB0] rounded-full transition-all"
                                               style={{ width: `${percentage}%` }}
                                             />
                                           </div>
@@ -1629,10 +1629,10 @@ export default function AdminPage() {
                                       const max = Math.max(...Object.values(analytics.charts.resumesByDegree));
                                       const percentage = Math.round((count / max) * 100);
                                       const degreeColors: Record<string, string> = {
-                                        '本科': 'from-green-400 to-green-600',
-                                        '硕士': 'from-blue-400 to-blue-600',
-                                        '博士': 'from-terracotta-400 to-terracotta-600',
-                                        '大专': 'from-gray-400 to-gray-600',
+                                        '本科': 'from-[#B5BEB0] to-[#E2D0B8]',
+                                        '硕士': 'from-[#C46A4A] to-[#B5BEB0]',
+                                        '博士': 'from-[#E2D0B8] to-[#C46A4A]',
+                                        '大专': 'from-[#C5C9CE] to-[#B5BEB0]',
                                       };
                                       return (
                                         <div key={degree} className="space-y-1">
@@ -1642,7 +1642,7 @@ export default function AdminPage() {
                                           </div>
                                           <div className="h-2 bg-muted rounded-full overflow-hidden">
                                             <div 
-                                              className={`h-full bg-gradient-to-r ${degreeColors[degree] || 'from-gray-400 to-gray-600'} rounded-full transition-all`}
+                                              className={`h-full bg-gradient-to-r ${degreeColors[degree] || 'from-[#C5C9CE] to-[#B5BEB0]'} rounded-full transition-all`}
                                               style={{ width: `${percentage}%` }}
                                             />
                                           </div>

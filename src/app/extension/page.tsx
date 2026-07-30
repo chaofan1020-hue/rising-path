@@ -49,9 +49,9 @@ function ExtensionContent() {
   ];
 
   return (
-    <div className="min-h-screen bg-gradient-to-b from-slate-50 to-white">
+    <div className="min-h-screen bg-gradient-to-b from-[#F5F0EB] to-white">
       {/* Hero Section */}
-      <div className="bg-gradient-to-r from-terracotta-600 to-sage-600 text-white">
+      <div className="bg-gradient-to-r from-[#C46A4A] to-[#B5BEB0] text-white">
         <div className="container mx-auto px-4 py-16">
           <div className="max-w-3xl mx-auto text-center">
             <div className="inline-flex items-center gap-2 bg-white/20 px-4 py-2 rounded-full text-sm mb-6">

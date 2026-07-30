@@ -44,14 +44,12 @@ interface JobConfig {
 // 根据公司名生成首字母占位符的颜色
 function getCompanyGradient(company: string): string {
   const gradients = [
-    'from-blue-500 to-cyan-500',
-    'from-terracotta-500 to-beige-500',
-    'from-sage-500 to-beige-500',
-    'from-orange-500 to-amber-500',
-    'from-rose-500 to-red-500',
-    'from-terracotta-500 to-sage-500',
-    'from-cyan-500 to-blue-500',
-    'from-beige-500 to-terracotta-500',
+    'from-[#C46A4A] to-[#B5BEB0]',
+    'from-[#B5BEB0] to-[#E2D0B8]',
+    'from-[#E2D0B8] to-[#C5C9CE]',
+    'from-[#C46A4A] to-[#E2D0B8]',
+    'from-[#B5BEB0] to-[#C46A4A]',
+    'from-[#E2D0B8] to-[#B5BEB0]',
   ];
   
   let hash = 0;
