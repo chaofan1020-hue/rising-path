@@ -21,7 +21,7 @@ const features: Feature[] = [
         <path d="M12 2l3.09 6.26L22 9.27l-5 4.87 1.18 6.88L12 17.77l-6.18 3.25L7 14.14 2 9.27l6.91-1.01L12 2z" />
       </svg>
     ),
-    href: "/ai-match",
+    href: "/access-code",
   },
   {
     title: "ATS 简历优化",
@@ -31,7 +31,7 @@ const features: Feature[] = [
         <path d="M7 2v11h3v9l7-12h-4l4-8z" />
       </svg>
     ),
-    href: "/optimize",
+    href: "/access-code",
   },
   {
     title: "自动网申填写",
@@ -41,7 +41,7 @@ const features: Feature[] = [
         <path d="M22.7 19l-9.1-9.1c.9-2.3.4-5-1.5-6.9-2-2-5-2.4-7.4-1.3L9 6 6 9 1.6 4.7C.4 7.1.9 10.1 2.9 12.1c1.9 1.9 4.6 2.4 6.9 1.5l9.1 9.1c.4.4 1 .4 1.4 0l2.3-2.3c.5-.4.5-1.1.1-1.4z" />
       </svg>
     ),
-    href: "/extension",
+    href: "/access-code",
   },
   {
     title: "海量岗位资源",
@@ -51,7 +51,7 @@ const features: Feature[] = [
         <path d="M12 2l3.09 6.26L22 9.27l-5 4.87 1.18 6.88L12 17.77l-6.18 3.25L7 14.14 2 9.27l6.91-1.01L12 2z" />
       </svg>
     ),
-    href: "/jobs",
+    href: "/access-code",
   },
   {
     title: "求职进度追踪",
@@ -61,7 +61,7 @@ const features: Feature[] = [
         <path d="M17 1H7c-1.1 0-2 .9-2 2v18c0 1.1.9 2 2 2h10c1.1 0 2-.9 2-2V3c0-1.1-.9-2-2-2zM7 4V3h10v1H7zM7 18V6h10v12H7z" />
       </svg>
     ),
-    href: "/applications",
+    href: "/access-code",
   },
   {
     title: "专属访问码",
@@ -71,7 +71,7 @@ const features: Feature[] = [
         <path d="M12 2C6.48 2 2 6.48 2 12s4.48 10 10 10 10-4.48 10-10S17.52 2 12 2zm-2 15l-5-5 1.41-1.41L10 14.17l7.59-7.59L19 8l-9 9z" />
       </svg>
     ),
-    href: "/resume",
+    href: "/access-code",
   },
 ]
 
