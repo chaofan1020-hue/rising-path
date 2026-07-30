@@ -1,6 +1,7 @@
 import type { Metadata } from 'next';
 import { Inspector } from 'react-dev-inspector';
 import { ThemeProvider } from '@/lib/theme-context';
+import { LanguageProvider } from '@/lib/language-context';
 import './globals.css';
 
 export const metadata: Metadata = {
@@ -39,8 +40,10 @@ export default function RootLayout({
     <html lang="zh-CN" suppressHydrationWarning>
       <body className={`antialiased`}>
         <ThemeProvider>
-          {isDev && <Inspector />}
-          {children}
+          <LanguageProvider>
+            {isDev && <Inspector />}
+            {children}
+          </LanguageProvider>
         </ThemeProvider>
       </body>
     </html>

@@ -3,19 +3,19 @@
 import type React from "react"
 import Link from "next/link"
 import { Warp } from "@paper-design/shaders-react"
+import { useLanguage } from "@/lib/language-context"
 
 interface Feature {
-  title: string
-  description: string
+  titleKey: string
+  descKey: string
   icon: React.ReactNode
   href: string
 }
 
 const features: Feature[] = [
   {
-    title: "智能岗位匹配",
-    description:
-      "基于 AI 算法分析你的简历，智能匹配最适合的岗位，提高求职成功率。",
+    titleKey: "feature1.title",
+    descKey: "feature1.desc",
     icon: (
       <svg className="w-12 h-12 text-white" fill="currentColor" viewBox="0 0 24 24">
         <path d="M12 2l3.09 6.26L22 9.27l-5 4.87 1.18 6.88L12 17.77l-6.18 3.25L7 14.14 2 9.27l6.91-1.01L12 2z" />
@@ -24,8 +24,8 @@ const features: Feature[] = [
     href: "/access-code",
   },
   {
-    title: "ATS 简历优化",
-    description: "针对 ATS 系统智能优化简历内容，让你的简历更容易通过筛选。",
+    titleKey: "feature2.title",
+    descKey: "feature2.desc",
     icon: (
       <svg className="w-12 h-12 text-white" fill="currentColor" viewBox="0 0 24 24">
         <path d="M7 2v11h3v9l7-12h-4l4-8z" />
@@ -34,8 +34,8 @@ const features: Feature[] = [
     href: "/access-code",
   },
   {
-    title: "自动网申填写",
-    description: "Chrome 扩展自动填充网申表单，节省大量重复填写时间。",
+    titleKey: "feature3.title",
+    descKey: "feature3.desc",
     icon: (
       <svg className="w-12 h-12 text-white" fill="currentColor" viewBox="0 0 24 24">
         <path d="M22.7 19l-9.1-9.1c.9-2.3.4-5-1.5-6.9-2-2-5-2.4-7.4-1.3L9 6 6 9 1.6 4.7C.4 7.1.9 10.1 2.9 12.1c1.9 1.9 4.6 2.4 6.9 1.5l9.1 9.1c.4.4 1 .4 1.4 0l2.3-2.3c.5-.4.5-1.1.1-1.4z" />
@@ -44,8 +44,8 @@ const features: Feature[] = [
     href: "/access-code",
   },
   {
-    title: "海量岗位资源",
-    description: "聚合全球知名企业岗位信息，覆盖科技、金融、咨询等多个行业。",
+    titleKey: "feature4.title",
+    descKey: "feature4.desc",
     icon: (
       <svg className="w-12 h-12 text-white" fill="currentColor" viewBox="0 0 24 24">
         <path d="M12 2l3.09 6.26L22 9.27l-5 4.87 1.18 6.88L12 17.77l-6.18 3.25L7 14.14 2 9.27l6.91-1.01L12 2z" />
@@ -54,8 +54,8 @@ const features: Feature[] = [
     href: "/access-code",
   },
   {
-    title: "求职进度追踪",
-    description: "实时追踪网申状态，管理求职进度，不错过任何机会。",
+    titleKey: "feature5.title",
+    descKey: "feature5.desc",
     icon: (
       <svg className="w-12 h-12 text-white" fill="currentColor" viewBox="0 0 24 24">
         <path d="M17 1H7c-1.1 0-2 .9-2 2v18c0 1.1.9 2 2 2h10c1.1 0 2-.9 2-2V3c0-1.1-.9-2-2-2zM7 4V3h10v1H7zM7 18V6h10v12H7z" />
@@ -64,8 +64,8 @@ const features: Feature[] = [
     href: "/access-code",
   },
   {
-    title: "专属访问码",
-    description: "独立用户空间，数据安全可靠，支持多人协作使用。",
+    titleKey: "feature6.title",
+    descKey: "feature6.desc",
     icon: (
       <svg className="w-12 h-12 text-white" fill="currentColor" viewBox="0 0 24 24">
         <path d="M12 2C6.48 2 2 6.48 2 12s4.48 10 10 10 10-4.48 10-10S17.52 2 12 2zm-2 15l-5-5 1.41-1.41L10 14.17l7.59-7.59L19 8l-9 9z" />
@@ -76,6 +76,7 @@ const features: Feature[] = [
 ]
 
 export default function FeaturesCards() {
+  const { t } = useLanguage()
   const getShaderConfig = (index: number) => {
     const configs = [
       {
@@ -146,9 +147,9 @@ export default function FeaturesCards() {
     <section className="min-h-screen py-20 px-4 bg-white dark:bg-black">
       <div className="max-w-7xl mx-auto">
         <div className="text-center mb-16">
-          <h2 className="text-4xl md:text-5xl font-light text-foreground mb-6">核心功能</h2>
+          <h2 className="text-4xl md:text-5xl font-light text-foreground mb-6">{t("features.title")}</h2>
           <p className="text-xl text-muted-foreground max-w-3xl mx-auto leading-relaxed">
-            为海外留学生打造的一站式求职平台，提供全方位的求职支持
+            {t("features.subtitle")}
           </p>
         </div>
 
@@ -181,8 +182,8 @@ export default function FeaturesCards() {
                     <div className="mb-4 p-3 rounded-2xl bg-white/10 backdrop-blur-sm transition-transform duration-300 group-hover:scale-110">
                       {feature.icon}
                     </div>
-                    <h3 className="text-2xl font-semibold text-white mb-3">{feature.title}</h3>
-                    <p className="text-white/80 leading-relaxed">{feature.description}</p>
+                    <h3 className="text-2xl font-semibold text-white mb-3">{t(feature.titleKey)}</h3>
+                    <p className="text-white/80 leading-relaxed">{t(feature.descKey)}</p>
                   </div>
                 </div>
               </div>

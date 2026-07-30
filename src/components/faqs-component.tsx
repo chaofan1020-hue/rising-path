@@ -2,68 +2,71 @@
 
 import { Accordion, AccordionContent, AccordionItem, AccordionTrigger } from '@/components/ui/accordion'
 import Link from 'next/link'
+import { useLanguage } from '@/lib/language-context'
 
 export default function FAQs() {
+    const { t } = useLanguage()
+
     const faqItems = [
         {
             id: 'item-1',
-            question: 'What is Rising Path?',
-            answer: 'Rising Path is a one-stop job seeking platform designed for international students, providing job search, AI-powered job matching, resume optimization, and automatic application features to help you land your dream offer.',
+            questionKey: 'faq1.q',
+            answerKey: 'faq1.a',
         },
         {
             id: 'item-2',
-            question: 'How do I use the access code?',
-            answer: 'The access code is your credential to enter the platform. Click any feature card on the homepage, enter your access code, and you will be directed to the platform. Each access code corresponds to an independent user space with isolated data.',
+            questionKey: 'faq2.q',
+            answerKey: 'faq2.a',
         },
         {
             id: 'item-3',
-            question: 'How does AI job matching work?',
-            answer: 'AI job matching intelligently analyzes your uploaded resume and matches the most suitable positions from our job database, generating match scores, reasons, and targeted optimization suggestions.',
+            questionKey: 'faq3.q',
+            answerKey: 'faq3.a',
         },
         {
             id: 'item-4',
-            question: 'What is ATS resume optimization?',
-            answer: 'ATS resume optimization is a feature that optimizes your resume for Applicant Tracking Systems. AI analyzes the target job description and provides targeted resume content optimization to increase your chances of passing ATS screening.',
+            questionKey: 'faq4.q',
+            answerKey: 'faq4.a',
         },
         {
             id: 'item-5',
-            question: 'How do I use the automatic application feature?',
-            answer: 'After installing our Chrome browser extension, the extension will automatically fill in your previously saved information when you complete application forms on job websites, greatly simplifying the application process.',
+            questionKey: 'faq5.q',
+            answerKey: 'faq5.a',
         },
     ]
 
     return (
-        <section className="bg-white py-16 md:py-24">
+        <section className="bg-white dark:bg-black py-16 md:py-24">
             <div className="mx-auto max-w-5xl px-4 md:px-6">
                 <div>
-                    <h2 className="text-gray-900 text-4xl font-semibold">Frequently Asked Questions</h2>
-                    <p className="text-gray-500 mt-4 text-balance text-lg">Quick answers to common questions about Rising Path platform</p>
+                    <h2 className="text-gray-900 dark:text-gray-100 text-4xl font-semibold">{t("faqs.title")}</h2>
+                    <p className="text-gray-500 dark:text-gray-400 mt-4 text-balance text-lg">{t("faqs.subtitle")}</p>
                 </div>
 
                 <div className="mt-12">
                     <Accordion
                         type="single"
                         collapsible
-                        className="bg-white ring-gray-200 rounded-lg w-full border border-gray-200 px-8 py-3 shadow ring-1">
+                        className="bg-white dark:bg-gray-900 ring-gray-200 dark:ring-gray-700 rounded-lg w-full border border-gray-200 dark:border-gray-700 px-8 py-3 shadow ring-1">
                         {faqItems.map((item) => (
                             <AccordionItem
                                 key={item.id}
                                 value={item.id}
-                                className="border-b border-gray-200">
-                                <AccordionTrigger className="cursor-pointer text-base hover:no-underline text-gray-900">{item.question}</AccordionTrigger>
+                                className="border-b border-gray-200 dark:border-gray-700">
+                                <AccordionTrigger className="cursor-pointer text-base hover:no-underline text-gray-900 dark:text-gray-100">{t(item.questionKey)}</AccordionTrigger>
                                 <AccordionContent>
-                                    <p className="text-base text-gray-900">{item.answer}</p>
+                                    <p className="text-base text-gray-900 dark:text-gray-100">{t(item.answerKey)}</p>
                                 </AccordionContent>
                             </AccordionItem>
                         ))}
                     </Accordion>
 
-                    <p className="text-gray-500 mt-6">
-                        Can't find the answer you're looking for? Contact our{' '}
+                    <p className="text-gray-500 dark:text-gray-400 mt-6">
+                        {t("faqs.contact")}{' '}
                         <Link
                             href="#"
                             className="text-purple-500 font-medium hover:underline">
-                            customer support team
+                            {t("faqs.contactLink")}
                         </Link>
                     </p>
                 </div>

@@ -13,53 +13,57 @@ import { Menu, MoveRight, X } from "lucide-react";
 import { useState } from "react";
 import Link from "next/link";
 import { ThemeToggle } from "@/components/theme-toggle";
+import { LanguageSwitcher } from "@/components/language-switcher";
+import { useLanguage } from "@/lib/language-context";
 
 function Header1() {
+    const { t } = useLanguage();
+    const [isOpen, setOpen] = useState(false);
+
     const navigationItems = [
         {
-            title: "Home",
+            title: t("nav.home"),
             href: "/",
             description: "",
         },
         {
-            title: "Features",
-            description: "Discover all the tools to boost your career.",
+            title: t("nav.features"),
+            description: t("features.subtitle"),
             items: [
                 {
-                    title: "Job Search",
+                    title: t("nav.jobSearch"),
                     href: "/jobs",
                 },
                 {
-                    title: "Resume Manager",
+                    title: t("nav.resumeManager"),
                     href: "/resume",
                 },
                 {
-                    title: "AI Match",
+                    title: t("nav.aiMatch"),
                     href: "/ai-match",
                 },
                 {
-                    title: "ATS Optimize",
+                    title: t("nav.atsOptimize"),
                     href: "/optimize",
                 },
             ],
         },
         {
-            title: "More",
-            description: "Additional tools and resources.",
+            title: t("nav.more"),
+            description: "",
             items: [
                 {
-                    title: "Applications",
+                    title: t("nav.applications"),
                     href: "/applications",
                 },
                 {
-                    title: "Admin",
+                    title: t("nav.admin"),
                     href: "/admin",
                 },
             ],
         },
     ];
 
-    const [isOpen, setOpen] = useState(false);
     return (
         <header className="w-full z-40 fixed top-0 left-0 bg-background">
             <div className="container relative mx-auto min-h-14 flex gap-4 flex-row lg:grid lg:grid-cols-3 items-center">
@@ -84,13 +88,12 @@ function Header1() {
                                                     <div className="flex flex-col h-full justify-between">
                                                         <div className="flex flex-col">
                                                             <p className="text-base">{item.title}</p>
-                                                            <p className="text-muted-foreground text-sm">
-                                                                {item.description}
-                                                            </p>
+                                                            {item.description && (
+                                                                <p className="text-muted-foreground text-sm">
+                                                                    {item.description}
+                                                                </p>
+                                                            )}
                                                         </div>
-                                                        <Button size="sm" className="mt-10">
-                                                            Book a call today
-                                                        </Button>
                                                     </div>
                                                     <div className="flex flex-col text-sm h-full justify-end">
                                                         {item.items?.map((subItem) => (
@@ -116,13 +119,14 @@ function Header1() {
                 <div className="flex lg:justify-center">
                     <Link href="/" className="font-semibold text-lg">Rising Path</Link>
                 </div>
-                <div className="flex justify-end w-full gap-4 items-center">
+                <div className="flex justify-end w-full gap-3 items-center">
+                    <LanguageSwitcher />
                     <ThemeToggle />
                     <Button variant="ghost" className="hidden md:inline-flex" asChild>
-                        <Link href="/login">Log in</Link>
+                        <Link href="/login">{t("nav.login")}</Link>
                     </Button>
                     <Button asChild>
-                        <Link href="/access-code">Get started</Link>
+                        <Link href="/access-code">{t("nav.getStarted")}</Link>
                     </Button>
                 </div>
                 <div className="flex w-12 shrink lg:hidden justify-end items-center">
@@ -130,7 +134,7 @@ function Header1() {
                         {isOpen ? <X className="w-5 h-5" /> : <Menu className="w-5 h-5" />}
                     </Button>
                     {isOpen && (
-                        <div className="absolute top-20 border-t flex flex-col w-full right-0 bg-background shadow-lg py-4 container gap-8">
+                        <div className="absolute top-14 border-t flex flex-col w-full right-0 bg-background shadow-lg py-4 container gap-8">
                             {navigationItems.map((item) => (
                                 <div key={item.title}>
                                     <div className="flex flex-col gap-2">
