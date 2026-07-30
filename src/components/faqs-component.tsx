@@ -36,32 +36,32 @@ export default function FAQs() {
     ]
 
     return (
-        <section className="bg-white dark:bg-black py-16 md:py-24">
+        <section className="bg-white py-16 md:py-24">
             <div className="mx-auto max-w-5xl px-4 md:px-6">
                 <div>
-                    <h2 className="text-gray-900 dark:text-gray-100 text-4xl font-semibold">{t("faqs.title")}</h2>
-                    <p className="text-gray-500 dark:text-gray-400 mt-4 text-balance text-lg">{t("faqs.subtitle")}</p>
+                    <h2 className="text-gray-900 text-4xl font-semibold">{t("faqs.title")}</h2>
+                    <p className="text-gray-500 mt-4 text-balance text-lg">{t("faqs.subtitle")}</p>
                 </div>
 
                 <div className="mt-12">
                     <Accordion
                         type="single"
                         collapsible
-                        className="bg-white dark:bg-gray-900 ring-gray-200 dark:ring-gray-700 rounded-lg w-full border border-gray-200 dark:border-gray-700 px-8 py-3 shadow ring-1">
+                        className="bg-white ring-gray-200 rounded-lg w-full border border-gray-200 px-8 py-3 shadow ring-1">
                         {faqItems.map((item) => (
                             <AccordionItem
                                 key={item.id}
                                 value={item.id}
-                                className="border-b border-gray-200 dark:border-gray-700">
-                                <AccordionTrigger className="cursor-pointer text-base hover:no-underline text-gray-900 dark:text-gray-100">{t(item.questionKey)}</AccordionTrigger>
+                                className="border-b border-gray-200">
+                                <AccordionTrigger className="cursor-pointer text-base hover:no-underline text-gray-900">{t(item.questionKey)}</AccordionTrigger>
                                 <AccordionContent>
-                                    <p className="text-base text-gray-900 dark:text-gray-100">{t(item.answerKey)}</p>
+                                    <p className="text-base text-gray-900">{t(item.answerKey)}</p>
                                 </AccordionContent>
                             </AccordionItem>
                         ))}
                     </Accordion>
 
-                    <p className="text-gray-500 dark:text-gray-400 mt-6">
+                    <p className="text-gray-500 mt-6">
                         {t("faqs.contact")}{' '}
                         <Link
                             href="#"
