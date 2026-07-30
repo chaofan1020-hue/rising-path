@@ -20,6 +20,11 @@ import {
   Layers,
   Wand2,
   Puzzle,
+  Star,
+  TrendingUp,
+  Globe,
+  Target,
+  Lightning,
 } from 'lucide-react';
 import { ScrollCard } from '@/components/scroll-card';
 
@@ -30,9 +35,9 @@ const features = [
     detail: '支持多维度筛选，一键收藏心仪机会',
     icon: Search,
     href: '/jobs',
-    gradient: 'from-terracotta-600 via-sage-500 to-beige-500',
+    gradient: 'from-[#C46A4A] via-[#B5BEB0] to-[#E2D0B8]',
+    iconBg: 'bg-[#C46A4A]',
     pattern: 'dots',
-
   },
   {
     title: 'AI智能选岗',
@@ -40,9 +45,9 @@ const features = [
     detail: 'AI驱动智能推荐，找到最适合你的机会',
     icon: Brain,
     href: '/ai-match',
-    gradient: 'from-terracotta-600 via-sage-500 to-beige-500',
+    gradient: 'from-[#B5BEB0] via-[#E2D0B8] to-[#C46A4A]',
+    iconBg: 'bg-[#B5BEB0]',
     pattern: 'grid',
-
   },
   {
     title: '简历管理',
@@ -50,9 +55,9 @@ const features = [
     detail: '支持 PDF、Word 多格式上传',
     icon: FileText,
     href: '/resume',
-    gradient: 'from-sage-600 via-beige-500 to-gray-500',
+    gradient: 'from-[#E2D0B8] via-[#C46A4A] to-[#B5BEB0]',
+    iconBg: 'bg-[#E2D0B8]',
     pattern: 'dots',
-
   },
   {
     title: 'ATS简历优化',
@@ -60,9 +65,9 @@ const features = [
     detail: '提高简历通过率，让 HR 更容易看到你',
     icon: Wand2,
     href: '/optimize',
-    gradient: 'from-beige-600 via-terracotta-500 to-sage-500',
+    gradient: 'from-[#C46A4A] via-[#E2D0B8] to-[#B5BEB0]',
+    iconBg: 'bg-[#C46A4A]',
     pattern: 'grid',
-
   },
   {
     title: '投递数据',
@@ -70,9 +75,9 @@ const features = [
     detail: '实时查看投递记录，掌握求职进展',
     icon: Send,
     href: '/applications',
-    gradient: 'from-gray-600 via-terracotta-500 to-beige-500',
+    gradient: 'from-[#B5BEB0] via-[#C46A4A] to-[#E2D0B8]',
+    iconBg: 'bg-[#B5BEB0]',
     pattern: 'dots',
-
   },
   {
     title: 'AutoFill一键填写',
@@ -80,80 +85,89 @@ const features = [
     detail: '浏览器扩展一键填充，高效完成投递',
     icon: Puzzle,
     href: '/extension',
-    gradient: 'from-cyan-600 via-teal-500 to-emerald-500',
+    gradient: 'from-[#E2D0B8] via-[#B5BEB0] to-[#C46A4A]',
+    iconBg: 'bg-[#E2D0B8]',
     pattern: 'grid',
-
   },
 ];
 
 const advantages = [
   {
-    icon: MapPin,
+    icon: Globe,
     title: '全球岗位覆盖',
     description: '覆盖美国、英国、新加坡、香港等主流留学地区',
-    iconBg: 'bg-sky-100',
-    iconColor: 'text-sky-600',
+    iconBg: 'bg-[#C46A4A]',
+    iconColor: 'text-white',
   },
   {
-    icon: Crosshair,
+    icon: Target,
     title: '精准智能匹配',
     description: 'AI深度分析简历与岗位匹配度',
-    iconBg: 'bg-terracotta-100',
-    iconColor: 'text-terracotta-600',
+    iconBg: 'bg-[#B5BEB0]',
+    iconColor: 'text-white',
   },
   {
-    icon: Rocket,
+    icon: Lightning,
     title: '高效求职工具',
     description: '一站式完成简历优化、岗位筛选、网申投递',
-    iconBg: 'bg-amber-100',
-    iconColor: 'text-amber-600',
+    iconBg: 'bg-[#E2D0B8]',
+    iconColor: 'text-[#C46A4A]',
   },
 ];
 
 export default function Home() {
   return (
-    <div className="min-h-screen bg-background relative overflow-hidden">
-      {/* Background Decoration */}
+    <div className="min-h-screen bg-[#F5F0EB] relative overflow-hidden">
+      {/* Animated Background */}
       <div className="absolute inset-0 -z-10">
-        <div className="absolute top-0 left-1/4 w-[600px] h-[600px] bg-gradient-to-r from-blue-500/10 to-purple-500/10 rounded-full blur-3xl" />
-        <div className="absolute bottom-1/4 right-1/4 w-[500px] h-[500px] bg-gradient-to-r from-terracotta-500/10 to-beige-500/10 rounded-full blur-3xl" />
-        <div className="absolute inset-0 bg-[linear-gradient(to_right,#80808005_1px,transparent_1px),linear-gradient(to_bottom,#80808005_1px,transparent_1px)] bg-[size:32px_32px]" />
+        {/* Large gradient blobs */}
+        <div className="absolute top-0 left-1/4 w-[800px] h-[800px] bg-gradient-to-br from-[#C46A4A]/20 via-[#B5BEB0]/10 to-transparent rounded-full blur-3xl animate-pulse" />
+        <div className="absolute bottom-1/4 right-1/4 w-[600px] h-[600px] bg-gradient-to-tr from-[#E2D0B8]/30 via-[#C46A4A]/10 to-transparent rounded-full blur-3xl animate-pulse [animation-delay:2s]" />
+        <div className="absolute top-1/2 left-1/2 w-[500px] h-[500px] bg-gradient-to-r from-[#B5BEB0]/15 to-[#E2D0B8]/10 rounded-full blur-3xl animate-pulse [animation-delay:4s]" />
+        
+        {/* Grid pattern */}
+        <div className="absolute inset-0 bg-[linear-gradient(to_right,#C46A4A08_1px,transparent_1px),linear-gradient(to_bottom,#C46A4A08_1px,transparent_1px)] bg-[size:40px_40px]" />
+        
+        {/* Floating shapes */}
+        <div className="absolute top-20 left-10 w-20 h-20 bg-[#C46A4A]/10 rounded-full blur-xl animate-bounce [animation-duration:8s]" />
+        <div className="absolute top-40 right-20 w-16 h-16 bg-[#B5BEB0]/15 rounded-full blur-xl animate-bounce [animation-duration:10s] [animation-delay:1s]" />
+        <div className="absolute bottom-40 left-1/3 w-24 h-24 bg-[#E2D0B8]/20 rounded-full blur-xl animate-bounce [animation-duration:12s] [animation-delay:2s]" />
       </div>
 
       {/* Navigation */}
-      <nav className="border-b/40 bg-background/80 backdrop-blur-xl sticky top-0 z-50">
+      <nav className="border-b border-[#C46A4A]/10 bg-white/60 backdrop-blur-2xl sticky top-0 z-50">
         <div className="container mx-auto px-4 md:px-6 h-16 flex items-center justify-between">
           <Link href="/" className="flex items-center gap-2 md:gap-3 group">
-            <Image src="/logo.svg" alt="Rising Path" width={36} height={36} className="rounded-lg" />
-            <span className="font-bold text-lg md:text-xl">Rising Path</span>
+            <Image src="/logo.svg" alt="Rising Path" width={36} height={36} className="rounded-lg transition-transform group-hover:scale-110" />
+            <span className="font-bold text-lg md:text-xl bg-gradient-to-r from-[#C46A4A] via-[#B5BEB0] to-[#E2D0B8] bg-clip-text text-transparent">Rising Path</span>
           </Link>
           
           {/* Desktop Nav */}
           <div className="hidden md:flex items-center gap-2">
             <Link href="/jobs">
-              <Button variant="ghost" size="sm" className="text-muted-foreground hover:text-foreground">
+              <Button variant="ghost" size="sm" className="text-muted-foreground hover:text-[#C46A4A] hover:bg-[#C46A4A]/5 transition-all">
                 岗位开放
               </Button>
             </Link>
             <Link href="/submit-job">
-              <Button variant="ghost" size="sm" className="text-muted-foreground hover:text-foreground">
+              <Button variant="ghost" size="sm" className="text-muted-foreground hover:text-[#C46A4A] hover:bg-[#C46A4A]/5 transition-all">
                 <span className="mr-1">+</span>
                 贡献岗位
               </Button>
             </Link>
             <Link href="/resume">
-              <Button variant="ghost" size="sm" className="text-muted-foreground hover:text-foreground">
+              <Button variant="ghost" size="sm" className="text-muted-foreground hover:text-[#C46A4A] hover:bg-[#C46A4A]/5 transition-all">
                 简历管理
               </Button>
             </Link>
             <Link href="/extension">
-              <Button variant="ghost" size="sm" className="text-muted-foreground hover:text-foreground">
+              <Button variant="ghost" size="sm" className="text-muted-foreground hover:text-[#C46A4A] hover:bg-[#C46A4A]/5 transition-all">
                 <Puzzle className="h-4 w-4 mr-1" />
                 AutoFill一键填写
               </Button>
             </Link>
             <Link href="/login">
-              <Button size="sm" className="bg-gradient-to-r from-primary to-primary/80 hover:opacity-90 shadow-lg shadow-primary/20">
+              <Button size="sm" className="bg-gradient-to-r from-[#C46A4A] to-[#B5BEB0] hover:opacity-90 shadow-lg shadow-[#C46A4A]/25 text-white font-medium transition-all hover:scale-105">
                 登录使用
               </Button>
             </Link>
@@ -162,12 +176,12 @@ export default function Home() {
           {/* Mobile Nav - Simplified */}
           <div className="flex md:hidden items-center gap-2">
             <Link href="/jobs">
-              <Button variant="ghost" size="sm" className="text-muted-foreground hover:text-foreground px-2">
+              <Button variant="ghost" size="sm" className="text-muted-foreground hover:text-[#C46A4A] px-2">
                 岗位
               </Button>
             </Link>
             <Link href="/login">
-              <Button size="sm" className="bg-gradient-to-r from-primary to-primary/80 hover:opacity-90">
+              <Button size="sm" className="bg-gradient-to-r from-[#C46A4A] to-[#B5BEB0] hover:opacity-90 text-white">
                 登录
               </Button>
             </Link>
@@ -177,120 +191,126 @@ export default function Home() {
 
       {/* Hero Section */}
       <section className="container mx-auto px-4 md:px-6 pt-16 pb-16 md:pt-28 md:pb-24">
-        <div className="max-w-4xl mx-auto text-center">
-          <div className="inline-flex items-center gap-2 px-3 py-1.5 md:px-4 md:py-2 rounded-full bg-primary/5 border border-primary/10 mb-6 md:mb-10">
-            <div className="w-2 h-2 rounded-full bg-primary animate-pulse" />
-            <span className="text-xs md:text-sm font-medium text-primary">专为海外留学生打造的智能求职平台</span>
+        <div className="max-w-5xl mx-auto text-center">
+          {/* Badge */}
+          <div className="inline-flex items-center gap-2 px-4 py-2 rounded-full bg-gradient-to-r from-[#C46A4A]/10 to-[#B5BEB0]/10 border border-[#C46A4A]/20 mb-8 backdrop-blur-sm">
+            <div className="w-2 h-2 rounded-full bg-[#C46A4A] animate-pulse" />
+            <span className="text-sm font-medium text-[#C46A4A]">专为海外留学生打造的智能求职平台</span>
           </div>
           
-          <h1 className="text-3xl sm:text-4xl md:text-7xl font-bold tracking-tight mb-4 md:mb-8 leading-[1.1]">
-            <span className="block mb-1 md:mb-2">智能求职</span>
-            <span className="bg-gradient-to-r from-primary via-primary/80 to-primary/60 bg-clip-text text-transparent">
+          {/* Main Heading */}
+          <h1 className="text-4xl sm:text-5xl md:text-7xl lg:text-8xl font-bold tracking-tight mb-6 md:mb-8 leading-[1.1]">
+            <span className="block mb-2">智能求职</span>
+            <span className="bg-gradient-to-r from-[#C46A4A] via-[#B5BEB0] to-[#E2D0B8] bg-clip-text text-transparent">
               一步到位
             </span>
           </h1>
           
-          <p className="text-base md:text-xl text-muted-foreground max-w-2xl mx-auto mb-6 leading-relaxed">
+          {/* Subtitle */}
+          <p className="text-lg md:text-2xl text-muted-foreground max-w-3xl mx-auto mb-8 leading-relaxed">
             AI驱动的求职助手，从简历优化到岗位匹配
             <br className="hidden sm:block" />
             让每一步都更精准、更高效
           </p>
-          <div className="max-w-xl mx-auto">
+          
+          {/* Stats Widget */}
+          <div className="max-w-xl mx-auto mb-12">
             <JobStatsWidget />
           </div>
-        </div>
-      </section>
-
-      {/* Advantages Section - Premium Style */}
-      <section className="container mx-auto px-4 md:px-6">
-        <div className="grid grid-cols-1 md:grid-cols-3 gap-4 md:gap-8">
-          <ScrollCard
-            iconName="MapPin"
-            title="全球岗位覆盖"
-            description="覆盖美国、英国、新加坡、香港等主流留学地区"
-            iconColor="text-sky-600"
-            scrollTo="features"
-          />
-          <ScrollCard
-            iconName="Crosshair"
-            title="精准智能匹配"
-            description="AI深度分析简历与岗位匹配度"
-            iconColor="text-terracotta-600"
-            scrollTo="features"
-          />
-          <ScrollCard
-            iconName="Rocket"
-            title="高效求职工具"
-            description="一站式完成简历优化、岗位筛选、网申投递"
-            iconColor="text-amber-600"
-            scrollTo="features"
-          />
-        </div>
-      </section>
-
-      {/* Features Section - Bento Grid Style */}
-      <section id="features" className="container mx-auto px-4 md:px-6 py-12 md:py-24">
-        <div className="text-center mb-6 md:mb-20">
-          <div className="inline-flex items-center gap-2 px-3 py-1.5 md:px-4 md:py-2 rounded-full bg-muted/50 border border-muted/50 mb-3 md:mb-8">
-            <Layers className="h-4 w-4 md:h-5 md:w-5 text-primary" />
-            <span className="text-sm md:text-base font-medium">六大核心能力</span>
+          
+          {/* CTA Buttons */}
+          <div className="flex flex-col sm:flex-row gap-4 justify-center">
+            <Link href="/resume">
+              <Button size="lg" className="h-14 px-8 text-lg bg-gradient-to-r from-[#C46A4A] to-[#B5BEB0] hover:opacity-90 shadow-2xl shadow-[#C46A4A]/30 text-white font-medium rounded-xl group transition-all hover:scale-105">
+                从上传简历开始
+                <ArrowRight className="ml-2 h-5 w-5 group-hover:translate-x-1 transition-transform" />
+              </Button>
+            </Link>
+            <Link href="/jobs">
+              <Button size="lg" variant="outline" className="h-14 px-8 text-lg rounded-xl border-2 border-[#C46A4A]/20 hover:border-[#C46A4A]/40 hover:bg-[#C46A4A]/5 transition-all">
+                浏览岗位
+              </Button>
+            </Link>
           </div>
-          <h2 className="text-2xl sm:text-3xl md:text-6xl font-bold mb-2 md:mb-6">
+        </div>
+      </section>
+
+      {/* Advantages Section */}
+      <section className="container mx-auto px-4 md:px-6 mb-16">
+        <div className="grid grid-cols-1 md:grid-cols-3 gap-4 md:gap-8">
+          {advantages.map((adv, index) => (
+            <div key={adv.title} className="group relative overflow-hidden rounded-2xl bg-white/60 backdrop-blur-sm border border-[#C46A4A]/10 p-6 md:p-8 hover:shadow-xl hover:shadow-[#C46A4A]/10 transition-all duration-300 hover:-translate-y-1">
+              <div className={`w-12 h-12 md:w-14 md:h-14 rounded-xl ${adv.iconBg} flex items-center justify-center mb-4 group-hover:scale-110 transition-transform duration-300`}>
+                <adv.icon className={`h-6 w-6 md:h-7 md:w-7 ${adv.iconColor}`} />
+              </div>
+              <h3 className="font-bold text-lg md:text-xl mb-2">{adv.title}</h3>
+              <p className="text-muted-foreground text-sm md:text-base leading-relaxed">{adv.description}</p>
+            </div>
+          ))}
+        </div>
+      </section>
+
+      {/* Features Section */}
+      <section id="features" className="container mx-auto px-4 md:px-6 py-12 md:py-24">
+        <div className="text-center mb-12 md:mb-20">
+          <div className="inline-flex items-center gap-2 px-4 py-2 rounded-full bg-gradient-to-r from-[#C46A4A]/10 to-[#B5BEB0]/10 border border-[#C46A4A]/20 mb-6">
+            <Layers className="h-5 w-5 text-[#C46A4A]" />
+            <span className="text-sm md:text-base font-medium text-[#C46A4A]">六大核心能力</span>
+          </div>
+          <h2 className="text-3xl sm:text-4xl md:text-6xl font-bold mb-4 md:mb-6">
             为求职而生的
-            <span className="bg-gradient-to-r from-primary to-primary/60 bg-clip-text text-transparent ml-1 md:ml-3">超级工具</span>
+            <span className="bg-gradient-to-r from-[#C46A4A] via-[#B5BEB0] to-[#E2D0B8] bg-clip-text text-transparent ml-2 md:ml-3">超级工具</span>
           </h2>
-          <p className="text-muted-foreground text-sm md:text-xl max-w-xl mx-auto hidden md:block">
+          <p className="text-muted-foreground text-base md:text-xl max-w-2xl mx-auto">
             每一个功能都经过精心设计，让求职之路更加顺畅
           </p>
         </div>
         
-        {/* Mobile: Horizontal Card Layout / Desktop: Bento Grid */}
-        <div className="grid grid-cols-1 md:grid-cols-3 gap-3 md:gap-6">
+        {/* Features Grid */}
+        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4 md:gap-6">
           {features.map((feature) => (
             <Link 
               href={feature.href} 
               key={feature.title}
-              className="group relative overflow-hidden rounded-2xl md:rounded-3xl transition-all duration-300 md:duration-500 hover:-translate-y-1 active:scale-[0.98] md:active:scale-100"
+              className="group relative overflow-hidden rounded-2xl md:rounded-3xl transition-all duration-300 md:duration-500 hover:-translate-y-2 hover:shadow-2xl hover:shadow-[#C46A4A]/15 active:scale-[0.98]"
             >
               {/* Background */}
-              <div className="absolute inset-0 bg-gradient-to-br from-muted/30 to-muted/10" />
+              <div className="absolute inset-0 bg-gradient-to-br from-white/80 to-white/40 backdrop-blur-sm" />
               
-              {/* Pattern - Desktop only */}
-              <div className="absolute inset-0 opacity-30 hidden md:block">
+              {/* Pattern */}
+              <div className="absolute inset-0 opacity-20">
                 {feature.pattern === 'dots' && (
-                  <div className="w-full h-full bg-[radial-gradient(circle,_hsl(var(--muted-foreground))_1px,_transparent_1px)] bg-[size:16px_16px]" />
+                  <div className="w-full h-full bg-[radial-gradient(circle,_#C46A4A_1px,_transparent_1px)] bg-[size:20px_20px]" />
                 )}
                 {feature.pattern === 'grid' && (
-                  <div className="w-full h-full bg-[linear-gradient(to_right,_hsl(var(--muted-foreground))_1px,_transparent_1px),linear-gradient(to_bottom,_hsl(var(--muted-foreground))_1px,_transparent_1px)] bg-[size:24px_24px]" />
+                  <div className="w-full h-full bg-[linear-gradient(to_right,_#B5BEB0_1px,_transparent_1px),linear-gradient(to_bottom,_#B5BEB0_1px,_transparent_1px)] bg-[size:28px_28px]" />
                 )}
               </div>
               
               {/* Gradient overlay on hover */}
-              <div className={`absolute inset-0 bg-gradient-to-br ${feature.gradient} opacity-0 group-hover:opacity-5 transition-opacity duration-500`} />
+              <div className={`absolute inset-0 bg-gradient-to-br ${feature.gradient} opacity-0 group-hover:opacity-10 transition-opacity duration-500`} />
               
-              {/* Mobile: Horizontal Layout / Desktop: Vertical Layout */}
-              <div className="relative h-full p-4 md:p-9 flex flex-row md:flex-col items-center gap-4 md:gap-6 min-h-[auto] md:min-h-[280px]">
+              {/* Content */}
+              <div className="relative h-full p-6 md:p-8 flex flex-col items-start gap-4 min-h-[200px]">
                 {/* Icon */}
-                <div className={`w-14 h-14 md:w-16 md:h-16 rounded-2xl bg-gradient-to-br ${feature.gradient} flex items-center justify-center shadow-lg md:shadow-xl group-hover:scale-110 md:group-hover:rotate-3 transition-all duration-300 md:duration-500 flex-shrink-0`}>
+                <div className={`w-14 h-14 md:w-16 md:h-16 rounded-2xl bg-gradient-to-br ${feature.gradient} flex items-center justify-center shadow-lg group-hover:scale-110 group-hover:rotate-3 transition-all duration-300`}>
                   <feature.icon className="h-7 w-7 md:h-8 md:w-8 text-white" />
                 </div>
                 
                 {/* Text */}
-                <div className="flex-1 text-left md:text-center">
-                  <h3 className="font-bold text-base md:text-2xl mb-1 md:mb-3 group-hover:text-primary transition-colors">
+                <div className="flex-1">
+                  <h3 className="font-bold text-xl md:text-2xl mb-2 group-hover:text-[#C46A4A] transition-colors">
                     {feature.title}
                   </h3>
-                  <p className="text-muted-foreground text-xs md:text-base leading-relaxed line-clamp-2 md:line-clamp-none">
+                  <p className="text-muted-foreground text-sm md:text-base leading-relaxed">
                     {feature.description}
                   </p>
                 </div>
                 
-                {/* Arrow - Mobile */}
-                <ChevronRight className="h-5 w-5 text-muted-foreground md:hidden flex-shrink-0" />
-                
-                {/* Arrow - Desktop */}
-                <div className="hidden md:flex absolute bottom-9 right-9 w-12 h-12 rounded-xl bg-muted/50 items-center justify-center opacity-0 group-hover:opacity-100 transition-all duration-300 group-hover:translate-x-1">
-                  <ArrowRight className="h-6 w-6 text-primary" />
+                {/* Arrow */}
+                <div className="flex items-center gap-2 text-[#C46A4A] opacity-0 group-hover:opacity-100 transition-all duration-300 group-hover:translate-x-1">
+                  <span className="text-sm font-medium">了解更多</span>
+                  <ArrowRight className="h-4 w-4" />
                 </div>
               </div>
             </Link>
@@ -299,57 +319,49 @@ export default function Home() {
       </section>
 
       {/* How it works */}
-      <section className="container mx-auto px-4 md:px-6 py-10 md:py-20">
-        <div className="relative rounded-2xl md:rounded-3xl bg-gradient-to-br from-muted/60 via-muted/30 to-muted/10 border border-muted/30 p-8 md:p-12 lg:p-16 overflow-hidden">
+      <section className="container mx-auto px-4 md:px-6 py-12 md:py-20">
+        <div className="relative rounded-3xl bg-gradient-to-br from-white/80 via-[#F5F0EB]/50 to-white/60 backdrop-blur-sm border border-[#C46A4A]/10 p-8 md:p-12 lg:p-16 overflow-hidden">
           {/* Decorative elements */}
-          <div className="absolute top-0 right-0 w-60 md:w-80 h-60 md:h-80 bg-gradient-to-br from-primary/5 to-transparent rounded-full blur-3xl" />
-          <div className="absolute bottom-0 left-0 w-40 md:w-60 h-40 md:h-60 bg-gradient-to-tr from-terracotta-500/5 to-transparent rounded-full blur-3xl" />
+          <div className="absolute top-0 right-0 w-80 h-80 bg-gradient-to-br from-[#C46A4A]/10 to-transparent rounded-full blur-3xl" />
+          <div className="absolute bottom-0 left-0 w-60 h-60 bg-gradient-to-tr from-[#B5BEB0]/10 to-transparent rounded-full blur-3xl" />
           
           <div className="relative">
-            <div className="text-center mb-10 md:mb-14">
-              <div className="inline-flex items-center gap-2 px-3 py-1.5 md:px-4 md:py-2 rounded-full bg-primary/5 border border-primary/10 mb-4 md:mb-8">
-                <Zap className="h-4 w-4 md:h-5 md:w-5 text-primary" />
-                <span className="text-sm md:text-base font-medium">简单三步</span>
+            <div className="text-center mb-12 md:mb-16">
+              <div className="inline-flex items-center gap-2 px-4 py-2 rounded-full bg-gradient-to-r from-[#C46A4A]/10 to-[#B5BEB0]/10 border border-[#C46A4A]/20 mb-6">
+                <Zap className="h-5 w-5 text-[#C46A4A]" />
+                <span className="text-sm md:text-base font-medium text-[#C46A4A]">简单三步</span>
               </div>
-              <h2 className="text-2xl md:text-5xl lg:text-6xl font-bold mb-3 md:mb-6">开启求职之旅</h2>
-              <p className="text-muted-foreground text-sm md:text-xl">让AI帮你找到理想工作</p>
+              <h2 className="text-3xl md:text-5xl lg:text-6xl font-bold mb-4">开启求职之旅</h2>
+              <p className="text-muted-foreground text-lg md:text-xl">让AI帮你找到理想工作</p>
             </div>
             
-            {/* Mobile: Vertical Timeline / Desktop: Horizontal Cards */}
-            <div className="flex flex-col md:grid md:grid-cols-3 gap-6 md:gap-10">
+            {/* Steps */}
+            <div className="grid grid-cols-1 md:grid-cols-3 gap-8 md:gap-12">
               {[
                 { step: '01', title: '上传简历', desc: '上传 PDF 或 Word 简历，系统自动解析关键信息', icon: Upload },
                 { step: '02', title: '智能匹配', desc: 'AI 分析简历内容，精准推荐匹配岗位', icon: Brain },
                 { step: '03', title: '一键投递', desc: '优化简历并自动填写，高效完成网申投递', icon: Send },
               ].map((item, index) => (
                 <div key={item.step} className="relative group">
-                  {/* Mobile: Vertical connector line */}
+                  {/* Connector line */}
                   {index < 2 && (
-                    <div className="md:hidden absolute left-[31px] top-[80px] w-[2px] h-[calc(100%+8px)] bg-gradient-to-b from-primary/40 to-transparent" />
+                    <div className="hidden md:block absolute top-12 left-[60%] w-[80%] h-[2px] bg-gradient-to-r from-[#C46A4A]/30 to-transparent" />
                   )}
                   
-                  {/* Desktop: Horizontal connector line */}
-                  {index < 2 && (
-                    <div className="hidden md:block absolute top-10 left-[60%] w-[80%] h-[2px] bg-gradient-to-r from-primary/30 to-transparent" />
-                  )}
-                  
-                  {/* Mobile: Horizontal card layout */}
-                  <div className="flex md:flex-col items-start md:items-center gap-4 md:gap-0 py-4 px-4 md:p-0 rounded-xl md:rounded-none bg-muted/20 md:bg-transparent">
+                  <div className="flex flex-col items-center text-center">
                     {/* Step number with icon */}
-                    <div className="relative flex-shrink-0 md:mb-6">
-                      <div className="w-16 h-16 md:w-20 md:h-20 rounded-xl md:rounded-2xl bg-gradient-to-br from-primary to-primary/70 flex items-center justify-center shadow-lg md:shadow-2xl shadow-primary/20 group-hover:scale-105 transition-transform duration-300">
-                        <item.icon className="h-7 w-7 md:h-8 md:w-8 text-primary-foreground" />
+                    <div className="relative mb-6">
+                      <div className="w-20 h-20 md:w-24 md:h-24 rounded-2xl bg-gradient-to-br from-[#C46A4A] to-[#B5BEB0] flex items-center justify-center shadow-xl shadow-[#C46A4A]/20 group-hover:scale-110 transition-transform duration-300">
+                        <item.icon className="h-9 w-9 md:h-10 md:w-10 text-white" />
                       </div>
-                      <div className="absolute -top-1.5 -right-1.5 md:-top-2 md:-right-2 w-6 h-6 md:w-7 md:h-7 rounded-full bg-background border-2 border-primary flex items-center justify-center text-[10px] md:text-xs font-bold text-primary">
+                      <div className="absolute -top-2 -right-2 w-8 h-8 rounded-full bg-white border-2 border-[#C46A4A] flex items-center justify-center text-sm font-bold text-[#C46A4A]">
                         {item.step}
                       </div>
                     </div>
                     
                     {/* Text */}
-                    <div className="flex-1 md:text-center pt-1">
-                      <h3 className="font-semibold text-lg md:text-xl mb-2 md:mb-3">{item.title}</h3>
-                      <p className="text-muted-foreground text-sm md:text-base leading-relaxed">{item.desc}</p>
-                    </div>
+                    <h3 className="font-bold text-xl md:text-2xl mb-3">{item.title}</h3>
+                    <p className="text-muted-foreground text-sm md:text-base leading-relaxed">{item.desc}</p>
                   </div>
                 </div>
               ))}
@@ -363,25 +375,25 @@ export default function Home() {
         <div className="relative text-center">
           {/* Background glow */}
           <div className="absolute inset-0 flex items-center justify-center">
-            <div className="w-[400px] h-[400px] bg-gradient-to-r from-primary/10 to-purple-500/10 rounded-full blur-3xl" />
+            <div className="w-[600px] h-[600px] bg-gradient-to-r from-[#C46A4A]/15 via-[#B5BEB0]/10 to-[#E2D0B8]/15 rounded-full blur-3xl" />
           </div>
           
           <div className="relative">
-            <h2 className="text-4xl md:text-5xl font-bold mb-6">
+            <h2 className="text-4xl md:text-6xl font-bold mb-6">
               准备好开始了吗？
             </h2>
-            <p className="text-muted-foreground text-lg mb-10 max-w-md mx-auto">
+            <p className="text-muted-foreground text-lg md:text-xl mb-10 max-w-lg mx-auto">
               加入 Rising Path，让求职变得更简单
             </p>
             <div className="flex flex-col sm:flex-row gap-4 justify-center">
               <Link href="/resume">
-                <Button size="lg" className="h-16 px-12 text-lg bg-gradient-to-r from-primary to-primary/80 hover:opacity-90 shadow-2xl shadow-primary/20 rounded-2xl group">
+                <Button size="lg" className="h-16 px-12 text-lg bg-gradient-to-r from-[#C46A4A] to-[#B5BEB0] hover:opacity-90 shadow-2xl shadow-[#C46A4A]/30 text-white font-medium rounded-2xl group transition-all hover:scale-105">
                   从上传简历开始
                   <ArrowRight className="ml-2 h-5 w-5 group-hover:translate-x-1 transition-transform" />
                 </Button>
               </Link>
               <Link href="/jobs">
-                <Button size="lg" variant="outline" className="h-16 px-12 text-lg rounded-2xl border-2">
+                <Button size="lg" variant="outline" className="h-16 px-12 text-lg rounded-2xl border-2 border-[#C46A4A]/20 hover:border-[#C46A4A]/40 hover:bg-[#C46A4A]/5 transition-all">
                   浏览岗位
                 </Button>
               </Link>
@@ -391,15 +403,15 @@ export default function Home() {
       </section>
 
       {/* Footer */}
-      <footer className="border-t border-muted/30 bg-muted/10">
+      <footer className="border-t border-[#C46A4A]/10 bg-white/40 backdrop-blur-sm">
         <div className="container mx-auto px-6 py-10">
           <div className="flex flex-col md:flex-row items-center justify-between gap-4">
             <Link href="/" className="flex items-center gap-2.5">
               <Image src="/logo.svg" alt="Rising Path" width={32} height={32} className="rounded-lg" />
-              <span className="font-semibold text-lg">Rising Path</span>
+              <span className="font-semibold text-lg bg-gradient-to-r from-[#C46A4A] to-[#B5BEB0] bg-clip-text text-transparent">Rising Path</span>
             </Link>
-            <p className="text-sm text-muted-foreground">
-              © 2024 Rising Path. 专为海外留学生打造
+            <p className="text-muted-foreground text-sm">
+              © 2025 Rising Path. 专为海外留学生打造的智能求职平台
             </p>
           </div>
         </div>
