@@ -37,7 +37,7 @@ export default function FAQs() {
             <div className="mx-auto max-w-5xl px-4 md:px-6">
                 <div>
                     <h2 className="text-gray-900 text-4xl font-semibold">Frequently Asked Questions</h2>
-                    <p className="text-gray-500 mt-4 text-balance text-lg">Discover quick and comprehensive answers to common questions about our platform, services, and features.</p>
+                    <p className="text-gray-500 mt-4 text-balance text-lg">Quick answers to common questions about Rising Path platform</p>
                 </div>
 
                 <div className="mt-12">
