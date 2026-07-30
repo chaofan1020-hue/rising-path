@@ -6,9 +6,11 @@ import { Footer } from '@/components/ui/footer';
 
 export default function Home() {
   return (
-    <div className="min-h-screen bg-white">
-      <FeaturesCards />
-      <FAQs />
+    <div className="min-h-screen flex flex-col bg-white">
+      <div className="flex-1">
+        <FeaturesCards />
+        <FAQs />
+      </div>
       <Footer
         logo={<img src="/logo.svg" alt="Rising Path" className="h-8 w-8" />}
         brandName="Rising Path"
