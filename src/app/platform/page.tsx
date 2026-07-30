@@ -56,13 +56,13 @@ export default function PlatformPage() {
           {stats.map((stat) => (
             <div
               key={stat.label}
-              className="bg-gray-50 rounded-xl p-6 border border-gray-200 hover:border-gray-300 transition-colors"
+              className="bg-gray-50 rounded-xl p-6 border border-gray-100 hover:border-gray-200 transition-colors"
             >
               <div className="flex items-center justify-between mb-4">
                 <div className={`w-12 h-12 rounded-lg bg-gradient-to-br ${stat.color} flex items-center justify-center`}>
                   <stat.icon className="h-6 w-6 text-white" />
                 </div>
-                <span className="text-sm font-medium text-gray-500">{stat.change}</span>
+                <span className="text-sm font-medium text-gray-400">{stat.change}</span>
               </div>
               <div className="text-3xl font-bold text-gray-900 mb-1">{stat.value}</div>
               <div className="text-sm text-gray-500">{stat.label}</div>
@@ -73,28 +73,28 @@ export default function PlatformPage() {
         {/* Charts Section */}
         <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
           {/* Activity Chart */}
-          <div className="bg-gray-50 rounded-xl p-6 border border-gray-200">
+          <div className="bg-gray-50 rounded-xl p-6 border border-gray-100">
             <h3 className="text-lg font-semibold text-gray-900 mb-4">活动趋势</h3>
             <div className="h-64 flex items-end justify-between gap-2">
               {[40, 65, 45, 80, 55, 90, 70, 85, 60, 95, 75, 88].map((height, i) => (
                 <div key={i} className="flex-1 flex flex-col items-center gap-2">
                   <div
-                    className="w-full bg-gradient-to-t from-gray-400 to-gray-300 rounded-t-sm transition-all hover:opacity-80"
+                    className="w-full bg-gradient-to-t from-gray-300 to-gray-200 rounded-t-sm transition-all hover:opacity-80"
                     style={{ height: `${height}%` }}
                   />
-                  <span className="text-xs text-gray-500">{i + 1}月</span>
+                  <span className="text-xs text-gray-400">{i + 1}月</span>
                 </div>
               ))}
             </div>
           </div>
 
           {/* Recent Activity */}
-          <div className="bg-gray-50 rounded-xl p-6 border border-gray-200">
+          <div className="bg-gray-50 rounded-xl p-6 border border-gray-100">
             <h3 className="text-lg font-semibold text-gray-900 mb-4">最近活动</h3>
             <div className="space-y-4">
               {recentActivity.map((activity, i) => (
-                <div key={i} className="flex items-start gap-3 pb-4 border-b border-gray-200 last:border-0 last:pb-0">
-                  <div className="w-2 h-2 rounded-full bg-gray-400 mt-2 flex-shrink-0" />
+                <div key={i} className="flex items-start gap-3 pb-4 border-b border-gray-100 last:border-0 last:pb-0">
+                  <div className="w-2 h-2 rounded-full bg-gray-300 mt-2 flex-shrink-0" />
                   <div className="flex-1 min-w-0">
                     <div className="text-sm text-gray-900 font-medium">{activity.action}</div>
                     <div className="text-sm text-gray-500 truncate">{activity.target}</div>
@@ -107,7 +107,7 @@ export default function PlatformPage() {
         </div>
 
         {/* Quick Actions */}
-        <div className="bg-gray-50 rounded-xl p-6 border border-gray-200">
+        <div className="bg-gray-50 rounded-xl p-6 border border-gray-100">
           <h3 className="text-lg font-semibold text-gray-900 mb-4">快速操作</h3>
           <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
             {[
