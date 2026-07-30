@@ -1,11 +1,11 @@
 "use client";
 
-import PlatformLayout from "@/components/platform-layout";
+import { Sidebar } from "@/components/ui/sidebar";
 
 interface PlatformPageProps {
   children: React.ReactNode;
 }
 
 export default function PlatformPage({ children }: PlatformPageProps) {
-  return <PlatformLayout>{children}</PlatformLayout>;
+  return <Sidebar>{children}</Sidebar>;
 }
