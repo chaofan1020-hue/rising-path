@@ -7,28 +7,28 @@ export default function FAQs() {
     const faqItems = [
         {
             id: 'item-1',
-            question: 'Rising Path 是什么？',
-            answer: 'Rising Path 是专为海外留学生打造的一站式求职平台，提供岗位查询、AI 智能选岗、简历优化、自动网申等功能，助力海外留学生拿到理想 Offer。',
+            question: 'What is Rising Path?',
+            answer: 'Rising Path is a one-stop job seeking platform designed for international students, providing job search, AI-powered job matching, resume optimization, and automatic application features to help you land your dream offer.',
         },
         {
             id: 'item-2',
-            question: '如何使用访问码？',
-            answer: '访问码是进入平台的凭证。在首页点击任意功能卡片，输入您的访问码即可进入平台。每个访问码对应独立的用户空间，数据相互隔离。',
+            question: 'How do I use the access code?',
+            answer: 'The access code is your credential to enter the platform. Click any feature card on the homepage, enter your access code, and you will be directed to the platform. Each access code corresponds to an independent user space with isolated data.',
         },
         {
             id: 'item-3',
-            question: 'AI 智能选岗是如何工作的？',
-            answer: 'AI 智能选岗基于您上传的简历进行智能分析，从岗位库中匹配最适合的岗位，生成匹配评分和理由，并提供针对性的优化建议。',
+            question: 'How does AI job matching work?',
+            answer: 'AI job matching intelligently analyzes your uploaded resume and matches the most suitable positions from our job database, generating match scores, reasons, and targeted optimization suggestions.',
         },
         {
             id: 'item-4',
-            question: 'ATS 简历优化是什么？',
-            answer: 'ATS 简历优化是针对企业招聘系统（ATS）的简历优化功能。AI 会分析目标岗位的 JD，针对性地优化您的简历内容，提高通过 ATS 筛选的概率。',
+            question: 'What is ATS resume optimization?',
+            answer: 'ATS resume optimization is a feature that optimizes your resume for Applicant Tracking Systems. AI analyzes the target job description and provides targeted resume content optimization to increase your chances of passing ATS screening.',
         },
         {
             id: 'item-5',
-            question: '自动网申功能如何使用？',
-            answer: '安装我们的 Chrome 浏览器扩展后，在招聘网站填写网申表单时，扩展会自动填充您之前保存的信息，大大简化网申流程。',
+            question: 'How do I use the automatic application feature?',
+            answer: 'After installing our Chrome browser extension, the extension will automatically fill in your previously saved information when you complete application forms on job websites, greatly simplifying the application process.',
         },
     ]
 
@@ -36,8 +36,8 @@ export default function FAQs() {
         <section className="bg-white py-16 md:py-24">
             <div className="mx-auto max-w-5xl px-4 md:px-6">
                 <div>
-                    <h2 className="text-gray-900 text-4xl font-semibold">常见问题</h2>
-                    <p className="text-gray-600 mt-4 text-balance text-lg">快速了解 Rising Path 平台的功能和使用方法</p>
+                    <h2 className="text-gray-900 text-4xl font-semibold">Frequently Asked Questions</h2>
+                    <p className="text-gray-600 mt-4 text-balance text-lg">Quick answers to common questions about Rising Path platform</p>
                 </div>
 
                 <div className="mt-12">
@@ -59,11 +59,11 @@ export default function FAQs() {
                     </Accordion>
 
                     <p className="text-gray-600 mt-6">
-                        没有找到您想要的答案？联系我们的{' '}
+                        Can't find the answer you're looking for? Contact our{' '}
                         <Link
                             href="#"
                             className="text-purple-500 font-medium hover:underline">
-                            客服团队
+                            customer support team
                         </Link>
                     </p>
                 </div>
