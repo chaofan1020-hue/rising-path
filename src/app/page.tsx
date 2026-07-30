@@ -123,7 +123,7 @@ export default function Home() {
       </div>
 
       {/* Navigation - Glass Effect */}
-      <nav className="sticky top-0 z-50 border-b border-white/20 bg-white/10 backdrop-blur-2xl">
+      <nav className="sticky top-0 z-50 border-b border-white/40 bg-white/30 backdrop-blur-2xl">
         <div className="container mx-auto px-4 md:px-6 h-16 flex items-center justify-between">
           <Link href="/" className="flex items-center gap-2 md:gap-3 group">
             <Image src="/logo.svg" alt="Rising Path" width={36} height={36} className="rounded-lg transition-transform group-hover:scale-110" />
@@ -186,7 +186,7 @@ export default function Home() {
           className="max-w-5xl mx-auto text-center"
         >
           {/* Badge - Glass Effect */}
-          <div className="inline-flex items-center gap-2 px-4 py-2 rounded-full bg-white/10 backdrop-blur-xl border border-white/20 mb-8">
+          <div className="inline-flex items-center gap-2 px-4 py-2 rounded-full bg-white/40 backdrop-blur-2xl border border-white/60 mb-8">
             <div className="w-2 h-2 rounded-full bg-indigo-400 animate-pulse" />
             <span className="text-sm font-medium text-white/90">专为海外留学生打造的<span className="text-indigo-300">y</span><span className="text-violet-300">e</span><span className="text-purple-300">s</span><span className="text-blue-300">！</span>求职平台</span>
           </div>
@@ -232,7 +232,7 @@ export default function Home() {
       <section className="container mx-auto px-4 md:px-6 mb-16">
         <div className="grid grid-cols-1 md:grid-cols-3 gap-4 md:gap-8">
           {advantages.map((adv, index) => (
-            <div key={adv.title} className="group relative overflow-hidden rounded-2xl bg-white/10 backdrop-blur-xl border border-white/20 p-6 md:p-8 hover:bg-white/15 transition-all duration-300 hover:-translate-y-1">
+            <div key={adv.title} className="group relative overflow-hidden rounded-2xl bg-white/40 backdrop-blur-2xl border border-white/60 p-6 md:p-8 hover:bg-white/50 transition-all duration-300 hover:-translate-y-1">
               <div className={`w-12 h-12 md:w-14 md:h-14 rounded-xl ${adv.iconBg} flex items-center justify-center mb-4 group-hover:scale-110 transition-transform duration-300`}>
                 <adv.icon className={`h-6 w-6 md:h-7 md:w-7 ${adv.iconColor}`} />
               </div>
@@ -246,7 +246,7 @@ export default function Home() {
       {/* Features Section - Glass Cards */}
       <section id="features" className="container mx-auto px-4 md:px-6 py-12 md:py-24">
         <div className="text-center mb-12 md:mb-20">
-          <div className="inline-flex items-center gap-2 px-4 py-2 rounded-full bg-white/10 backdrop-blur-xl border border-white/20 mb-6">
+          <div className="inline-flex items-center gap-2 px-4 py-2 rounded-full bg-white/40 backdrop-blur-2xl border border-white/60 mb-6">
             <Layers className="h-5 w-5 text-indigo-400" />
             <span className="text-sm md:text-base font-medium text-white/90">六大核心能力</span>
           </div>
@@ -268,7 +268,7 @@ export default function Home() {
               className="group relative overflow-hidden rounded-2xl md:rounded-3xl transition-all duration-300 md:duration-500 hover:-translate-y-2 hover:shadow-2xl hover:shadow-indigo-500/20 active:scale-[0.98]"
             >
               {/* Glass Background */}
-              <div className="absolute inset-0 bg-white/10 backdrop-blur-xl border border-white/20 rounded-2xl md:rounded-3xl" />
+              <div className="absolute inset-0 bg-white/40 backdrop-blur-2xl border border-white/60 rounded-2xl md:rounded-3xl" />
               
               {/* Gradient overlay on hover */}
               <div className={`absolute inset-0 bg-gradient-to-br ${feature.gradient} opacity-0 group-hover:opacity-20 transition-opacity duration-500 rounded-2xl md:rounded-3xl`} />
@@ -303,14 +303,14 @@ export default function Home() {
 
       {/* How it works - Glass Container */}
       <section className="container mx-auto px-4 md:px-6 py-12 md:py-20">
-        <div className="relative rounded-3xl bg-white/10 backdrop-blur-xl border border-white/20 p-8 md:p-12 lg:p-16 overflow-hidden">
+        <div className="relative rounded-3xl bg-white/40 backdrop-blur-2xl border border-white/60 p-8 md:p-12 lg:p-16 overflow-hidden">
           {/* Decorative elements */}
           <div className="absolute top-0 right-0 w-80 h-80 bg-gradient-to-br from-[#6366f1]/20 to-transparent rounded-full blur-3xl" />
           <div className="absolute bottom-0 left-0 w-60 h-60 bg-gradient-to-tr from-[#8b5cf6]/20 to-transparent rounded-full blur-3xl" />
           
           <div className="relative">
             <div className="text-center mb-12 md:mb-16">
-              <div className="inline-flex items-center gap-2 px-4 py-2 rounded-full bg-white/10 backdrop-blur-xl border border-white/20 mb-6">
+              <div className="inline-flex items-center gap-2 px-4 py-2 rounded-full bg-white/40 backdrop-blur-2xl border border-white/60 mb-6">
                 <Zap className="h-5 w-5 text-[#6366f1]" />
                 <span className="text-sm md:text-base font-medium text-white/90">简单三步</span>
               </div>
