@@ -52,7 +52,7 @@ export default function FAQs() {
                                 className="border-b border-gray-200">
                                 <AccordionTrigger className="cursor-pointer text-base hover:no-underline text-gray-900">{item.question}</AccordionTrigger>
                                 <AccordionContent>
-                                    <p className="text-base text-gray-600">{item.answer}</p>
+                                    <p className="text-base text-gray-900">{item.answer}</p>
                                 </AccordionContent>
                             </AccordionItem>
                         ))}
