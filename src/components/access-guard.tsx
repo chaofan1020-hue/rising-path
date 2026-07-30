@@ -55,7 +55,14 @@ export function AccessGuard({ children }: { children: ReactNode }) {
         return;
       }
 
-      const codeData = JSON.parse(stored) as AccessCode;
+      // 尝试解析 JSON，如果失败则视为纯字符串访问码
+      let codeData: AccessCode;
+      try {
+        codeData = JSON.parse(stored) as AccessCode;
+      } catch {
+        // 如果不是 JSON，视为纯字符串访问码
+        codeData = { id: 0, code: stored, name: '', expires_at: '' };
+      }
       
       // 验证访问码是否仍然有效
       const response = await fetch('/api/access-codes/verify', {
@@ -77,6 +84,8 @@ export function AccessGuard({ children }: { children: ReactNode }) {
       }
     } catch (error) {
       console.error('Access check failed:', error);
+      // 出错时清除可能损坏的数据
+      localStorage.removeItem('access_code');
     } finally {
       setLoading(false);
     }

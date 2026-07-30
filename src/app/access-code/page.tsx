@@ -28,11 +28,13 @@ export default function AccessCodePage() {
       const data = await response.json();
 
       if (response.ok && data.valid) {
-        // 保存访问码到 localStorage
-        localStorage.setItem("access_code", code.trim());
-        localStorage.setItem("access_code_id", data.access_code_id);
-        // 跳转到首页
-        router.push("/");
+        // 保存访问码到 localStorage（JSON 格式）
+        localStorage.setItem("access_code", JSON.stringify(data.code));
+        localStorage.setItem("access_code_id", String(data.access_code_id));
+        // 跳转到首页或目标页面
+        const targetPath = localStorage.getItem("target_path") || "/";
+        localStorage.removeItem("target_path");
+        router.push(targetPath);
       } else {
         setError(data.error || "访问码无效或已过期");
       }
