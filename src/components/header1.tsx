@@ -162,14 +162,9 @@ function Header1() {
                             </Button>
                         </>
                     ) : (
-                        <>
-                            <Button variant="ghost" className="hidden md:inline-flex" asChild>
-                                <Link href="/login">{t("nav.login")}</Link>
-                            </Button>
-                            <Button asChild>
-                                <Link href="/access-code">{t("nav.getStarted")}</Link>
-                            </Button>
-                        </>
+                        <Button asChild>
+                            <Link href="/access-code">{t("nav.getStarted")}</Link>
+                        </Button>
                     )}
                 </div>
                 <div className="flex w-12 shrink lg:hidden justify-end items-center">
