@@ -9,8 +9,8 @@ import {
     NavigationMenuList,
     NavigationMenuTrigger,
 } from "@/components/ui/navigation-menu";
-import { Menu, MoveRight, X } from "lucide-react";
-import { useState } from "react";
+import { Menu, MoveRight, X, LogOut, User } from "lucide-react";
+import { useState, useEffect } from "react";
 import Link from "next/link";
 import { ThemeToggle } from "@/components/theme-toggle";
 import { LanguageSwitcher } from "@/components/language-switcher";
@@ -19,6 +19,35 @@ import { useLanguage } from "@/lib/language-context";
 function Header1() {
     const { t } = useLanguage();
     const [isOpen, setOpen] = useState(false);
+    const [isLoggedIn, setIsLoggedIn] = useState(false);
+    const [accessCodeName, setAccessCodeName] = useState("");
+
+    useEffect(() => {
+        // 检查登录状态
+        const accessCode = localStorage.getItem('access_code');
+        const accessCodeData = localStorage.getItem('access_code_data');
+        
+        if (accessCode && accessCodeData) {
+            try {
+                const data = JSON.parse(accessCodeData);
+                setIsLoggedIn(true);
+                setAccessCodeName(data.name || accessCode);
+            } catch {
+                setIsLoggedIn(false);
+            }
+        } else {
+            setIsLoggedIn(false);
+        }
+    }, []);
+
+    const handleLogout = () => {
+        localStorage.removeItem('access_code');
+        localStorage.removeItem('access_code_id');
+        localStorage.removeItem('access_code_data');
+        setIsLoggedIn(false);
+        setAccessCodeName("");
+        window.location.href = '/';
+    };
 
     const navigationItems = [
         {
@@ -122,12 +151,27 @@ function Header1() {
                 <div className="flex justify-end w-full gap-3 items-center">
                     <LanguageSwitcher />
                     <ThemeToggle />
-                    <Button variant="ghost" className="hidden md:inline-flex" asChild>
-                        <Link href="/login">{t("nav.login")}</Link>
-                    </Button>
-                    <Button asChild>
-                        <Link href="/access-code">{t("nav.getStarted")}</Link>
-                    </Button>
+                    {isLoggedIn ? (
+                        <>
+                            <div className="hidden md:flex items-center gap-2 text-sm text-muted-foreground">
+                                <User className="w-4 h-4" />
+                                <span>{accessCodeName}</span>
+                            </div>
+                            <Button variant="ghost" onClick={handleLogout} className="hidden md:inline-flex">
+                                <LogOut className="w-4 h-4 mr-2" />
+                                {t("nav.logout")}
+                            </Button>
+                        </>
+                    ) : (
+                        <>
+                            <Button variant="ghost" className="hidden md:inline-flex" asChild>
+                                <Link href="/login">{t("nav.login")}</Link>
+                            </Button>
+                            <Button asChild>
+                                <Link href="/access-code">{t("nav.getStarted")}</Link>
+                            </Button>
+                        </>
+                    )}
                 </div>
                 <div className="flex w-12 shrink lg:hidden justify-end items-center">
                     <Button variant="ghost" onClick={() => setOpen(!isOpen)}>

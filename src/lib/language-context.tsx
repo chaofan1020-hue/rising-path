@@ -27,6 +27,7 @@ const translations: Record<Locale, Record<string, string>> = {
     "nav.admin": "后台管理",
     "nav.login": "登录",
     "nav.getStarted": "开始使用",
+    "nav.logout": "退出",
     // 功能卡片
     "features.title": "核心功能",
     "features.subtitle": "为您的求职之路提供全方位支持",
@@ -78,6 +79,7 @@ const translations: Record<Locale, Record<string, string>> = {
     "nav.admin": "後台管理",
     "nav.login": "登入",
     "nav.getStarted": "開始使用",
+    "nav.logout": "退出",
     // 功能卡片
     "features.title": "核心功能",
     "features.subtitle": "為您的求職之路提供全方位支援",
@@ -129,6 +131,7 @@ const translations: Record<Locale, Record<string, string>> = {
     "nav.admin": "Admin",
     "nav.login": "Log in",
     "nav.getStarted": "Get started",
+    "nav.logout": "Log out",
     // Features
     "features.title": "Core Features",
     "features.subtitle": "Comprehensive support for your career journey",
