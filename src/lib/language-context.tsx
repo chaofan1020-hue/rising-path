@@ -56,6 +56,12 @@ const translations: Record<Locale, Record<string, string>> = {
     "faq4.a": "我们采用企业级数据加密和隔离技术，每个访问码的数据完全独立存储，确保您的信息安全。",
     "faq5.q": "如何联系客服？",
     "faq5.a": "您可以通过平台内的客服系统或发送邮件至support@risingpath.com联系我们的客服团队，我们会在24小时内回复。",
+    // 平台介绍
+    "intro.greeting": "亲爱的同学：",
+    "intro.p1": "当几乎所有机构都在把自己包装成精致的都市丽人，穿西装在高档写字楼里谈「赋能」「赛道」时，我们选择一头扎进泥土里。泥土里有被折叠的真实信息——那些机构不愿明说「这个岗位今年只招三人」的数据；那些被包装成「独家」其实公开可查的链接；那些用漂亮话掩盖的冰冷但有用的行业真相。泥土里也有被消费升级和求职焦虑抛弃的普通学生——他们不是不想花十几万块买安心，是花不起；不是不想被精心服务，是发现所谓精心服务最终只是为了把自己塞进更贵的链条。",
+    "intro.p2": "对于一个清醒意识到求职重要性的同学来说，能花极低的成本解决最直接的问题，就是最大的进步。",
+    "intro.p3": "我们管这叫「决策降级」——不是消费降级，是把选择权、评判权、止损权，一样一样还给你。以前做一个求职决策，先被销售教育两小时，再被合同困住半年，最后被维权消耗一个月。现在，你来决定值不值，你来决定要不要继续，你来决定什么时候转身就走。",
+    "intro.p4": "我们只负责一件事：把真正有用的工具，做到足够便宜、足够直接、足够没废话。",
   },
   "zh-TW": {
     // 導航欄
@@ -100,6 +106,12 @@ const translations: Record<Locale, Record<string, string>> = {
     "faq4.a": "我們採用企業級數據加密和隔離技術，每個訪問碼的數據完全獨立存儲，確保您的資訊安全。",
     "faq5.q": "如何聯繫客服？",
     "faq5.a": "您可以通過平台內的客服系統或發送郵件至support@risingpath.com聯繫我們的客服團隊，我們會在24小時內回覆。",
+    // 平台介紹
+    "intro.greeting": "親愛的同學：",
+    "intro.p1": "當幾乎所有機構都在把自己包裝成精緻的都市麗人，穿西裝在高檔寫字樓裡談「賦能」「賽道」時，我們選擇一頭扎進泥土裡。泥土裡有被摺疊的真實資訊——那些機構不願明說「這個崗位今年只招三人」的數據；那些被包裝成「獨家」其實公開可查的連結；那些用漂亮話掩蓋的冰冷但有用的行業真相。泥土裡也有被消費升級和求職焦慮拋棄的普通學生——他們不是不想花十幾萬塊買安心，是花不起；不是不想被精心服務，是發現所謂精心服務最終只是為了把自己塞進更貴的鏈條。",
+    "intro.p2": "對於一個清醒意識到求職重要性的同學來說，能花極低的成本解決最直接的問題，就是最大的進步。",
+    "intro.p3": "我們管這叫「決策降級」——不是消費降級，是把選擇權、評判權、止損權，一樣一樣還給你。以前做一個求職決策，先被銷售教育兩小時，再被合同困住半年，最後被維權消耗一個月。現在，你來決定值不值，你來決定要不要繼續，你來決定什麼時候轉身就走。",
+    "intro.p4": "我們只負責一件事：把真正有用的工具，做到足夠便宜、足夠直接、足夠沒廢話。",
   },
   "en": {
     // Navigation
@@ -144,6 +156,12 @@ const translations: Record<Locale, Record<string, string>> = {
     "faq4.a": "We use enterprise-grade encryption and data isolation. Each access code's data is stored independently to ensure your information security.",
     "faq5.q": "How to contact support?",
     "faq5.a": "You can reach our support team through the in-platform support system or email support@risingpath.com. We'll respond within 24 hours.",
+    // Platform Introduction
+    "intro.greeting": "Dear Student,",
+    "intro.p1": "While almost all agencies package themselves as polished urban professionals, wearing suits in fancy office buildings talking about \"empowerment\" and \"market segments,\" we choose to dive straight into the mud. In the mud lies the folded truth — data that agencies won't openly share like \"this position only hires three people this year\"; links that are packaged as \"exclusive\" but are actually publicly available; cold but useful industry truths hidden behind fancy words. The mud also holds ordinary students abandoned by consumption upgrades and job-seeking anxiety — they don't refuse to spend hundreds of thousands for peace of mind, they simply can't afford it; they don't refuse to be carefully served, they just realize that so-called careful service is ultimately just about squeezing them into a more expensive chain.",
+    "intro.p2": "For a student who is clearly aware of the importance of job seeking, being able to solve the most direct problems at the lowest cost is the greatest progress.",
+    "intro.p3": "We call this \"decision downgrade\" — not consumption downgrade, but returning the right to choose, judge, and cut losses back to you, one by one. Before, making a job-seeking decision meant being educated by sales for two hours, trapped by a contract for six months, and consumed by rights protection for a month. Now, you decide if it's worth it, you decide whether to continue, you decide when to walk away.",
+    "intro.p4": "We are only responsible for one thing: making truly useful tools cheap enough, direct enough, and without nonsense.",
   },
 };
 
