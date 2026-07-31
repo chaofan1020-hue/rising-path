@@ -20,7 +20,7 @@ export default function Home() {
         
         {/* Platform Introduction */}
         <section className="py-16 px-4 bg-white dark:bg-black">
-          <div className="max-w-7xl mx-auto text-left space-y-6 font-handwriting">
+          <div className="max-w-7xl mx-auto text-left space-y-6">
             <p className="text-lg md:text-xl text-gray-700 dark:text-gray-300 leading-relaxed">
               亲爱的同学：
             </p>
