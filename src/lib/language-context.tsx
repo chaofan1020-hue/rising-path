@@ -39,8 +39,8 @@ const translations: Record<Locale, Record<string, string>> = {
     "feature4.desc": "聚合全球知名企业岗位信息，覆盖科技、金融、咨询等多个行业。",
     "feature5.title": "求职进度追踪",
     "feature5.desc": "实时追踪网申状态，管理求职进度，不错过任何机会。",
-    "feature6.title": "专属访问码",
-    "feature6.desc": "独立用户空间，数据安全可靠，支持多人协作使用。",
+    "feature6.title": "AI 模拟面试",
+    "feature6.desc": "与 AI 进行模拟面试，获得即时反馈，提升面试表现。",
     // FAQs
     "faqs.title": "常见问题",
     "faqs.subtitle": "快速解答关于Rising Path平台的常见问题",
@@ -89,8 +89,8 @@ const translations: Record<Locale, Record<string, string>> = {
     "feature4.desc": "聚合全球知名企業崗位資訊，覆蓋科技、金融、諮詢等多個行業。",
     "feature5.title": "求職進度追蹤",
     "feature5.desc": "實時追蹤網申狀態，管理求職進度，不錯過任何機會。",
-    "feature6.title": "專屬訪問碼",
-    "feature6.desc": "獨立用戶空間，數據安全可靠，支援多人協作使用。",
+    "feature6.title": "AI 模擬面試",
+    "feature6.desc": "與 AI 進行模擬面試，獲得即時反饋，提升面試表現。",
     // FAQs
     "faqs.title": "常見問題",
     "faqs.subtitle": "快速解答關於Rising Path平台的常見問題",
