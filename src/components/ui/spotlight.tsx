@@ -31,23 +31,6 @@ export function Spotlight({ className, fill = "white" }: SpotlightProps) {
 
   return (
     <div ref={containerRef} className="absolute inset-0 overflow-hidden">
-      {/* 静态聚光灯效果 */}
-      <motion.div
-        className={`absolute w-96 h-96 rounded-full blur-3xl opacity-30 pointer-events-none ${className}`}
-        style={{
-          background: fill,
-        }}
-        animate={{
-          scale: [1, 1.2, 1],
-          opacity: [0.3, 0.4, 0.3],
-        }}
-        transition={{
-          duration: 3,
-          repeat: Infinity,
-          repeatType: "reverse",
-        }}
-      />
-      
       {/* 鼠标跟随光斑效果 */}
       <motion.div
         className="absolute inset-0 pointer-events-none"
