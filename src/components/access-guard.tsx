@@ -137,7 +137,7 @@ export function AccessGuard({ children }: { children: ReactNode }) {
                 const data = await response.json();
                 if (response.ok && data.valid) {
                   localStorage.setItem('access_code', JSON.stringify(data.code));
-                  localStorage.setItem('access_code_id', String(data.access_code_id));
+                  localStorage.setItem('access_code_id', String(data.code.id));
                   window.location.reload();
                 }
               } catch (err) {
