@@ -26,7 +26,7 @@ const translations: Record<Locale, Record<string, string>> = {
     "nav.autoApplication": "自动网申",
     "nav.admin": "后台管理",
     "nav.login": "登录",
-    "nav.getStarted": "开始使用",
+    "nav.getStarted": "登录",
     "nav.logout": "退出",
     // 功能卡片
     "features.title": "核心功能",
@@ -150,7 +150,7 @@ const translations: Record<Locale, Record<string, string>> = {
     "nav.autoApplication": "自動網申",
     "nav.admin": "後台管理",
     "nav.login": "登入",
-    "nav.getStarted": "開始使用",
+    "nav.getStarted": "登錄",
     "nav.logout": "退出",
     // 功能卡片
     "features.title": "核心功能",
@@ -274,7 +274,7 @@ const translations: Record<Locale, Record<string, string>> = {
     "nav.autoApplication": "Auto Application",
     "nav.admin": "Admin",
     "nav.login": "Log in",
-    "nav.getStarted": "Get started",
+    "nav.getStarted": "Login",
     "nav.logout": "Log out",
     // Features
     "features.title": "Core Features",
