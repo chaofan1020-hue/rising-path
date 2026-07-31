@@ -3,16 +3,18 @@
 import { CtaCard } from "@/components/ui/cta-card";
 import { useRouter } from "next/navigation";
 import { useState } from "react";
+import { useLanguage } from "@/lib/language-context";
 
 export default function AccessCodePage() {
   const router = useRouter();
   const [error, setError] = useState("");
+  const { t } = useLanguage();
 
   const handleAccessCode = async (code: string) => {
     setError("");
     
     if (!code.trim()) {
-      setError("请输入访问码");
+      setError(t("accessCode.error.empty"));
       return;
     }
 
@@ -36,10 +38,10 @@ export default function AccessCodePage() {
         localStorage.removeItem("target_path");
         router.push(targetPath);
       } else {
-        setError(data.error || "访问码无效或已过期");
+        setError(data.error || t("accessCode.error.invalid"));
       }
     } catch (err) {
-      setError("验证失败，请稍后重试");
+      setError(t("accessCode.error.failed"));
     }
   };
 
@@ -47,10 +49,10 @@ export default function AccessCodePage() {
     <div className="min-h-screen bg-white dark:bg-black flex items-center justify-center p-4">
       <div className="w-full max-w-6xl">
         <CtaCard
-          title="欢迎使用 Rising Path"
-          description="输入您的专属访问码，开启智能求职之旅。AI 智能选岗、简历优化、自动网申，助力海外留学生拿到理想 Offer。"
-          buttonText="进入平台"
-          inputPlaceholder="请输入访问码"
+          title={t("accessCode.title")}
+          description={t("accessCode.subtitle")}
+          buttonText={t("accessCode.button")}
+          inputPlaceholder={t("accessCode.placeholder")}
           imageSrc="https://images.unsplash.com/photo-1478760329108-5c3ed9d495a0?ixlib=rb-4.1.0&ixid=M3wxMjA3fDB8MHxzZWFyY2h8M3x8YmFja2dyb3VuZHxlbnwwfHwwfHx8MA%3D%3D&auto=format&fit=crop&q=60&w=900&q=80&w=2574&auto=format&fit=crop"
           onButtonClick={handleAccessCode}
           className="min-h-[200px] md:min-h-[250px]"

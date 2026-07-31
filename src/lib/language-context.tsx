@@ -94,6 +94,14 @@ const translations: Record<Locale, Record<string, string>> = {
     "intro.p2": "对于一个清醒意识到求职重要性的同学来说，能花极低的成本解决最直接的问题，就是最大的进步。",
     "intro.p3": "我们管这叫「决策降级」——不是消费降级，是把选择权、评判权、止损权，一样一样还给你。以前做一个求职决策，先被销售教育两小时，再被合同困住半年，最后被维权消耗一个月。现在，你来决定值不值，你来决定要不要继续，你来决定什么时候转身就走。",
     "intro.p4": "我们只负责一件事：把真正有用的工具，做到足够便宜、足够直接、足够没废话。",
+    // 访问码页面
+    "accessCode.title": "欢迎使用 Rising Path",
+    "accessCode.subtitle": "输入您的专属访问码，开启智能求职之旅。AI 智能选岗、简历优化、自动网申，助力海外留学生拿到理想 Offer。",
+    "accessCode.button": "进入平台",
+    "accessCode.placeholder": "请输入访问码",
+    "accessCode.error.empty": "请输入访问码",
+    "accessCode.error.invalid": "访问码无效或已过期",
+    "accessCode.error.failed": "验证失败，请稍后重试",
   },
   "zh-TW": {
     // 導航欄
@@ -176,6 +184,14 @@ const translations: Record<Locale, Record<string, string>> = {
     "intro.p2": "對於一個清醒意識到求職重要性的同學來說，能花極低的成本解決最直接的問題，就是最大的進步。",
     "intro.p3": "我們管這叫「決策降級」——不是消費降級，是把選擇權、評判權、止損權，一樣一樣還給你。以前做一個求職決策，先被銷售教育兩小時，再被合同困住半年，最後被維權消耗一個月。現在，你來決定值不值，你來決定要不要繼續，你來決定什麼時候轉身就走。",
     "intro.p4": "我們只負責一件事：把真正有用的工具，做到足夠便宜、足夠直接、足夠沒廢話。",
+    // 訪問碼頁面
+    "accessCode.title": "歡迎使用 Rising Path",
+    "accessCode.subtitle": "輸入您的專屬訪問碼，開啟智能求職之旅。AI 智能選崗、簡歷優化、自動網申，助力海外留學生拿到理想 Offer。",
+    "accessCode.button": "進入平台",
+    "accessCode.placeholder": "請輸入訪問碼",
+    "accessCode.error.empty": "請輸入訪問碼",
+    "accessCode.error.invalid": "訪問碼無效或已過期",
+    "accessCode.error.failed": "驗證失敗，請稍後重試",
   },
   "en": {
     // Navigation
@@ -258,6 +274,14 @@ const translations: Record<Locale, Record<string, string>> = {
     "intro.p2": "For a student who is clearly aware of the importance of job seeking, being able to solve the most direct problems at the lowest cost is the greatest progress.",
     "intro.p3": "We call this \"decision downgrade\" — not consumption downgrade, but returning the right to choose, judge, and cut losses back to you, one by one. Before, making a job-seeking decision meant being educated by sales for two hours, trapped by a contract for six months, and consumed by rights protection for a month. Now, you decide if it's worth it, you decide whether to continue, you decide when to walk away.",
     "intro.p4": "We are only responsible for one thing: making truly useful tools cheap enough, direct enough, and without nonsense.",
+    // Access Code Page
+    "accessCode.title": "Welcome to Rising Path",
+    "accessCode.subtitle": "Enter your exclusive access code to start your intelligent job-seeking journey. AI job matching, resume optimization, and auto-application help international students land their ideal offers.",
+    "accessCode.button": "Enter Platform",
+    "accessCode.placeholder": "Enter access code",
+    "accessCode.error.empty": "Please enter access code",
+    "accessCode.error.invalid": "Invalid or expired access code",
+    "accessCode.error.failed": "Verification failed, please try again later",
   },
 };
 
