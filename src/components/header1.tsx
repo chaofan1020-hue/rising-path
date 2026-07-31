@@ -103,12 +103,12 @@ function Header1() {
                                     {item.href ? (
                                         <>
                                             <NavigationMenuLink href={item.href}>
-                                                <Button variant="ghost">{item.title}</Button>
+                                                <Button variant="ghost" className="text-black">{item.title}</Button>
                                             </NavigationMenuLink>
                                         </>
                                     ) : (
                                         <>
-                                            <NavigationMenuTrigger className="font-medium text-sm">
+                                            <NavigationMenuTrigger className="font-medium text-sm text-black">
                                                 {item.title}
                                             </NavigationMenuTrigger>
                                             <NavigationMenuContent className="!w-[450px] p-4">
@@ -145,7 +145,7 @@ function Header1() {
                     </NavigationMenu>
                 </div>
                 <div className="flex lg:justify-center">
-                    <Link href="/" className="font-semibold text-lg">Rising Path</Link>
+                    <Link href="/" className="font-semibold text-lg text-black">Rising Path</Link>
                 </div>
                 <div className="flex justify-end w-full gap-3 items-center">
                     <LanguageSwitcher />

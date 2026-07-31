@@ -1,6 +1,7 @@
 'use client'
 
 import { FloatingIconsHero, type FloatingIconsHeroProps } from '@/components/ui/floating-icons-hero'
+import { Header1 } from '@/components/header1'
 import {
   IconGoogle,
   IconApple,
@@ -64,12 +65,15 @@ export default function ShowcasePage() {
   const { title, subtitle, cta } = content[locale]
 
   return (
-    <FloatingIconsHero
-      title={title}
-      subtitle={subtitle}
-      ctaText={cta}
-      ctaHref="/home"
-      icons={demoIcons}
-    />
+    <>
+      <Header1 />
+      <FloatingIconsHero
+        title={title}
+        subtitle={subtitle}
+        ctaText={cta}
+        ctaHref="/home"
+        icons={demoIcons}
+      />
+    </>
   )
 }
