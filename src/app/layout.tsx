@@ -45,7 +45,7 @@ export default function RootLayout({
 
   return (
     <html lang="zh-CN" suppressHydrationWarning>
-      <body className={`antialiased`}>
+      <body className={`antialiased bg-background`}>
         <ThemeProvider>
           <LanguageProvider>
             {isDev && <Inspector />}
