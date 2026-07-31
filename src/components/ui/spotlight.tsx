@@ -1,7 +1,7 @@
 'use client'
 
 import { motion, useMotionTemplate, useMotionValue } from 'framer-motion'
-import { useEffect } from 'react'
+import { useEffect, useRef } from 'react'
 
 interface SpotlightProps {
   className?: string
@@ -11,28 +11,35 @@ interface SpotlightProps {
 export function Spotlight({ className, fill = "white" }: SpotlightProps) {
   const mouseX = useMotionValue(0)
   const mouseY = useMotionValue(0)
+  const containerRef = useRef<HTMLDivElement>(null)
 
   useEffect(() => {
     const handleMouseMove = (e: MouseEvent) => {
-      mouseX.set(e.clientX)
-      mouseY.set(e.clientY)
+      const rect = containerRef.current?.getBoundingClientRect()
+      if (rect) {
+        mouseX.set(e.clientX - rect.left)
+        mouseY.set(e.clientY - rect.top)
+      }
     }
 
-    window.addEventListener('mousemove', handleMouseMove)
-    return () => window.removeEventListener('mousemove', handleMouseMove)
+    const container = containerRef.current
+    if (container) {
+      container.addEventListener('mousemove', handleMouseMove)
+      return () => container.removeEventListener('mousemove', handleMouseMove)
+    }
   }, [mouseX, mouseY])
 
   return (
-    <>
+    <div ref={containerRef} className="absolute inset-0 overflow-hidden">
       {/* 静态聚光灯效果 */}
       <motion.div
-        className={`absolute w-64 h-64 rounded-full blur-3xl opacity-20 pointer-events-none ${className}`}
+        className={`absolute w-96 h-96 rounded-full blur-3xl opacity-30 pointer-events-none ${className}`}
         style={{
           background: fill,
         }}
         animate={{
           scale: [1, 1.2, 1],
-          opacity: [0.2, 0.3, 0.2],
+          opacity: [0.3, 0.4, 0.3],
         }}
         transition={{
           duration: 3,
@@ -43,11 +50,11 @@ export function Spotlight({ className, fill = "white" }: SpotlightProps) {
       
       {/* 鼠标跟随光斑效果 */}
       <motion.div
-        className="fixed inset-0 pointer-events-none z-50"
+        className="absolute inset-0 pointer-events-none"
         style={{
-          background: useMotionTemplate`radial-gradient(600px circle at ${mouseX}px ${mouseY}px, ${fill}15, transparent 80%)`,
+          background: useMotionTemplate`radial-gradient(400px circle at ${mouseX}px ${mouseY}px, ${fill}20, transparent 80%)`,
         }}
       />
-    </>
+    </div>
   )
 }
