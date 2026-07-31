@@ -25,13 +25,12 @@ function Header1() {
     useEffect(() => {
         // 检查登录状态
         const accessCode = localStorage.getItem('access_code');
-        const accessCodeData = localStorage.getItem('access_code_data');
         
-        if (accessCode && accessCodeData) {
+        if (accessCode) {
             try {
-                const data = JSON.parse(accessCodeData);
+                const data = JSON.parse(accessCode);
                 setIsLoggedIn(true);
-                setAccessCodeName(data.name || accessCode);
+                setAccessCodeName(data.name || data.code || "");
             } catch {
                 setIsLoggedIn(false);
             }
