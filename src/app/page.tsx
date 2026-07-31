@@ -28,7 +28,7 @@ export default function Home() {
                 textStream={paragraph}
                 mode="typewriter"
                 speed={30}
-                className="text-lg md:text-xl text-gray-700 dark:text-gray-300 leading-relaxed"
+                className="text-lg md:text-xl text-gray-700 dark:text-gray-300 leading-relaxed font-handwriting"
               />
             ))}
           </div>

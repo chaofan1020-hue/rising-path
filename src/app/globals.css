@@ -1,6 +1,11 @@
 @import 'tailwindcss';
 @import 'tw-animate-css';
 
+/* 手写体字体类 */
+.font-handwriting {
+  font-family: 'Ma Shan Zheng', cursive;
+}
+
 /* 主题变量 - 默认浅色模式 */
 :root {
   --background: 0 0% 100%;
