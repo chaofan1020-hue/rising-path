@@ -160,7 +160,10 @@ export default function FeaturesCards() {
               <div
                 key={index}
                 onClick={() => {
-                  window.location.href = "/access-code"
+                  // 保存目标路径到 localStorage，访问码验证后跳转到对应页面
+                  const targetPaths = ["/ai-match", "/optimize", "/field-mappings", "/jobs", "/applications", "/mock-interview"];
+                  localStorage.setItem("target_path", targetPaths[index] || "/");
+                  window.location.href = "/access-code";
                 }}
                 className="block group cursor-pointer"
               >
