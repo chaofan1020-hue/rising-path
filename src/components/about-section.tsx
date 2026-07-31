@@ -163,7 +163,7 @@ export default function AboutSection3({ onStartClick }: AboutSection3Props) {
                 <span className="text-gray-600">{t("about.words")}</span>
               </div>
             </TimelineContent>
-            <div className="lg:absolute right-0 bottom-16 flex lg:flex-col flex-row-reverse lg:gap-0 gap-4">
+            <div className="flex lg:flex-col flex-row-reverse lg:gap-0 gap-4 lg:absolute right-0 bottom-16">
               <TimelineContent
                 as="div"
                 animationNum={6}
