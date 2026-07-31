@@ -27,6 +27,13 @@ export const metadata: Metadata = {
     icon: '/logo.svg',
     apple: '/logo.svg',
   },
+  other: {
+    'link': [
+      '<https://fonts.googleapis.com>; rel=preconnect',
+      '<https://fonts.gstatic.com>; rel=preconnect; crossorigin',
+      '<https://fonts.googleapis.com/css2?family=Ma+Shan+Zheng&display=swap>; rel=stylesheet',
+    ],
+  },
 };
 
 export default function RootLayout({
@@ -38,11 +45,6 @@ export default function RootLayout({
 
   return (
     <html lang="zh-CN" suppressHydrationWarning>
-      <head>
-        <link rel="preconnect" href="https://fonts.googleapis.com" />
-        <link rel="preconnect" href="https://fonts.gstatic.com" crossOrigin="anonymous" />
-        <link href="https://fonts.googleapis.com/css2?family=Ma+Shan+Zheng&display=swap" rel="stylesheet" />
-      </head>
       <body className={`antialiased`}>
         <ThemeProvider>
           <LanguageProvider>
