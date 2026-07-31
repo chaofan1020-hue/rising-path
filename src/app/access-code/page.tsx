@@ -30,7 +30,7 @@ export default function AccessCodePage() {
       if (response.ok && data.valid) {
         // 保存访问码到 localStorage（JSON 格式）
         localStorage.setItem("access_code", JSON.stringify(data.code));
-        localStorage.setItem("access_code_id", String(data.access_code_id));
+        localStorage.setItem("access_code_id", String(data.code.id));
         // 跳转到首页或目标页面
         const targetPath = localStorage.getItem("target_path") || "/";
         localStorage.removeItem("target_path");
