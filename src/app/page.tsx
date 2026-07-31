@@ -21,7 +21,7 @@ export default function Home() {
         
         {/* Platform Introduction with Typewriter Effect */}
         <section className="py-16 px-4 bg-white dark:bg-black">
-          <div className="max-w-4xl mx-auto text-left space-y-6">
+          <div className="max-w-6xl mx-auto text-left space-y-6">
             {platformIntroParagraphs.map((paragraph, index) => (
               <ResponseStream
                 key={index}
