@@ -16,6 +16,7 @@ import Link from 'next/link';
 import Image from 'next/image';
 import { AccessGuard, useAccessCode } from '@/components/access-guard';
 import { Header1 } from '@/components/header1';
+import { useLanguage } from '@/lib/language-context';
 
 interface Job {
   id: number;
@@ -355,6 +356,7 @@ function JobsContent() {
   }>({ region: [], direction: [], audience: [] });
 
   const { accessCodeId } = useAccessCode();
+  const { t } = useLanguage();
 
   const fetchJobs = useCallback(async () => {
     setLoading(true);
@@ -485,8 +487,8 @@ function JobsContent() {
       <main className="container mx-auto px-4 py-4 md:py-8 pt-20">
         {/* Page Title */}
         <div className="mb-4 md:mb-8">
-          <h1 className="text-2xl md:text-3xl font-bold mb-1 md:mb-2">岗位查询</h1>
-          <p className="text-sm md:text-base text-muted-foreground">按地区、方向、受众筛选海量海外岗位</p>
+          <h1 className="text-2xl md:text-3xl font-bold mb-1 md:mb-2">{t('page.jobs.title')}</h1>
+          <p className="text-sm md:text-base text-muted-foreground">{t('page.jobs.subtitle')}</p>
         </div>
 
         {/* Filters */}
@@ -497,7 +499,7 @@ function JobsContent() {
               <div className="relative w-full md:max-w-md">
                 <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
                 <Input
-                  placeholder="搜索岗位名称或公司..."
+                  placeholder={t('page.jobs.searchPlaceholder') || '搜索岗位名称或公司...'}
                   value={searchTerm}
                   onChange={(e) => setSearchTerm(e.target.value)}
                   className="pl-10 h-10 md:h-11 bg-background text-sm"
