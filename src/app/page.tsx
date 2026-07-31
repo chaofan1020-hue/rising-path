@@ -17,19 +17,19 @@ export default function Home() {
         {/* Platform Introduction */}
         <section className="py-16 px-4 bg-white dark:bg-black">
           <div className="max-w-7xl mx-auto text-left space-y-6">
-            <p className="text-lg text-gray-500 leading-relaxed">
+            <p className="text-lg text-gray-500 dark:text-gray-400 leading-relaxed">
               {t('intro.greeting')}
             </p>
-            <p className="text-lg text-gray-500 leading-relaxed">
+            <p className="text-lg text-gray-500 dark:text-gray-400 leading-relaxed">
               {t('intro.p1')}
             </p>
-            <p className="text-lg text-gray-500 leading-relaxed">
+            <p className="text-lg text-gray-500 dark:text-gray-400 leading-relaxed">
               {t('intro.p2')}
             </p>
-            <p className="text-lg text-gray-500 leading-relaxed">
+            <p className="text-lg text-gray-500 dark:text-gray-400 leading-relaxed">
               {t('intro.p3')}
             </p>
-            <p className="text-lg text-gray-500 leading-relaxed">
+            <p className="text-lg text-gray-500 dark:text-gray-400 leading-relaxed">
               {t('intro.p4')}
             </p>
           </div>
