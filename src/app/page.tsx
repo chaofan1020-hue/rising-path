@@ -21,13 +21,13 @@ export default function Home() {
         {/* Platform Introduction */}
         <section className="py-16 px-4 bg-white dark:bg-black">
           <div className="max-w-7xl mx-auto text-left space-y-6">
-            <p className="text-sm md:text-base text-gray-700 dark:text-gray-300 leading-relaxed">
+            <p className="text-lg text-gray-500 leading-relaxed">
               亲爱的同学：
             </p>
             {platformIntroParagraphs.map((paragraph, index) => (
               <p
                 key={index}
-                className="text-sm md:text-base text-gray-700 dark:text-gray-300 leading-relaxed"
+                className="text-lg text-gray-500 leading-relaxed"
               >
                 {paragraph}
               </p>
