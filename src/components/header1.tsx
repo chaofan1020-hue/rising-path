@@ -56,6 +56,10 @@ function Header1() {
                     title: t("nav.applications"),
                     href: "/applications",
                 },
+                {
+                    title: t("nav.autoApplication"),
+                    href: "/field-mappings",
+                },
             ],
         },
     ];
