@@ -5,7 +5,11 @@ import { ArrowRight } from "lucide-react";
 import { useRef } from "react";
 import { useLanguage } from "@/lib/language-context";
 
-export default function AboutSection3() {
+interface AboutSection3Props {
+  onStartClick?: () => void;
+}
+
+export default function AboutSection3({ onStartClick }: AboutSection3Props) {
   const { t } = useLanguage();
   const heroRef = useRef<HTMLElement>(null);
   const revealVariants = {
@@ -186,8 +190,8 @@ export default function AboutSection3() {
         </div>
         {/* Main Content */}
         <div className="grid md:grid-cols-3 gap-8">
-          <div className="md:col-span-2">
-            <h1 className="sm:text-4xl md:text-5xl text-2xl !leading-[110%] font-semibold text-gray-900 mb-8">
+          <div className="md:col-span-2 min-w-0">
+            <h1 className="sm:text-4xl md:text-5xl text-2xl !leading-[110%] font-semibold text-gray-900 mb-8 break-words">
               <VerticalCutReveal
                 splitBy="words"
                 staggerDuration={0.1}
@@ -234,14 +238,14 @@ export default function AboutSection3() {
               </TimelineContent>
             </TimelineContent>
           </div>
-          <div className="md:col-span-1">
-            <div className="text-right">
+          <div className="md:col-span-1 min-w-0">
+            <div className="text-right break-words">
               <TimelineContent
                 as="div"
                 animationNum={12}
                 timelineRef={heroRef}
                 customVariants={revealVariants}
-                className="text-red-500 text-2xl font-bold mb-2"
+                className="text-red-500 text-xl md:text-2xl font-bold mb-2 break-words"
               >
                 {t("about.brandName")}
               </TimelineContent>
@@ -271,6 +275,7 @@ export default function AboutSection3() {
                 timelineRef={heroRef}
                 customVariants={revealVariants}
                 className="bg-neutral-900 hover:bg-neutral-950 shadow-lg shadow-neutral-900 border border-neutral-700 flex w-fit ml-auto gap-2 hover:gap-4 transition-all duration-300 ease-in-out text-white px-5 py-3 rounded-lg cursor-pointer font-semibold"
+                onClick={onStartClick}
               >
                 {t("about.ctaButton")} <ArrowRight className="" />
               </TimelineContent>
