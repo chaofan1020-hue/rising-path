@@ -53,7 +53,7 @@ export default function AboutSection3() {
                 customVariants={revealVariants}
                 className="text-sm font-medium text-gray-600"
               >
-                WHO I AM
+                {t("about.whoIAm")}
               </TimelineContent>
             </div>
             <div className="flex gap-4">
@@ -151,12 +151,12 @@ export default function AboutSection3() {
             >
               <div className="flex items-center gap-2 mb-2 sm:text-base text-xs">
                 <span className="text-red-500 font-bold">10+</span>
-                <span className="text-gray-600">years of experience</span>
+                <span className="text-gray-600">{t("about.yearsExperience")}</span>
                 <span className="text-gray-300">|</span>
               </div>
               <div className="flex items-center gap-2 mb-2 sm:text-base text-xs">
-                <span className="text-red-500 font-bold">3 million</span>
-                <span className="text-gray-600">words</span>
+                <span className="text-red-500 font-bold">1 million+</span>
+                <span className="text-gray-600">{t("about.words")}</span>
               </div>
             </TimelineContent>
             <div className="lg:absolute right-0 bottom-16 flex lg:flex-col flex-row-reverse lg:gap-0 gap-4">
@@ -167,8 +167,8 @@ export default function AboutSection3() {
                 customVariants={revealVariants}
                 className="flex lg:text-4xl sm:text-3xl text-2xl items-center gap-2 mb-2"
               >
-                <span className="text-red-500 font-semibold">100+</span>
-                <span className="text-gray-600 uppercase">brands</span>
+                <span className="text-red-500 font-semibold">500+</span>
+                <span className="text-gray-600 uppercase">{t("about.brands")}</span>
               </TimelineContent>
               <TimelineContent
                 as="div"
@@ -177,8 +177,8 @@ export default function AboutSection3() {
                 customVariants={revealVariants}
                 className="flex items-center gap-2 mb-2 sm:text-base text-xs"
               >
-                <span className="text-red-500 font-bold">30%</span>
-                <span className="text-gray-600">higher engagement</span>
+                <span className="text-red-500 font-bold">95%</span>
+                <span className="text-gray-600">{t("about.higherEngagement")}</span>
                 <span className="text-gray-300 lg:hidden block">|</span>
               </TimelineContent>
             </div>
@@ -200,7 +200,7 @@ export default function AboutSection3() {
                   delay: 3,
                 }}
               >
-                Crafting Words That Make a Difference.
+                {t("about.title")}
               </VerticalCutReveal>
             </h1>
             <TimelineContent
@@ -218,9 +218,7 @@ export default function AboutSection3() {
                 className="sm:text-base text-xs"
               >
                 <p className="leading-relaxed text-justify">
-                  My journey began as a passionate writer and evolved into a
-                  strategic copywriting career. I specialize in transforming
-                  ideas into compelling content that helps brands grow.
+                  {t("about.p1")}
                 </p>
               </TimelineContent>
               <TimelineContent
@@ -231,9 +229,7 @@ export default function AboutSection3() {
                 className="sm:text-base text-xs"
               >
                 <p className="leading-relaxed text-justify">
-                  Every brand has a story, and I specialize in telling yours
-                  with clarity and impact. By blending creativity with strategy,
-                  I write content that resonates with audiences.
+                  {t("about.p2")}
                 </p>
               </TimelineContent>
             </TimelineContent>
@@ -247,7 +243,7 @@ export default function AboutSection3() {
                 customVariants={revealVariants}
                 className="text-red-500 text-2xl font-bold mb-2"
               >
-                SANGVI
+                {t("about.brandName")}
               </TimelineContent>
               <TimelineContent
                 as="div"
@@ -256,7 +252,7 @@ export default function AboutSection3() {
                 customVariants={revealVariants}
                 className="text-gray-600 text-sm mb-8"
               >
-                Copywriter | Content Strategist
+                {t("about.brandTitle")}
               </TimelineContent>
               <TimelineContent
                 as="div"
@@ -266,7 +262,7 @@ export default function AboutSection3() {
                 className="mb-6"
               >
                 <p className="text-gray-900 font-medium mb-4">
-                  Ready to transform your brand's message into results?
+                  {t("about.ctaText")}
                 </p>
               </TimelineContent>
               <TimelineContent
@@ -276,7 +272,7 @@ export default function AboutSection3() {
                 customVariants={revealVariants}
                 className="bg-neutral-900 hover:bg-neutral-950 shadow-lg shadow-neutral-900 border border-neutral-700 flex w-fit ml-auto gap-2 hover:gap-4 transition-all duration-300 ease-in-out text-white px-5 py-3 rounded-lg cursor-pointer font-semibold"
               >
-                LET'S COLLABORATE <ArrowRight className="" />
+                {t("about.ctaButton")} <ArrowRight className="" />
               </TimelineContent>
             </div>
           </div>
