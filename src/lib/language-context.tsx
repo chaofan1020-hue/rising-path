@@ -139,8 +139,8 @@ const translations: Record<Locale, Record<string, string>> = {
     "feature4.desc": "Aggregates job info from global companies across tech, finance, consulting and more.",
     "feature5.title": "Application Tracking",
     "feature5.desc": "Track application status in real-time, manage your job search progress.",
-    "feature6.title": "Exclusive Access Code",
-    "feature6.desc": "Independent user space with secure data, supporting multi-user collaboration.",
+    "feature6.title": "AI Mock Interview",
+    "feature6.desc": "Practice interviews with AI, get instant feedback to improve your performance.",
     // FAQs
     "faqs.title": "Frequently Asked Questions",
     "faqs.subtitle": "Quick answers to common questions about Rising Path platform",
