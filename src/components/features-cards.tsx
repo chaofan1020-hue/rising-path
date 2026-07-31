@@ -164,7 +164,7 @@ export default function FeaturesCards() {
                 }}
                 className="block group cursor-pointer"
               >
-                <div className="relative h-80 transition-transform duration-300 group-hover:scale-105">
+                <div className="relative h-64 transition-transform duration-300 group-hover:scale-105">
                   <div className="absolute inset-0 rounded-3xl overflow-hidden">
                     <Warp
                       style={{ height: "100%", width: "100%" }}
@@ -179,11 +179,11 @@ export default function FeaturesCards() {
                     />
                   </div>
                   <div className="relative z-10 flex flex-col items-center justify-center h-full px-6 text-center">
-                    <div className="mb-4 p-3 rounded-2xl bg-white/10 backdrop-blur-sm transition-transform duration-300 group-hover:scale-110">
+                    <div className="mb-3 p-2.5 rounded-xl bg-white/10 backdrop-blur-sm transition-transform duration-300 group-hover:scale-110">
                       {feature.icon}
                     </div>
-                    <h3 className="text-2xl font-semibold text-white mb-3">{t(feature.titleKey)}</h3>
-                    <p className="text-white/80 leading-relaxed">{t(feature.descKey)}</p>
+                    <h3 className="text-xl font-semibold text-white mb-2">{t(feature.titleKey)}</h3>
+                    <p className="text-white/80 text-sm leading-relaxed">{t(feature.descKey)}</p>
                   </div>
                 </div>
               </div>
