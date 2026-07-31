@@ -2,7 +2,6 @@
 
 import FeaturesCards from '@/components/features-cards';
 import FAQs from '@/components/faqs-component';
-import { ResponseStream } from '@/components/ui/response-stream';
 import { Header1 } from '@/components/header1';
 
 export default function Home() {
@@ -19,17 +18,19 @@ export default function Home() {
       <div className="pt-20">
         <FeaturesCards />
         
-        {/* Platform Introduction with Typewriter Effect */}
+        {/* Platform Introduction */}
         <section className="py-16 px-4 bg-white dark:bg-black">
-          <div className="max-w-7xl mx-auto text-left space-y-6">
+          <div className="max-w-7xl mx-auto text-left space-y-6 font-handwriting">
+            <p className="text-lg md:text-xl text-gray-700 dark:text-gray-300 leading-relaxed">
+              亲爱的同学：
+            </p>
             {platformIntroParagraphs.map((paragraph, index) => (
-              <ResponseStream
+              <p
                 key={index}
-                textStream={paragraph}
-                mode="typewriter"
-                speed={30}
-                className="text-lg md:text-xl text-gray-700 dark:text-gray-300 leading-relaxed font-handwriting"
-              />
+                className="text-lg md:text-xl text-gray-700 dark:text-gray-300 leading-relaxed"
+              >
+                {paragraph}
+              </p>
             ))}
           </div>
         </section>
