@@ -23,21 +23,31 @@ export function Spotlight({ className, fill = "white" }: SpotlightProps) {
   }, [mouseX, mouseY])
 
   return (
-    <motion.div
-      className={`absolute rounded-full blur-3xl ${className}`}
-      style={{
-        background: useMotionTemplate`radial-gradient(600px circle at ${mouseX}px ${mouseY}px, ${fill}, transparent 80%)`,
-        opacity: 0.15,
-      }}
-      animate={{
-        scale: [1, 1.2, 1],
-        opacity: [0.15, 0.25, 0.15],
-      }}
-      transition={{
-        duration: 3,
-        repeat: Infinity,
-        repeatType: "reverse",
-      }}
-    />
+    <>
+      {/* 静态聚光灯效果 */}
+      <motion.div
+        className={`absolute w-64 h-64 rounded-full blur-3xl opacity-20 pointer-events-none ${className}`}
+        style={{
+          background: fill,
+        }}
+        animate={{
+          scale: [1, 1.2, 1],
+          opacity: [0.2, 0.3, 0.2],
+        }}
+        transition={{
+          duration: 3,
+          repeat: Infinity,
+          repeatType: "reverse",
+        }}
+      />
+      
+      {/* 鼠标跟随光斑效果 */}
+      <motion.div
+        className="fixed inset-0 pointer-events-none z-50"
+        style={{
+          background: useMotionTemplate`radial-gradient(600px circle at ${mouseX}px ${mouseY}px, ${fill}15, transparent 80%)`,
+        }}
+      />
+    </>
   )
 }
