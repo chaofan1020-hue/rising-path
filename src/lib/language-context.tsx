@@ -135,6 +135,7 @@ const translations: Record<Locale, Record<string, string>> = {
     // 展示页面
     "showcase.title": "Interactive 3D",
     "showcase.description": "Bring your UI to life with beautiful 3D scenes. Create immersive experiences that capture attention and enhance your design.",
+    "showcase.clickToEnter": "点击任意处进入",
   },
   "zh-TW": {
     // 導航欄
@@ -258,6 +259,7 @@ const translations: Record<Locale, Record<string, string>> = {
     // 展示頁面
     "showcase.title": "Interactive 3D",
     "showcase.description": "Bring your UI to life with beautiful 3D scenes. Create immersive experiences that capture attention and enhance your design.",
+    "showcase.clickToEnter": "點擊任意處進入",
   },
   "en": {
     // Navigation
@@ -381,6 +383,7 @@ const translations: Record<Locale, Record<string, string>> = {
     // Showcase Page
     "showcase.title": "Interactive 3D",
     "showcase.description": "Bring your UI to life with beautiful 3D scenes. Create immersive experiences that capture attention and enhance your design.",
+    "showcase.clickToEnter": "Click anywhere to enter",
   },
 };
 
