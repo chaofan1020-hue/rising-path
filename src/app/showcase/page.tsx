@@ -41,7 +41,7 @@ export default function ShowcasePage() {
             </div>
 
             {/* Right content */}
-            <div className="flex-1 relative scale-115">
+            <div className="flex-[1.3] relative">
               <SplineScene 
                 scene="https://prod.spline.design/kZDDjO5HuC9GJUM2/scene.splinecode"
                 className="w-full h-full"
