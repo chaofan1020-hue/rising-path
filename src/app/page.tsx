@@ -3,6 +3,7 @@
 import FeaturesCards from '@/components/features-cards';
 import FAQs from '@/components/faqs-component';
 import { Header1 } from '@/components/header1';
+import AboutSection3 from '@/components/about-section';
 import { useLanguage } from '@/lib/language-context';
 
 export default function Home() {
@@ -12,6 +13,7 @@ export default function Home() {
     <div className="min-h-screen bg-white dark:bg-black">
       <Header1 />
       <div className="pt-20">
+        <AboutSection3 />
         <FeaturesCards />
         
         {/* Platform Introduction */}
