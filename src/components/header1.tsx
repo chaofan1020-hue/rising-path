@@ -103,12 +103,12 @@ function Header1() {
                                     {item.href ? (
                                         <>
                                             <NavigationMenuLink href={item.href}>
-                                                <Button variant="ghost" className="text-black">{item.title}</Button>
+                                                <Button variant="ghost" className="text-black hover:bg-[#C46A4A]/10 hover:text-[#C46A4A]">{item.title}</Button>
                                             </NavigationMenuLink>
                                         </>
                                     ) : (
                                         <>
-                                            <NavigationMenuTrigger className="font-medium text-sm text-black">
+                                            <NavigationMenuTrigger className="font-medium text-sm text-black hover:bg-[#C46A4A]/10 hover:text-[#C46A4A]">
                                                 {item.title}
                                             </NavigationMenuTrigger>
                                             <NavigationMenuContent className="!w-[450px] p-4">
@@ -128,7 +128,7 @@ function Header1() {
                                                             <NavigationMenuLink
                                                                 href={subItem.href}
                                                                 key={subItem.title}
-                                                                className="flex flex-row justify-between items-center hover:bg-muted py-2 px-4 rounded"
+                                                                className="flex flex-row justify-between items-center hover:bg-[#C46A4A]/10 py-2 px-4 rounded"
                                                             >
                                                                 <span className="text-black">{subItem.title}</span>
                                                                 <MoveRight className="w-4 h-4 text-black/60" />
@@ -156,7 +156,7 @@ function Header1() {
                                 <User className="w-4 h-4" />
                                 <span>{accessCodeName}</span>
                             </div>
-                            <Button variant="ghost" onClick={handleLogout} className="hidden md:inline-flex text-black">
+                            <Button variant="ghost" onClick={handleLogout} className="hidden md:inline-flex text-black hover:bg-[#C46A4A]/10 hover:text-[#C46A4A]">
                                 <LogOut className="w-4 h-4 mr-2" />
                                 {t("nav.logout")}
                             </Button>
