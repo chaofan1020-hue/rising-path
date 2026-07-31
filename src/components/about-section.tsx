@@ -44,7 +44,7 @@ export default function AboutSection3({ onStartClick }: AboutSection3Props) {
   };
   return (
     <div className="py-8 px-4 bg-[#f9f9f9]" ref={heroRef as React.RefObject<HTMLDivElement>}>
-      <div className="max-w-6xl mx-auto">
+      <div className="max-w-7xl mx-auto">
         <div className="relative">
           {/* Header with social icons */}
           <div className="flex justify-between items-center mb-8 w-[85%] absolute lg:top-4 md:top-0 sm:-top-2 -top-3 z-10">
