@@ -162,8 +162,16 @@ export default function FeaturesCards() {
                 onClick={() => {
                   // 保存目标路径到 localStorage，访问码验证后跳转到对应页面
                   const targetPaths = ["/ai-match", "/optimize", "/field-mappings", "/jobs", "/applications", "/mock-interview"];
-                  localStorage.setItem("target_path", targetPaths[index] || "/");
-                  window.location.href = "/access-code";
+                  const targetPath = targetPaths[index] || "/";
+                  localStorage.setItem("target_path", targetPath);
+                  
+                  // 检查是否已登录，已登录直接跳转到功能页面
+                  const accessCode = localStorage.getItem("access_code");
+                  if (accessCode) {
+                    window.location.href = targetPath;
+                  } else {
+                    window.location.href = "/access-code";
+                  }
                 }}
                 className="block group cursor-pointer"
               >

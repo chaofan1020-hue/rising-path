@@ -52,7 +52,7 @@ export default function MockInterviewPage() {
 
   return (
     <AccessGuard>
-      <div className="min-h-screen bg-white dark:bg-black">
+      <div className="min-h-screen bg-background">
         <Header1 />
         <div className="pt-20 container mx-auto px-4 py-8">
           <div className="max-w-4xl mx-auto">
