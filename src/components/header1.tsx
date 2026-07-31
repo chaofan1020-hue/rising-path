@@ -56,10 +56,6 @@ function Header1() {
                     title: t("nav.applications"),
                     href: "/applications",
                 },
-                {
-                    title: t("nav.admin"),
-                    href: "/admin",
-                },
             ],
         },
     ];
