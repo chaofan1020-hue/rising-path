@@ -204,6 +204,7 @@ function MultiSelectFilter({
   selected,
   onChange,
   showFlag = false,
+  t,
 }: {
   label: string;
   icon: React.ElementType;
@@ -211,6 +212,7 @@ function MultiSelectFilter({
   selected: string[];
   onChange: (values: string[]) => void;
   showFlag?: boolean;
+  t: (key: string) => string;
 }) {
   const handleToggle = (value: string) => {
     if (selected.includes(value)) {
@@ -258,7 +260,7 @@ function MultiSelectFilter({
           ))}
         </div>
         {options.length === 0 && (
-          <div className="text-center py-2 text-sm text-muted-foreground">暂无选项</div>
+          <div className="text-center py-2 text-sm text-muted-foreground">{t('jobs.noOptions')}</div>
         )}
         {selected.length > 0 && (
           <div className="border-t mt-2 pt-2">
@@ -266,7 +268,7 @@ function MultiSelectFilter({
               onClick={() => onChange([])}
               className="w-full text-xs text-muted-foreground hover:text-foreground transition-colors py-1"
             >
-              清除全部
+              {t('jobs.clearAll')}
             </button>
           </div>
         )}
@@ -282,14 +284,16 @@ function SingleSelectFilter({
   options,
   selected,
   onChange,
+  t,
 }: {
   label: string;
   icon: React.ElementType;
   options: JobConfig[];
   selected: string;
   onChange: (value: string) => void;
+  t: (key: string) => string;
 }) {
-  const displayValue = selected === '全部' ? null : selected;
+  const displayValue = selected === '全部' || selected === 'All' ? null : selected;
   
   return (
     <Popover>
@@ -308,14 +312,14 @@ function SingleSelectFilter({
       <PopoverContent className="w-36 md:w-40 p-1" align="start">
         <div className="space-y-0.5">
           <button
-            onClick={() => onChange('全部')}
+            onClick={() => onChange(t('page.all'))}
             className={`w-full text-left px-3 py-2 rounded-md text-sm transition-colors ${
-              selected === '全部' 
+              selected === t('page.all') 
                 ? 'bg-primary text-primary-foreground' 
                 : 'hover:bg-muted'
             }`}
           >
-            全部
+            {t('page.all')}
           </button>
           {options.map((option) => (
             <button
@@ -344,7 +348,7 @@ function JobsContent() {
   const [searchTerm, setSearchTerm] = useState('');
   const [selectedRegions, setSelectedRegions] = useState<string[]>([]);
   const [selectedDirections, setSelectedDirections] = useState<string[]>([]);
-  const [selectedAudience, setSelectedAudience] = useState('全部');
+  const [selectedAudience, setSelectedAudience] = useState('');
   const [applyingJobId, setApplyingJobId] = useState<number | null>(null);
   const [appliedJobIds, setAppliedJobIds] = useState<Set<number>>(new Set());
   
@@ -358,6 +362,13 @@ function JobsContent() {
   const { accessCodeId } = useAccessCode();
   const { t } = useLanguage();
 
+  // 初始化受众为"全部"
+  useEffect(() => {
+    if (!selectedAudience) {
+      setSelectedAudience(t('page.all'));
+    }
+  }, [t, selectedAudience]);
+
   const fetchJobs = useCallback(async () => {
     setLoading(true);
     try {
@@ -368,7 +379,7 @@ function JobsContent() {
       if (selectedDirections.length > 0) {
         selectedDirections.forEach(d => params.append('direction', d));
       }
-      if (selectedAudience !== '全部') params.append('audience', selectedAudience);
+      if (selectedAudience !== t('page.all')) params.append('audience', selectedAudience);
 
       const response = await fetch(`/api/jobs?${params.toString()}`);
       const data = await response.json();
@@ -378,7 +389,7 @@ function JobsContent() {
     } finally {
       setLoading(false);
     }
-  }, [selectedRegions, selectedDirections, selectedAudience]);
+  }, [selectedRegions, selectedDirections, selectedAudience, t]);
 
   // 获取已投递的岗位ID列表
   const fetchAppliedJobIds = useCallback(async () => {
@@ -422,7 +433,7 @@ function JobsContent() {
   // 添加到网申管理
   const handleAdd = async (jobId: number) => {
     if (!accessCodeId) {
-      alert('请先登录');
+      alert(t('jobs.loginFirst'));
       return;
     }
     
@@ -448,11 +459,11 @@ function JobsContent() {
       if (data.application) {
         setAppliedJobIds(new Set([...appliedJobIds, jobId]));
       } else if (data.error) {
-        alert('添加失败: ' + data.error);
+        alert(t('jobs.addFailed') + ': ' + data.error);
       }
     } catch (error) {
       console.error('Failed to add:', error);
-      alert('添加失败，请重试');
+      alert(t('jobs.addFailedRetry'));
     } finally {
       setApplyingJobId(null);
     }
@@ -468,7 +479,7 @@ function JobsContent() {
         // 方向筛选
         (selectedDirections.length === 0 || selectedDirections.includes(job.direction)) &&
         // 受众筛选
-        (selectedAudience === '全部' || job.audience === selectedAudience)
+        (selectedAudience === t('page.all') || job.audience === selectedAudience)
     )
     .sort((a, b) => {
       // 首先按投递状态排序：可投递排在前面
@@ -499,7 +510,7 @@ function JobsContent() {
               <div className="relative w-full md:max-w-md">
                 <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
                 <Input
-                  placeholder={t('page.jobs.searchPlaceholder') || '搜索岗位名称或公司...'}
+                  placeholder={t('jobs.searchPlaceholder')}
                   value={searchTerm}
                   onChange={(e) => setSearchTerm(e.target.value)}
                   className="pl-10 h-10 md:h-11 bg-background text-sm"
@@ -508,42 +519,45 @@ function JobsContent() {
               
               {/* 筛选器组 */}
               <div className="flex flex-wrap items-center gap-2 md:gap-3">
-                <span className="text-xs md:text-sm text-muted-foreground">筛选</span>
+                <span className="text-xs md:text-sm text-muted-foreground">{t('jobs.filter')}</span>
                 <MultiSelectFilter
-                  label="地区"
+                  label={t('jobs.region')}
                   icon={MapPin}
                   options={configs.region || []}
                   selected={selectedRegions}
                   onChange={setSelectedRegions}
                   showFlag={true}
+                  t={t}
                 />
                 <MultiSelectFilter
-                  label="方向"
+                  label={t('jobs.direction')}
                   icon={Briefcase}
                   options={configs.direction || []}
                   selected={selectedDirections}
                   onChange={setSelectedDirections}
+                  t={t}
                 />
                 <SingleSelectFilter
-                  label="受众"
+                  label={t('jobs.audience')}
                   icon={Users}
                   options={configs.audience || []}
                   selected={selectedAudience}
                   onChange={setSelectedAudience}
+                  t={t}
                 />
                 
                 {/* 清除筛选按钮 */}
-                {(selectedRegions.length > 0 || selectedDirections.length > 0 || selectedAudience !== '全部') && (
+                {(selectedRegions.length > 0 || selectedDirections.length > 0 || selectedAudience !== t('page.all')) && (
                   <button
                     onClick={() => {
                       setSelectedRegions([]);
                       setSelectedDirections([]);
-                      setSelectedAudience('全部');
+                      setSelectedAudience(t('page.all'));
                     }}
                     className="inline-flex items-center gap-1 px-2 py-1 text-xs text-muted-foreground hover:text-foreground transition-colors"
                   >
                     <X className="h-3 w-3" />
-                    清除全部
+                    {t('jobs.clearAll')}
                   </button>
                 )}
               </div>
@@ -556,12 +570,12 @@ function JobsContent() {
           {loading ? (
             <div className="text-center py-12 text-muted-foreground">
               <Loader2 className="h-8 w-8 animate-spin mx-auto mb-2" />
-              加载中...
+              {t('jobs.loading')}
             </div>
           ) : filteredJobs.length === 0 ? (
             <Card>
               <CardContent className="py-12 text-center text-muted-foreground">
-                暂无符合条件的岗位，请调整筛选条件
+                {t('jobs.noJobs')}
               </CardContent>
             </Card>
           ) : (
@@ -610,16 +624,16 @@ function JobsContent() {
                                 : 'text-red-600 border-red-600'
                             }`}
                           >
-                            {job.sponsorship === 'yes' ? 'Sponsor' : '无Sponsor'}
+                            {job.sponsorship === 'yes' ? t('jobs.sponsor') : t('jobs.noSponsor')}
                           </Badge>
                         )}
                         {job.is_active === false ? (
                           <Badge variant="secondary" className="bg-gray-100 text-gray-600 rounded-md text-xs">
-                            不可投递
+                            {t('jobs.inactive')}
                           </Badge>
                         ) : (
                           <Badge variant="default" className="bg-green-600 rounded-md text-xs">
-                            可投递
+                            {t('jobs.active')}
                           </Badge>
                         )}
                       </div>
@@ -646,26 +660,26 @@ function JobsContent() {
                           ) : appliedJobIds.has(job.id) ? (
                             <>
                               <Check className="h-3.5 w-3.5 mr-1" />
-                              已添加
+                              {t('jobs.added')}
                             </>
                           ) : (
                             <>
                               <Plus className="h-3.5 w-3.5 mr-1" />
-                              添加
+                              {t('jobs.add')}
                             </>
                           )}
                         </Button>
                       )}
                       <Button size="sm" variant="outline" asChild className="rounded-lg text-xs md:text-sm h-9 w-24 md:w-28">
                         <Link href={`/jobs/${job.id}`}>
-                          查看详情
+                          {t('jobs.viewDetail')}
                         </Link>
                       </Button>
                       {job.job_url && (
                         <Button size="sm" variant="outline" asChild className="rounded-lg text-xs md:text-sm h-9 w-24 md:w-28">
                           <a href={job.job_url} target="_blank" rel="noopener noreferrer">
                             <ExternalLink className="h-3.5 w-3.5 mr-1" />
-                            原链接
+                            {t('jobs.originalLink')}
                           </a>
                         </Button>
                       )}
@@ -680,7 +694,7 @@ function JobsContent() {
         {/* Results count */}
         {!loading && filteredJobs.length > 0 && (
           <div className="mt-4 md:mt-6 text-center text-xs md:text-sm text-muted-foreground">
-            共找到 {filteredJobs.length} 个岗位
+            {t('jobs.foundJobs')} {filteredJobs.length} {t('jobs.jobsUnit')}
           </div>
         )}
       </main>
