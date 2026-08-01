@@ -880,7 +880,9 @@ function OptimizeContent() {
         {/* Page Title */}
         <div className="mb-6 md:mb-8">
           <h1 className="text-2xl md:text-3xl font-bold mb-1 md:mb-2 flex items-center gap-2 md:gap-3 text-black dark:text-white">
-            <Wand2 className="h-6 w-6 md:h-8 md:w-8 text-orange-600" />
+            <svg className="h-6 w-6 md:h-8 md:w-8 text-orange-600" fill="currentColor" viewBox="0 0 24 24">
+              <path d="M7 2v11h3v9l7-12h-4l4-8z" />
+            </svg>
             {t('optimize.title')}
           </h1>
           <p className="text-sm md:text-base text-black dark:text-white">

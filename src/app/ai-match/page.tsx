@@ -250,7 +250,9 @@ function AIMatchContent() {
         {/* Page Title */}
         <div className="mb-6 md:mb-8">
           <h1 className="text-2xl md:text-3xl font-bold mb-1 md:mb-2 flex items-center gap-2 md:gap-3 text-black dark:text-white">
-            <Brain className="h-6 w-6 md:h-8 md:w-8 text-terracotta-600" />
+            <svg className="h-6 w-6 md:h-8 md:w-8 text-terracotta-600" fill="currentColor" viewBox="0 0 24 24">
+              <path d="M12 2l3.09 6.26L22 9.27l-5 4.87 1.18 6.88L12 17.77l-6.18 3.25L7 14.14 2 9.27l6.91-1.01L12 2z" />
+            </svg>
             {t('aiMatch.title')}
           </h1>
           <p className="text-sm md:text-base text-black dark:text-white">
