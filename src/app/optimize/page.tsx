@@ -51,6 +51,7 @@ import { Document, Packer, Paragraph, TextRun, HeadingLevel, AlignmentType } fro
 import { saveAs } from 'file-saver';
 import { AccessGuard, useAccessCode } from '@/components/access-guard';
 import { Header1 } from '@/components/header1';
+import { useLanguage } from '@/lib/language-context';
 
 interface Resume {
   id: number;
@@ -348,18 +349,19 @@ function OptimizeContent() {
   const [editedContent, setEditedContent] = useState('');
   const [showSavedToast, setShowSavedToast] = useState(false);
   const { accessCodeId } = useAccessCode();
+  const { t } = useLanguage();
 
   // 地区列表
   const regionList = [
-    { value: 'us', label: '美国' },
-    { value: 'uk', label: '英国' },
-    { value: 'sg', label: '新加坡' },
-    { value: 'hk', label: '香港' },
-    { value: 'au', label: '澳大利亚' },
-    { value: 'ca', label: '加拿大' },
-    { value: 'eu', label: '欧洲' },
-    { value: 'cn', label: '中国内地' },
-    { value: 'jp', label: '日本' },
+    { value: 'us', label: t('optimize.regionUs') },
+    { value: 'uk', label: t('optimize.regionUk') },
+    { value: 'sg', label: t('optimize.regionSg') },
+    { value: 'hk', label: t('optimize.regionHk') },
+    { value: 'au', label: t('optimize.regionAu') },
+    { value: 'ca', label: t('optimize.regionCa') },
+    { value: 'eu', label: t('optimize.regionEu') },
+    { value: 'cn', label: t('optimize.regionCn') },
+    { value: 'jp', label: t('optimize.regionJp') },
   ];
 
   // 获取当前访问码的存储key
@@ -384,7 +386,7 @@ function OptimizeContent() {
     const record: OptimizedRecord = {
       id: Date.now().toString(),
       resumeId: selectedResumeId,
-      resumeName: resumes.find(r => r.id.toString() === selectedResumeId)?.file_name || '未知简历',
+      resumeName: resumes.find(r => r.id.toString() === selectedResumeId)?.file_name || t('optimize.unknownResume'),
       targetCompany,
       targetPosition,
       resumeData,
@@ -407,13 +409,13 @@ function OptimizeContent() {
   // 获取岗位描述
   const handleSearchJD = async () => {
     if (!targetCompany || !targetPosition) {
-      alert('请先填写目标公司和岗位');
+      alert(t('optimize.alertFillFirst'));
       return;
     }
 
     setSearchingJD(true);
     try {
-      const regionName = regionList.find(r => r.value === targetRegion)?.label || '美国';
+      const regionName = regionList.find(r => r.value === targetRegion)?.label || t('optimize.regionUs');
       const response = await fetch('/api/jobs/search-jd', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
@@ -430,11 +432,11 @@ function OptimizeContent() {
         setJdResults(data.results || []);
         setSuggestions(data.summary || '');
       } else {
-        alert(data.error || '获取岗位描述失败');
+        alert(data.error || t('optimize.alertJdFailed'));
       }
     } catch (error) {
       console.error('Search JD failed:', error);
-      alert('获取岗位描述失败，请稍后重试');
+      alert(t('optimize.alertJdRetry'));
     } finally {
       setSearchingJD(false);
     }
@@ -531,7 +533,7 @@ function OptimizeContent() {
         const record: OptimizedRecord = {
           id: Date.now().toString(),
           resumeId: selectedResumeId,
-          resumeName: resumes.find(r => r.id.toString() === selectedResumeId)?.file_name || '未知简历',
+          resumeName: resumes.find(r => r.id.toString() === selectedResumeId)?.file_name || t('optimize.unknownResume'),
           targetCompany,
           targetPosition,
           resumeData: data.resume_data,
@@ -557,7 +559,7 @@ function OptimizeContent() {
     // 生成纯文本格式的简历内容
     if (resumeData) {
       let text = '';
-      text += `${resumeData.name || '姓名'}\n`;
+      text += `${resumeData.name || t('optimize.copyName')}\n`;
       if (resumeData.contact) {
         const contactParts = [
           resumeData.contact.email,
@@ -570,15 +572,15 @@ function OptimizeContent() {
       text += '\n';
       
       if (resumeData.summary) {
-        text += `个人简介\n${resumeData.summary}\n\n`;
+        text += `${t('optimize.copySummary')}\n${resumeData.summary}\n\n`;
       }
       
       if (resumeData.skills && resumeData.skills.length > 0) {
-        text += `专业技能\n${resumeData.skills.join('、')}\n\n`;
+        text += `${t('optimize.copySkills')}\n${resumeData.skills.join('、')}\n\n`;
       }
       
       if (resumeData.experience && resumeData.experience.length > 0) {
-        text += `工作经历\n`;
+        text += `${t('optimize.copyExperience')}\n`;
         resumeData.experience.forEach(exp => {
           text += `${exp.title} | ${exp.company}${exp.location ? ` · ${exp.location}` : ''} | ${exp.period}\n`;
           exp.highlights.forEach(h => text += `• ${h}\n`);
@@ -587,7 +589,7 @@ function OptimizeContent() {
       }
       
       if (resumeData.education && resumeData.education.length > 0) {
-        text += `教育背景\n`;
+        text += `${t('optimize.copyEducation')}\n`;
         resumeData.education.forEach(edu => {
           text += `${edu.degree}${edu.major ? ` in ${edu.major}` : ''} | ${edu.school} | ${edu.period}`;
           if (edu.gpa) text += ` | GPA: ${edu.gpa}`;
@@ -597,7 +599,7 @@ function OptimizeContent() {
       }
       
       if (resumeData.projects && resumeData.projects.length > 0) {
-        text += `项目经历\n`;
+        text += `${t('optimize.copyProjects')}\n`;
         resumeData.projects.forEach(proj => {
           text += `${proj.name}${proj.role ? ` | ${proj.role}` : ''}${proj.period ? ` | ${proj.period}` : ''}\n`;
           if (proj.description) text += `${proj.description}\n`;
@@ -607,7 +609,7 @@ function OptimizeContent() {
       }
       
       if (resumeData.certifications && resumeData.certifications.length > 0) {
-        text += `证书认证\n${resumeData.certifications.join('\n')}\n`;
+        text += `${t('optimize.copyCertifications')}\n${resumeData.certifications.join('\n')}\n`;
       }
       
       navigator.clipboard.writeText(text.trim());
@@ -628,7 +630,7 @@ function OptimizeContent() {
         new Paragraph({
           children: [
             new TextRun({
-              text: resumeData.name || '姓名',
+              text: resumeData.name || t('optimize.copyName'),
               bold: true,
               size: 48, // 24pt
             }),
@@ -665,7 +667,7 @@ function OptimizeContent() {
       if (resumeData.summary) {
         children.push(
           new Paragraph({
-            text: '个人简介',
+            text: t('optimize.copySummary'),
             heading: HeadingLevel.HEADING_2,
             spacing: { before: 300, after: 100 },
           })
@@ -682,7 +684,7 @@ function OptimizeContent() {
       if (resumeData.skills && resumeData.skills.length > 0) {
         children.push(
           new Paragraph({
-            text: '专业技能',
+            text: t('optimize.copySkills'),
             heading: HeadingLevel.HEADING_2,
             spacing: { before: 300, after: 100 },
           })
@@ -699,7 +701,7 @@ function OptimizeContent() {
       if (resumeData.experience && resumeData.experience.length > 0) {
         children.push(
           new Paragraph({
-            text: '工作经历',
+            text: t('optimize.copyExperience'),
             heading: HeadingLevel.HEADING_2,
             spacing: { before: 300, after: 100 },
           })
@@ -737,7 +739,7 @@ function OptimizeContent() {
       if (resumeData.education && resumeData.education.length > 0) {
         children.push(
           new Paragraph({
-            text: '教育背景',
+            text: t('optimize.copyEducation'),
             heading: HeadingLevel.HEADING_2,
             spacing: { before: 300, after: 100 },
           })
@@ -764,7 +766,7 @@ function OptimizeContent() {
       if (resumeData.projects && resumeData.projects.length > 0) {
         children.push(
           new Paragraph({
-            text: '项目经历',
+            text: t('optimize.copyProjects'),
             heading: HeadingLevel.HEADING_2,
             spacing: { before: 300, after: 100 },
           })
@@ -804,7 +806,7 @@ function OptimizeContent() {
       if (resumeData.certifications && resumeData.certifications.length > 0) {
         children.push(
           new Paragraph({
-            text: '证书认证',
+            text: t('optimize.copyCertifications'),
             heading: HeadingLevel.HEADING_2,
             spacing: { before: 300, after: 100 },
           })
@@ -833,7 +835,7 @@ function OptimizeContent() {
       saveAs(blob, fileName);
     } catch (error) {
       console.error('Failed to generate Word document:', error);
-      alert('生成Word文档失败，请重试');
+      alert(t('optimize.alertWordFailed'));
     } finally {
       setDownloading(false);
     }
@@ -877,12 +879,12 @@ function OptimizeContent() {
       <main className="container mx-auto px-4 py-4 md:py-8 pt-20">
         {/* Page Title */}
         <div className="mb-6 md:mb-8">
-          <h1 className="text-2xl md:text-3xl font-bold mb-1 md:mb-2 flex items-center gap-2 md:gap-3">
+          <h1 className="text-2xl md:text-3xl font-bold mb-1 md:mb-2 flex items-center gap-2 md:gap-3 text-black dark:text-white">
             <Wand2 className="h-6 w-6 md:h-8 md:w-8 text-orange-600" />
-            ATS简历优化
+            {t('optimize.title')}
           </h1>
-          <p className="text-sm md:text-base text-muted-foreground">
-            针对ATS系统优化简历，提高简历通过率和曝光率
+          <p className="text-sm md:text-base text-black dark:text-white">
+            {t('optimize.subtitle')}
           </p>
         </div>
 
@@ -892,7 +894,7 @@ function OptimizeContent() {
             <CardHeader className="pb-2 md:pb-4">
               <CardTitle className="flex items-center gap-2 text-base md:text-lg">
                 <Clock className="h-4 w-4 md:h-5 md:w-5" />
-                优化历史
+                {t('optimize.history')}
               </CardTitle>
             </CardHeader>
             <CardContent>
@@ -914,7 +916,7 @@ function OptimizeContent() {
                           </Badge>
                         )}
                         <Badge variant="outline" className="text-[10px] md:text-xs">
-                          {record.isEnglish ? '英文' : '中文'}
+                          {record.isEnglish ? t('optimize.english') : t('optimize.chinese')}
                         </Badge>
                       </div>
                       <div className="flex items-center gap-2 mt-0.5">
@@ -951,19 +953,19 @@ function OptimizeContent() {
           <CardHeader className="pb-2 md:pb-4">
             <CardTitle className="flex items-center gap-2 text-base md:text-lg">
               <Target className="h-4 w-4 md:h-5 md:w-5" />
-              优化设置
+              {t('optimize.settings')}
             </CardTitle>
             <CardDescription className="text-xs md:text-sm">
-              选择简历并设置目标岗位，AI将针对性优化简历内容
+              {t('optimize.settingsDesc')}
             </CardDescription>
           </CardHeader>
           <CardContent className="space-y-3 md:space-y-4">
             <div className="grid grid-cols-1 md:grid-cols-3 gap-3 md:gap-4">
               <div>
-                <label className="text-xs md:text-sm font-medium mb-1.5 md:mb-2 block">选择简历</label>
+                <label className="text-xs md:text-sm font-medium mb-1.5 md:mb-2 block">{t('optimize.selectResume')}</label>
                 <Select value={selectedResumeId} onValueChange={setSelectedResumeId}>
                   <SelectTrigger className="h-9 md:h-10">
-                    <SelectValue placeholder="选择要优化的简历" />
+                    <SelectValue placeholder={t('optimize.selectResumePlaceholder')} />
                   </SelectTrigger>
                   <SelectContent>
                     {resumes.map((resume) => (
@@ -975,10 +977,10 @@ function OptimizeContent() {
                 </Select>
               </div>
               <div>
-                <label className="text-xs md:text-sm font-medium mb-1.5 md:mb-2 block">目标公司（可选）</label>
+                <label className="text-xs md:text-sm font-medium mb-1.5 md:mb-2 block">{t('optimize.targetCompany')}</label>
                 <div className="flex gap-2">
                   <Input
-                    placeholder="如：Google, Apple..."
+                    placeholder={t('optimize.targetCompanyPlaceholder')}
                     value={targetCompany}
                     onChange={(e) => setTargetCompany(e.target.value)}
                     className="h-9 md:h-10 flex-1"
@@ -989,7 +991,7 @@ function OptimizeContent() {
                     onClick={handleSearchJD}
                     disabled={!targetCompany || !targetPosition || searchingJD}
                     className="h-9 md:h-10 px-3"
-                    title="从网络获取该岗位的描述和要求"
+                    title={t('optimize.searchJdTitle')}
                   >
                     {searchingJD ? (
                       <Loader2 className="h-4 w-4 animate-spin" />
@@ -1000,9 +1002,9 @@ function OptimizeContent() {
                 </div>
               </div>
               <div>
-                <label className="text-xs md:text-sm font-medium mb-1.5 md:mb-2 block">目标岗位</label>
+                <label className="text-xs md:text-sm font-medium mb-1.5 md:mb-2 block">{t('optimize.targetPosition')}</label>
                 <Input
-                  placeholder="如：软件工程师..."
+                  placeholder={t('optimize.targetPositionPlaceholder')}
                   value={targetPosition}
                   onChange={(e) => setTargetPosition(e.target.value)}
                   className="h-9 md:h-10"
@@ -1014,7 +1016,7 @@ function OptimizeContent() {
               <div className="w-32">
                 <Select value={targetRegion} onValueChange={setTargetRegion}>
                   <SelectTrigger className="h-9 md:h-10">
-                    <SelectValue placeholder="目标地区" />
+                    <SelectValue placeholder={t('optimize.targetRegion')} />
                   </SelectTrigger>
                   <SelectContent>
                     {regionList.map((region) => (
@@ -1033,12 +1035,12 @@ function OptimizeContent() {
                 {optimizing ? (
                   <>
                     <Loader2 className="mr-2 h-4 w-4 animate-spin" />
-                    优化中...
+                    {t('optimize.optimizing')}
                   </>
                 ) : (
                   <>
                     <Sparkles className="mr-2 h-4 w-4" />
-                    开始优化
+                    {t('optimize.startOptimize')}
                   </>
                 )}
               </Button>
@@ -1053,7 +1055,7 @@ function OptimizeContent() {
                   }}
                   className="h-9 md:h-10"
                 >
-                  清除JD
+                  {t('optimize.clearJd')}
                 </Button>
               )}
             </div>
@@ -1061,11 +1063,11 @@ function OptimizeContent() {
             {/* 手动输入JD */}
             <div className="mt-3 md:mt-4">
               <div className="flex items-center justify-between mb-1.5 md:mb-2">
-                <label className="text-xs md:text-sm font-medium">岗位JD（可选）</label>
-                <span className="text-[10px] md:text-xs text-muted-foreground">粘贴目标岗位的JD，AI将针对性优化</span>
+                <label className="text-xs md:text-sm font-medium">{t('optimize.jdLabel')}</label>
+                <span className="text-[10px] md:text-xs text-muted-foreground">{t('optimize.jdHint')}</span>
               </div>
               <textarea
-                placeholder="粘贴岗位描述（Job Description）到这里...&#10;&#10;例如：&#10;We are looking for a Software Engineer who is proficient in Python, JavaScript, and cloud technologies...&#10;Requirements:&#10;- 3+ years of experience in full-stack development&#10;- Strong understanding of REST APIs&#10;- Experience with AWS or Azure"
+                placeholder={t('optimize.jdPlaceholder')}
                 value={jdContent}
                 onChange={(e) => setJdContent(e.target.value)}
                 className="w-full min-h-[100px] md:min-h-[120px] p-3 text-xs md:text-sm rounded-lg border border-input bg-background resize-y focus:outline-none focus:ring-2 focus:ring-ring focus:ring-offset-2 placeholder:text-muted-foreground/60"
@@ -1078,11 +1080,11 @@ function OptimizeContent() {
                 <div className="flex items-center gap-2 mb-2">
                   <Target className="h-4 w-4 text-blue-600" />
                   <span className="text-xs md:text-sm font-medium text-blue-700 dark:text-blue-400">
-                    已设置岗位描述
+                    {t('optimize.jdSet')}
                   </span>
                 </div>
                 <p className="text-xs md:text-sm text-blue-600/80 mb-2">
-                  AI将基于以下岗位要求进行优化
+                  {t('optimize.jdSetDesc')}
                 </p>
                 <div className="max-h-32 md:max-h-40 overflow-y-auto">
                   <p className="text-xs md:text-sm text-muted-foreground whitespace-pre-wrap">
@@ -1099,7 +1101,7 @@ function OptimizeContent() {
                   <Sparkles className="h-4 w-4 md:h-5 md:w-5 text-terracotta-600 mt-0.5 flex-shrink-0" />
                   <div className="flex-1">
                     <h4 className="font-medium text-terracotta-700 dark:text-terracotta-300 mb-1.5 md:mb-2 text-sm md:text-base">
-                      来自AI智能选岗的优化建议
+                      {t('optimize.suggestionsTitle')}
                     </h4>
                     <p className="text-xs md:text-sm text-terracotta-600 dark:text-terracotta-400 whitespace-pre-wrap">
                       {suggestions}
@@ -1112,7 +1114,7 @@ function OptimizeContent() {
             {optimizing && (
               <div className="mt-3 md:mt-4">
                 <div className="flex items-center justify-between mb-2">
-                  <span className="text-xs md:text-sm text-muted-foreground">AI正在优化简历...</span>
+                  <span className="text-xs md:text-sm text-muted-foreground">{t('optimize.optimizingProgress')}</span>
                   <span className="text-xs md:text-sm font-medium">{optimizeProgress}%</span>
                 </div>
                 <Progress value={optimizeProgress} className="h-1.5 md:h-2" />
@@ -1126,27 +1128,27 @@ function OptimizeContent() {
           <Card>
             <CardContent className="pt-4 md:pt-6">
               <CheckCircle className="h-8 w-8 md:h-10 md:w-10 text-green-600 mb-3 md:mb-4" />
-              <h3 className="font-semibold mb-1.5 md:mb-2 text-sm md:text-base">关键词优化</h3>
+              <h3 className="font-semibold mb-1.5 md:mb-2 text-sm md:text-base">{t('optimize.feature1Title')}</h3>
               <p className="text-xs md:text-sm text-muted-foreground">
-                自动分析岗位要求，添加关键技能词汇
+                {t('optimize.feature1Desc')}
               </p>
             </CardContent>
           </Card>
           <Card>
             <CardContent className="pt-4 md:pt-6">
               <Target className="h-8 w-8 md:h-10 md:w-10 text-blue-600 mb-3 md:mb-4" />
-              <h3 className="font-semibold mb-1.5 md:mb-2 text-sm md:text-base">ATS友好格式</h3>
+              <h3 className="font-semibold mb-1.5 md:mb-2 text-sm md:text-base">{t('optimize.feature2Title')}</h3>
               <p className="text-xs md:text-sm text-muted-foreground">
-                优化简历格式，确保ATS系统正确解析
+                {t('optimize.feature2Desc')}
               </p>
             </CardContent>
           </Card>
           <Card>
             <CardContent className="pt-4 md:pt-6">
               <Sparkles className="h-8 w-8 md:h-10 md:w-10 text-terracotta-600 mb-3 md:mb-4" />
-              <h3 className="font-semibold mb-1.5 md:mb-2 text-sm md:text-base">内容增强</h3>
+              <h3 className="font-semibold mb-1.5 md:mb-2 text-sm md:text-base">{t('optimize.feature3Title')}</h3>
               <p className="text-xs md:text-sm text-muted-foreground">
-                使用专业术语增强简历描述
+                {t('optimize.feature3Desc')}
               </p>
             </CardContent>
           </Card>
@@ -1158,12 +1160,12 @@ function OptimizeContent() {
             <div className="flex items-start gap-2 md:gap-3">
               <AlertCircle className="h-4 w-4 md:h-5 md:w-5 text-amber-600 mt-0.5" />
               <div>
-                <h4 className="font-medium mb-1.5 md:mb-2 text-sm md:text-base">ATS优化建议</h4>
+                <h4 className="font-medium mb-1.5 md:mb-2 text-sm md:text-base">{t('optimize.tipsTitle')}</h4>
                 <ul className="text-xs md:text-sm text-muted-foreground space-y-0.5 md:space-y-1">
-                  <li>• 使用标准格式：避免复杂的表格和图片</li>
-                  <li>• 关键词匹配：研究目标岗位的JD，使用相同术语</li>
-                  <li>• 量化成果：用具体数字展示成就</li>
-                  <li>• 清晰结构：使用标准章节标题</li>
+                  <li>• {t('optimize.tip1')}</li>
+                  <li>• {t('optimize.tip2')}</li>
+                  <li>• {t('optimize.tip3')}</li>
+                  <li>• {t('optimize.tip4')}</li>
                 </ul>
               </div>
             </div>
@@ -1177,10 +1179,10 @@ function OptimizeContent() {
           <DialogHeader className="flex-shrink-0">
             <DialogTitle className="flex items-center gap-2 text-base md:text-lg">
               <CheckCircle className="h-4 w-4 md:h-5 md:w-5 text-green-600" />
-              简历优化完成
+              {t('optimize.resultTitle')}
             </DialogTitle>
             <DialogDescription className="text-xs md:text-sm">
-              AI已根据目标岗位优化了您的简历内容
+              {t('optimize.resultDesc')}
             </DialogDescription>
           </DialogHeader>
           
@@ -1207,26 +1209,26 @@ function OptimizeContent() {
               {isEditing ? (
                 <>
                   <Eye className="mr-1.5 h-3.5 w-3.5" />
-                  预览
+                  {t('optimize.preview')}
                 </>
               ) : (
                 <>
                   <Pencil className="mr-1.5 h-3.5 w-3.5" />
-                  编辑
+                  {t('optimize.edit')}
                 </>
               )}
             </Button>
             <Button variant="outline" size="sm" onClick={handleCopy} className="h-9 text-xs items-center">
               <Copy className="mr-1.5 h-3.5 w-3.5" />
-              复制
+              {t('optimize.copy')}
             </Button>
             {resumeData && (
               <Button variant="outline" size="sm" onClick={handleSave} className="h-9 text-xs items-center relative">
                 <Save className="mr-1.5 h-3.5 w-3.5" />
-                保存
+                {t('optimize.save')}
                 {showSavedToast && (
                   <span className="absolute -top-8 left-1/2 -translate-x-1/2 bg-green-600 text-white text-xs px-2 py-1 rounded whitespace-nowrap">
-                    已保存
+                    {t('optimize.saved')}
                   </span>
                 )}
               </Button>
@@ -1238,12 +1240,12 @@ function OptimizeContent() {
                     {translating ? (
                       <>
                         <Loader2 className="mr-1.5 h-3.5 w-3.5 animate-spin" />
-                        转换中...
+                        {t('optimize.translating')}
                       </>
                     ) : (
                       <>
                         <Languages className="mr-1.5 h-3.5 w-3.5" />
-                        中英文转换
+                        {t('optimize.translate')}
                       </>
                     )}
                   </Button>
@@ -1254,16 +1256,16 @@ function OptimizeContent() {
                     disabled={!isEnglishVersion}
                     className={!isEnglishVersion ? 'opacity-50 cursor-not-allowed' : ''}
                   >
-                    转为中文
-                    {!isEnglishVersion && <Badge variant="secondary" className="ml-2 text-[10px]">当前</Badge>}
+                    {t('optimize.toChinese')}
+                    {!isEnglishVersion && <Badge variant="secondary" className="ml-2 text-[10px]">{t('optimize.current')}</Badge>}
                   </DropdownMenuItem>
                   <DropdownMenuItem 
                     onClick={() => handleTranslate('english')}
                     disabled={isEnglishVersion}
                     className={isEnglishVersion ? 'opacity-50 cursor-not-allowed' : ''}
                   >
-                    转为英文
-                    {isEnglishVersion && <Badge variant="secondary" className="ml-2 text-[10px]">当前</Badge>}
+                    {t('optimize.toEnglish')}
+                    {isEnglishVersion && <Badge variant="secondary" className="ml-2 text-[10px]">{t('optimize.current')}</Badge>}
                   </DropdownMenuItem>
                 </DropdownMenuContent>
               </DropdownMenu>
@@ -1272,12 +1274,12 @@ function OptimizeContent() {
               {downloading ? (
                 <>
                   <Loader2 className="mr-1.5 h-3.5 w-3.5 animate-spin" />
-                  生成中...
+                  {t('optimize.generating')}
                 </>
               ) : (
                 <>
                   <Download className="mr-1.5 h-3.5 w-3.5" />
-                  下载简历
+                  {t('optimize.download')}
                 </>
               )}
             </Button>
@@ -1289,7 +1291,7 @@ function OptimizeContent() {
             <div className="flex flex-col min-h-0 overflow-hidden">
               <div className="flex items-center gap-1.5 md:gap-2 mb-1.5 md:mb-2 flex-shrink-0">
                 <FileText className="h-3.5 w-3.5 md:h-4 md:w-4 text-gray-500" />
-                <h3 className="font-medium text-gray-600 text-xs md:text-sm">原简历</h3>
+                <h3 className="font-medium text-gray-600 text-xs md:text-sm">{t('optimize.originalResume')}</h3>
               </div>
               <div className="bg-gray-100 p-2 md:p-3 rounded-lg flex-1 overflow-y-auto min-h-[150px] md:min-h-0">
                 <div className="bg-white p-3 md:p-6 shadow rounded-lg text-xs md:text-sm text-gray-700 whitespace-pre-wrap leading-relaxed">
@@ -1302,8 +1304,8 @@ function OptimizeContent() {
             <div className="flex flex-col min-h-0 overflow-hidden">
               <div className="flex items-center gap-1.5 md:gap-2 mb-1.5 md:mb-2 flex-shrink-0">
                 <Sparkles className="h-3.5 w-3.5 md:h-4 md:w-4 text-green-600" />
-                <h3 className="font-medium text-green-600 text-xs md:text-sm">优化后简历</h3>
-                <Badge variant="secondary" className="ml-0.5 text-[10px] md:text-xs h-4 md:h-5">ATS优化</Badge>
+                <h3 className="font-medium text-green-600 text-xs md:text-sm">{t('optimize.optimizedResume')}</h3>
+                <Badge variant="secondary" className="ml-0.5 text-[10px] md:text-xs h-4 md:h-5">{t('optimize.atsBadge')}</Badge>
               </div>
               <div className="bg-gray-100 p-2 md:p-3 rounded-lg flex-1 overflow-y-auto min-h-[200px] md:min-h-0">
                 {isEditing ? (

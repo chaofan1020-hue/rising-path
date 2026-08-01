@@ -37,6 +37,7 @@ import Link from 'next/link';
 import Image from 'next/image';
 import { AccessGuard, useAccessCode } from '@/components/access-guard';
 import { Header1 } from '@/components/header1';
+import { useLanguage } from '@/lib/language-context';
 
 interface Resume {
   id: number;
@@ -71,12 +72,14 @@ function MultiSelectFilter({
   options,
   selected,
   onChange,
+  t,
 }: {
   label: string;
   icon: React.ElementType;
   options: JobConfig[];
   selected: string[];
   onChange: (values: string[]) => void;
+  t: (key: string) => string;
 }) {
   const handleToggle = (value: string) => {
     if (selected.includes(value)) {
@@ -89,7 +92,7 @@ function MultiSelectFilter({
   return (
     <Popover>
       <PopoverTrigger asChild>
-        <button className="inline-flex items-center gap-1.5 md:gap-2 px-2.5 py-1.5 md:px-3 md:py-2 rounded-full border border-input bg-background hover:bg-accent hover:text-accent-foreground transition-colors text-xs md:text-sm">
+        <button className="inline-flex items-center gap-1.5 md:gap-2 px-2.5 py-1.5 md:px-3 md:py-2 rounded-full hover:bg-accent hover:text-accent-foreground transition-colors text-xs md:text-sm">
           <Icon className="h-3.5 w-3.5 md:h-4 md:w-4 text-muted-foreground" />
           <span className="font-medium">{label}</span>
           {selected.length > 0 && (
@@ -122,7 +125,7 @@ function MultiSelectFilter({
           ))}
         </div>
         {options.length === 0 && (
-          <div className="text-center py-2 text-sm text-muted-foreground">暂无选项</div>
+          <div className="text-center py-2 text-sm text-muted-foreground">{t('aiMatch.noOptions')}</div>
         )}
         {selected.length > 0 && (
           <div className="border-t mt-2 pt-2">
@@ -130,7 +133,7 @@ function MultiSelectFilter({
               onClick={() => onChange([])}
               className="w-full text-xs text-muted-foreground hover:text-foreground transition-colors py-1"
             >
-              清除全部
+              {t('aiMatch.clearAll')}
             </button>
           </div>
         )}
@@ -141,6 +144,7 @@ function MultiSelectFilter({
 
 // 内部组件
 function AIMatchContent() {
+  const { t } = useLanguage();
   const [resumes, setResumes] = useState<Resume[]>([]);
   const [selectedResumeId, setSelectedResumeId] = useState<string>('');
   const [matching, setMatching] = useState(false);
@@ -234,9 +238,9 @@ function AIMatchContent() {
   };
 
   const getScoreLabel = (score: number) => {
-    if (score >= 80) return '高度匹配';
-    if (score >= 60) return '中等匹配';
-    return '匹配度较低';
+    if (score >= 80) return t('aiMatch.scoreHigh');
+    if (score >= 60) return t('aiMatch.scoreMedium');
+    return t('aiMatch.scoreLow');
   };
 
   return (
@@ -245,12 +249,12 @@ function AIMatchContent() {
       <main className="container mx-auto px-4 py-4 md:py-8 pt-20">
         {/* Page Title */}
         <div className="mb-6 md:mb-8">
-          <h1 className="text-2xl md:text-3xl font-bold mb-1 md:mb-2 flex items-center gap-2 md:gap-3">
+          <h1 className="text-2xl md:text-3xl font-bold mb-1 md:mb-2 flex items-center gap-2 md:gap-3 text-black dark:text-white">
             <Brain className="h-6 w-6 md:h-8 md:w-8 text-terracotta-600" />
-            AI智能选岗
+            {t('aiMatch.title')}
           </h1>
-          <p className="text-sm md:text-base text-muted-foreground">
-            基于你的简历，AI将智能分析并推荐最匹配的岗位
+          <p className="text-sm md:text-base text-black dark:text-white">
+            {t('aiMatch.subtitle')}
           </p>
         </div>
 
@@ -259,20 +263,20 @@ function AIMatchContent() {
           <CardHeader className="pb-2 md:pb-4">
             <CardTitle className="flex items-center gap-2 text-base md:text-lg">
               <Target className="h-4 w-4 md:h-5 md:w-5" />
-              开始匹配
+              {t('aiMatch.startMatch')}
             </CardTitle>
             <CardDescription className="text-xs md:text-sm">
-              选择一份简历，AI将分析你的技能和经验，匹配最合适的岗位
+              {t('aiMatch.startMatchDesc')}
             </CardDescription>
           </CardHeader>
           <CardContent>
             <div className="flex flex-wrap items-end gap-3">
               {/* 简历选择 */}
               <div className="w-full md:w-auto">
-                <label className="text-xs md:text-sm font-medium mb-1.5 block">选择简历</label>
+                <label className="text-xs md:text-sm font-medium mb-1.5 block">{t('aiMatch.selectResume')}</label>
                 <Select value={selectedResumeId} onValueChange={setSelectedResumeId}>
                   <SelectTrigger className="h-10 w-full md:w-48">
-                    <SelectValue placeholder="选择要匹配的简历" />
+                    <SelectValue placeholder={t('aiMatch.selectResumePlaceholder')} />
                   </SelectTrigger>
                   <SelectContent>
                     {resumes.map((resume) => (
@@ -288,18 +292,20 @@ function AIMatchContent() {
               {/* 筛选器 - 推到右边 */}
               <div className="flex items-center gap-3 md:ml-auto">
                 <MultiSelectFilter
-                  label="地区"
+                  label={t('aiMatch.region')}
                   icon={MapPin}
                   options={regions}
                   selected={selectedRegions}
                   onChange={setSelectedRegions}
+                  t={t}
                 />
                 <MultiSelectFilter
-                  label="方向"
+                  label={t('aiMatch.direction')}
                   icon={Compass}
                   options={directions}
                   selected={selectedDirections}
                   onChange={setSelectedDirections}
+                  t={t}
                 />
                 <Button
                   onClick={handleMatch}
@@ -309,12 +315,12 @@ function AIMatchContent() {
                   {matching ? (
                     <>
                       <Loader2 className="mr-2 h-4 w-4 animate-spin" />
-                      匹配中...
+                      {t('aiMatch.matching')}
                     </>
                   ) : (
                     <>
                       <Sparkles className="mr-2 h-4 w-4" />
-                      开始AI匹配
+                      {t('aiMatch.startAiMatch')}
                     </>
                   )}
                 </Button>
@@ -324,7 +330,7 @@ function AIMatchContent() {
             {/* 已选择的筛选条件显示 */}
             {(selectedRegions.length > 0 || selectedDirections.length > 0) && (
               <div className="mt-4 flex flex-wrap gap-1.5 md:gap-2 items-center">
-                <span className="text-xs md:text-sm text-muted-foreground">已选择：</span>
+                <span className="text-xs md:text-sm text-muted-foreground">{t('aiMatch.selected')}</span>
                 {selectedRegions.map((region) => (
                   <Badge 
                     key={region} 
@@ -364,7 +370,7 @@ function AIMatchContent() {
                   }}
                   className="text-xs text-muted-foreground hover:text-foreground transition-colors"
                 >
-                  清除全部
+                  {t('aiMatch.clearAll')}
                 </button>
               </div>
             )}
@@ -372,7 +378,7 @@ function AIMatchContent() {
             {matching && (
               <div className="mt-4 md:mt-6">
                 <div className="flex items-center justify-between mb-2">
-                  <span className="text-xs md:text-sm text-muted-foreground">正在分析简历并匹配岗位...</span>
+                  <span className="text-xs md:text-sm text-muted-foreground">{t('aiMatch.analyzing')}</span>
                   <span className="text-xs md:text-sm font-medium">{matchProgress}%</span>
                 </div>
                 <Progress value={matchProgress} className="h-1.5 md:h-2" />
@@ -387,9 +393,9 @@ function AIMatchContent() {
             <div className="flex items-center justify-between">
               <h2 className="text-lg md:text-xl font-semibold flex items-center gap-2">
                 <CheckCircle className="h-4 w-4 md:h-5 md:w-5 text-green-600" />
-                匹配结果
+                {t('aiMatch.matchResults')}
               </h2>
-              <Badge variant="secondary" className="text-xs">共 {matchResults.length} 个推荐</Badge>
+              <Badge variant="secondary" className="text-xs">{t('aiMatch.total')} {matchResults.length} {t('aiMatch.recommendations')}</Badge>
             </div>
 
             {matchResults.map((result, index) => (
@@ -403,7 +409,7 @@ function AIMatchContent() {
                         {result.match_score}
                       </div>
                       <div className="flex flex-col gap-0.5 md:gap-1 md:items-center">
-                        <div className="text-xs md:text-sm text-muted-foreground">匹配分数</div>
+                        <div className="text-xs md:text-sm text-muted-foreground">{t('aiMatch.matchScore')}</div>
                         <Badge className="hidden md:flex" variant={result.match_score >= 80 ? 'default' : 'secondary'}>
                           {getScoreLabel(result.match_score)}
                         </Badge>
@@ -420,7 +426,7 @@ function AIMatchContent() {
                       <div>
                         <h4 className="font-medium flex items-center gap-2 mb-1.5 md:mb-2 text-sm md:text-base">
                           <TrendingUp className="h-3.5 w-3.5 md:h-4 md:w-4 text-green-600" />
-                          匹配原因
+                          {t('aiMatch.matchReason')}
                         </h4>
                         <p className="text-xs md:text-sm text-muted-foreground bg-muted/50 p-2.5 md:p-3 rounded-lg">
                           {result.match_reason}
@@ -431,7 +437,7 @@ function AIMatchContent() {
                         <div>
                           <h4 className="font-medium flex items-center gap-2 mb-1.5 md:mb-2 text-sm md:text-base">
                             <Sparkles className="h-3.5 w-3.5 md:h-4 md:w-4 text-orange-600" />
-                            优化建议
+                            {t('aiMatch.suggestions')}
                           </h4>
                           <p className="text-xs md:text-sm text-muted-foreground bg-orange-50 dark:bg-orange-950/30 p-2.5 md:p-3 rounded-lg">
                             {result.suggestions}
@@ -443,12 +449,12 @@ function AIMatchContent() {
                         <Button size="sm" asChild className="h-8 text-xs">
                           <Link href={`/optimize?resumeId=${selectedResumeId}&company=${encodeURIComponent(result.company)}&position=${encodeURIComponent(result.job_title)}&suggestions=${encodeURIComponent(result.suggestions || '')}`}>
                             <Wand2 className="mr-1 h-3 w-3" />
-                            优化简历
+                            {t('aiMatch.optimizeResume')}
                           </Link>
                         </Button>
                         <Button size="sm" variant="outline" asChild className="h-8 text-xs">
                           <Link href={`/jobs/${result.job_id}`}>
-                            查看岗位
+                            {t('aiMatch.viewJob')}
                           </Link>
                         </Button>
                       </div>
@@ -465,9 +471,9 @@ function AIMatchContent() {
           <Card className="border-dashed">
             <CardContent className="py-8 md:py-12 text-center">
               <Brain className="h-12 w-12 md:h-16 md:w-16 mx-auto mb-3 md:mb-4 text-muted-foreground opacity-50" />
-              <h3 className="text-base md:text-lg font-medium mb-1.5 md:mb-2">选择简历开始匹配</h3>
+              <h3 className="text-base md:text-lg font-medium mb-1.5 md:mb-2">{t('aiMatch.emptyTitle')}</h3>
               <p className="text-xs md:text-sm text-muted-foreground max-w-md mx-auto px-4">
-                AI将分析你的简历内容，结合岗位要求，为你推荐最匹配的工作机会
+                {t('aiMatch.emptyDesc')}
               </p>
             </CardContent>
           </Card>
