@@ -35,6 +35,7 @@ import Image from 'next/image';
 import { AccessGuard, useAccessCode } from '@/components/access-guard';
 import { Header1 } from '@/components/header1';
 import { Target, Wand2, Send, CheckCircle2 } from 'lucide-react';
+import { useLanguage } from '@/lib/language-context';
 
 interface ParsedFields {
   name?: string;
@@ -90,6 +91,7 @@ function ResumeContent() {
   const [translatingId, setTranslatingId] = useState<number | null>(null);
   const [extractingId, setExtractingId] = useState<number | null>(null);
   const { accessCodeId } = useAccessCode();
+  const { t } = useLanguage();
 
   // 提取结构化字段
   const extractFields = async (resume: Resume) => {
@@ -110,13 +112,13 @@ function ResumeContent() {
           r.id === resume.id ? { ...r, parsed_fields: data.parsed_fields } : r
         ));
         setSelectedResume(prev => prev?.id === resume.id ? { ...prev, parsed_fields: data.parsed_fields } : prev);
-        alert('字段提取成功！');
+        alert(t('resume.extractSuccess'));
       } else if (data.error) {
-        alert('提取失败: ' + data.error);
+        alert(t('resume.extractFailed') + ': ' + data.error);
       }
     } catch (error) {
       console.error('Extract failed:', error);
-      alert('提取失败，请重试');
+      alert(t('resume.extractFailedRetry'));
     } finally {
       setExtractingId(null);
     }
@@ -133,7 +135,7 @@ function ResumeContent() {
     if (!selectedFile) return;
 
     if (!accessCodeId) {
-      alert('请先登录');
+      alert(t('resume.loginFirst'));
       return;
     }
 
@@ -168,11 +170,11 @@ function ResumeContent() {
         setSelectedFile(null);
         setUploadProgress(0);
       } else if (data.error) {
-        alert('上传失败: ' + data.error);
+        alert(t('resume.uploadFailed') + ': ' + data.error);
       }
     } catch (error) {
       console.error('Upload failed:', error);
-      alert('上传失败，请重试');
+      alert(t('resume.uploadFailedRetry'));
     } finally {
       setUploading(false);
     }
@@ -198,7 +200,7 @@ function ResumeContent() {
   };
 
   const deleteResume = async (id: number) => {
-    if (!confirm('确定要删除这份简历吗？此操作不可撤销。')) {
+    if (!confirm(t('resume.deleteConfirm'))) {
       return;
     }
     
@@ -209,11 +211,11 @@ function ResumeContent() {
       if (response.ok && data.success) {
         setResumes(resumes.filter((r) => r.id !== id));
       } else {
-        alert('删除失败: ' + (data.error || '未知错误'));
+        alert(t('resume.deleteFailed') + ': ' + (data.error || ''));
       }
     } catch (error) {
       console.error('Failed to delete resume:', error);
-      alert('删除失败，请重试');
+      alert(t('resume.deleteFailedRetry'));
     }
   };
 
@@ -256,8 +258,8 @@ function ResumeContent() {
       <main className="container mx-auto px-4 py-4 md:py-8 pt-20">
         {/* Page Title */}
         <div className="mb-4 md:mb-8">
-          <h1 className="text-2xl md:text-3xl font-bold mb-1 md:mb-2">简历管理</h1>
-          <p className="text-sm md:text-base text-muted-foreground">上传、管理你的简历，支持智能解析</p>
+          <h1 className="text-2xl md:text-3xl font-bold mb-1 md:mb-2 text-black dark:text-white">{t('resume.title')}</h1>
+          <p className="text-sm md:text-base text-black dark:text-white">{t('resume.subtitle')}</p>
         </div>
 
         {/* 状态引导区域 */}
@@ -271,21 +273,21 @@ function ResumeContent() {
                     <CheckCircle2 className="h-5 w-5 text-green-600 dark:text-green-400" />
                   </div>
                   <div>
-                    <p className="font-medium text-sm md:text-base">已上传 {resumes.length} 份简历</p>
-                    <p className="text-xs text-muted-foreground">你可以基于简历进行下一步操作</p>
+                    <p className="font-medium text-sm md:text-base">{t('resume.uploaded')} {resumes.length} {t('resume.resumesUnit')}</p>
+                    <p className="text-xs text-muted-foreground">{t('resume.nextStep')}</p>
                   </div>
                 </div>
                 <div className="flex items-center gap-2">
                   <Link href="/ai-match">
                     <Button size="sm" className="gap-1">
                       <Target className="h-3.5 w-3.5" />
-                      AI选岗
+                      {t('resume.aiMatch')}
                     </Button>
                   </Link>
                   <Link href="/optimize">
                     <Button variant="outline" size="sm" className="gap-1">
                       <Wand2 className="h-3.5 w-3.5" />
-                      优化简历
+                      {t('resume.optimize')}
                     </Button>
                   </Link>
                 </div>
@@ -297,19 +299,19 @@ function ResumeContent() {
           <Card className="mb-4 md:mb-8 border-dashed">
             <CardContent className="pt-4 pb-4">
               <div className="text-center py-4">
-                <p className="text-sm text-muted-foreground mb-3">还没有简历？上传后可以享受更多服务</p>
+                <p className="text-sm text-muted-foreground mb-3">{t('resume.noResume')}</p>
                 <div className="grid grid-cols-3 gap-2 max-w-md mx-auto text-xs">
                   <div className="flex flex-col items-center gap-1 p-2 rounded-lg bg-muted/50">
                     <Target className="h-4 w-4 text-primary" />
-                    <span>AI智能选岗</span>
+                    <span>{t('resume.feature.aiMatch')}</span>
                   </div>
                   <div className="flex flex-col items-center gap-1 p-2 rounded-lg bg-muted/50">
                     <Wand2 className="h-4 w-4 text-primary" />
-                    <span>优化简历ATS</span>
+                    <span>{t('resume.feature.optimize')}</span>
                   </div>
                   <div className="flex flex-col items-center gap-1 p-2 rounded-lg bg-muted/50">
                     <Send className="h-4 w-4 text-primary" />
-                    <span>一键填写网申</span>
+                    <span>{t('resume.feature.autoApply')}</span>
                   </div>
                 </div>
               </div>
@@ -322,10 +324,10 @@ function ResumeContent() {
           <CardHeader className="pb-2 md:pb-4">
             <CardTitle className="flex items-center gap-2 text-base md:text-lg">
               <Upload className="h-4 w-4 md:h-5 md:w-5" />
-              上传简历
+              {t('resume.upload.title')}
             </CardTitle>
             <CardDescription className="text-xs md:text-sm">
-              支持 PDF、Word (.docx)、TXT 格式，系统将自动解析提取关键信息
+              {t('resume.upload.description')}
             </CardDescription>
           </CardHeader>
           <CardContent>
@@ -342,22 +344,22 @@ function ResumeContent() {
                   {uploading ? (
                     <>
                       <Loader2 className="mr-2 h-4 w-4 animate-spin" />
-                      上传中...
+                      {t('resume.upload.uploading')}
                     </>
                   ) : (
                     <>
                       <Upload className="mr-2 h-4 w-4" />
-                      上传简历
+                      {t('resume.upload.button')}
                     </>
                   )}
                 </Button>
               </div>
               <p className="text-xs text-muted-foreground hidden md:block">
-                支持 PDF、Word (.docx)、TXT 格式，系统将自动提取姓名、联系方式、教育经历、工作经验、技能等信息
+                {t('resume.upload.hint')}
               </p>
               {selectedFile && (
                 <p className="text-xs md:text-sm text-muted-foreground">
-                  已选择: {selectedFile.name}
+                  {t('resume.upload.selected')}: {selectedFile.name}
                 </p>
               )}
             </div>
@@ -365,7 +367,7 @@ function ResumeContent() {
               <div className="mt-4">
                 <Progress value={uploadProgress} className="h-2" />
                 <p className="text-sm text-muted-foreground mt-2 text-center">
-                  {uploadProgress < 100 ? '正在上传并解析...' : '上传完成！'}
+                  {uploadProgress < 100 ? t('resume.upload.parsing') : t('resume.upload.complete')}
                 </p>
               </div>
             )}
@@ -375,21 +377,21 @@ function ResumeContent() {
         {/* Resume List */}
         <div className="space-y-4">
           <div className="flex items-center justify-between">
-            <h2 className="text-lg md:text-xl font-semibold">我的简历</h2>
+            <h2 className="text-lg md:text-xl font-semibold">{t('resume.myResumes')}</h2>
             <Button variant="outline" size="sm" className="text-xs md:text-sm" onClick={fetchResumes}>
-              刷新列表
+              {t('resume.refresh')}
             </Button>
           </div>
           {loading ? (
             <div className="text-center py-12 text-muted-foreground">
               <Loader2 className="h-8 w-8 animate-spin mx-auto mb-2" />
-              加载中...
+              {t('resume.loading')}
             </div>
           ) : resumes.length === 0 ? (
             <Card>
               <CardContent className="py-12 text-center text-muted-foreground">
                 <FileText className="h-12 w-12 mx-auto mb-4 opacity-50" />
-                <p>暂无简历，上传你的第一份简历吧</p>
+                <p>{t('resume.noResumes')}</p>
               </CardContent>
             </Card>
           ) : (
@@ -417,7 +419,7 @@ function ResumeContent() {
                           ) : (
                             <Badge variant="outline" className="text-xs text-yellow-600">
                               <Loader2 className="h-3 w-3 mr-1 animate-spin" />
-                              解析中...
+                              {t('resume.parsing')}
                             </Badge>
                           )}
                         </div>
@@ -442,17 +444,17 @@ function ResumeContent() {
                           {extractingId === resume.id ? (
                             <>
                               <Loader2 className="h-3 w-3 mr-1 animate-spin" />
-                              提取中
+                              {t('resume.extracting')}
                             </>
                           ) : resume.parsed_fields ? (
                             <>
                               <CheckCircle className="h-3 w-3 mr-1 text-green-600" />
-                              已提取
+                              {t('resume.extracted')}
                             </>
                           ) : (
                             <>
                               <Sparkles className="h-3 w-3 mr-1" />
-                              提取字段
+                              {t('resume.extractFields')}
                             </>
                           )}
                         </Button>
@@ -467,19 +469,19 @@ function ResumeContent() {
                         {translatingId === resume.id ? (
                           <>
                             <Loader2 className="h-3 w-3 mr-1 animate-spin" />
-                            翻译中
+                            {t('resume.translating')}
                           </>
                         ) : (
                           <>
                             <Languages className="h-3 w-3 mr-1" />
-                            翻译
+                            {t('resume.translate')}
                           </>
                         )}
                       </Button>
                       <Link href="/field-mappings" className="hidden sm:block">
                         <Button variant="outline" size="sm" className="text-xs h-8">
                           <Map className="h-3 w-3 mr-1" />
-                          字段映射
+                          {t('resume.fieldMapping')}
                         </Button>
                       </Link>
                       <Dialog>
@@ -490,14 +492,14 @@ function ResumeContent() {
                             className="text-xs h-8"
                             onClick={() => setSelectedResume(resume)}
                           >
-                            查看详情
+                            {t('resume.viewDetail')}
                           </Button>
                         </DialogTrigger>
                         <DialogContent className="max-w-2xl max-h-[85vh] md:max-h-[80vh] overflow-y-auto">
                           <DialogHeader>
                             <DialogTitle className="text-base md:text-lg truncate pr-6">{resume.file_name}</DialogTitle>
                             <DialogDescription className="text-xs md:text-sm">
-                              简历解析结果
+                              {t('resume.parseResult')}
                             </DialogDescription>
                           </DialogHeader>
                           <div className="space-y-4">
@@ -506,32 +508,32 @@ function ResumeContent() {
                               <div className="bg-gradient-to-r from-terracotta-50 to-beige-50 dark:from-terracotta-950/30 dark:to-beige-950/30 p-3 md:p-4 rounded-lg">
                                 <div className="flex items-center gap-2 mb-3">
                                   <Sparkles className="h-4 w-4 text-terracotta-600" />
-                                  <h4 className="font-semibold text-sm md:text-base">结构化字段</h4>
-                                  <Badge variant="secondary" className="text-xs">AI 提取</Badge>
+                                  <h4 className="font-semibold text-sm md:text-base">{t('resume.structuredFields')}</h4>
+                                  <Badge variant="secondary" className="text-xs">{t('resume.aiExtracted')}</Badge>
                                 </div>
                                 
                                 <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 text-sm">
                                   {resume.parsed_fields.name && (
                                     <div>
-                                      <span className="text-muted-foreground">姓名:</span>
+                                      <span className="text-muted-foreground">{t('resume.name')}:</span>
                                       <p className="font-medium">{resume.parsed_fields.name}</p>
                                     </div>
                                   )}
                                   {resume.parsed_fields.email && (
                                     <div>
-                                      <span className="text-muted-foreground">邮箱:</span>
+                                      <span className="text-muted-foreground">{t('resume.email')}:</span>
                                       <p className="font-medium break-all">{resume.parsed_fields.email}</p>
                                     </div>
                                   )}
                                   {resume.parsed_fields.phone && (
                                     <div>
-                                      <span className="text-muted-foreground">电话:</span>
+                                      <span className="text-muted-foreground">{t('resume.phone')}:</span>
                                       <p className="font-medium">{resume.parsed_fields.phone}</p>
                                     </div>
                                   )}
                                   {resume.parsed_fields.location && (
                                     <div>
-                                      <span className="text-muted-foreground">地址:</span>
+                                      <span className="text-muted-foreground">{t('resume.location')}:</span>
                                       <p className="font-medium">{resume.parsed_fields.location}</p>
                                     </div>
                                   )}
@@ -539,7 +541,7 @@ function ResumeContent() {
 
                                 {resume.parsed_fields.education && resume.parsed_fields.education.length > 0 && (
                                   <div className="mt-3">
-                                    <span className="text-sm text-muted-foreground">教育背景:</span>
+                                    <span className="text-sm text-muted-foreground">{t('resume.education')}:</span>
                                     <ul className="mt-1 space-y-1">
                                       {resume.parsed_fields.education.map((edu, i) => (
                                         <li key={i} className="text-sm">
@@ -553,7 +555,7 @@ function ResumeContent() {
 
                                 {resume.parsed_fields.experience && resume.parsed_fields.experience.length > 0 && (
                                   <div className="mt-3">
-                                    <span className="text-sm text-muted-foreground">工作经历:</span>
+                                    <span className="text-sm text-muted-foreground">{t('resume.experience')}:</span>
                                     <ul className="mt-1 space-y-2">
                                       {resume.parsed_fields.experience.map((exp, i) => (
                                         <li key={i} className="text-sm">
@@ -580,7 +582,7 @@ function ResumeContent() {
                                   <Link href="/field-mappings">
                                     <Button variant="outline" size="sm" className="w-full">
                                       <Map className="h-4 w-4 mr-2" />
-                                      配置字段映射
+                                      {t('resume.configureMapping')}
                                     </Button>
                                   </Link>
                                 </div>
@@ -590,17 +592,17 @@ function ResumeContent() {
                             {/* 原始解析信息 */}
                             {resume.user_info?.name && (
                               <div>
-                                <h4 className="font-semibold text-sm md:text-base mb-2">基本信息</h4>
+                                <h4 className="font-semibold text-sm md:text-base mb-2">{t('resume.basicInfo')}</h4>
                                 <div className="grid grid-cols-1 sm:grid-cols-2 gap-2 text-sm">
-                                  {resume.user_info.name && <p><strong>姓名:</strong> {resume.user_info.name}</p>}
-                                  {resume.user_info.email && <p className="break-all"><strong>邮箱:</strong> {resume.user_info.email}</p>}
-                                  {resume.user_info.phone && <p><strong>电话:</strong> {resume.user_info.phone}</p>}
+                                  {resume.user_info.name && <p><strong>{t('resume.name')}:</strong> {resume.user_info.name}</p>}
+                                  {resume.user_info.email && <p className="break-all"><strong>{t('resume.email')}:</strong> {resume.user_info.email}</p>}
+                                  {resume.user_info.phone && <p><strong>{t('resume.phone')}:</strong> {resume.user_info.phone}</p>}
                                 </div>
                               </div>
                             )}
                             {resume.user_info?.education && resume.user_info.education.length > 0 && (
                               <div>
-                                <h4 className="font-semibold text-sm md:text-base mb-2">教育背景</h4>
+                                <h4 className="font-semibold text-sm md:text-base mb-2">{t('resume.education')}</h4>
                                 <ul className="list-disc list-inside text-sm space-y-1">
                                   {resume.user_info.education.map((edu, i) => (
                                     <li key={i}>{edu}</li>
@@ -610,7 +612,7 @@ function ResumeContent() {
                             )}
                             {resume.user_info?.experience && resume.user_info.experience.length > 0 && (
                               <div>
-                                <h4 className="font-semibold text-sm md:text-base mb-2">工作经历</h4>
+                                <h4 className="font-semibold text-sm md:text-base mb-2">{t('resume.experience')}</h4>
                                 <ul className="list-disc list-inside text-sm space-y-1">
                                   {resume.user_info.experience.map((exp, i) => (
                                     <li key={i}>{exp}</li>
@@ -620,7 +622,7 @@ function ResumeContent() {
                             )}
                             {resume.user_info?.skills && resume.user_info.skills.length > 0 && (
                               <div>
-                                <h4 className="font-semibold text-sm md:text-base mb-2">技能标签</h4>
+                                <h4 className="font-semibold text-sm md:text-base mb-2">{t('resume.skills')}</h4>
                                 <div className="flex flex-wrap gap-1.5 md:gap-2">
                                   {resume.user_info.skills.map((skill, i) => (
                                     <Badge key={i} variant="secondary" className="text-xs">{skill}</Badge>
