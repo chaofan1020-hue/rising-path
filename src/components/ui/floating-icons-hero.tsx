@@ -19,6 +19,7 @@ export interface FloatingIconsHeroProps {
   ctaText: string;
   ctaHref: string;
   icons: IconProps[];
+  onCtaClick?: () => void;
 }
 
 // A single icon component with its own motion logic
@@ -105,7 +106,7 @@ const Icon = ({
 const FloatingIconsHero = React.forwardRef<
   HTMLDivElement,
   React.HTMLAttributes<HTMLDivElement> & FloatingIconsHeroProps
->(({ className, title, subtitle, ctaText, ctaHref, icons, ...props }, ref) => {
+>(({ className, title, subtitle, ctaText, ctaHref, icons, onCtaClick, ...props }, ref) => {
   const mouseX = React.useRef(0);
   const mouseY = React.useRef(0);
 
@@ -145,7 +146,17 @@ const FloatingIconsHero = React.forwardRef<
         </p>
         <div className="mt-10">
           <Button asChild size="lg" className="px-8 py-6 text-base font-semibold">
-            <a href={ctaHref}>{ctaText}</a>
+            <a
+              href={ctaHref}
+              onClick={(e) => {
+                if (onCtaClick) {
+                  e.preventDefault();
+                  onCtaClick();
+                }
+              }}
+            >
+              {ctaText}
+            </a>
           </Button>
         </div>
       </div>

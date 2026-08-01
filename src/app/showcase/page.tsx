@@ -1,5 +1,8 @@
 'use client'
 
+import { useState } from 'react'
+import { useRouter } from 'next/navigation'
+import { motion, AnimatePresence } from 'framer-motion'
 import { FloatingIconsHero, type FloatingIconsHeroProps } from '@/components/ui/floating-icons-hero'
 import {
   IconGoogle,
@@ -42,6 +45,8 @@ const demoIcons: FloatingIconsHeroProps['icons'] = [
 
 export default function ShowcasePage() {
   const { locale } = useLanguage()
+  const router = useRouter()
+  const [isExiting, setIsExiting] = useState(false)
 
   const content = {
     'zh-CN': {
@@ -63,13 +68,31 @@ export default function ShowcasePage() {
 
   const { title, subtitle, cta } = content[locale]
 
+  const handleCtaClick = () => {
+    setIsExiting(true)
+    setTimeout(() => {
+      router.push('/home')
+    }, 600)
+  }
+
   return (
-    <FloatingIconsHero
-      title={title}
-      subtitle={subtitle}
-      ctaText={cta}
-      ctaHref="/home"
-      icons={demoIcons}
-    />
+    <AnimatePresence>
+      {!isExiting && (
+        <motion.div
+          initial={{ y: 0 }}
+          exit={{ y: '-100%', opacity: 0 }}
+          transition={{ duration: 0.6, ease: [0.22, 1, 0.36, 1] }}
+        >
+          <FloatingIconsHero
+            title={title}
+            subtitle={subtitle}
+            ctaText={cta}
+            ctaHref="/home"
+            icons={demoIcons}
+            onCtaClick={handleCtaClick}
+          />
+        </motion.div>
+      )}
+    </AnimatePresence>
   )
 }
