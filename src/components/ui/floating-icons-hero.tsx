@@ -145,7 +145,7 @@ const FloatingIconsHero = React.forwardRef<
           {subtitle}
         </p>
         <div className="mt-10">
-          <Button asChild size="lg" className="px-8 py-6 text-base font-semibold">
+          <Button asChild size="lg" className="px-8 py-6 text-base font-semibold bg-[#C46A4A] hover:bg-[#C46A4A]/90 text-white">
             <a
               href={ctaHref}
               onClick={(e) => {
