@@ -1,6 +1,6 @@
 'use client'
 
-import { useState } from 'react'
+import { useState, useEffect } from 'react'
 import { useRouter } from 'next/navigation'
 import { motion, AnimatePresence } from 'framer-motion'
 import { FloatingIconsHero, type FloatingIconsHeroProps } from '@/components/ui/floating-icons-hero'
@@ -47,6 +47,10 @@ export default function ShowcasePage() {
   const { locale } = useLanguage()
   const router = useRouter()
   const [isExiting, setIsExiting] = useState(false)
+
+  useEffect(() => {
+    router.prefetch('/home')
+  }, [router])
 
   const content = {
     'zh-CN': {
