@@ -108,10 +108,7 @@ export function AccessGuard({ children }: { children: ReactNode }) {
   if (loading) {
     return (
       <div className="min-h-screen flex items-center justify-center bg-background">
-        <div className="text-center">
-          <AnimatedLoader />
-          <p className="text-muted-foreground mt-6">验证访问权限...</p>
-        </div>
+        <AnimatedLoader />
       </div>
     );
   }
