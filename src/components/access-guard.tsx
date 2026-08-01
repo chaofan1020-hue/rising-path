@@ -3,8 +3,8 @@
 import { createContext, useContext, useEffect, useState, ReactNode } from 'react';
 import { useRouter } from 'next/navigation';
 import { Button } from '@/components/ui/button';
-import { Loader2 } from 'lucide-react';
 import { CtaCard } from '@/components/ui/cta-card';
+import { Loader2 as AnimatedLoader } from '@/components/ui/loader-2';
 
 interface AccessCode {
   id: number;
@@ -109,8 +109,8 @@ export function AccessGuard({ children }: { children: ReactNode }) {
     return (
       <div className="min-h-screen flex items-center justify-center bg-background">
         <div className="text-center">
-          <Loader2 className="h-8 w-8 animate-spin text-primary mx-auto mb-4" />
-          <p className="text-muted-foreground">验证访问权限...</p>
+          <AnimatedLoader />
+          <p className="text-muted-foreground mt-6">验证访问权限...</p>
         </div>
       </div>
     );
