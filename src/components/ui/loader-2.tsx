@@ -7,7 +7,7 @@ export const Loader2 = () => {
     <>
       <style jsx>{`
         .loader {
-          --path: currentColor;
+          --path: #000000;
           --dot: #FF0000;
           --duration: 3s;
           width: 44px;
