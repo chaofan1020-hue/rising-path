@@ -138,10 +138,10 @@ const FloatingIconsHero = React.forwardRef<
       </div>
 
       <div className="relative z-10 text-center px-4">
-        <h1 className="text-5xl md:text-7xl font-bold tracking-tight text-black">
+        <h1 className="text-5xl md:text-7xl font-bold tracking-tight text-black dark:text-white">
           {title}
         </h1>
-        <p className="mt-6 max-w-xl mx-auto text-lg text-black">
+        <p className="mt-6 max-w-xl mx-auto text-lg text-black dark:text-white">
           {subtitle}
         </p>
         <div className="mt-10">
