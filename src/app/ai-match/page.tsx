@@ -92,7 +92,7 @@ function MultiSelectFilter({
   return (
     <Popover>
       <PopoverTrigger asChild>
-        <button className="inline-flex items-center gap-1.5 md:gap-2 px-2.5 py-1.5 md:px-3 md:py-2 rounded-full hover:bg-accent hover:text-accent-foreground transition-colors text-xs md:text-sm">
+        <button className="inline-flex items-center gap-1.5 md:gap-2 px-3 py-2 md:px-4 md:py-2.5 rounded-full bg-white dark:bg-black/50 shadow-sm hover:shadow-md hover:bg-accent hover:text-accent-foreground transition-all text-xs md:text-sm">
           <Icon className="h-3.5 w-3.5 md:h-4 md:w-4 text-muted-foreground" />
           <span className="font-medium">{label}</span>
           {selected.length > 0 && (
@@ -244,27 +244,29 @@ function AIMatchContent() {
   };
 
   return (
-    <div className="min-h-screen bg-background">
+    <div className="min-h-screen bg-white dark:bg-black">
       <Header1 />
       <main className="container mx-auto px-4 py-4 md:py-8 pt-20">
         {/* Page Title */}
-        <div className="mb-6 md:mb-8">
-          <h1 className="text-2xl md:text-3xl font-bold mb-1 md:mb-2 flex items-center gap-2 md:gap-3 text-black dark:text-white">
-            <svg className="h-6 w-6 md:h-8 md:w-8 text-terracotta-600" fill="currentColor" viewBox="0 0 24 24">
-              <path d="M12 2l3.09 6.26L22 9.27l-5 4.87 1.18 6.88L12 17.77l-6.18 3.25L7 14.14 2 9.27l6.91-1.01L12 2z" />
-            </svg>
+        <div className="mb-8 md:mb-12 text-center">
+          <h1 className="text-3xl md:text-4xl font-light mb-3 md:mb-4 flex items-center justify-center gap-2 md:gap-3 text-black dark:text-white">
+            <span className="p-2 rounded-xl bg-gradient-to-br from-terracotta-500 to-sage-500 inline-flex">
+              <svg className="h-6 w-6 md:h-8 md:w-8 text-white" fill="currentColor" viewBox="0 0 24 24">
+                <path d="M12 2l3.09 6.26L22 9.27l-5 4.87 1.18 6.88L12 17.77l-6.18 3.25L7 14.14 2 9.27l6.91-1.01L12 2z" />
+              </svg>
+            </span>
             {t('aiMatch.title')}
           </h1>
-          <p className="text-sm md:text-base text-black dark:text-white">
+          <p className="text-base md:text-lg text-gray-500 dark:text-gray-400 max-w-2xl mx-auto">
             {t('aiMatch.subtitle')}
           </p>
         </div>
 
         {/* Match Form */}
-        <Card className="mb-6 md:mb-8">
+        <Card className="mb-6 md:mb-8 rounded-3xl border-0 shadow-lg bg-gradient-to-br from-terracotta-50 to-beige-50 dark:from-terracotta-950/40 dark:to-beige-950/40">
           <CardHeader className="pb-2 md:pb-4">
-            <CardTitle className="flex items-center gap-2 text-base md:text-lg">
-              <Target className="h-4 w-4 md:h-5 md:w-5" />
+            <CardTitle className="flex items-center gap-2 text-base md:text-lg text-black dark:text-white">
+              <Target className="h-4 w-4 md:h-5 md:w-5 text-terracotta-600" />
               {t('aiMatch.startMatch')}
             </CardTitle>
             <CardDescription className="text-xs md:text-sm">
@@ -275,9 +277,9 @@ function AIMatchContent() {
             <div className="flex flex-wrap items-end gap-3">
               {/* 简历选择 */}
               <div className="w-full md:w-auto">
-                <label className="text-xs md:text-sm font-medium mb-1.5 block">{t('aiMatch.selectResume')}</label>
+                <label className="text-xs md:text-sm font-medium mb-1.5 block text-black dark:text-white">{t('aiMatch.selectResume')}</label>
                 <Select value={selectedResumeId} onValueChange={setSelectedResumeId}>
-                  <SelectTrigger className="h-10 w-full md:w-48">
+                  <SelectTrigger className="h-11 w-full md:w-52 rounded-xl bg-white dark:bg-black/50">
                     <SelectValue placeholder={t('aiMatch.selectResumePlaceholder')} />
                   </SelectTrigger>
                   <SelectContent>
@@ -312,7 +314,7 @@ function AIMatchContent() {
                 <Button
                   onClick={handleMatch}
                   disabled={!selectedResumeId || matching}
-                  className="bg-gradient-to-r from-terracotta-600 to-sage-600 hover:from-terracotta-700 hover:to-sage-700 h-10"
+                  className="bg-gradient-to-r from-terracotta-600 to-sage-600 hover:from-terracotta-700 hover:to-sage-700 h-11 rounded-xl px-6 shadow-md hover:shadow-lg transition-all"
                 >
                   {matching ? (
                     <>
@@ -337,13 +339,13 @@ function AIMatchContent() {
                   <Badge 
                     key={region} 
                     variant="secondary" 
-                    className="flex items-center gap-1 pr-1 text-xs"
+                    className="flex items-center gap-1 pr-1 text-xs rounded-full bg-terracotta-100 dark:bg-terracotta-950/50 text-terracotta-700 dark:text-terracotta-300 border-0"
                   >
                     <MapPin className="h-3 w-3" />
                     {region}
                     <button
                       onClick={() => setSelectedRegions(selectedRegions.filter(r => r !== region))}
-                      className="ml-1 hover:bg-muted-foreground/20 rounded-full p-0.5"
+                      className="ml-1 hover:bg-terracotta-200 dark:hover:bg-terracotta-900 rounded-full p-0.5"
                     >
                       <X className="h-3 w-3" />
                     </button>
@@ -353,13 +355,13 @@ function AIMatchContent() {
                   <Badge 
                     key={direction} 
                     variant="secondary" 
-                    className="flex items-center gap-1 pr-1 text-xs"
+                    className="flex items-center gap-1 pr-1 text-xs rounded-full bg-sage-100 dark:bg-sage-950/50 text-sage-700 dark:text-sage-300 border-0"
                   >
                     <Compass className="h-3 w-3" />
                     {direction}
                     <button
                       onClick={() => setSelectedDirections(selectedDirections.filter(d => d !== direction))}
-                      className="ml-1 hover:bg-muted-foreground/20 rounded-full p-0.5"
+                      className="ml-1 hover:bg-sage-200 dark:hover:bg-sage-900 rounded-full p-0.5"
                     >
                       <X className="h-3 w-3" />
                     </button>
@@ -391,28 +393,29 @@ function AIMatchContent() {
 
         {/* Match Results */}
         {matchResults.length > 0 && (
-          <div className="space-y-3 md:space-y-4">
+          <div className="space-y-4 md:space-y-6">
             <div className="flex items-center justify-between">
-              <h2 className="text-lg md:text-xl font-semibold flex items-center gap-2">
-                <CheckCircle className="h-4 w-4 md:h-5 md:w-5 text-green-600" />
+              <h2 className="text-xl md:text-2xl font-light flex items-center gap-2 text-black dark:text-white">
+                <CheckCircle className="h-5 w-5 md:h-6 md:w-6 text-green-600" />
                 {t('aiMatch.matchResults')}
               </h2>
-              <Badge variant="secondary" className="text-xs">{t('aiMatch.total')} {matchResults.length} {t('aiMatch.recommendations')}</Badge>
+              <Badge className="text-xs bg-gradient-to-r from-terracotta-500 to-sage-500 text-white border-0 rounded-full px-3 py-1">{t('aiMatch.total')} {matchResults.length} {t('aiMatch.recommendations')}</Badge>
             </div>
 
             {matchResults.map((result, index) => (
-              <Card key={result.job_id} className="hover:shadow-lg transition-all">
+              <Card key={result.job_id} className="rounded-3xl border-0 shadow-md hover:shadow-xl transition-all duration-300 hover:-translate-y-1 bg-white dark:bg-card overflow-hidden">
+                <div className="h-1.5 bg-gradient-to-r from-terracotta-500 via-beige-500 to-sage-500" />
                 <CardContent className="pt-4 md:pt-6">
                   {/* 手机端：纵向布局，桌面端：横向布局 */}
                   <div className="flex flex-col md:flex-row gap-4 md:gap-6">
                     {/* Score - 手机端横向紧凑，桌面端纵向带背景 */}
-                    <div className="flex items-center gap-3 md:flex-col md:items-center md:justify-center md:p-4 md:rounded-lg md:bg-gradient-to-br md:from-terracotta-50 md:to-beige-50 dark:md:from-terracotta-950 dark:md:to-beige-950 flex-shrink-0">
+                    <div className="flex items-center gap-3 md:flex-col md:items-center md:justify-center md:p-5 md:rounded-2xl md:bg-gradient-to-br md:from-terracotta-50 md:to-beige-50 dark:md:from-terracotta-950/50 dark:md:to-beige-950/50 flex-shrink-0 md:min-w-[120px]">
                       <div className={`text-3xl md:text-4xl font-bold ${getScoreColor(result.match_score)}`}>
                         {result.match_score}
                       </div>
                       <div className="flex flex-col gap-0.5 md:gap-1 md:items-center">
                         <div className="text-xs md:text-sm text-muted-foreground">{t('aiMatch.matchScore')}</div>
-                        <Badge className="hidden md:flex" variant={result.match_score >= 80 ? 'default' : 'secondary'}>
+                        <Badge className={`hidden md:flex rounded-full ${result.match_score >= 80 ? 'bg-gradient-to-r from-terracotta-500 to-sage-500 text-white border-0' : ''}`} variant={result.match_score >= 80 ? 'default' : 'secondary'}>
                           {getScoreLabel(result.match_score)}
                         </Badge>
                       </div>
@@ -421,40 +424,40 @@ function AIMatchContent() {
                     {/* Details */}
                     <div className="flex-1 space-y-3 md:space-y-4">
                       <div>
-                        <h3 className="text-base md:text-lg font-semibold">{result.job_title}</h3>
-                        <p className="text-xs md:text-sm text-muted-foreground">{result.company}</p>
+                        <h3 className="text-base md:text-lg font-semibold text-black dark:text-white">{result.job_title}</h3>
+                        <p className="text-xs md:text-sm text-gray-500 dark:text-gray-400">{result.company}</p>
                       </div>
 
                       <div>
-                        <h4 className="font-medium flex items-center gap-2 mb-1.5 md:mb-2 text-sm md:text-base">
+                        <h4 className="font-medium flex items-center gap-2 mb-1.5 md:mb-2 text-sm md:text-base text-black dark:text-white">
                           <TrendingUp className="h-3.5 w-3.5 md:h-4 md:w-4 text-green-600" />
                           {t('aiMatch.matchReason')}
                         </h4>
-                        <p className="text-xs md:text-sm text-muted-foreground bg-muted/50 p-2.5 md:p-3 rounded-lg">
+                        <p className="text-xs md:text-sm text-muted-foreground bg-muted/50 p-2.5 md:p-3 rounded-xl">
                           {result.match_reason}
                         </p>
                       </div>
 
                       {result.suggestions && (
                         <div>
-                          <h4 className="font-medium flex items-center gap-2 mb-1.5 md:mb-2 text-sm md:text-base">
-                            <Sparkles className="h-3.5 w-3.5 md:h-4 md:w-4 text-orange-600" />
+                          <h4 className="font-medium flex items-center gap-2 mb-1.5 md:mb-2 text-sm md:text-base text-black dark:text-white">
+                            <Sparkles className="h-3.5 w-3.5 md:h-4 md:w-4 text-terracotta-600" />
                             {t('aiMatch.suggestions')}
                           </h4>
-                          <p className="text-xs md:text-sm text-muted-foreground bg-orange-50 dark:bg-orange-950/30 p-2.5 md:p-3 rounded-lg">
+                          <p className="text-xs md:text-sm text-muted-foreground bg-terracotta-50 dark:bg-terracotta-950/30 p-2.5 md:p-3 rounded-xl">
                             {result.suggestions}
                           </p>
                         </div>
                       )}
 
                       <div className="flex gap-2">
-                        <Button size="sm" asChild className="h-8 text-xs">
+                        <Button size="sm" asChild className="h-9 text-xs rounded-xl bg-gradient-to-r from-terracotta-600 to-sage-600 hover:from-terracotta-700 hover:to-sage-700 border-0">
                           <Link href={`/optimize?resumeId=${selectedResumeId}&company=${encodeURIComponent(result.company)}&position=${encodeURIComponent(result.job_title)}&suggestions=${encodeURIComponent(result.suggestions || '')}`}>
                             <Wand2 className="mr-1 h-3 w-3" />
                             {t('aiMatch.optimizeResume')}
                           </Link>
                         </Button>
-                        <Button size="sm" variant="outline" asChild className="h-8 text-xs">
+                        <Button size="sm" variant="outline" asChild className="h-9 text-xs rounded-xl">
                           <Link href={`/jobs/${result.job_id}`}>
                             {t('aiMatch.viewJob')}
                           </Link>
@@ -470,11 +473,13 @@ function AIMatchContent() {
 
         {/* Empty State */}
         {!matching && matchResults.length === 0 && (
-          <Card className="border-dashed">
-            <CardContent className="py-8 md:py-12 text-center">
-              <Brain className="h-12 w-12 md:h-16 md:w-16 mx-auto mb-3 md:mb-4 text-muted-foreground opacity-50" />
-              <h3 className="text-base md:text-lg font-medium mb-1.5 md:mb-2">{t('aiMatch.emptyTitle')}</h3>
-              <p className="text-xs md:text-sm text-muted-foreground max-w-md mx-auto px-4">
+          <Card className="rounded-3xl border-0 shadow-lg bg-gradient-to-br from-terracotta-50 to-beige-50 dark:from-terracotta-950/40 dark:to-beige-950/40">
+            <CardContent className="py-12 md:py-16 text-center">
+              <div className="p-4 rounded-2xl bg-gradient-to-br from-terracotta-500 to-sage-500 inline-flex mb-4 md:mb-6">
+                <Brain className="h-12 w-12 md:h-16 md:w-16 text-white" />
+              </div>
+              <h3 className="text-lg md:text-xl font-medium mb-2 md:mb-3 text-black dark:text-white">{t('aiMatch.emptyTitle')}</h3>
+              <p className="text-sm md:text-base text-gray-500 dark:text-gray-400 max-w-md mx-auto px-4">
                 {t('aiMatch.emptyDesc')}
               </p>
             </CardContent>
