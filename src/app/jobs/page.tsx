@@ -225,7 +225,7 @@ function MultiSelectFilter({
   return (
     <Popover>
       <PopoverTrigger asChild>
-        <button className="inline-flex items-center gap-1.5 md:gap-2 px-2.5 py-1.5 md:px-3 md:py-2 rounded-full border border-input bg-background hover:bg-accent hover:text-accent-foreground transition-colors text-xs md:text-sm">
+        <button className="inline-flex items-center gap-1.5 md:gap-2 px-2.5 py-1.5 md:px-3 md:py-2 rounded-full hover:bg-accent hover:text-accent-foreground transition-colors text-xs md:text-sm">
           <Icon className="h-3.5 w-3.5 md:h-4 md:w-4 text-muted-foreground" />
           <span className="font-medium">{label}</span>
           {selected.length > 0 && (
@@ -298,7 +298,7 @@ function SingleSelectFilter({
   return (
     <Popover>
       <PopoverTrigger asChild>
-        <button className="inline-flex items-center gap-1.5 md:gap-2 px-2.5 py-1.5 md:px-3 md:py-2 rounded-full border border-input bg-background hover:bg-accent hover:text-accent-foreground transition-colors text-xs md:text-sm">
+        <button className="inline-flex items-center gap-1.5 md:gap-2 px-2.5 py-1.5 md:px-3 md:py-2 rounded-full hover:bg-accent hover:text-accent-foreground transition-colors text-xs md:text-sm">
           <Icon className="h-3.5 w-3.5 md:h-4 md:w-4 text-muted-foreground" />
           <span className="font-medium">{label}</span>
           {displayValue && (
