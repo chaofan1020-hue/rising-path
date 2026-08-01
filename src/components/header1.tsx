@@ -103,21 +103,21 @@ function Header1() {
                                     {item.href ? (
                                         <>
                                             <NavigationMenuLink href={item.href}>
-                                                <Button variant="ghost" className="text-black hover:bg-[#C46A4A]/10 hover:text-[#C46A4A]">{item.title}</Button>
+                                                <Button variant="ghost" className="text-black dark:text-white hover:bg-[#C46A4A]/10 hover:text-[#C46A4A]">{item.title}</Button>
                                             </NavigationMenuLink>
                                         </>
                                     ) : (
                                         <>
-                                            <NavigationMenuTrigger className="font-medium text-sm text-black hover:bg-[#C46A4A]/10 hover:text-[#C46A4A]">
+                                            <NavigationMenuTrigger className="font-medium text-sm text-black dark:text-white hover:bg-[#C46A4A]/10 hover:text-[#C46A4A]">
                                                 {item.title}
                                             </NavigationMenuTrigger>
                                             <NavigationMenuContent className="!w-[450px] p-4">
                                                 <div className="flex flex-col lg:grid grid-cols-2 gap-4">
                                                     <div className="flex flex-col h-full justify-between">
                                                         <div className="flex flex-col">
-                                                            <p className="text-base text-black">{item.title}</p>
+                                                            <p className="text-base text-black dark:text-white">{item.title}</p>
                                                             {item.description && (
-                                                                <p className="text-black/60 text-sm">
+                                                                <p className="text-black/60 dark:text-white/60 text-sm">
                                                                     {item.description}
                                                                 </p>
                                                             )}
@@ -130,8 +130,8 @@ function Header1() {
                                                                 key={subItem.title}
                                                                 className="flex flex-row justify-between items-center hover:bg-[#C46A4A]/10 py-2 px-4 rounded"
                                                             >
-                                                                <span className="text-black">{subItem.title}</span>
-                                                                <MoveRight className="w-4 h-4 text-black/60" />
+                                                                <span className="text-black dark:text-white">{subItem.title}</span>
+                                                                <MoveRight className="w-4 h-4 text-black/60 dark:text-white/60" />
                                                             </NavigationMenuLink>
                                                         ))}
                                                     </div>
@@ -145,18 +145,18 @@ function Header1() {
                     </NavigationMenu>
                 </div>
                 <div className="flex lg:justify-center">
-                    <Link href="/" className="font-semibold text-lg text-black">Rising Path</Link>
+                    <Link href="/" className="font-semibold text-lg text-black dark:text-white">Rising Path</Link>
                 </div>
                 <div className="flex justify-end w-full gap-3 items-center">
                     <LanguageSwitcher />
                     <ThemeToggle />
                     {isLoggedIn ? (
                         <>
-                            <div className="hidden md:flex items-center gap-2 text-sm text-black">
+                            <div className="hidden md:flex items-center gap-2 text-sm text-black dark:text-white">
                                 <User className="w-4 h-4" />
                                 <span>{accessCodeName}</span>
                             </div>
-                            <Button variant="ghost" onClick={handleLogout} className="hidden md:inline-flex text-black hover:bg-[#C46A4A]/10 hover:text-[#C46A4A]">
+                            <Button variant="ghost" onClick={handleLogout} className="hidden md:inline-flex text-black dark:text-white hover:bg-[#C46A4A]/10 hover:text-[#C46A4A]">
                                 <LogOut className="w-4 h-4 mr-2" />
                                 {t("nav.logout")}
                             </Button>
@@ -181,10 +181,10 @@ function Header1() {
                                                 href={item.href}
                                                 className="flex justify-between items-center"
                                             >
-                                                <span className="text-lg text-black">{item.title}</span>
+                                                <span className="text-lg text-black dark:text-white">{item.title}</span>
                                             </Link>
                                         ) : (
-                                            <p className="text-lg text-black">{item.title}</p>
+                                            <p className="text-lg text-black dark:text-white">{item.title}</p>
                                         )}
                                         {item.items &&
                                             item.items.map((subItem) => (
@@ -193,7 +193,7 @@ function Header1() {
                                                     href={subItem.href}
                                                     className="flex justify-between items-center"
                                                 >
-                                                    <span className="text-black/70">
+                                                    <span className="text-black/70 dark:text-white/70">
                                                         {subItem.title}
                                                     </span>
                                                     <MoveRight className="w-4 h-4" />
