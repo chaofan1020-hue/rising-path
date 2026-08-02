@@ -63,6 +63,7 @@ export async function POST(request: NextRequest) {
       sessionId,
       interviewType,
       jobDescription,
+      jobId,
       resumeId,
       answer,
       language = 'zh',
@@ -82,7 +83,23 @@ export async function POST(request: NextRequest) {
         return new Response(JSON.stringify({ error: '缺少面试类型' }), { status: 400 });
       }
 
-      const jdText = jobDescription || (language === 'en' ? 'General position (no specific JD provided)' : '通用岗位（未提供具体 JD）');
+      // 优先使用选中的岗位 JD
+      let jdText = jobDescription || '';
+      let selectedJobId: number | null = null;
+      if (jobId) {
+        const { data: job } = await client
+          .from('jobs')
+          .select('id, title, company, description, requirements')
+          .eq('id', jobId)
+          .single();
+        if (job) {
+          selectedJobId = job.id;
+          jdText = `${job.company} - ${job.title}\n\n${language === 'en' ? 'Job Description' : '岗位描述'}:\n${job.description || ''}\n\n${language === 'en' ? 'Requirements' : '岗位要求'}:\n${job.requirements || ''}`;
+        }
+      }
+      if (!jdText) {
+        jdText = language === 'en' ? 'General position (no specific JD provided)' : '通用岗位（未提供具体 JD）';
+      }
 
       // 可选：结合简历内容
       let resumeContext = '';
@@ -117,7 +134,8 @@ export async function POST(request: NextRequest) {
         .insert({
           access_code_id: accessCodeId,
           interview_type: interviewType,
-          job_description: jobDescription || '',
+          job_description: jdText,
+          job_id: selectedJobId,
           messages: [],
         })
         .select('id')
