@@ -12,7 +12,7 @@ const SPEAKER_EN = 'zh_female_vv_uranus_bigtts';
 export async function POST(request: NextRequest) {
   try {
     const body = await request.json();
-    const { accessCodeId, text, language, speaker } = body;
+    const { accessCodeId, text, language, speaker, speechRate } = body;
 
     if (!accessCodeId || !text) {
       return NextResponse.json({ error: '缺少必要参数' }, { status: 400 });
@@ -33,12 +33,16 @@ export async function POST(request: NextRequest) {
     const config = new Config();
     const ttsClient = new TTSClient(config, customHeaders);
 
+    // 语速：-50 ~ 100，越界回退默认 0；面试官语速由人格原型决定，打破匀速 AI 腔
+    const rate = typeof speechRate === 'number' && speechRate >= -50 && speechRate <= 100 ? Math.round(speechRate) : 0;
+
     const response = await ttsClient.synthesize({
       uid: `interview_${accessCodeId}`,
       text: text.slice(0, 1000),
       speaker: speaker || (language === 'en' ? SPEAKER_EN : SPEAKER_ZH),
       audioFormat: 'mp3',
-      sampleRate: 24000,
+      sampleRate: 48000,
+      speechRate: rate,
     });
 
     return NextResponse.json({ audioUri: response.audioUri });

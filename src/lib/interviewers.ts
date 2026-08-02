@@ -355,10 +355,6 @@ export const INTERVIEWERS: Interviewer[] = [
 
 export function selectRoundInterviewers(count: number): Interviewer[] {const s=[...INTERVIEWERS];for(let i=s.length-1;i>0;i--){const j=Math.floor(Math.random()*(i+1));[s[i],s[j]]=[s[j],s[i]];}return s.slice(0,count);}
 
-const VOICES_FEMALE=['zh_female_vv_uranus_bigtts','zh_female_xiaohe_uranus_bigtts'];
-const VOICES_MALE=['zh_male_m191_uranus_bigtts','zh_male_taocheng_uranus_bigtts'];
-export function getInterviewerVoice(it: Interviewer): string {const pool=it.gender==='female'?VOICES_FEMALE:VOICES_MALE;return pool[it.id%pool.length];}
-
 // ===== 人格原型与剧本角色 =====
 export type InterviewerArchetype =
   | 'ice_tech'
@@ -578,6 +574,56 @@ export function assignToCompany(interviewer: Interviewer, company: string): Inte
 
 export function getPersona(id: number): PersonaInfo {
   return PERSONA_MAP[id] ?? { archetype: 'pressure_finance', role: 'griller' };
+}
+
+// ===== 语音人性化：音色与语速按人格原型匹配 =====
+// saturn 系列为配音/角色演绎音色，语气和起伏更贴近真人；uranus 通用音色作为补充
+const VOICE_MAP: Record<InterviewerArchetype, { female: string[]; male: string[] }> = {
+  ice_tech: {
+    female: ['zh_female_vv_uranus_bigtts', 'zh_female_mizai_saturn_bigtts'],
+    male: ['zh_male_m191_uranus_bigtts', 'zh_male_dayi_saturn_bigtts'],
+  },
+  pressure_finance: {
+    female: ['zh_female_vv_uranus_bigtts', 'zh_female_jitangnv_saturn_bigtts'],
+    male: ['zh_male_taocheng_uranus_bigtts', 'zh_male_dayi_saturn_bigtts'],
+  },
+  warm_mentor: {
+    female: ['zh_female_santongyongns_saturn_bigtts', 'saturn_zh_female_cancan_tob'],
+    male: ['zh_male_ruyayichen_saturn_bigtts', 'zh_male_taocheng_uranus_bigtts'],
+  },
+  creative_eclectic: {
+    female: ['zh_female_mizai_saturn_bigtts', 'zh_female_jitangnv_saturn_bigtts'],
+    male: ['zh_male_dayi_saturn_bigtts', 'zh_male_ruyayichen_saturn_bigtts'],
+  },
+  culture_guardian: {
+    female: ['zh_female_xiaohe_uranus_bigtts', 'zh_female_santongyongns_saturn_bigtts'],
+    male: ['zh_male_taocheng_uranus_bigtts', 'zh_male_m191_uranus_bigtts'],
+  },
+  silent_executive: {
+    female: ['zh_female_mizai_saturn_bigtts', 'zh_female_xiaohe_uranus_bigtts'],
+    male: ['zh_male_m191_uranus_bigtts', 'zh_male_dayi_saturn_bigtts'],
+  },
+};
+
+// 各原型语速微调（-50 ~ 100）：语速变化是真人感的关键——匀速正是 AI 腔的主要来源
+// 高压型偏快制造压迫感，高管偏慢制造沉稳压迫，温和型轻快亲和
+const SPEECH_RATE_MAP: Record<InterviewerArchetype, number> = {
+  ice_tech: -5,
+  pressure_finance: 15,
+  warm_mentor: 5,
+  creative_eclectic: 10,
+  culture_guardian: 0,
+  silent_executive: -10,
+};
+
+export function getInterviewerVoice(it: Interviewer): string {
+  const persona = getPersona(it.id);
+  const pool = VOICE_MAP[persona.archetype][it.gender === 'female' ? 'female' : 'male'];
+  return pool[it.id % pool.length];
+}
+
+export function getInterviewerSpeechRate(it: Interviewer): number {
+  return SPEECH_RATE_MAP[getPersona(it.id).archetype];
 }
 
 // 按剧本角色抽取面试官（同一场面试内不重复）

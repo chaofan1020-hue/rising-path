@@ -307,6 +307,7 @@ export default function MockInterviewPage() {
     company: string;
     personality: string;
     voice?: string;
+    speechRate?: number;
     title?: { zh: string; en: string } | null;
   } | null>(null);
   const [roundTransition, setRoundTransition] = useState(false);
@@ -470,16 +471,16 @@ export default function MockInterviewPage() {
     stopAmbience();
   }, []);
 
-  // 播放面试官语音（TTS，支持面试官专属音色）
+  // 播放面试官语音（TTS，支持面试官专属音色与人格语速）
   const playInterviewerAudio = useCallback(
-    async (text: string, speaker?: string) => {
+    async (text: string, speaker?: string, speechRate?: number) => {
       if (!accessCodeId || !text.trim()) return;
       try {
         setSpeaking(true);
         const res = await fetch("/api/interview/tts", {
           method: "POST",
           headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ accessCodeId, text, language, speaker }),
+          body: JSON.stringify({ accessCodeId, text, language, speaker, speechRate }),
         });
         if (!res.ok) throw new Error("TTS failed");
         const data = await res.json();
@@ -629,7 +630,7 @@ export default function MockInterviewPage() {
         totalRounds: interviewMode === "gauntlet" ? totalRounds : 1,
         targetCompany,
       });
-      playInterviewerAudio(fullContent, activeInterviewer?.voice);
+      playInterviewerAudio(fullContent, activeInterviewer?.voice, activeInterviewer?.speechRate);
     } catch {
       alert(t("mockInterview.startFailed"));
       setStage("setup");
@@ -707,7 +708,7 @@ export default function MockInterviewPage() {
     setMessages((prev) => [...prev, { role: "candidate", content: text }]);
     try {
       const { fullContent, activeInterviewer } = await streamInterviewer({ sessionId, answer: text });
-      playInterviewerAudio(fullContent, activeInterviewer?.voice);
+      playInterviewerAudio(fullContent, activeInterviewer?.voice, activeInterviewer?.speechRate);
     } catch {
       alert(t("mockInterview.sendFailed"));
     }
