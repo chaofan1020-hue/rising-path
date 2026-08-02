@@ -74,6 +74,10 @@ function Header1() {
                     title: t("nav.atsOptimize"),
                     href: "/optimize",
                 },
+                {
+                    title: t("nav.mockInterview"),
+                    href: "/mock-interview",
+                },
             ],
         },
         {
