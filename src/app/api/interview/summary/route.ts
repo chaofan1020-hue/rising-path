@@ -131,10 +131,12 @@ export async function POST(request: NextRequest) {
     }));
 
     // 委员会档案（轮次/角色/人设），供 prompt 与结果回填共用
+    // 公司统一使用本场目标公司（画像库仅提供性格参考）
     const isGauntlet = session.mode === 'gauntlet' && (session.total_rounds || 1) > 1;
     const rounds: number = session.total_rounds || 1;
     const interviewerIds: number[] = (session.interviewer_ids as number[]) || [];
     const script = isGauntlet ? GAUNTLET_SCRIPTS[rounds] ?? null : null;
+    const sessionCompany: string = session.target_company || '';
     const panel = interviewerIds
       .map((id, idx) => {
         const it = INTERVIEWERS.find((i) => i.id === id);
@@ -147,7 +149,7 @@ export async function POST(request: NextRequest) {
         const archetypeLabel = language === 'en'
           ? ARCHETYPE_PARAMS[persona.archetype].labelEn
           : ARCHETYPE_PARAMS[persona.archetype].labelZh;
-        return { id: it.id, name: it.name, company: it.company, personality: it.personality, round: idx + 1, roleLabel, archetypeLabel };
+        return { id: it.id, name: it.name, company: sessionCompany || it.company, personality: it.personality, round: idx + 1, roleLabel, archetypeLabel };
       })
       .filter((p): p is NonNullable<typeof p> => p !== null);
 

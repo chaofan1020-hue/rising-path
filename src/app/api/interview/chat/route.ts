@@ -7,8 +7,10 @@ import {
   selectScriptInterviewers,
   getInterviewerVoice,
   getPersona,
+  assignToCompany,
   ARCHETYPE_PARAMS,
   ROUND_ROLE_INFO,
+  ROLE_TITLES,
   GAUNTLET_SCRIPTS,
   type Interviewer,
   type RoundRole,
@@ -45,8 +47,9 @@ function buildSystemPrompt(
   const roleInfo = roundRole ? ROUND_ROLE_INFO[roundRole] : null;
 
   if (language === 'en') {
+    const title = roundRole ? ROLE_TITLES[roundRole].en : 'Interviewer';
     const personaBlock = interviewer
-      ? `\n\nYOUR PERSONA:\nYou are ${interviewer.name}, an interviewer from ${interviewer.company}.
+      ? `\n\nYOUR PERSONA:\nYou are ${interviewer.name}, ${title} at ${interviewer.company}.
 Personality & interview style: ${interviewer.personality}
 You appreciate: ${interviewer.likes}
 You dislike: ${interviewer.dislikes}`
@@ -72,8 +75,9 @@ Rules you MUST follow (this is a REAL interview):
 7. Keep each response under 120 words.`;
   }
 
+  const zhTitle = roundRole ? ROLE_TITLES[roundRole].zh : '面试官';
   const personaBlock = interviewer
-    ? `\n\n【你的人设】\n你是 ${interviewer.name}，来自 ${interviewer.company} 的面试官。
+    ? `\n\n【你的人设】\n你是 ${interviewer.company} 的${zhTitle} ${interviewer.name}。
 性格与面试风格：${interviewer.personality}
 你欣赏：${interviewer.likes}
 你厌恶：${interviewer.dislikes}`
@@ -111,6 +115,7 @@ function interviewerPayload(interviewer: Interviewer, round: number, totalRounds
       id: interviewer.id,
       name: interviewer.name,
       company: interviewer.company,
+      title: role ? { zh: ROLE_TITLES[role].zh, en: ROLE_TITLES[role].en } : null,
       personality: interviewer.personality,
       gender: interviewer.gender,
       voice: getInterviewerVoice(interviewer),
@@ -135,6 +140,7 @@ export async function POST(request: NextRequest) {
       language = 'zh',
       mode = 'single',
       totalRounds = 1,
+      targetCompany,
     } = body;
 
     if (!accessCodeId) {
@@ -151,6 +157,7 @@ export async function POST(request: NextRequest) {
 
       let jdText = jobDescription || '';
       let selectedJobId: number | null = null;
+      let jobCompany = '';
       if (jobId) {
         const { data: job } = await client
           .from('jobs')
@@ -159,11 +166,18 @@ export async function POST(request: NextRequest) {
           .single();
         if (job) {
           selectedJobId = job.id;
+          jobCompany = job.company || '';
           jdText = `${job.company} - ${job.title}\n\n${language === 'en' ? 'Job Description' : '岗位描述'}:\n${job.description || ''}\n\n${language === 'en' ? 'Requirements' : '岗位要求'}:\n${job.requirements || ''}`;
         }
       }
       if (!jdText) {
         jdText = language === 'en' ? 'General position (no specific JD provided)' : '通用岗位（未提供具体 JD）';
+      }
+
+      // 目标公司：本场所有面试官均来自该公司（画像库仅提供性格参考）
+      const company = String(targetCompany || jobCompany || '').trim();
+      if (!company) {
+        return new Response(JSON.stringify({ error: '缺少目标公司' }), { status: 400 });
       }
 
       let resumeContext = '';
@@ -182,8 +196,10 @@ export async function POST(request: NextRequest) {
       }
 
       // 闯关模式：按剧本角色抽取 N 位面试官；单面模式：随机 1 位
+      // 抽出的性格画像全部分配到目标公司（同一场面试所有面试官来自同一家公司）
       const rounds = isGauntlet ? totalRounds : 1;
-      const interviewers = isGauntlet ? selectScriptInterviewers(rounds) : selectRoundInterviewers(rounds);
+      const interviewers = (isGauntlet ? selectScriptInterviewers(rounds) : selectRoundInterviewers(rounds))
+        .map((it) => assignToCompany(it, company));
       const firstInterviewer = interviewers[0];
       const script = isGauntlet ? GAUNTLET_SCRIPTS[rounds] ?? null : null;
       const firstRole: RoundRole | null = script ? script[0] : null;
@@ -206,6 +222,7 @@ export async function POST(request: NextRequest) {
           interview_type: interviewType,
           job_description: jdText,
           job_id: selectedJobId,
+          target_company: company,
           messages: [],
           mode: isGauntlet ? 'gauntlet' : 'single',
           total_rounds: rounds,
@@ -289,6 +306,7 @@ export async function POST(request: NextRequest) {
     const rounds: number = session.total_rounds || 1;
     const interviewerIds: number[] = (session.interviewer_ids as number[]) || [];
     const currentRound: number = session.current_round || 1;
+    const sessionCompany: string = session.target_company || '';
 
     // 追加候选人回答（归属当前轮）
     const currentInterviewerId = interviewerIds[currentRound - 1] || null;
@@ -300,8 +318,11 @@ export async function POST(request: NextRequest) {
       sessionMode === 'gauntlet' && answersThisRound >= QUESTIONS_PER_ROUND && currentRound < rounds;
     const nextRound = shouldSwitch ? currentRound + 1 : currentRound;
     const nextInterviewerId = interviewerIds[nextRound - 1] || currentInterviewerId;
-    const activeInterviewer: Interviewer | null =
+    const rawInterviewer =
       INTERVIEWERS.find((i) => i.id === (shouldSwitch ? nextInterviewerId : currentInterviewerId)) || null;
+    // 性格画像分配到本场目标公司（兼容无 target_company 的历史会话）
+    const activeInterviewer: Interviewer | null =
+      rawInterviewer && sessionCompany ? assignToCompany(rawInterviewer, sessionCompany) : rawInterviewer;
 
     const script = sessionMode === 'gauntlet' ? GAUNTLET_SCRIPTS[rounds] ?? null : null;
     const activeRole: RoundRole | null = script ? script[nextRound - 1] ?? null : null;

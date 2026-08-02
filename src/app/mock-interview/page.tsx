@@ -5,6 +5,7 @@ import { Header1 } from "@/components/header1";
 import { AccessGuard, useAccessCode } from "@/components/access-guard";
 import { Button } from "@/components/ui/button";
 import { Textarea } from "@/components/ui/textarea";
+import { Input } from "@/components/ui/input";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
 import { useLanguage } from "@/lib/language-context";
 import {
@@ -278,6 +279,7 @@ export default function MockInterviewPage() {
   const [jobs, setJobs] = useState<JobItem[]>([]);
   const [selectedJobId, setSelectedJobId] = useState<number | null>(null);
   const [jd, setJd] = useState("");
+  const [targetCompanyInput, setTargetCompanyInput] = useState(""); // 手动 JD 时的目标公司
   const [resumes, setResumes] = useState<ResumeItem[]>([]);
   const [selectedResumeId, setSelectedResumeId] = useState<number | null>(null);
 
@@ -305,6 +307,7 @@ export default function MockInterviewPage() {
     company: string;
     personality: string;
     voice?: string;
+    title?: { zh: string; en: string } | null;
   } | null>(null);
   const [roundTransition, setRoundTransition] = useState(false);
   const [roundRoleLabel, setRoundRoleLabel] = useState<{ zh: string; en: string } | null>(null);
@@ -601,6 +604,12 @@ export default function MockInterviewPage() {
   // 开始面试
   const handleStart = async () => {
     if (!accessCodeId) return;
+    // 目标公司：选岗位时用岗位所属公司，手动 JD 时用用户输入——本场所有面试官均来自该公司
+    const targetCompany = (selectedJobId ? selectedCompany : targetCompanyInput).trim();
+    if (!targetCompany) {
+      alert(t("mockInterview.companyRequired"));
+      return;
+    }
     setMessages([]);
     setSummary("");
     setOverallScore(null);
@@ -618,6 +627,7 @@ export default function MockInterviewPage() {
         resumeId: selectedResumeId || undefined,
         mode: interviewMode,
         totalRounds: interviewMode === "gauntlet" ? totalRounds : 1,
+        targetCompany,
       });
       playInterviewerAudio(fullContent, activeInterviewer?.voice);
     } catch {
@@ -773,6 +783,7 @@ export default function MockInterviewPage() {
     setOverallScore(null);
     setSessionId(null);
     setJd("");
+    setTargetCompanyInput("");
     setSelectedCompany("");
     setSelectedJobId(null);
     setSelectedResumeId(null);
@@ -943,6 +954,15 @@ export default function MockInterviewPage() {
                 {!selectedJobId && (
                   <div className="mb-6">
                     <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
+                      {t("mockInterview.targetCompany")} <span className="text-[#C46A4A]">*</span>
+                    </label>
+                    <Input
+                      value={targetCompanyInput}
+                      onChange={(e) => setTargetCompanyInput(e.target.value)}
+                      placeholder={t("mockInterview.targetCompanyPlaceholder")}
+                      className="rounded-xl mb-4"
+                    />
+                    <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
                       {t("mockInterview.jd")}
                     </label>
                     <Textarea
@@ -990,7 +1010,9 @@ export default function MockInterviewPage() {
                   {currentInterviewer ? currentInterviewer.name : t("mockInterview.title")}
                 </p>
                 <p className="text-zinc-400 text-xs">
-                  {currentInterviewer ? currentInterviewer.company : t("mockInterview.qaCount").replace("{count}", String(qaCount))}
+                  {currentInterviewer
+                    ? `${currentInterviewer.title ? (language.startsWith("zh") ? currentInterviewer.title.zh : currentInterviewer.title.en) + " · " : ""}${currentInterviewer.company}`
+                    : t("mockInterview.qaCount").replace("{count}", String(qaCount))}
                 </p>
               </div>
             </div>
@@ -1094,7 +1116,9 @@ export default function MockInterviewPage() {
                     <span className="text-white text-2xl font-light">{currentInterviewer.name.charAt(0).toUpperCase()}</span>
                   </div>
                   <p className="text-white text-xl font-medium">{currentInterviewer.name}</p>
-                  <p className="text-zinc-400 text-sm">{currentInterviewer.company}</p>
+                  <p className="text-zinc-400 text-sm">
+                    {currentInterviewer.title ? `${language.startsWith("zh") ? currentInterviewer.title.zh : currentInterviewer.title.en} · ` : ""}{currentInterviewer.company}
+                  </p>
                 </div>
               )}
 

@@ -563,6 +563,19 @@ export const GAUNTLET_SCRIPTS: Record<number, RoundRole[]> = {
   7: ['screener', 'griller', 'cross', 'griller', 'cross', 'griller', 'executive'],
 };
 
+// 轮次角色在目标公司内的职位头衔
+export const ROLE_TITLES: Record<RoundRole, { zh: string; en: string }> = {
+  screener: { zh: 'HR 经理', en: 'HR Manager' },
+  griller: { zh: '业务主管', en: 'Hiring Manager' },
+  cross: { zh: '跨部门负责人', en: 'Cross-functional Lead' },
+  executive: { zh: '业务高管', en: 'Executive' },
+};
+
+// 将性格画像分配到目标公司（100 位画像仅作性格库，实际一场面试中所有面试官均来自同一目标公司）
+export function assignToCompany(interviewer: Interviewer, company: string): Interviewer {
+  return { ...interviewer, company };
+}
+
 export function getPersona(id: number): PersonaInfo {
   return PERSONA_MAP[id] ?? { archetype: 'pressure_finance', role: 'griller' };
 }
