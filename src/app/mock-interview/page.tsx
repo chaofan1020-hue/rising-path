@@ -104,7 +104,21 @@ const TYPE_ICONS: Record<InterviewType, React.ReactNode> = {
 
 export default function MockInterviewPage() {
   const { t, locale } = useLanguage();
-  const { accessCodeId } = useAccessCode();
+  const { accessCodeId: contextAccessCodeId } = useAccessCode();
+  // 兜底：Context 未就绪时从 localStorage 读取（登录时 access-guard 会写入 access_code_id）
+  const [accessCodeId, setAccessCodeId] = useState<number | null>(contextAccessCodeId);
+
+  useEffect(() => {
+    if (contextAccessCodeId) {
+      setAccessCodeId(contextAccessCodeId);
+      return;
+    }
+    const stored = typeof window !== "undefined" ? localStorage.getItem("access_code_id") : null;
+    if (stored) {
+      const id = parseInt(stored, 10);
+      if (!isNaN(id)) setAccessCodeId(id);
+    }
+  }, [contextAccessCodeId]);
   const [stage, setStage] = useState<Stage>("setup");
   const [interviewType, setInterviewType] = useState<InterviewType>("mixed");
 
@@ -158,8 +172,11 @@ export default function MockInterviewPage() {
     if (!accessCodeId) return;
     fetch(`/api/resume?access_code_id=${accessCodeId}`)
       .then((r) => (r.ok ? r.json() : null))
-      .then((d) => d && setResumes(d.resumes || []))
-      .catch(() => {});
+      .then((d) => {
+        console.log("[mock-interview] accessCodeId:", accessCodeId, "resumes:", d?.resumes?.length);
+        if (d) setResumes(d.resumes || []);
+      })
+      .catch((e) => console.error("[mock-interview] fetch resumes error:", e));
   }, [accessCodeId]);
 
   // 公司变化时加载岗位
