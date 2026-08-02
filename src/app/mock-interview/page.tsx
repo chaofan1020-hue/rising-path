@@ -307,6 +307,7 @@ export default function MockInterviewPage() {
     name: string;
     company: string;
     personality: string;
+    gender?: string;
     voice?: string;
     speechRate?: number;
     title?: { zh: string; en: string } | null;
@@ -1096,22 +1097,28 @@ export default function MockInterviewPage() {
           {/* 主区域：面试官全屏画面 */}
           <div className="relative flex-1">
             <div className="absolute inset-0 flex flex-col items-center justify-center px-6">
-              {/* 头像 + 说话波纹 */}
+              {/* 全息投影形象 */}
               <div className="relative flex items-center justify-center">
+                {/* 说话时的声波扩散环 */}
                 {speaking && (
                   <>
-                    <span className="absolute inset-0 rounded-full bg-[#C46A4A]/30 animate-ping" style={{ animationDuration: "1.6s" }} />
-                    <span className="absolute -inset-4 rounded-full bg-[#C46A4A]/15 animate-ping" style={{ animationDuration: "2.2s" }} />
+                    <span className="absolute inset-4 rounded-full border border-cyan-400/40 animate-ping" style={{ animationDuration: "1.6s" }} />
+                    <span className="absolute -inset-2 rounded-full border border-cyan-400/20 animate-ping" style={{ animationDuration: "2.4s" }} />
                   </>
                 )}
-                <div className={`relative h-28 w-28 md:h-36 md:w-36 rounded-full bg-gradient-to-br from-[#C46A4A] to-[#B5BEB0] flex items-center justify-center shadow-2xl shadow-[#C46A4A]/20 transition-transform duration-500 ${speaking ? "scale-105" : "scale-100"}`}>
-                  {currentInterviewer ? (
-                    <span className="text-white text-4xl md:text-5xl font-light">
-                      {currentInterviewer.name.charAt(0).toUpperCase()}
-                    </span>
-                  ) : (
-                    <Bot className="h-14 w-14 md:h-16 md:w-16 text-white" />
-                  )}
+                <div className={`relative h-56 w-56 md:h-80 md:w-80 transition-transform duration-500 ${speaking ? "scale-[1.03]" : "scale-100"}`}>
+                  {/* 全息人像（屏幕混合模式，黑底自动消失） */}
+                  {/* eslint-disable-next-line @next/next/no-img-element */}
+                  <img
+                    src={currentInterviewer?.gender === "female" ? "/hologram-female.png" : "/hologram-male.png"}
+                    alt={currentInterviewer?.name || "AI Interviewer"}
+                    draggable={false}
+                    className={`holo-figure h-full w-full object-contain select-none ${speaking ? "holo-figure-speaking" : ""}`}
+                  />
+                  {/* 扫描线覆盖层 */}
+                  <div className="holo-scanlines pointer-events-none absolute inset-0" />
+                  {/* 底部投影基座光环 */}
+                  <div className="holo-base absolute -bottom-2 left-1/2 h-5 w-36 md:w-52 -translate-x-1/2 rounded-[100%] bg-cyan-400/25 blur-md" />
                 </div>
               </div>
 
@@ -1132,7 +1139,7 @@ export default function MockInterviewPage() {
                     {[0, 1, 2, 3].map((i) => (
                       <span
                         key={i}
-                        className="w-1 rounded-full bg-[#C46A4A] animate-pulse"
+                        className="w-1 rounded-full bg-cyan-400 animate-pulse"
                         style={{ height: `${8 + (i % 3) * 5}px`, animationDelay: `${i * 0.15}s` }}
                       />
                     ))}
@@ -1195,8 +1202,16 @@ export default function MockInterviewPage() {
                   {t("mockInterview.roundProgress").replace("{current}", String(currentRound)).replace("{total}", String(totalRounds))}
                 </p>
                 <p className="text-zinc-500 text-xs mb-4">{t("mockInterview.newInterviewer")}</p>
-                <div className="h-20 w-20 rounded-full bg-gradient-to-br from-[#C46A4A] to-[#B5BEB0] flex items-center justify-center mb-4 shadow-2xl shadow-[#C46A4A]/20">
-                  <span className="text-white text-3xl font-light">{currentInterviewer.name.charAt(0).toUpperCase()}</span>
+                <div className="relative h-28 w-28 mb-3">
+                  {/* eslint-disable-next-line @next/next/no-img-element */}
+                  <img
+                    src={currentInterviewer.gender === "female" ? "/hologram-female.png" : "/hologram-male.png"}
+                    alt={currentInterviewer.name}
+                    draggable={false}
+                    className="holo-figure h-full w-full object-contain select-none"
+                  />
+                  <div className="holo-scanlines pointer-events-none absolute inset-0" />
+                  <div className="holo-base absolute -bottom-1 left-1/2 h-3 w-20 -translate-x-1/2 rounded-[100%] bg-cyan-400/25 blur-sm" />
                 </div>
                 <p className="text-white text-2xl font-medium">{currentInterviewer.name}</p>
                 <p className="text-zinc-400 text-sm mt-1">
