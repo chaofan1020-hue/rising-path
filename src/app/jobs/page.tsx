@@ -675,15 +675,15 @@ function JobsContent() {
                           )}
                         </Button>
                       )}
-                      <Button size="sm" variant="outline" asChild className="rounded-lg text-xs md:text-sm h-9 w-24 md:w-28">
+                      <Button size="sm" variant="outline" asChild className="rounded-lg text-xs md:text-sm h-9 whitespace-nowrap">
                         <Link href={`/jobs/${job.id}`}>
                           {t('jobs.viewDetail')}
                         </Link>
                       </Button>
                       {job.job_url && (
-                        <Button size="sm" variant="outline" asChild className="rounded-lg text-xs md:text-sm h-9 w-24 md:w-28">
+                        <Button size="sm" variant="outline" asChild className="rounded-lg text-xs md:text-sm h-9 whitespace-nowrap">
                           <a href={job.job_url} target="_blank" rel="noopener noreferrer">
-                            <ExternalLink className="h-3.5 w-3.5 mr-1" />
+                            <ExternalLink className="h-3.5 w-3.5 mr-1 flex-shrink-0" />
                             {t('jobs.originalLink')}
                           </a>
                         </Button>
