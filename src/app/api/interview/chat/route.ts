@@ -19,6 +19,7 @@ interface ChatMessage {
   content: string;
   round?: number;
   interviewerId?: number;
+  ts?: number; // 消息时间戳（毫秒），用于统计反应速度
 }
 
 const QUESTIONS_PER_ROUND = 2;
@@ -241,7 +242,7 @@ export async function POST(request: NextRequest) {
             }
 
             const newMessages: ChatMessage[] = [
-              { role: 'interviewer', content: fullContent, round: 1, interviewerId: firstInterviewer.id },
+              { role: 'interviewer', content: fullContent, round: 1, interviewerId: firstInterviewer.id, ts: Date.now() },
             ];
             await client
               .from('interview_sessions')
@@ -291,7 +292,7 @@ export async function POST(request: NextRequest) {
 
     // 追加候选人回答（归属当前轮）
     const currentInterviewerId = interviewerIds[currentRound - 1] || null;
-    messages.push({ role: 'candidate', content: answer, round: currentRound, interviewerId: currentInterviewerId ?? undefined });
+    messages.push({ role: 'candidate', content: answer, round: currentRound, interviewerId: currentInterviewerId ?? undefined, ts: Date.now() });
 
     // 判断是否需要切换到下一面试官
     const answersThisRound = messages.filter((m) => m.role === 'candidate' && m.round === currentRound).length;
@@ -366,6 +367,7 @@ export async function POST(request: NextRequest) {
               content: fullContent,
               round: nextRound,
               interviewerId: activeInterviewer?.id,
+              ts: Date.now(),
             },
           ];
           await client

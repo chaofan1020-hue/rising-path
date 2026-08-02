@@ -8,7 +8,7 @@ import { Textarea } from "@/components/ui/textarea";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
 import { useLanguage } from "@/lib/language-context";
 import {
-  Bot, Loader2, Sparkles, RotateCcw, ClipboardList, Code2, MessagesSquare,
+  Bot, Loader2, RotateCcw, ClipboardList, Code2, MessagesSquare,
   Puzzle, Layers, Mic, Square, PhoneOff, Video, VideoOff, User,
   Building2, Briefcase, FileText, ChevronDown, Check, Timer, Zap,
 } from "lucide-react";
@@ -96,6 +96,155 @@ interface JobItem {
   company: string;
 }
 
+// ===== 结构化面试报告 =====
+interface ReportVerdict {
+  pass: boolean;
+  vote: string;
+  grade: string;
+  hireLevel: string;
+  headline: string;
+}
+
+interface ReportCommitteeItem {
+  interviewerId: number;
+  name: string;
+  company: string;
+  round: number;
+  roleLabel: string;
+  archetypeLabel: string;
+  tags: string[];
+  grade: string;
+  attitude: string;
+  comment: string;
+  keyMoment: { question: string; answer: string; note: string };
+}
+
+interface RadarDim {
+  dimension: string;
+  score: number;
+  grade: string;
+  diagnosis: string;
+}
+
+interface InterviewReport {
+  verdict: ReportVerdict;
+  committee: ReportCommitteeItem[];
+  radar: RadarDim[];
+  highlights: {
+    mistakes: Array<{ title: string; scene: string; consequence: string; coach: string }>;
+    best: { title: string; scene: string; effect: string; coach: string };
+  };
+  actionPlan: { immediate: string[]; practice: string[]; reading: string[] };
+  annotations: Array<{ msgIndex: number; label: string; note: string }>;
+}
+
+interface ReportStats {
+  durationSec: number;
+  totalWords: number;
+  turns: number;
+  probes: number;
+  avgResponseSec: number | null;
+}
+
+interface HistoryPoint {
+  date: string;
+  score: number;
+  grade: string | null;
+}
+
+// 评级颜色映射
+function gradeColor(grade: string): string {
+  const g = grade.toUpperCase();
+  if (g.startsWith("A")) return "text-emerald-500";
+  if (g.startsWith("B")) return "text-amber-500";
+  return "text-red-500";
+}
+function gradeDot(grade: string): string {
+  const g = grade.toUpperCase();
+  if (g.startsWith("A")) return "bg-emerald-500";
+  if (g.startsWith("B")) return "bg-amber-500";
+  return "bg-red-500";
+}
+
+// SVG 雷达图（6 维）
+function RadarChart({ dims }: { dims: RadarDim[] }) {
+  const cx = 110, cy = 100, r = 72;
+  const n = dims.length || 6;
+  const angle = (i: number) => (Math.PI / 2) - (i * 2 * Math.PI) / n;
+  const pt = (i: number, ratio: number) => ({
+    x: cx + Math.cos(angle(i)) * r * ratio,
+    y: cy - Math.sin(angle(i)) * r * ratio,
+  });
+  const rings = [0.25, 0.5, 0.75, 1];
+  const valuePts = dims.map((d, i) => pt(i, Math.max(0, Math.min(1, d.score / 100))));
+  const poly = (pts: Array<{ x: number; y: number }>) => pts.map((p) => `${p.x.toFixed(1)},${p.y.toFixed(1)}`).join(" ");
+  return (
+    <svg viewBox="0 0 220 200" className="w-full max-w-[300px] mx-auto">
+      {rings.map((ratio) => (
+        <polygon
+          key={ratio}
+          points={poly(Array.from({ length: n }, (_, i) => pt(i, ratio)))}
+          fill="none"
+          stroke="currentColor"
+          strokeWidth="0.5"
+          className="text-zinc-300 dark:text-zinc-700"
+        />
+      ))}
+      {dims.map((_, i) => {
+        const p = pt(i, 1);
+        return <line key={i} x1={cx} y1={cy} x2={p.x} y2={p.y} stroke="currentColor" strokeWidth="0.5" className="text-zinc-300 dark:text-zinc-700" />;
+      })}
+      <polygon points={poly(valuePts)} fill="rgba(196,106,74,0.25)" stroke="#C46A4A" strokeWidth="1.5" />
+      {valuePts.map((p, i) => (
+        <circle key={i} cx={p.x} cy={p.y} r="2.5" fill="#C46A4A" />
+      ))}
+      {dims.map((d, i) => {
+        const p = pt(i, 1.22);
+        return (
+          <text
+            key={d.dimension}
+            x={p.x}
+            y={p.y}
+            textAnchor="middle"
+            dominantBaseline="middle"
+            className="fill-zinc-500 dark:fill-zinc-400"
+            fontSize="9"
+          >
+            {d.dimension.length > 6 ? d.dimension.slice(0, 6) : d.dimension}
+          </text>
+        );
+      })}
+    </svg>
+  );
+}
+
+// SVG 历史趋势折线
+function TrendChart({ points, current }: { points: HistoryPoint[]; current: number | null }) {
+  const data = [...points.map((p) => p.score), ...(current !== null ? [current] : [])];
+  if (data.length === 0) return null;
+  const w = 320, h = 90, pad = 18;
+  const min = Math.max(0, Math.min(...data) - 10);
+  const max = Math.min(100, Math.max(...data) + 10);
+  const x = (i: number) => data.length === 1 ? w / 2 : pad + (i * (w - pad * 2)) / (data.length - 1);
+  const y = (v: number) => h - pad - ((v - min) / (max - min || 1)) * (h - pad * 2);
+  return (
+    <svg viewBox={`0 0 ${w} ${h}`} className="w-full max-w-[360px] mx-auto">
+      <polyline
+        points={data.map((v, i) => `${x(i)},${y(v)}`).join(" ")}
+        fill="none"
+        stroke="#B5BEB0"
+        strokeWidth="2"
+      />
+      {data.map((v, i) => (
+        <g key={i}>
+          <circle cx={x(i)} cy={y(v)} r={i === data.length - 1 ? 4 : 3} fill={i === data.length - 1 ? "#C46A4A" : "#B5BEB0"} />
+          <text x={x(i)} y={y(v) - 8} textAnchor="middle" fontSize="9" className="fill-zinc-500 dark:fill-zinc-400">{v}</text>
+        </g>
+      ))}
+    </svg>
+  );
+}
+
 const TYPE_ICONS: Record<InterviewType, React.ReactNode> = {
   technical: <Code2 className="h-6 w-6" />,
   behavioral: <MessagesSquare className="h-6 w-6" />,
@@ -139,6 +288,12 @@ export default function MockInterviewPage() {
   const [streaming, setStreaming] = useState(false);
   const [ending, setEnding] = useState(false);
   const [summary, setSummary] = useState("");
+
+  // 结构化面试报告（委员会评议）
+  const [report, setReport] = useState<InterviewReport | null>(null);
+  const [reportStats, setReportStats] = useState<ReportStats | null>(null);
+  const [reportHistory, setReportHistory] = useState<HistoryPoint[]>([]);
+  const [reportChars, setReportChars] = useState(0); // 生成中已接收字符数（进度展示）
 
   // 闯关模式状态
   const [interviewMode, setInterviewMode] = useState<"single" | "gauntlet">("single");
@@ -567,10 +722,13 @@ export default function MockInterviewPage() {
       const reader = res.body?.getReader();
       if (!reader) throw new Error("no reader");
       const decoder = new TextDecoder();
-      let fullContent = "";
       let buffer = "";
       setStage("summary");
       setSummary("");
+      setReport(null);
+      setReportStats(null);
+      setReportHistory([]);
+      setReportChars(0);
       while (true) {
         const { done, value } = await reader.read();
         if (done) break;
@@ -582,12 +740,18 @@ export default function MockInterviewPage() {
           try {
             const data = JSON.parse(line.slice(6));
             if (data.content) {
-              fullContent += data.content;
-              setSummary(fullContent);
+              // 生成中：仅更新进度字符数（原始 JSON 不直接展示）
+              setReportChars((c) => c + String(data.content).length);
             }
-            if (data.score) setOverallScore(data.score);
-          } catch {
-            // ignore
+            if (data.report) {
+              setReport(data.report as InterviewReport);
+              if (data.stats) setReportStats(data.stats as ReportStats);
+              if (Array.isArray(data.history)) setReportHistory(data.history as HistoryPoint[]);
+              if (data.score) setOverallScore(data.score);
+            }
+            if (data.error) throw new Error(data.error);
+          } catch (e) {
+            if (e instanceof Error && e.message !== "failed") throw e;
           }
         }
       }
@@ -602,6 +766,10 @@ export default function MockInterviewPage() {
     setStage("setup");
     setMessages([]);
     setSummary("");
+    setReport(null);
+    setReportStats(null);
+    setReportHistory([]);
+    setReportChars(0);
     setOverallScore(null);
     setSessionId(null);
     setJd("");
@@ -1053,50 +1221,285 @@ export default function MockInterviewPage() {
     );
   }
 
-  // ========== 总结阶段 ==========
+  // ========== 总结阶段（面试委员会评议报告） ==========
+  const annotationMap = new Map<number, Array<{ label: string; note: string }>>();
+  report?.annotations?.forEach((a) => {
+    if (typeof a.msgIndex !== "number") return;
+    const arr = annotationMap.get(a.msgIndex) || [];
+    arr.push({ label: a.label, note: a.note });
+    annotationMap.set(a.msgIndex, arr);
+  });
+  const fmtDuration = (sec: number) => `${Math.floor(sec / 60)}:${String(sec % 60).padStart(2, "0")}`;
+
   return (
     <AccessGuard>
       <div className="min-h-screen bg-white dark:bg-black">
         <Header1 />
         <main className="py-8 md:py-12">
-          <div className="container mx-auto px-4 max-w-3xl">
-            <div className="mb-8 text-center">
+          <div className="container mx-auto px-4 max-w-4xl">
+            <div className="mb-8 text-center print:mb-4">
               <div className="inline-flex items-center justify-center h-12 w-12 rounded-2xl bg-gradient-to-br from-[#C46A4A] to-[#B5BEB0] mb-3">
                 <ClipboardList className="h-6 w-6 text-white" />
               </div>
-              <h1 className="text-3xl md:text-4xl font-light text-black dark:text-white mb-2">
+              <h1 className="text-3xl md:text-4xl font-light text-black dark:text-white">
                 {t("mockInterview.summaryTitle")}
               </h1>
-              {overallScore !== null && (
-                <div className="inline-flex items-center gap-2 mt-2 px-5 py-2 rounded-full bg-gradient-to-r from-[#C46A4A] to-[#B5BEB0] text-white">
-                  <Sparkles className="h-4 w-4" />
-                  <span className="text-2xl font-semibold">{overallScore}</span>
-                  <span className="text-sm opacity-80">/ 100</span>
-                </div>
-              )}
             </div>
 
-            <div className="rounded-3xl border-0 bg-gradient-to-br from-[#C46A4A]/5 via-white to-[#E2D0B8]/10 dark:from-[#C46A4A]/10 dark:via-zinc-900 dark:to-[#E2D0B8]/5 shadow-lg p-6 md:p-8">
-              {summary ? (
-                <div className="prose prose-sm dark:prose-invert max-w-none whitespace-pre-wrap text-gray-800 dark:text-gray-200">
-                  {summary}
-                </div>
-              ) : (
-                <div className="flex items-center justify-center py-12">
-                  <Loader2 className="h-8 w-8 animate-spin text-[#C46A4A]" />
-                </div>
-              )}
-            </div>
+            {!report ? (
+              /* 报告生成中 */
+              <div className="rounded-3xl bg-gradient-to-br from-[#C46A4A]/5 via-white to-[#E2D0B8]/10 dark:from-[#C46A4A]/10 dark:via-zinc-900 dark:to-[#E2D0B8]/5 shadow-lg p-12 flex flex-col items-center">
+                <Loader2 className="h-10 w-10 animate-spin text-[#C46A4A] mb-5" />
+                <p className="text-gray-700 dark:text-gray-300 text-sm mb-1">{t("mockInterview.reportWriting")}</p>
+                {reportChars > 0 && (
+                  <p className="text-gray-400 text-xs">{t("mockInterview.reportRecorded").replace("{n}", String(reportChars))}</p>
+                )}
+              </div>
+            ) : (
+              <div className="space-y-8">
+                {/* ===== 模块一：总体战报 ===== */}
+                <section className={`rounded-3xl border shadow-lg p-6 md:p-8 ${
+                  report.verdict.pass
+                    ? "border-emerald-500/30 bg-emerald-50/60 dark:bg-emerald-950/20"
+                    : "border-red-500/30 bg-red-50/60 dark:bg-red-950/20"
+                }`}>
+                  <div className="flex flex-wrap items-start justify-between gap-4 mb-4">
+                    <div>
+                      <p className={`text-2xl md:text-3xl font-semibold ${report.verdict.pass ? "text-emerald-600 dark:text-emerald-400" : "text-red-600 dark:text-red-400"}`}>
+                        {report.verdict.pass ? t("mockInterview.verdictPass") : t("mockInterview.verdictFail")}
+                      </p>
+                      <div className="flex flex-wrap items-center gap-2 mt-2">
+                        <span className="px-2.5 py-1 rounded-full text-xs font-medium bg-zinc-900 text-white dark:bg-white dark:text-zinc-900">
+                          {report.verdict.hireLevel}
+                        </span>
+                        {report.verdict.vote && (
+                          <span className="px-2.5 py-1 rounded-full text-xs font-medium bg-zinc-200 text-zinc-700 dark:bg-zinc-800 dark:text-zinc-300">
+                            {t("mockInterview.vote")} {report.verdict.vote}
+                          </span>
+                        )}
+                      </div>
+                    </div>
+                    <div className="text-right">
+                      <p className="text-xs text-zinc-500 dark:text-zinc-400 mb-1">{t("mockInterview.overallGrade")}</p>
+                      <p className={`text-5xl font-bold leading-none ${gradeColor(report.verdict.grade)}`}>{report.verdict.grade}</p>
+                      {overallScore !== null && (
+                        <p className="text-xs text-zinc-500 dark:text-zinc-400 mt-1">{overallScore} / 100</p>
+                      )}
+                    </div>
+                  </div>
+                  {report.verdict.headline && (
+                    <p className="text-sm text-zinc-700 dark:text-zinc-300 border-l-2 border-[#C46A4A] pl-3 mb-5">{report.verdict.headline}</p>
+                  )}
+                  {reportStats && (
+                    <div className="grid grid-cols-2 md:grid-cols-5 gap-3 mb-5">
+                      {[
+                        { label: t("mockInterview.statDuration"), value: fmtDuration(reportStats.durationSec) },
+                        { label: t("mockInterview.statWords"), value: String(reportStats.totalWords) },
+                        { label: t("mockInterview.statTurns"), value: String(reportStats.turns) },
+                        { label: t("mockInterview.statProbes"), value: String(reportStats.probes) },
+                        { label: t("mockInterview.statAvgResponse"), value: reportStats.avgResponseSec !== null ? `${reportStats.avgResponseSec}${t("mockInterview.statSeconds")}` : "—" },
+                      ].map((s) => (
+                        <div key={s.label} className="rounded-2xl bg-white/70 dark:bg-zinc-900/60 p-3 text-center">
+                          <p className="text-lg font-semibold text-zinc-900 dark:text-white">{s.value}</p>
+                          <p className="text-[11px] text-zinc-500 dark:text-zinc-400 mt-0.5">{s.label}</p>
+                        </div>
+                      ))}
+                    </div>
+                  )}
+                  <div>
+                    <p className="text-xs text-zinc-500 dark:text-zinc-400 mb-2">{t("mockInterview.panel")}</p>
+                    <div className="flex flex-wrap gap-2">
+                      {report.committee.map((c) => (
+                        <span key={c.interviewerId} className="px-3 py-1.5 rounded-full text-xs bg-white/80 dark:bg-zinc-900/70 text-zinc-700 dark:text-zinc-300 border border-zinc-200 dark:border-zinc-700">
+                          {c.name} · {c.company}
+                        </span>
+                      ))}
+                    </div>
+                  </div>
+                </section>
 
-            <div className="mt-6 flex justify-center">
-              <Button
-                onClick={handleRestart}
-                className="rounded-full bg-gradient-to-r from-[#C46A4A] to-[#B5BEB0] hover:opacity-90 text-white px-8 h-11"
-              >
-                <RotateCcw className="h-4 w-4 mr-2" />
-                {t("mockInterview.restart")}
-              </Button>
-            </div>
+                {/* ===== 模块二：面试官委员会评语（横向滑动卡片） ===== */}
+                <section>
+                  <h2 className="text-lg font-medium text-zinc-900 dark:text-white mb-4">{t("mockInterview.committeeTitle")}</h2>
+                  <div className="flex gap-4 overflow-x-auto pb-3 snap-x snap-mandatory [-ms-overflow-style:none] [scrollbar-width:thin]">
+                    {report.committee.map((c) => (
+                      <div key={c.interviewerId} className="snap-start shrink-0 w-[85%] md:w-[420px] rounded-3xl bg-white dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-800 shadow-md p-5">
+                        <div className="flex items-center gap-3 mb-3">
+                          <div className="h-11 w-11 rounded-full bg-gradient-to-br from-[#C46A4A] to-[#B5BEB0] flex items-center justify-center shrink-0">
+                            <span className="text-white text-lg font-light">{c.name.charAt(0).toUpperCase()}</span>
+                          </div>
+                          <div className="min-w-0 flex-1">
+                            <p className="text-sm font-medium text-zinc-900 dark:text-white truncate">{c.name}</p>
+                            <p className="text-xs text-zinc-500 dark:text-zinc-400 truncate">
+                              {c.company} · {t("mockInterview.roundN").replace("{n}", String(c.round))} · {c.roleLabel}
+                            </p>
+                          </div>
+                          <span className={`text-2xl font-bold ${gradeColor(c.grade)}`}>{c.grade}</span>
+                        </div>
+                        <div className="flex flex-wrap gap-1.5 mb-3">
+                          <span className="px-2 py-0.5 rounded-full text-[10px] bg-[#C46A4A]/10 text-[#C46A4A]">{c.archetypeLabel}</span>
+                          {(c.tags || []).map((tag) => (
+                            <span key={tag} className="px-2 py-0.5 rounded-full text-[10px] bg-zinc-100 dark:bg-zinc-800 text-zinc-600 dark:text-zinc-400">{tag}</span>
+                          ))}
+                          <span className="px-2 py-0.5 rounded-full text-[10px] bg-zinc-900 text-white dark:bg-white dark:text-zinc-900">{c.attitude}</span>
+                        </div>
+                        <p className="text-sm text-zinc-700 dark:text-zinc-300 leading-relaxed mb-4">{c.comment}</p>
+                        {c.keyMoment?.question && (
+                          <div className="rounded-2xl bg-zinc-50 dark:bg-zinc-800/60 p-3">
+                            <p className="text-[11px] font-medium text-zinc-500 dark:text-zinc-400 mb-1.5">{t("mockInterview.keyMoment")}</p>
+                            <p className="text-xs text-zinc-800 dark:text-zinc-200 mb-2">Q: {c.keyMoment.question}</p>
+                            <p className="text-xs text-zinc-500 dark:text-zinc-400 mb-2">{t("mockInterview.yourAnswer")}: {c.keyMoment.answer}</p>
+                            {c.keyMoment.note && (
+                              <p className="text-[11px] text-[#C46A4A]">{c.keyMoment.note}</p>
+                            )}
+                          </div>
+                        )}
+                      </div>
+                    ))}
+                  </div>
+                </section>
+
+                {/* ===== 模块三：能力拆解雷达图 ===== */}
+                {report.radar?.length > 0 && (
+                  <section className="rounded-3xl bg-white dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-800 shadow-md p-6">
+                    <h2 className="text-lg font-medium text-zinc-900 dark:text-white mb-4">{t("mockInterview.radarTitle")}</h2>
+                    <div className="grid md:grid-cols-2 gap-6 items-center">
+                      <RadarChart dims={report.radar} />
+                      <div className="space-y-3">
+                        {report.radar.map((d) => (
+                          <div key={d.dimension} className="flex items-start gap-2.5">
+                            <span className={`mt-1.5 h-2.5 w-2.5 rounded-full shrink-0 ${gradeDot(d.grade)}`} />
+                            <div className="min-w-0">
+                              <p className="text-sm text-zinc-900 dark:text-white">
+                                <span className="font-medium">{d.dimension}</span>
+                                <span className={`ml-2 font-semibold ${gradeColor(d.grade)}`}>{d.grade}</span>
+                              </p>
+                              <p className="text-xs text-zinc-500 dark:text-zinc-400 mt-0.5">{d.diagnosis}</p>
+                            </div>
+                          </div>
+                        ))}
+                      </div>
+                    </div>
+                  </section>
+                )}
+
+                {/* ===== 模块四：关键时刻回放 ===== */}
+                {report.highlights && (
+                  <section>
+                    <h2 className="text-lg font-medium text-zinc-900 dark:text-white mb-4">{t("mockInterview.highlightsTitle")}</h2>
+                    <div className="space-y-4">
+                      {(report.highlights.mistakes || []).map((m, i) => (
+                        <div key={i} className="rounded-3xl border border-red-500/25 bg-red-50/50 dark:bg-red-950/15 p-5">
+                          <p className="text-xs font-medium text-red-500 mb-1">{t("mockInterview.fatalMistakes")} {i + 1}</p>
+                          <p className="text-sm font-medium text-zinc-900 dark:text-white mb-2">{m.title}</p>
+                          <p className="text-sm text-zinc-700 dark:text-zinc-300 mb-2">{m.scene}</p>
+                          <p className="text-xs text-red-600 dark:text-red-400 mb-2">{t("mockInterview.consequence")}: {m.consequence}</p>
+                          <p className="text-xs text-zinc-500 dark:text-zinc-400 border-l-2 border-[#C46A4A] pl-2.5">{t("mockInterview.coach")}: {m.coach}</p>
+                        </div>
+                      ))}
+                      {report.highlights.best?.title && (
+                        <div className="rounded-3xl border border-emerald-500/25 bg-emerald-50/50 dark:bg-emerald-950/15 p-5">
+                          <p className="text-xs font-medium text-emerald-600 dark:text-emerald-400 mb-1">{t("mockInterview.bestMoment")}</p>
+                          <p className="text-sm font-medium text-zinc-900 dark:text-white mb-2">{report.highlights.best.title}</p>
+                          <p className="text-sm text-zinc-700 dark:text-zinc-300 mb-2">{report.highlights.best.scene}</p>
+                          <p className="text-xs text-emerald-600 dark:text-emerald-400 mb-2">{t("mockInterview.effect")}: {report.highlights.best.effect}</p>
+                          <p className="text-xs text-zinc-500 dark:text-zinc-400 border-l-2 border-[#B5BEB0] pl-2.5">{t("mockInterview.coach")}: {report.highlights.best.coach}</p>
+                        </div>
+                      )}
+                    </div>
+                  </section>
+                )}
+
+                {/* ===== 模块五：AI 私人教练行动清单 ===== */}
+                {report.actionPlan && (
+                  <section className="rounded-3xl bg-white dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-800 shadow-md p-6">
+                    <h2 className="text-lg font-medium text-zinc-900 dark:text-white mb-4">{t("mockInterview.actionPlanTitle")}</h2>
+                    <div className="grid md:grid-cols-3 gap-5">
+                      <div>
+                        <p className="text-xs font-medium text-[#C46A4A] mb-2">{t("mockInterview.immediate")}</p>
+                        <ul className="space-y-2">
+                          {(report.actionPlan.immediate || []).map((item, i) => (
+                            <li key={i} className="flex gap-2 text-sm text-zinc-700 dark:text-zinc-300">
+                              <span className="text-[#C46A4A] font-medium shrink-0">{i + 1}.</span>{item}
+                            </li>
+                          ))}
+                        </ul>
+                      </div>
+                      <div>
+                        <p className="text-xs font-medium text-[#8a9685] dark:text-[#B5BEB0] mb-2">{t("mockInterview.practice")}</p>
+                        <ul className="space-y-2">
+                          {(report.actionPlan.practice || []).map((item, i) => (
+                            <li key={i} className="flex gap-2 text-sm text-zinc-700 dark:text-zinc-300">
+                              <span className="text-[#B5BEB0] shrink-0">▸</span>{item}
+                            </li>
+                          ))}
+                        </ul>
+                      </div>
+                      <div>
+                        <p className="text-xs font-medium text-[#b3946d] dark:text-[#E2D0B8] mb-2">{t("mockInterview.reading")}</p>
+                        <ul className="space-y-2">
+                          {(report.actionPlan.reading || []).map((item, i) => (
+                            <li key={i} className="flex gap-2 text-sm text-zinc-700 dark:text-zinc-300">
+                              <span className="text-[#E2D0B8] shrink-0">▸</span>{item}
+                            </li>
+                          ))}
+                        </ul>
+                      </div>
+                    </div>
+                  </section>
+                )}
+
+                {/* ===== 模块六：完整笔录 + 导出 + 历史趋势 ===== */}
+                <section className="rounded-3xl bg-white dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-800 shadow-md p-6">
+                  <div className="flex items-center justify-between mb-4">
+                    <h2 className="text-lg font-medium text-zinc-900 dark:text-white">{t("mockInterview.transcriptTitle")}</h2>
+                    <Button
+                      onClick={() => window.print()}
+                      variant="outline"
+                      className="rounded-full h-9 print:hidden"
+                    >
+                      <FileText className="h-4 w-4 mr-1.5" />
+                      {t("mockInterview.exportReport")}
+                    </Button>
+                  </div>
+                  {(reportHistory.length > 0 || overallScore !== null) && (
+                    <div className="mb-5 pb-5 border-b border-zinc-100 dark:border-zinc-800">
+                      <p className="text-xs text-zinc-500 dark:text-zinc-400 mb-2">{t("mockInterview.trend")}</p>
+                      <TrendChart points={reportHistory} current={overallScore} />
+                    </div>
+                  )}
+                  <div className="space-y-3 max-h-[480px] overflow-y-auto pr-1">
+                    {messages.map((m, idx) => {
+                      const anns = annotationMap.get(idx);
+                      return (
+                        <div key={idx} className={`rounded-2xl p-3.5 ${m.role === "interviewer" ? "bg-zinc-50 dark:bg-zinc-800/60" : "bg-[#C46A4A]/5 dark:bg-[#C46A4A]/10 ml-6"}`}>
+                          <p className="text-[11px] font-medium text-zinc-400 mb-1">
+                            {m.role === "interviewer" ? t("mockInterview.interviewer") : t("mockInterview.you")}
+                          </p>
+                          <p className="text-sm text-zinc-700 dark:text-zinc-300 whitespace-pre-wrap">{m.content}</p>
+                          {anns && anns.map((a, i) => (
+                            <div key={i} className="mt-2 flex items-start gap-1.5">
+                              <span className="px-1.5 py-0.5 rounded text-[10px] bg-[#E2D0B8]/40 text-[#8a6d4a] dark:text-[#E2D0B8] shrink-0">{a.label}</span>
+                              <span className="text-[11px] text-zinc-500 dark:text-zinc-400">{a.note}</span>
+                            </div>
+                          ))}
+                        </div>
+                      );
+                    })}
+                  </div>
+                </section>
+
+                <div className="flex justify-center print:hidden">
+                  <Button
+                    onClick={handleRestart}
+                    className="rounded-full bg-gradient-to-r from-[#C46A4A] to-[#B5BEB0] hover:opacity-90 text-white px-8 h-11"
+                  >
+                    <RotateCcw className="h-4 w-4 mr-2" />
+                    {t("mockInterview.restart")}
+                  </Button>
+                </div>
+              </div>
+            )}
           </div>
         </main>
       </div>
