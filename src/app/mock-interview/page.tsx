@@ -5,11 +5,76 @@ import { Header1 } from "@/components/header1";
 import { AccessGuard, useAccessCode } from "@/components/access-guard";
 import { Button } from "@/components/ui/button";
 import { Textarea } from "@/components/ui/textarea";
+import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
 import { useLanguage } from "@/lib/language-context";
 import {
   Bot, Loader2, Sparkles, RotateCcw, ClipboardList, Code2, MessagesSquare,
   Puzzle, Layers, Mic, Square, PhoneOff, Video, VideoOff, User,
+  Building2, Briefcase, FileText, ChevronDown, Check,
 } from "lucide-react";
+
+// 通用下拉选择器（与 jobs 页一致的 Popover 交互，避免原生 select 交互问题）
+function OptionSelect({
+  icon: Icon,
+  label,
+  placeholder,
+  options,
+  value,
+  onChange,
+  disabled,
+}: {
+  icon: React.ElementType;
+  label: string;
+  placeholder: string;
+  options: { value: string; text: string }[];
+  value: string;
+  onChange: (value: string) => void;
+  disabled?: boolean;
+}) {
+  const [open, setOpen] = useState(false);
+  const selected = options.find((o) => o.value === value);
+  return (
+    <Popover open={open} onOpenChange={setOpen}>
+      <PopoverTrigger asChild>
+        <button
+          disabled={disabled}
+          className="w-full h-11 inline-flex items-center gap-2 px-4 rounded-xl border border-gray-200 dark:border-zinc-700 bg-white dark:bg-zinc-900 text-sm text-black dark:text-white hover:border-[#C46A4A]/50 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+        >
+          <Icon className="h-4 w-4 text-gray-400 flex-shrink-0" />
+          <span className={`flex-1 text-left truncate ${selected ? "" : "text-gray-400 dark:text-gray-500"}`}>
+            {selected ? selected.text : placeholder}
+          </span>
+          <ChevronDown className="h-4 w-4 text-gray-400 flex-shrink-0" />
+        </button>
+      </PopoverTrigger>
+      <PopoverContent className="w-[var(--radix-popover-trigger-width)] p-1 max-h-64 overflow-y-auto" align="start">
+        <div className="space-y-0.5">
+          <button
+            onClick={() => { onChange(""); setOpen(false); }}
+            className={`w-full flex items-center gap-2 text-left px-3 py-2 rounded-md text-sm transition-colors ${
+              !value ? "bg-primary text-primary-foreground" : "hover:bg-muted"
+            }`}
+          >
+            {!value && <Check className="h-3.5 w-3.5" />}
+            <span className={!value ? "" : "pl-5"}>{placeholder}</span>
+          </button>
+          {options.map((opt) => (
+            <button
+              key={opt.value}
+              onClick={() => { onChange(opt.value); setOpen(false); }}
+              className={`w-full flex items-center gap-2 text-left px-3 py-2 rounded-md text-sm transition-colors ${
+                value === opt.value ? "bg-primary text-primary-foreground" : "hover:bg-muted"
+              }`}
+            >
+              {value === opt.value && <Check className="h-3.5 w-3.5 flex-shrink-0" />}
+              <span className={value === opt.value ? "" : "pl-5"}>{opt.text}</span>
+            </button>
+          ))}
+        </div>
+      </PopoverContent>
+    </Popover>
+  );
+}
 
 type InterviewType = "technical" | "behavioral" | "case" | "mixed";
 type Stage = "setup" | "interview" | "summary";
@@ -80,16 +145,20 @@ export default function MockInterviewPage() {
   const interviewTypes: InterviewType[] = ["technical", "behavioral", "case", "mixed"];
   const language = locale === "en" ? "en" : "zh";
 
-  // 加载简历列表与公司列表
+  // 加载公司列表（无需 accessCodeId，独立加载）
+  useEffect(() => {
+    fetch("/api/interview/jobs")
+      .then((r) => (r.ok ? r.json() : null))
+      .then((d) => d && setCompanies(d.companies || []))
+      .catch(() => {});
+  }, []);
+
+  // 加载简历列表（依赖 accessCodeId）
   useEffect(() => {
     if (!accessCodeId) return;
     fetch(`/api/resume?access_code_id=${accessCodeId}`)
       .then((r) => (r.ok ? r.json() : null))
       .then((d) => d && setResumes(d.resumes || []))
-      .catch(() => {});
-    fetch("/api/interview/jobs")
-      .then((r) => (r.ok ? r.json() : null))
-      .then((d) => d && setCompanies(d.companies || []))
       .catch(() => {});
   }, [accessCodeId]);
 
@@ -454,32 +523,28 @@ export default function MockInterviewPage() {
                     <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
                       {t("mockInterview.selectCompany")}
                     </label>
-                    <select
+                    <OptionSelect
+                      icon={Building2}
+                      label={t("mockInterview.selectCompany")}
+                      placeholder={t("mockInterview.companyPlaceholder")}
+                      options={companies.map((c) => ({ value: c, text: c }))}
                       value={selectedCompany}
-                      onChange={(e) => setSelectedCompany(e.target.value)}
-                      className="w-full h-11 rounded-xl border border-gray-200 dark:border-zinc-700 bg-white dark:bg-zinc-900 px-3 text-sm text-black dark:text-white"
-                    >
-                      <option value="">{t("mockInterview.companyPlaceholder")}</option>
-                      {companies.map((c) => (
-                        <option key={c} value={c}>{c}</option>
-                      ))}
-                    </select>
+                      onChange={setSelectedCompany}
+                    />
                   </div>
                   <div>
                     <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
                       {t("mockInterview.selectJob")}
                     </label>
-                    <select
-                      value={selectedJobId || ""}
-                      onChange={(e) => setSelectedJobId(e.target.value ? Number(e.target.value) : null)}
+                    <OptionSelect
+                      icon={Briefcase}
+                      label={t("mockInterview.selectJob")}
+                      placeholder={t("mockInterview.jobPlaceholder")}
+                      options={jobs.map((j) => ({ value: String(j.id), text: j.title }))}
+                      value={selectedJobId ? String(selectedJobId) : ""}
+                      onChange={(v) => setSelectedJobId(v ? Number(v) : null)}
                       disabled={!selectedCompany}
-                      className="w-full h-11 rounded-xl border border-gray-200 dark:border-zinc-700 bg-white dark:bg-zinc-900 px-3 text-sm text-black dark:text-white disabled:opacity-50"
-                    >
-                      <option value="">{t("mockInterview.jobPlaceholder")}</option>
-                      {jobs.map((j) => (
-                        <option key={j.id} value={j.id}>{j.title}</option>
-                      ))}
-                    </select>
+                    />
                   </div>
                 </div>
 
@@ -488,16 +553,14 @@ export default function MockInterviewPage() {
                   <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
                     {t("mockInterview.resume")}
                   </label>
-                  <select
-                    value={selectedResumeId || ""}
-                    onChange={(e) => setSelectedResumeId(e.target.value ? Number(e.target.value) : null)}
-                    className="w-full h-11 rounded-xl border border-gray-200 dark:border-zinc-700 bg-white dark:bg-zinc-900 px-3 text-sm text-black dark:text-white"
-                  >
-                    <option value="">{t("mockInterview.resumePlaceholder")}</option>
-                    {resumes.map((r) => (
-                      <option key={r.id} value={r.id}>{r.file_name}</option>
-                    ))}
-                  </select>
+                  <OptionSelect
+                    icon={FileText}
+                    label={t("mockInterview.resume")}
+                    placeholder={t("mockInterview.resumePlaceholder")}
+                    options={resumes.map((r) => ({ value: String(r.id), text: r.file_name }))}
+                    value={selectedResumeId ? String(selectedResumeId) : ""}
+                    onChange={(v) => setSelectedResumeId(v ? Number(v) : null)}
+                  />
                   <p className="text-xs text-gray-400 mt-1.5">{t("mockInterview.resumeHint")}</p>
                 </div>
 
