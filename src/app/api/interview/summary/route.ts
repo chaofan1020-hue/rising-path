@@ -108,6 +108,29 @@ export async function POST(request: NextRequest) {
     }
 
     const messages = (session.messages as ChatMessage[]) || [];
+
+    // 用户全程未作答：不生成 AI 评估，直接将会话标记为已完成（不写入报告与分数）
+    const hasCandidateAnswer = messages.some((m) => m.role === 'candidate' && m.content?.trim());
+    if (!hasCandidateAnswer) {
+      await client
+        .from('interview_sessions')
+        .update({ status: 'completed', updated_at: new Date().toISOString() })
+        .eq('id', sessionId);
+      const skipped = new ReadableStream({
+        start(controller) {
+          controller.enqueue(new TextEncoder().encode(`data: ${JSON.stringify({ skipped: true, done: true })}\n\n`));
+          controller.close();
+        },
+      });
+      return new Response(skipped, {
+        headers: {
+          'Content-Type': 'text/event-stream',
+          'Cache-Control': 'no-cache',
+          'Connection': 'keep-alive',
+        },
+      });
+    }
+
     if (messages.length < 2) {
       return new Response(JSON.stringify({ error: '面试内容太少，无法生成报告' }), { status: 400 });
     }

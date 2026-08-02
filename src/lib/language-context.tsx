@@ -136,6 +136,7 @@ const translations: Record<Locale, Record<string, string>> = {
     "mockInterview.cameraError": "无法访问摄像头，请检查权限",
     "mockInterview.subtitleOn": "字幕",
     "mockInterview.endConfirm": "确定要结束面试吗？将生成本次面试总结报告。",
+    "mockInterview.noAnswerSkip": "本次面试未检测到任何回答，已结束且不生成评估报告",
     "mockInterview.summaryFailed": "总结生成失败，请重试",
     "mockInterview.qaCount": "已进行 {count} 轮问答",
     // FAQs
@@ -481,6 +482,7 @@ const translations: Record<Locale, Record<string, string>> = {
     "mockInterview.targetCompanyPlaceholder": "如：字節跳動 / Goldman Sachs",
     "mockInterview.companyRequired": "請先填寫目標公司（本場所有面試官都將來自該公司）",
     "mockInterview.summaryFailed": "總結生成失敗，請重試",
+    "mockInterview.noAnswerSkip": "本次面試未檢測到任何回答，已結束且不生成評估報告",
     "mockInterview.qaCount": "已進行 {count} 輪問答",
     "mockInterview.selectCompany": "選擇公司（可選）",
     "mockInterview.selectJob": "選擇崗位（可選）",
@@ -849,6 +851,7 @@ const translations: Record<Locale, Record<string, string>> = {
     "mockInterview.targetCompanyPlaceholder": "e.g. ByteDance / Goldman Sachs",
     "mockInterview.companyRequired": "Please enter a target company first (all interviewers will be from this company)",
     "mockInterview.summaryFailed": "Failed to generate summary, please try again",
+    "mockInterview.noAnswerSkip": "No answers detected. Interview ended without generating an evaluation report.",
     "mockInterview.qaCount": "{count} Q&A rounds completed",
     "mockInterview.selectCompany": "Select Company (Optional)",
     "mockInterview.selectJob": "Select Position (Optional)",

@@ -721,6 +721,26 @@ export default function MockInterviewPage() {
     clearPressure();
     audioRef.current?.pause();
     setSpeaking(false);
+
+    // 全程未作答：不生成 AI 评估，标记会话结束后直接返回设置页
+    const hasAnswer = messages.some((m) => m.role === "candidate" && m.content.trim());
+    if (!hasAnswer) {
+      try {
+        const res = await fetch("/api/interview/summary", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ accessCodeId, sessionId, language }),
+        });
+        await res.text(); // 排空响应流（后端秒回 skipped）
+      } catch {
+        // 忽略网络异常：会话残留为 in_progress 无副作用
+      }
+      setEnding(false);
+      alert(t("mockInterview.noAnswerSkip"));
+      handleRestart();
+      return;
+    }
+
     try {
       const res = await fetch("/api/interview/summary", {
         method: "POST",
