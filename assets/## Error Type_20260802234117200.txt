@@ -1,0 +1,75 @@
+## Error Type
+Build Error
+
+## Error Message
+Error evaluating Node.js code
+
+## Build Output
+./workspace/projects/src/lib/interviewers.ts
+Error evaluating Node.js code
+SyntaxError: /workspace/projects/src/lib/interviewers.ts: Unexpected token (43:121)
+
+  41 | export const INTERVIEWERS: Interviewer[] = [
+  42 |   // ===== 北美 · 金融（15）=====
+> 43 |   { id: 1, name: 'Victoria Chen', company: 'Goldman Sachs', region: 'north-america', industry: 'finance', gender: 'male',: 'female',
+     |                                                                                                                          ^
+  44 |     personality: '刀锋般锐利的完美主义者，永远正装，时间观极强。面试风格为高压连续追问，擅长抓住回答中的微小漏洞无限深挖。',
+  45 |     likes: '极度自信且逻辑无懈可击的候选人，对数字极其敏感。', dislikes: '任何形式的犹豫、模糊用词或对过往经历不熟悉。' },
+  46 |   { id: 2, name: 'Marcus Thompson', company: 'J.P. Morgan', region: 'north-america', industry: 'finance', gender: 'male',
+    [at constructor (/workspace/projects/node_modules/.pnpm/next@16.1.1_@babel+core@7.28.6_react-dom@19.2.3_react@19.2.3__react@19.2.3/node_modules/next/dist/compiled/babel/bundle.js:191:137105)]
+    [at TypeScriptParserMixin.raise (/workspace/projects/node_modules/.pnpm/next@16.1.1_@babel+core@7.28.6_react-dom@19.2.3_react@19.2.3__react@19.2.3/node_modules/next/dist/compiled/babel/bundle.js:191:194164)]
+    [at TypeScriptParserMixin.unexpected (/workspace/projects/node_modules/.pnpm/next@16.1.1_@babel+core@7.28.6_react-dom@19.2.3_react@19.2.3__react@19.2.3/node_modules/next/dist/compiled/babel/bundle.js:191:194550)]
+    [at TypeScriptParserMixin.parsePropertyName (/workspace/projects/node_modules/.pnpm/next@16.1.1_@babel+core@7.28.6_react-dom@19.2.3_react@19.2.3__react@19.2.3/node_modules/next/dist/compiled/babel/bundle.js:191:376316)]
+    [at TypeScriptParserMixin.parsePropertyDefinition (/workspace/projects/node_modules/.pnpm/next@16.1.1_@babel+core@7.28.6_react-dom@19.2.3_react@19.2.3__react@19.2.3/node_modules/next/dist/compiled/babel/bundle.js:191:373683)]
+    [at TypeScriptParserMixin.parseObjectLike (/workspace/projects/node_modules/.pnpm/next@16.1.1_@babel+core@7.28.6_react-dom@19.2.3_react@19.2.3__react@19.2.3/node_modules/next/dist/compiled/babel/bundle.js:191:372491)]
+    [at TypeScriptParserMixin.parseExprAtom (/workspace/projects/node_modules/.pnpm/next@16.1.1_@babel+core@7.28.6_react-dom@19.2.3_react@19.2.3__react@19.2.3/node_modules/next/dist/compiled/babel/bundle.js:191:361743)]
+    [at TypeScriptParserMixin.parseExprSubscripts (/workspace/projects/node_modules/.pnpm/next@16.1.1_@babel+core@7.28.6_react-dom@19.2.3_react@19.2.3__react@19.2.3/node_modules/next/dist/compiled/babel/bundle.js:191:356364)]
+    [at TypeScriptParserMixin.parseUpdate (/workspace/projects/node_modules/.pnpm/next@16.1.1_@babel+core@7.28.6_react-dom@19.2.3_react@19.2.3__react@19.2.3/node_modules/next/dist/compiled/babel/bundle.js:191:355963)]
+    [at TypeScriptParserMixin.parseMaybeUnary (/workspace/projects/node_modules/.pnpm/next@16.1.1_@babel+core@7.28.6_react-dom@19.2.3_react@19.2.3__react@19.2.3/node_modules/next/dist/compiled/babel/bundle.js:191:355527)]
+    [at TypeScriptParserMixin.parseMaybeUnary (/workspace/projects/node_modules/.pnpm/next@16.1.1_@babel+core@7.28.6_react-dom@19.2.3_react@19.2.3__react@19.2.3/node_modules/next/dist/compiled/babel/bundle.js:191:331837)]
+    [at TypeScriptParserMixin.parseMaybeUnaryOrPrivate (/workspace/projects/node_modules/.pnpm/next@16.1.1_@babel+core@7.28.6_react-dom@19.2.3_react@19.2.3__react@19.2.3/node_modules/next/dist/compiled/babel/bundle.js:191:352169)]
+    [at TypeScriptParserMixin.parseExprOps (/workspace/projects/node_modules/.pnpm/next@16.1.1_@babel+core@7.28.6_react-dom@19.2.3_react@19.2.3__react@19.2.3/node_modules/next/dist/compiled/babel/bundle.js:191:352281)]
+    [at TypeScriptParserMixin.parseMaybeConditional (/workspace/projects/node_modules/.pnpm/next@16.1.1_@babel+core@7.28.6_react-dom@19.2.3_react@19.2.3__react@19.2.3/node_modules/next/dist/compiled/babel/bundle.js:191:351760)]
+    [at TypeScriptParserMixin.parseMaybeAssign (/workspace/projects/node_modules/.pnpm/next@16.1.1_@babel+core@7.28.6_react-dom@19.2.3_react@19.2.3__react@19.2.3/node_modules/next/dist/compiled/babel/bundle.js:191:350714)]
+    [at TypeScriptParserMixin.parseMaybeAssign (/workspace/projects/node_modules/.pnpm/next@16.1.1_@babel+core@7.28.6_react-dom@19.2.3_react@19.2.3__react@19.2.3/node_modules/next/dist/compiled/babel/bundle.js:191:330620)]
+    [at /workspace/projects/node_modules/.pnpm/next@16.1.1_@babel+core@7.28.6_react-dom@19.2.3_react@19.2.3__react@19.2.3/node_modules/next/dist/compiled/babel/bundle.js:191:350260]
+    [at TypeScriptParserMixin.allowInAnd (/workspace/projects/node_modules/.pnpm/next@16.1.1_@babel+core@7.28.6_react-dom@19.2.3_react@19.2.3__react@19.2.3/node_modules/next/dist/compiled/babel/bundle.js:191:383968)]
+    [at TypeScriptParserMixin.parseMaybeAssignAllowIn (/workspace/projects/node_modules/.pnpm/next@16.1.1_@babel+core@7.28.6_react-dom@19.2.3_react@19.2.3__react@19.2.3/node_modules/next/dist/compiled/babel/bundle.js:191:350239)]
+    [at TypeScriptParserMixin.parseExprListItem (/workspace/projects/node_modules/.pnpm/next@16.1.1_@babel+core@7.28.6_react-dom@19.2.3_react@19.2.3__react@19.2.3/node_modules/next/dist/compiled/babel/bundle.js:191:379439)]
+    [at TypeScriptParserMixin.parseExprList (/workspace/projects/node_modules/.pnpm/next@16.1.1_@babel+core@7.28.6_react-dom@19.2.3_react@19.2.3__react@19.2.3/node_modules/next/dist/compiled/babel/bundle.js:191:378946)]
+    [at TypeScriptParserMixin.parseArrayLike (/workspace/projects/node_modules/.pnpm/next@16.1.1_@babel+core@7.28.6_react-dom@19.2.3_react@19.2.3__react@19.2.3/node_modules/next/dist/compiled/babel/bundle.js:191:376925)]
+    [at TypeScriptParserMixin.parseArrayLike (/workspace/projects/node_modules/.pnpm/next@16.1.1_@babel+core@7.28.6_react-dom@19.2.3_react@19.2.3__react@19.2.3/node_modules/next/dist/compiled/babel/bundle.js:191:318594)]
+    [at TypeScriptParserMixin.parseExprAtom (/workspace/projects/node_modules/.pnpm/next@16.1.1_@babel+core@7.28.6_react-dom@19.2.3_react@19.2.3__react@19.2.3/node_modules/next/dist/compiled/babel/bundle.js:191:361613)]
+    [at TypeScriptParserMixin.parseExprSubscripts (/workspace/projects/node_modules/.pnpm/next@16.1.1_@babel+core@7.28.6_react-dom@19.2.3_react@19.2.3__react@19.2.3/node_modules/next/dist/compiled/babel/bundle.js:191:356364)]
+    [at TypeScriptParserMixin.parseUpdate (/workspace/projects/node_modules/.pnpm/next@16.1.1_@babel+core@7.28.6_react-dom@19.2.3_react@19.2.3__react@19.2.3/node_modules/next/dist/compiled/babel/bundle.js:191:355963)]
+    [at TypeScriptParserMixin.parseMaybeUnary (/workspace/projects/node_modules/.pnpm/next@16.1.1_@babel+core@7.28.6_react-dom@19.2.3_react@19.2.3__react@19.2.3/node_modules/next/dist/compiled/babel/bundle.js:191:355527)]
+    [at TypeScriptParserMixin.parseMaybeUnary (/workspace/projects/node_modules/.pnpm/next@16.1.1_@babel+core@7.28.6_react-dom@19.2.3_react@19.2.3__react@19.2.3/node_modules/next/dist/compiled/babel/bundle.js:191:331837)]
+    [at TypeScriptParserMixin.parseMaybeUnaryOrPrivate (/workspace/projects/node_modules/.pnpm/next@16.1.1_@babel+core@7.28.6_react-dom@19.2.3_react@19.2.3__react@19.2.3/node_modules/next/dist/compiled/babel/bundle.js:191:352169)]
+    [at TypeScriptParserMixin.parseExprOps (/workspace/projects/node_modules/.pnpm/next@16.1.1_@babel+core@7.28.6_react-dom@19.2.3_react@19.2.3__react@19.2.3/node_modules/next/dist/compiled/babel/bundle.js:191:352281)]
+    [at TypeScriptParserMixin.parseMaybeConditional (/workspace/projects/node_modules/.pnpm/next@16.1.1_@babel+core@7.28.6_react-dom@19.2.3_react@19.2.3__react@19.2.3/node_modules/next/dist/compiled/babel/bundle.js:191:351760)]
+    [at TypeScriptParserMixin.parseMaybeAssign (/workspace/projects/node_modules/.pnpm/next@16.1.1_@babel+core@7.28.6_react-dom@19.2.3_react@19.2.3__react@19.2.3/node_modules/next/dist/compiled/babel/bundle.js:191:350714)]
+    [at TypeScriptParserMixin.parseMaybeAssign (/workspace/projects/node_modules/.pnpm/next@16.1.1_@babel+core@7.28.6_react-dom@19.2.3_react@19.2.3__react@19.2.3/node_modules/next/dist/compiled/babel/bundle.js:191:330620)]
+    [at /workspace/projects/node_modules/.pnpm/next@16.1.1_@babel+core@7.28.6_react-dom@19.2.3_react@19.2.3__react@19.2.3/node_modules/next/dist/compiled/babel/bundle.js:191:350260]
+    [at TypeScriptParserMixin.allowInAnd (/workspace/projects/node_modules/.pnpm/next@16.1.1_@babel+core@7.28.6_react-dom@19.2.3_react@19.2.3__react@19.2.3/node_modules/next/dist/compiled/babel/bundle.js:191:383926)]
+    [at TypeScriptParserMixin.parseMaybeAssignAllowIn (/workspace/projects/node_modules/.pnpm/next@16.1.1_@babel+core@7.28.6_react-dom@19.2.3_react@19.2.3__react@19.2.3/node_modules/next/dist/compiled/babel/bundle.js:191:350239)]
+    [at TypeScriptParserMixin.parseVar (/workspace/projects/node_modules/.pnpm/next@16.1.1_@babel+core@7.28.6_react-dom@19.2.3_react@19.2.3__react@19.2.3/node_modules/next/dist/compiled/babel/bundle.js:191:402967)]
+    [at TypeScriptParserMixin.parseVarStatement (/workspace/projects/node_modules/.pnpm/next@16.1.1_@babel+core@7.28.6_react-dom@19.2.3_react@19.2.3__react@19.2.3/node_modules/next/dist/compiled/babel/bundle.js:191:399366)]
+    [at TypeScriptParserMixin.parseVarStatement (/workspace/projects/node_modules/.pnpm/next@16.1.1_@babel+core@7.28.6_react-dom@19.2.3_react@19.2.3__react@19.2.3/node_modules/next/dist/compiled/babel/bundle.js:191:323322)]
+    [at TypeScriptParserMixin.parseStatementContent (/workspace/projects/node_modules/.pnpm/next@16.1.1_@babel+core@7.28.6_react-dom@19.2.3_react@19.2.3__react@19.2.3/node_modules/next/dist/compiled/babel/bundle.js:191:391398)]
+    [at TypeScriptParserMixin.parseStatementContent (/workspace/projects/node_modules/.pnpm/next@16.1.1_@babel+core@7.28.6_react-dom@19.2.3_react@19.2.3__react@19.2.3/node_modules/next/dist/compiled/babel/bundle.js:191:324042)]
+    [at TypeScriptParserMixin.parseStatementLike (/workspace/projects/node_modules/.pnpm/next@16.1.1_@babel+core@7.28.6_react-dom@19.2.3_react@19.2.3__react@19.2.3/node_modules/next/dist/compiled/babel/bundle.js:191:389494)]
+    [at TypeScriptParserMixin.parseStatementListItem (/workspace/projects/node_modules/.pnpm/next@16.1.1_@babel+core@7.28.6_react-dom@19.2.3_react@19.2.3__react@19.2.3/node_modules/next/dist/compiled/babel/bundle.js:191:389120)]
+    [at TypeScriptParserMixin.parseExportDeclaration (/workspace/projects/node_modules/.pnpm/next@16.1.1_@babel+core@7.28.6_react-dom@19.2.3_react@19.2.3__react@19.2.3/node_modules/next/dist/compiled/babel/bundle.js:191:415606)]
+    [at TypeScriptParserMixin.parseExportDeclaration (/workspace/projects/node_modules/.pnpm/next@16.1.1_@babel+core@7.28.6_react-dom@19.2.3_react@19.2.3__react@19.2.3/node_modules/next/dist/compiled/babel/bundle.js:191:327104)]
+    [at TypeScriptParserMixin.maybeParseExportDeclaration (/workspace/projects/node_modules/.pnpm/next@16.1.1_@babel+core@7.28.6_react-dom@19.2.3_react@19.2.3__react@19.2.3/node_modules/next/dist/compiled/babel/bundle.js:191:414570)]
+    [at TypeScriptParserMixin.parseExport (/workspace/projects/node_modules/.pnpm/next@16.1.1_@babel+core@7.28.6_react-dom@19.2.3_react@19.2.3__react@19.2.3/node_modules/next/dist/compiled/babel/bundle.js:191:412708)]
+    [at TypeScriptParserMixin.parseExport (/workspace/projects/node_modules/.pnpm/next@16.1.1_@babel+core@7.28.6_react-dom@19.2.3_react@19.2.3__react@19.2.3/node_modules/next/dist/compiled/babel/bundle.js:191:322862)]
+    [at TypeScriptParserMixin.parseStatementContent (/workspace/projects/node_modules/.pnpm/next@16.1.1_@babel+core@7.28.6_react-dom@19.2.3_react@19.2.3__react@19.2.3/node_modules/next/dist/compiled/babel/bundle.js:191:391808)]
+    [at TypeScriptParserMixin.parseStatementContent (/workspace/projects/node_modules/.pnpm/next@16.1.1_@babel+core@7.28.6_react-dom@19.2.3_react@19.2.3__react@19.2.3/node_modules/next/dist/compiled/babel/bundle.js:191:324042)]
+
+Import trace:
+  App Route:
+    ./workspace/projects/src/lib/interviewers.ts
+    ./workspace/projects/src/app/api/interview/chat/route.ts
+
+Next.js version: 16.1.1 (Turbopack)

@@ -36,10 +36,18 @@ export async function POST(request: NextRequest) {
 
     return NextResponse.json({ text: result.text });
   } catch (error) {
+    const message = error instanceof Error ? error.message : '语音识别失败';
+    // 静音/空音频/无有效语音属于正常业务情况（用户未说话或声音太小），不作为服务器错误
+    const isSilence =
+      message.includes('no valid speech') ||
+      message.includes('silence') ||
+      message.includes('20000003') ||
+      message.includes('empty audio') ||
+      message.includes('invalid argument');
+    if (isSilence) {
+      return NextResponse.json({ text: '', silence: true });
+    }
     console.error('ASR error:', error);
-    return NextResponse.json(
-      { error: error instanceof Error ? error.message : '语音识别失败' },
-      { status: 500 }
-    );
+    return NextResponse.json({ error: message }, { status: 500 });
   }
 }

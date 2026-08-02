@@ -1,11 +1,27 @@
 import { NextRequest } from 'next/server';
 import { getSupabaseClient } from '@/storage/database/supabase-client';
 import { LLMClient, Config, HeaderUtils } from 'coze-coding-dev-sdk';
+import {
+  INTERVIEWERS,
+  selectRoundInterviewers,
+  selectScriptInterviewers,
+  getInterviewerVoice,
+  getPersona,
+  ARCHETYPE_PARAMS,
+  ROUND_ROLE_INFO,
+  GAUNTLET_SCRIPTS,
+  type Interviewer,
+  type RoundRole,
+} from '@/lib/interviewers';
 
 interface ChatMessage {
   role: 'interviewer' | 'candidate';
   content: string;
+  round?: number;
+  interviewerId?: number;
 }
+
+const QUESTIONS_PER_ROUND = 2;
 
 const TYPE_LABELS: Record<string, { zh: string; en: string }> = {
   technical: { zh: '技术面试', en: 'Technical Interview' },
@@ -14,44 +30,93 @@ const TYPE_LABELS: Record<string, { zh: string; en: string }> = {
   mixed: { zh: '综合面试', en: 'Mixed Interview' },
 };
 
-function buildSystemPrompt(interviewType: string, jobDescription: string, language: string) {
+function buildSystemPrompt(
+  interviewType: string,
+  jobDescription: string,
+  language: string,
+  interviewer: Interviewer | null,
+  isNewInterviewer: boolean,
+  roundRole: RoundRole | null
+) {
   const typeLabel = TYPE_LABELS[interviewType]?.[language === 'en' ? 'en' : 'zh'] || interviewType;
+  const persona = interviewer ? getPersona(interviewer.id) : null;
+  const archetype = persona ? ARCHETYPE_PARAMS[persona.archetype] : null;
+  const roleInfo = roundRole ? ROUND_ROLE_INFO[roundRole] : null;
 
   if (language === 'en') {
-    return `You are a professional interviewer at a top company, conducting a ${typeLabel} for the following position:
+    const personaBlock = interviewer
+      ? `\n\nYOUR PERSONA:\nYou are ${interviewer.name}, an interviewer from ${interviewer.company}.
+Personality & interview style: ${interviewer.personality}
+You appreciate: ${interviewer.likes}
+You dislike: ${interviewer.dislikes}`
+      : '';
+    const behaviorBlock = archetype ? `\n\nHOW YOU BEHAVE:\n${archetype.behaviorEn}` : '';
+    const missionBlock = roleInfo ? `\n\nTHIS ROUND'S MISSION:\n${roleInfo.missionEn}` : '';
+    const switchNote = isNewInterviewer && interviewer
+      ? `\nYou are a NEW interviewer taking over this round. Reference the previous topic in one sentence WITHOUT evaluating it, briefly introduce yourself (name + company), then ask your first question.`
+      : '';
+
+    return `You are conducting a ${typeLabel} for the following position:
 
 ${jobDescription}
+${personaBlock}${behaviorBlock}${missionBlock}${switchNote}
 
-Rules you MUST follow:
-1. Act as a real interviewer. Be professional, sharp, and realistic — not overly friendly.
+Rules you MUST follow (this is a REAL interview):
+1. Stay fully in character as ${interviewer ? interviewer.name : 'a professional interviewer'} — your persona defines how you speak, probe, and apply pressure.
 2. Conduct the interview entirely in English.
-3. Start with a brief greeting and your first question in your FIRST response.
-4. For each candidate answer:
-   - Give concise, honest feedback (2-4 sentences): point out strengths AND specific weaknesses.
-   - Then naturally transition to your next question.
-   - Occasionally ask follow-up questions to dig deeper if an answer is vague.
-5. Ask questions that are realistic for this specific role. Reference the job description.
-6. Cover different dimensions across the interview (e.g., experience, skills, problem-solving, culture fit).
-7. Output format for each turn: plain text. Start with "[Feedback]" section (only if evaluating an answer), then "[Question]" section.
-8. Keep each response under 250 words. Be conversational, not robotic.`;
+3. NEVER evaluate, score, praise, or criticize the candidate's answers. Do not say "good answer", "that's correct", or analyze whether they are right. Real interviewers reveal nothing. You only listen, then based on your persona: probe deeper, demand clarification, or move to the next question.
+4. Keep transitions minimal — one or two words in your persona's style ("Mm.", "Okay.", "Go on."), or skip any transition and press on directly if you are the high-pressure type.
+5. Ask exactly ONE question per turn, realistic for this role and the job description.
+6. Plain conversational text only. No headings, no bullet lists, no bracketed markers like [Question]. Speak like a real person.
+7. Keep each response under 120 words.`;
   }
 
-  return `你是一位顶级公司的资深面试官，正在为以下岗位进行一场${typeLabel}：
+  const personaBlock = interviewer
+    ? `\n\n【你的人设】\n你是 ${interviewer.name}，来自 ${interviewer.company} 的面试官。
+性格与面试风格：${interviewer.personality}
+你欣赏：${interviewer.likes}
+你厌恶：${interviewer.dislikes}`
+    : '';
+  const behaviorBlock = archetype ? `\n\n【你的行为方式】\n${archetype.behaviorZh}` : '';
+  const missionBlock = roleInfo ? `\n\n【本轮任务】\n${roleInfo.missionZh}` : '';
+  const switchNote = isNewInterviewer && interviewer
+    ? `\n你是本轮新接手的面试官。用一句话提及刚才的话题作为衔接（不作任何评价），简短自我介绍（姓名+公司），然后提出你的第一个问题。`
+    : '';
+
+  return `你正在为以下岗位进行一场${typeLabel}：
 
 ${jobDescription}
+${personaBlock}${behaviorBlock}${missionBlock}${switchNote}
 
-你必须遵守以下规则：
-1. 扮演真实的面试官：专业、犀利、务实，不要过分客套。
+你必须遵守以下规则（这是真实面试）：
+1. 完全沉浸在${interviewer ? `「${interviewer.name}」` : '资深面试官'}的角色中，你的性格决定你的说话、追问与施压方式。
 2. 全程使用中文进行面试。
-3. 第一轮回复：简短开场白 + 第一个面试问题。
-4. 对候选人的每次回答：
-   - 先给出简洁、诚恳的点评（2-4句话）：指出亮点和具体的不足。
-   - 然后自然过渡到你的下一个问题。
-   - 如果回答含糊，可以适当追问深挖。
-5. 提问要贴合该岗位的真实面试场景，结合岗位描述中的要求。
-6. 整场面试要覆盖不同维度（如：项目经验、专业技能、问题解决、团队协作风等）。
-7. 每轮输出格式：纯文本。先输出"[点评]"部分（仅在评价回答时），再输出"[提问]"部分。
-8. 每轮回复控制在250字以内，像真人对话一样自然，不要机械。`;
+3. 【绝对不要】对候选人的回答做任何评价、打分、总结或反馈——不说"答得好""这个思路不错""我认为"之类的话，不分析对错。真实面试官不会透露任何态度。你只做：倾听，然后按你的性格选择追问细节、要求澄清、或直接进入下一个问题。
+4. 过渡要极简：用符合你人设的一两个词承接（如"嗯。""好。""继续。"），高压型人设可以不承接直接追问。
+5. 每次只问一个问题，问题要贴合该岗位的真实面试场景。
+6. 纯对话文本输出，禁止任何标题、列表、方括号标记（如[提问]）。像真人说话一样。
+7. 每轮回复控制在150字以内。`;
+}
+
+function interviewerPayload(interviewer: Interviewer, round: number, totalRounds: number, role: RoundRole | null) {
+  const persona = getPersona(interviewer.id);
+  const archetype = ARCHETYPE_PARAMS[persona.archetype];
+  return {
+    round,
+    totalRounds,
+    roundRole: role,
+    roundRoleLabel: role ? { zh: ROUND_ROLE_INFO[role].labelZh, en: ROUND_ROLE_INFO[role].labelEn } : null,
+    interviewer: {
+      id: interviewer.id,
+      name: interviewer.name,
+      company: interviewer.company,
+      personality: interviewer.personality,
+      gender: interviewer.gender,
+      voice: getInterviewerVoice(interviewer),
+      archetype: persona.archetype,
+      archetypeLabel: { zh: archetype.labelZh, en: archetype.labelEn },
+    },
+  };
 }
 
 export async function POST(request: NextRequest) {
@@ -67,23 +132,22 @@ export async function POST(request: NextRequest) {
       resumeId,
       answer,
       language = 'zh',
+      mode = 'single',
+      totalRounds = 1,
     } = body;
 
     if (!accessCodeId) {
       return new Response(JSON.stringify({ error: '未授权的访问' }), { status: 401 });
     }
 
-    let messages: ChatMessage[] = [];
-    let currentSessionId = sessionId;
-    let systemPrompt = '';
+    const isGauntlet = mode === 'gauntlet' && totalRounds > 1;
 
-    if (!currentSessionId) {
-      // 开始新面试
+    if (!sessionId) {
+      // ===== 开始新面试 =====
       if (!interviewType) {
         return new Response(JSON.stringify({ error: '缺少面试类型' }), { status: 400 });
       }
 
-      // 优先使用选中的岗位 JD
       let jdText = jobDescription || '';
       let selectedJobId: number | null = null;
       if (jobId) {
@@ -101,7 +165,6 @@ export async function POST(request: NextRequest) {
         jdText = language === 'en' ? 'General position (no specific JD provided)' : '通用岗位（未提供具体 JD）';
       }
 
-      // 可选：结合简历内容
       let resumeContext = '';
       if (resumeId) {
         const { data: resume } = await client
@@ -117,18 +180,24 @@ export async function POST(request: NextRequest) {
         }
       }
 
-      systemPrompt = buildSystemPrompt(interviewType, jdText + resumeContext, language);
+      // 闯关模式：按剧本角色抽取 N 位面试官；单面模式：随机 1 位
+      const rounds = isGauntlet ? totalRounds : 1;
+      const interviewers = isGauntlet ? selectScriptInterviewers(rounds) : selectRoundInterviewers(rounds);
+      const firstInterviewer = interviewers[0];
+      const script = isGauntlet ? GAUNTLET_SCRIPTS[rounds] ?? null : null;
+      const firstRole: RoundRole | null = script ? script[0] : null;
+
+      const systemPrompt = buildSystemPrompt(interviewType, jdText + resumeContext, language, firstInterviewer, false, firstRole);
       const llmMessages = [
         { role: 'system' as const, content: systemPrompt },
         {
           role: 'user' as const,
           content: language === 'en'
-            ? 'The candidate has arrived. Please greet them briefly and ask your first interview question.'
-            : '候选人已到，请简短开场并提出你的第一个面试问题。',
+            ? 'The candidate has arrived. Briefly introduce yourself (name + company) and ask your first interview question.'
+            : '候选人已到，请简短自我介绍（姓名+公司）并提出你的第一个面试问题。',
         },
       ];
 
-      // 先创建会话记录
       const { data: session, error: insertError } = await client
         .from('interview_sessions')
         .insert({
@@ -137,6 +206,10 @@ export async function POST(request: NextRequest) {
           job_description: jdText,
           job_id: selectedJobId,
           messages: [],
+          mode: isGauntlet ? 'gauntlet' : 'single',
+          total_rounds: rounds,
+          current_round: 1,
+          interviewer_ids: interviewers.map((i) => i.id),
         })
         .select('id')
         .single();
@@ -145,9 +218,7 @@ export async function POST(request: NextRequest) {
         return new Response(JSON.stringify({ error: '创建面试会话失败' }), { status: 500 });
       }
 
-      currentSessionId = session.id;
-
-      // 流式生成第一个问题
+      const currentSessionId = session.id;
       const llmClient = new LLMClient(new Config(), HeaderUtils.extractForwardHeaders(request.headers));
       const encoder = new TextEncoder();
       let fullContent = '';
@@ -155,8 +226,10 @@ export async function POST(request: NextRequest) {
       const readableStream = new ReadableStream({
         async start(controller) {
           try {
-            // 先发送 sessionId
             controller.enqueue(encoder.encode(`data: ${JSON.stringify({ sessionId: currentSessionId })}\n\n`));
+            controller.enqueue(
+              encoder.encode(`data: ${JSON.stringify({ roundStart: true, ...interviewerPayload(firstInterviewer, 1, rounds, firstRole) })}\n\n`)
+            );
 
             const stream = llmClient.stream(llmMessages, { temperature: 0.8 });
             for await (const chunk of stream) {
@@ -167,8 +240,9 @@ export async function POST(request: NextRequest) {
               }
             }
 
-            // 保存面试官的第一条消息
-            const newMessages: ChatMessage[] = [{ role: 'interviewer', content: fullContent }];
+            const newMessages: ChatMessage[] = [
+              { role: 'interviewer', content: fullContent, round: 1, interviewerId: firstInterviewer.id },
+            ];
             await client
               .from('interview_sessions')
               .update({ messages: newMessages, updated_at: new Date().toISOString() })
@@ -193,11 +267,11 @@ export async function POST(request: NextRequest) {
       });
     }
 
-    // 继续面试：候选人提交了回答
+    // ===== 继续面试 =====
     const { data: session, error: sessionError } = await client
       .from('interview_sessions')
       .select('*')
-      .eq('id', currentSessionId)
+      .eq('id', sessionId)
       .eq('access_code_id', accessCodeId)
       .single();
 
@@ -209,17 +283,43 @@ export async function POST(request: NextRequest) {
       return new Response(JSON.stringify({ error: '面试已结束' }), { status: 400 });
     }
 
-    messages = (session.messages as ChatMessage[]) || [];
-    systemPrompt = buildSystemPrompt(session.interview_type, session.job_description || '', language);
+    const messages: ChatMessage[] = (session.messages as ChatMessage[]) || [];
+    const sessionMode = session.mode || 'single';
+    const rounds: number = session.total_rounds || 1;
+    const interviewerIds: number[] = (session.interviewer_ids as number[]) || [];
+    const currentRound: number = session.current_round || 1;
 
-    // 追加候选人回答
-    messages.push({ role: 'candidate', content: answer });
+    // 追加候选人回答（归属当前轮）
+    const currentInterviewerId = interviewerIds[currentRound - 1] || null;
+    messages.push({ role: 'candidate', content: answer, round: currentRound, interviewerId: currentInterviewerId ?? undefined });
 
-    // 构建 LLM 消息历史
+    // 判断是否需要切换到下一面试官
+    const answersThisRound = messages.filter((m) => m.role === 'candidate' && m.round === currentRound).length;
+    const shouldSwitch =
+      sessionMode === 'gauntlet' && answersThisRound >= QUESTIONS_PER_ROUND && currentRound < rounds;
+    const nextRound = shouldSwitch ? currentRound + 1 : currentRound;
+    const nextInterviewerId = interviewerIds[nextRound - 1] || currentInterviewerId;
+    const activeInterviewer: Interviewer | null =
+      INTERVIEWERS.find((i) => i.id === (shouldSwitch ? nextInterviewerId : currentInterviewerId)) || null;
+
+    const script = sessionMode === 'gauntlet' ? GAUNTLET_SCRIPTS[rounds] ?? null : null;
+    const activeRole: RoundRole | null = script ? script[nextRound - 1] ?? null : null;
+
+    const systemPrompt = buildSystemPrompt(
+      session.interview_type,
+      session.job_description || '',
+      language,
+      activeInterviewer,
+      shouldSwitch,
+      activeRole
+    );
+
+    // 构建 LLM 消息历史（仅保留最近 12 条，控制上下文）
     const llmMessages: Array<{ role: 'system' | 'user' | 'assistant'; content: string }> = [
       { role: 'system', content: systemPrompt },
     ];
-    for (const msg of messages) {
+    const recent = messages.slice(-12);
+    for (const msg of recent) {
       llmMessages.push({
         role: msg.role === 'interviewer' ? 'assistant' : 'user',
         content: msg.content,
@@ -227,9 +327,13 @@ export async function POST(request: NextRequest) {
     }
     llmMessages.push({
       role: 'user',
-      content: language === 'en'
-        ? 'Please evaluate my answer above, then ask your next question.'
-        : '请点评我上面的回答，然后提出你的下一个问题。',
+      content: shouldSwitch
+        ? (language === 'en'
+            ? 'The previous round is over. You are the new interviewer for the next round — begin now.'
+            : '上一轮已结束，你是下一轮的新面试官，请开始。')
+        : (language === 'en'
+            ? 'The candidate has answered. Continue the interview in character — probe deeper or ask your next question. Do NOT evaluate the answer.'
+            : '候选人已回答。请以你的人设继续面试——追问细节或提出下一个问题，不要评价回答。'),
     });
 
     const llmClient = new LLMClient(new Config(), HeaderUtils.extractForwardHeaders(request.headers));
@@ -239,6 +343,13 @@ export async function POST(request: NextRequest) {
     const readableStream = new ReadableStream({
       async start(controller) {
         try {
+          // 切换轮次时先发送 roundStart 事件
+          if (shouldSwitch && activeInterviewer) {
+            controller.enqueue(
+              encoder.encode(`data: ${JSON.stringify({ roundStart: true, ...interviewerPayload(activeInterviewer, nextRound, rounds, activeRole) })}\n\n`)
+            );
+          }
+
           const stream = llmClient.stream(llmMessages, { temperature: 0.8 });
           for await (const chunk of stream) {
             if (chunk.content) {
@@ -248,12 +359,23 @@ export async function POST(request: NextRequest) {
             }
           }
 
-          // 保存面试官回复
-          const newMessages: ChatMessage[] = [...messages, { role: 'interviewer', content: fullContent }];
+          const newMessages: ChatMessage[] = [
+            ...messages,
+            {
+              role: 'interviewer',
+              content: fullContent,
+              round: nextRound,
+              interviewerId: activeInterviewer?.id,
+            },
+          ];
           await client
             .from('interview_sessions')
-            .update({ messages: newMessages, updated_at: new Date().toISOString() })
-            .eq('id', currentSessionId);
+            .update({
+              messages: newMessages,
+              current_round: nextRound,
+              updated_at: new Date().toISOString(),
+            })
+            .eq('id', sessionId);
 
           controller.enqueue(encoder.encode(`data: ${JSON.stringify({ done: true })}\n\n`));
           controller.close();

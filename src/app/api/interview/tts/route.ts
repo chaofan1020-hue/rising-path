@@ -12,7 +12,7 @@ const SPEAKER_EN = 'zh_female_vv_uranus_bigtts';
 export async function POST(request: NextRequest) {
   try {
     const body = await request.json();
-    const { accessCodeId, text, language } = body;
+    const { accessCodeId, text, language, speaker } = body;
 
     if (!accessCodeId || !text) {
       return NextResponse.json({ error: '缺少必要参数' }, { status: 400 });
@@ -36,7 +36,7 @@ export async function POST(request: NextRequest) {
     const response = await ttsClient.synthesize({
       uid: `interview_${accessCodeId}`,
       text: text.slice(0, 1000),
-      speaker: language === 'en' ? SPEAKER_EN : SPEAKER_ZH,
+      speaker: speaker || (language === 'en' ? SPEAKER_EN : SPEAKER_ZH),
       audioFormat: 'mp3',
       sampleRate: 24000,
     });

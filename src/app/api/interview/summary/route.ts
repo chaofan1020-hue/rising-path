@@ -1,10 +1,13 @@
 import { NextRequest } from 'next/server';
 import { getSupabaseClient } from '@/storage/database/supabase-client';
 import { LLMClient, Config, HeaderUtils } from 'coze-coding-dev-sdk';
+import { INTERVIEWERS, getPersona, ROUND_ROLE_INFO, GAUNTLET_SCRIPTS } from '@/lib/interviewers';
 
 interface ChatMessage {
   role: 'interviewer' | 'candidate';
   content: string;
+  round?: number;
+  interviewerId?: number;
 }
 
 export async function POST(request: NextRequest) {
@@ -32,67 +35,113 @@ export async function POST(request: NextRequest) {
       return new Response(JSON.stringify({ error: '面试内容太少，无法生成报告' }), { status: 400 });
     }
 
+    // 构建面试委员会成员档案（含轮次角色与人设）
+    const isGauntlet = session.mode === 'gauntlet' && (session.total_rounds || 1) > 1;
+    const rounds: number = session.total_rounds || 1;
+    const interviewerIds: number[] = (session.interviewer_ids as number[]) || [];
+    const script = isGauntlet ? GAUNTLET_SCRIPTS[rounds] ?? null : null;
+    const dossier = interviewerIds
+      .map((id, idx) => {
+        const it = INTERVIEWERS.find((i) => i.id === id);
+        if (!it) return null;
+        const role = script ? script[idx] : null;
+        const roleLabel = role
+          ? (language === 'en' ? ROUND_ROLE_INFO[role].labelEn : ROUND_ROLE_INFO[role].labelZh)
+          : (language === 'en' ? 'Sole interviewer' : '唯一面试官');
+        const persona = getPersona(it.id);
+        return language === 'en'
+          ? `Round ${idx + 1} (${roleLabel}): ${it.name} from ${it.company}. Persona: ${it.personality} Archetype: ${persona.archetype}.`
+          : `第 ${idx + 1} 轮（${roleLabel}）：${it.name}，来自${it.company}。人设：${it.personality} 原型：${persona.archetype}。`;
+      })
+      .filter(Boolean)
+      .join('\n');
+    const getInterviewerLabel = (m: ChatMessage) => {
+      if (m.role !== 'interviewer') return language === 'en' ? 'Candidate' : '候选人';
+      if (m.interviewerId) {
+        const it = INTERVIEWERS.find((i) => i.id === m.interviewerId);
+        if (it) return `${it.name} (${it.company})`;
+      }
+      return language === 'en' ? 'Interviewer' : '面试官';
+    };
     const transcript = messages
-      .map((m) => `${m.role === 'interviewer' ? (language === 'en' ? 'Interviewer' : '面试官') : (language === 'en' ? 'Candidate' : '候选人')}: ${m.content}`)
+      .map((m) => `${getInterviewerLabel(m)}: ${m.content}`)
       .join('\n\n');
 
     const systemPrompt = language === 'en'
-      ? 'You are a senior interview coach. Analyze mock interview transcripts and provide structured, actionable feedback reports in English.'
-      : '你是一位资深面试教练，擅长分析模拟面试记录并给出结构化、可落地的中文反馈报告。';
+      ? 'You are the secretary of a hiring committee at a top company. You compile brutally honest, multi-perspective evaluation reports from each interviewer. Your reports are sharp, specific and never generic — like real internal hiring committee notes.'
+      : '你是顶级公司面试委员会的记录秘书，负责汇总每位面试官的真实评议。你的报告尖锐、具体、毫不客气，就像真实的大厂内部面试评议记录。';
 
     const userPrompt = language === 'en'
-      ? `Below is a mock interview transcript for a ${session.interview_type} interview.
+      ? `Below is a ${isGauntlet ? `${rounds}-round gauntlet` : 'single-round'} mock interview transcript for a ${session.interview_type} interview.
 
 Job Description:
 ${session.job_description}
 
+Interview Panel:
+${dossier || 'One interviewer'}
+
 Transcript:
 ${transcript}
 
-Please generate a comprehensive interview performance report with the following structure (use Markdown):
+Generate a HIRING COMMITTEE evaluation report in Markdown with this exact structure:
 
-## Overall Assessment
-(2-3 sentences overall evaluation + a score out of 100)
+## Committee Verdict Overview
+(One paragraph: the interview format, panel composition, and the overall atmosphere of the candidate's performance)
 
-## Strengths
-- (3-5 bullet points with specific examples from the interview)
+## Individual Evaluations
+(For EACH interviewer on the panel, in round order:)
+### Round N · [Round Role] — Interviewer Name (Company)
+(In this interviewer's OWN voice and persona, 2-4 sentences of sharp, honest commentary on what they observed — specific moments from the transcript, not generic feedback)
+- Score: one of A+ / A / B+ / B / C+ / C / D
+- Recommendation: Strongly Recommend / Recommend / Neutral / Not Recommend / Strongly Oppose
 
-## Areas for Improvement
-- (3-5 bullet points with specific examples)
+## Final Decision
+- Verdict: PASS or FAIL
+- Decisive factors: (which dimensions drove the decision, e.g. "cultural fit", "attention to detail", "technical depth")
+- Committee consensus: (2-3 sentences)
 
-## Question-by-Question Review
-(For each question: brief comment on the answer quality)
+## Style Adaptability
+(How consistently the candidate performed across different interviewer personalities and pressure styles)
 
-## Actionable Suggestions
-- (3-5 concrete preparation suggestions for real interviews)
+## Preparation Advice
+- (3-5 concrete, actionable suggestions)
 
-Keep the report professional, specific and encouraging.`
-      : `以下是一场${session.interview_type}模拟面试的完整记录。
+Be specific, cite real moments from the transcript, and keep each interviewer's voice true to their persona.`
+      : `以下是一场${isGauntlet ? `${rounds}轮闯关` : '单轮'}模拟面试的完整记录，岗位类型：${session.interview_type}。
 
 岗位描述：
 ${session.job_description}
 
+面试委员会成员：
+${dossier || '一位面试官'}
+
 面试记录：
 ${transcript}
 
-请生成一份全面的面试表现报告，使用 Markdown 格式，结构如下：
+请生成一份面试委员会评议报告，使用 Markdown，严格按以下结构：
 
-## 总体评价
-（2-3句话整体评估 + 百分制综合得分）
+## 委员会总览
+（一段话：本场面试形式、委员会构成，以及候选人整体表现氛围）
 
-## 表现亮点
-- （3-5条，结合面试中的具体回答举例）
+## 各面试官评议
+（按轮次顺序，为委员会中【每一位】面试官输出：）
+### 第 N 轮 · [轮次角色] — 面试官姓名（公司）
+（以该面试官【自己的口吻与人设】写 2-4 句尖锐真实的评议——引用记录中的具体瞬间，不要泛泛而谈）
+- 评分：A+ / A / B+ / B / C+ / C / D 之一
+- 态度：强烈推荐 / 推荐 / 保留意见 / 不推荐 / 强烈反对
 
-## 待提升之处
-- （3-5条，结合具体回答举例）
+## 综合决议
+- 决议：通过 或 未通过
+- 关键决定因素：（如"文化匹配度""细节严谨度""专业深度"等维度）
+- 委员会共识：（2-3 句话）
 
-## 逐题回顾
-（针对每个问题：简要点评回答质量）
+## 风格适应度分析
+（候选人在不同性格、不同压力风格的面试官面前，表现的稳定性与适应力）
 
 ## 备考建议
-- （3-5条可落地的真实面试准备建议）
+- （3-5 条具体可落地的建议）
 
-报告要求专业、具体、有鼓励性。`;
+要求：引用记录中的真实瞬间，每位面试官的口吻必须符合其人设，评议要尖锐直接，不怕得罪人。`;
 
     const llmClient = new LLMClient(new Config(), HeaderUtils.extractForwardHeaders(request.headers));
     const encoder = new TextEncoder();
