@@ -257,9 +257,9 @@ function ResumeContent() {
       <Header1 />
       <main className="container mx-auto px-4 py-4 md:py-8 pt-20">
         {/* Page Title */}
-        <div className="mb-4 md:mb-8">
-          <h1 className="text-2xl md:text-3xl font-bold mb-1 md:mb-2 text-black dark:text-white">{t('resume.title')}</h1>
-          <p className="text-sm md:text-base text-black dark:text-white">{t('resume.subtitle')}</p>
+        <div className="mb-8 md:mb-12 text-center">
+          <h1 className="text-3xl md:text-4xl font-light mb-3 md:mb-4 text-black dark:text-white">{t('resume.title')}</h1>
+          <p className="text-base md:text-lg text-gray-500 dark:text-gray-400 max-w-2xl mx-auto">{t('resume.subtitle')}</p>
         </div>
 
         {/* 状态引导区域 */}

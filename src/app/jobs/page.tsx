@@ -497,14 +497,16 @@ function JobsContent() {
       <Header1 />
       <main className="container mx-auto px-4 py-4 md:py-8 pt-20">
         {/* Page Title */}
-        <div className="mb-4 md:mb-8">
-          <h1 className="text-2xl md:text-3xl font-bold mb-1 md:mb-2 flex items-center gap-2 md:gap-3 text-black dark:text-white">
-            <svg className="h-6 w-6 md:h-8 md:w-8 text-terracotta-600" fill="currentColor" viewBox="0 0 24 24">
-              <path d="M20 6h-4V4c0-1.11-.89-2-2-2h-4c-1.11 0-2 .89-2 2v2H4c-1.11 0-1.99.89-1.99 2L2 19c0 1.11.89 2 2 2h16c1.11 0 2-.89 2-2V8c0-1.11-.89-2-2-2zm-6 0h-4V4h4v2z" />
-            </svg>
+        <div className="mb-8 md:mb-12 text-center">
+          <h1 className="text-3xl md:text-4xl font-light mb-3 md:mb-4 flex items-center justify-center gap-2 md:gap-3 text-black dark:text-white">
+            <span className="p-2 rounded-xl bg-gradient-to-br from-terracotta-500 to-sage-500 inline-flex">
+              <svg className="h-6 w-6 md:h-8 md:w-8 text-white" fill="currentColor" viewBox="0 0 24 24">
+                <path d="M20 6h-4V4c0-1.11-.89-2-2-2h-4c-1.11 0-2 .89-2 2v2H4c-1.11 0-1.99.89-1.99 2L2 19c0 1.11.89 2 2 2h16c1.11 0 2-.89 2-2V8c0-1.11-.89-2-2-2zm-6 0h-4V4h4v2z" />
+              </svg>
+            </span>
             {t('page.jobs.title')}
           </h1>
-          <p className="text-sm md:text-base text-black dark:text-white">{t('page.jobs.subtitle')}</p>
+          <p className="text-base md:text-lg text-gray-500 dark:text-gray-400 max-w-2xl mx-auto">{t('page.jobs.subtitle')}</p>
         </div>
 
         {/* Filters */}
