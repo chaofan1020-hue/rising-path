@@ -34,8 +34,6 @@ import {
   CheckCircle, 
   Copy, 
   Download,
-  Briefcase,
-  Wand2,
   Target,
   AlertCircle,
   Languages,
@@ -883,11 +881,8 @@ function OptimizeContent() {
           </span>
         </div>
 
-        {/* Hero：黑色圆角图标方块 + 居中标题（悬浮于水印之上） */}
+        {/* Hero：居中标题（悬浮于水印之上） */}
         <div className="relative mb-10 md:mb-14 text-center">
-          <div className="mx-auto mb-6 w-16 h-16 rounded-2xl bg-zinc-900 dark:bg-white shadow-2xl shadow-zinc-900/25 dark:shadow-black/50 flex items-center justify-center">
-            <Wand2 className="h-7 w-7 text-white dark:text-zinc-900" />
-          </div>
           <h1 className="text-3xl md:text-4xl font-semibold tracking-tight text-zinc-900 dark:text-white mb-3">{t('optimize.title')}</h1>
           <p className="text-sm md:text-base text-zinc-500 dark:text-zinc-400 max-w-xl mx-auto">{t('optimize.subtitle')}</p>
         </div>
