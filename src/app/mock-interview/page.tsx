@@ -7,6 +7,10 @@ import { Button } from "@/components/ui/button";
 import { Textarea } from "@/components/ui/textarea";
 import { Input } from "@/components/ui/input";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
+import {
+  Modal, ModalBody, ModalContent, ModalDescription,
+  ModalFooter, ModalHeader, ModalTitle,
+} from "@/components/ui/modal";
 import { useLanguage } from "@/lib/language-context";
 import {
   Bot, Loader2, RotateCcw, ClipboardList, Code2, MessagesSquare,
@@ -54,7 +58,7 @@ function OptionSelect({
           <button
             onClick={() => { onChange(""); setOpen(false); }}
             className={`w-full flex items-center gap-2 text-left px-3 py-2 rounded-md text-sm transition-colors ${
-              !value ? "bg-primary text-primary-foreground" : "hover:bg-muted"
+              !value ? "bg-zinc-900 text-white dark:bg-white dark:text-zinc-900" : "hover:bg-muted"
             }`}
           >
             {!value && <Check className="h-3.5 w-3.5" />}
@@ -65,7 +69,7 @@ function OptionSelect({
               key={opt.value}
               onClick={() => { onChange(opt.value); setOpen(false); }}
               className={`w-full flex items-center gap-2 text-left px-3 py-2 rounded-md text-sm transition-colors ${
-                value === opt.value ? "bg-primary text-primary-foreground" : "hover:bg-muted"
+                value === opt.value ? "bg-zinc-900 text-white dark:bg-white dark:text-zinc-900" : "hover:bg-muted"
               }`}
             >
               {value === opt.value && <Check className="h-3.5 w-3.5 flex-shrink-0" />}
@@ -324,6 +328,7 @@ export default function MockInterviewPage() {
   const [micError, setMicError] = useState(false);
   // 免提模式：麦克风常开 + VAD 语音活动检测
   const [listening, setListening] = useState(false);
+  const [setupOpen, setSetupOpen] = useState(true);
   const [voiceActive, setVoiceActive] = useState(false); // 检测到正在说话
   const vadRafRef = useRef<number | null>(null);
   // 麦克风错误细分：denied=权限被拒 nodevice=无设备 busy=被占用 unknown=其他
@@ -1042,6 +1047,7 @@ export default function MockInterviewPage() {
     setRoundTransition(false);
     setRoundRoleLabel(null);
     setListening(false);
+    setSetupOpen(true);
     clearPressure();
   };
 
@@ -1065,10 +1071,32 @@ export default function MockInterviewPage() {
                 <p className="text-gray-500 dark:text-gray-400">{t("mockInterview.subtitle")}</p>
               </div>
 
-              <div className="rounded-3xl border border-gray-200 dark:border-zinc-800 bg-white dark:bg-zinc-900 shadow-lg p-6 md:p-8">
-                <h2 className="text-xl font-semibold text-black dark:text-white mb-6">
-                  {t("mockInterview.setupTitle")}
-                </h2>
+              {/* Modal 被关闭后的重新打开入口 */}
+              {!setupOpen && (
+                <div className="flex justify-center">
+                  <Button
+                    onClick={() => setSetupOpen(true)}
+                    variant="outline"
+                    className="rounded-full h-11 px-6"
+                  >
+                    <ClipboardList className="h-4 w-4 mr-2" />
+                    {t("mockInterview.openSettings")}
+                  </Button>
+                </div>
+              )}
+            </div>
+          </main>
+
+          {/* 面试设置表单：桌面居中 Dialog / 移动端底部 Drawer（响应式 Modal） */}
+          <Modal open={setupOpen} onOpenChange={setSetupOpen}>
+            <ModalContent
+              popoverProps={{ className: "p-0 gap-0 sm:max-w-2xl max-h-[88vh] flex flex-col overflow-hidden" }}
+            >
+              <ModalHeader className="px-6 pt-6 pb-2 text-left">
+                <ModalTitle>{t("mockInterview.setupTitle")}</ModalTitle>
+                <ModalDescription>{t("mockInterview.subtitle")}</ModalDescription>
+              </ModalHeader>
+              <ModalBody className="px-6 py-4 flex-1 overflow-y-auto min-h-0">
 
                 {/* 面试类型 */}
                 <div className="mb-6">
@@ -1225,6 +1253,8 @@ export default function MockInterviewPage() {
                   </div>
                 )}
 
+              </ModalBody>
+              <ModalFooter className="px-6 pb-6 pt-2">
                 <Button
                   onClick={handleStart}
                   disabled={streaming}
@@ -1236,9 +1266,9 @@ export default function MockInterviewPage() {
                     <><Video className="h-5 w-5 mr-2" />{t("mockInterview.start")}</>
                   )}
                 </Button>
-              </div>
-            </div>
-          </main>
+              </ModalFooter>
+            </ModalContent>
+          </Modal>
         </div>
       </AccessGuard>
     );
