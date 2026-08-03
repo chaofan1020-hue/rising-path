@@ -12,7 +12,6 @@ import {
   Bot, Loader2, RotateCcw, ClipboardList, Code2, MessagesSquare,
   Puzzle, Layers, Mic, Square, PhoneOff, Video, VideoOff, User,
   Building2, Briefcase, FileText, ChevronDown, Check, Timer, Zap,
-  Subtitles, ScrollText, X,
 } from "lucide-react";
 import { startAmbience, stopAmbience, playNotify } from "@/lib/interview-audio";
 
@@ -340,7 +339,6 @@ export default function MockInterviewPage() {
   const [noSpeech, setNoSpeech] = useState(false);
   const [speaking, setSpeaking] = useState(false);
   const [showSubtitle, setShowSubtitle] = useState(true);
-  const [showTranscript, setShowTranscript] = useState(false); // 面试记录抽屉
 
   const videoRef = useRef<HTMLVideoElement>(null);
   const streamRef = useRef<MediaStream | null>(null);
@@ -838,7 +836,6 @@ export default function MockInterviewPage() {
     setCurrentInterviewer(null);
     setRoundTransition(false);
     setRoundRoleLabel(null);
-    setShowTranscript(false);
     clearPressure();
   };
 
@@ -1041,9 +1038,8 @@ export default function MockInterviewPage() {
     );
   }
 
-  // ========== 面试进行阶段（沉浸式视频面试间） ==========
+  // ========== 面试进行阶段（视频面试间） ==========
   if (stage === "interview") {
-    const lastMsg = messages.length > 0 ? messages[messages.length - 1] : null;
     const statusText = speaking
       ? t("mockInterview.speaking")
       : streaming
@@ -1053,15 +1049,9 @@ export default function MockInterviewPage() {
           : t("mockInterview.listening");
     return (
       <AccessGuard>
-        <div className="h-screen bg-zinc-950 flex flex-col overflow-hidden relative">
-          {/* 背景微光 */}
-          <div className="pointer-events-none absolute inset-0">
-            <div className="absolute -top-32 left-1/4 h-80 w-80 rounded-full bg-[#C46A4A]/10 blur-3xl" />
-            <div className="absolute bottom-0 right-1/4 h-80 w-80 rounded-full bg-[#B5BEB0]/10 blur-3xl" />
-          </div>
-
+        <div className="min-h-screen bg-zinc-950 flex flex-col">
           {/* 顶部栏 */}
-          <div className="relative z-30 flex items-center justify-between px-4 md:px-6 py-3 bg-zinc-950/60 backdrop-blur-xl border-b border-white/5">
+          <div className="flex items-center justify-between px-4 md:px-6 py-3 bg-zinc-900/80 backdrop-blur border-b border-zinc-800">
             <div className="flex items-center gap-3">
               <div className="h-8 w-8 rounded-xl bg-gradient-to-br from-[#C46A4A] to-[#B5BEB0] flex items-center justify-center">
                 <Bot className="h-4 w-4 text-white" />
@@ -1115,63 +1105,112 @@ export default function MockInterviewPage() {
                   {`${Math.floor(roundSecondsLeft / 60)}:${String(roundSecondsLeft % 60).padStart(2, "0")}`}
                 </span>
               )}
-              <span className="text-zinc-600 text-xs hidden sm:block">
-                {t("mockInterview.qaCount").replace("{count}", String(qaCount))}
-              </span>
+              <button
+                onClick={() => setShowSubtitle((v) => !v)}
+                className={`px-3 py-1.5 rounded-full text-xs font-medium transition-colors ${
+                  showSubtitle ? "bg-[#C46A4A] text-white" : "bg-zinc-800 text-zinc-400"
+                }`}
+              >
+                {t("mockInterview.subtitleOn")}
+              </button>
+              <Button
+                onClick={handleEnd}
+                disabled={ending}
+                variant="destructive"
+                className="rounded-full h-9"
+              >
+                <PhoneOff className="h-4 w-4 mr-1.5" />
+                {ending ? t("mockInterview.ending") : t("mockInterview.endInterview")}
+              </Button>
             </div>
           </div>
 
-          {/* 主区域：面试官全屏画面 */}
-          <div className="relative flex-1">
-            <div className="absolute inset-0 flex flex-col items-center justify-center px-6">
-              {/* 头像 + 说话波纹 */}
-              <div className="relative flex items-center justify-center">
-                {speaking && (
-                  <>
-                    <span className="absolute inset-0 rounded-full bg-[#C46A4A]/30 animate-ping" style={{ animationDuration: "1.6s" }} />
-                    <span className="absolute -inset-4 rounded-full bg-[#C46A4A]/15 animate-ping" style={{ animationDuration: "2.2s" }} />
-                  </>
-                )}
-                <div className={`relative h-28 w-28 md:h-36 md:w-36 rounded-full bg-gradient-to-br from-[#C46A4A] to-[#B5BEB0] flex items-center justify-center shadow-2xl shadow-[#C46A4A]/20 transition-transform duration-500 ${speaking ? "scale-105" : "scale-100"}`}>
-                  {currentInterviewer ? (
-                    <span className="text-white text-4xl md:text-5xl font-light">
-                      {currentInterviewer.name.charAt(0).toUpperCase()}
-                    </span>
-                  ) : (
-                    <Bot className="h-14 w-14 md:h-16 md:w-16 text-white" />
+          {/* 视频区域 */}
+          <div className="flex-1 flex flex-col md:flex-row gap-3 p-3 md:p-4 max-w-7xl w-full mx-auto">
+            {/* AI 面试官画面 */}
+            <div className="flex-1 relative rounded-3xl overflow-hidden bg-gradient-to-br from-zinc-900 to-zinc-800 border border-zinc-800" style={{ aspectRatio: "16/9" }}>
+              <div className="absolute inset-0 flex flex-col items-center justify-center">
+                {/* 头像 + 说话波纹 */}
+                <div className="relative flex items-center justify-center">
+                  {speaking && (
+                    <>
+                      <span className="absolute inset-0 rounded-full bg-[#C46A4A]/30 animate-ping" style={{ animationDuration: "1.6s" }} />
+                      <span className="absolute -inset-4 rounded-full bg-[#C46A4A]/15 animate-ping" style={{ animationDuration: "2.2s" }} />
+                    </>
                   )}
+                  <div className={`relative h-24 w-24 md:h-32 md:w-32 rounded-full bg-gradient-to-br from-[#C46A4A] to-[#B5BEB0] flex items-center justify-center shadow-2xl shadow-[#C46A4A]/20 transition-transform duration-500 ${speaking ? "scale-105" : "scale-100"}`}>
+                    {currentInterviewer ? (
+                      <span className="text-white text-3xl md:text-5xl font-light">
+                        {currentInterviewer.name.charAt(0).toUpperCase()}
+                      </span>
+                    ) : (
+                      <Bot className="h-12 w-12 md:h-16 md:w-16 text-white" />
+                    )}
+                  </div>
                 </div>
+                {currentInterviewer && (
+                  <p className="text-white text-sm md:text-base font-medium mt-3">{currentInterviewer.name}</p>
+                )}
+                {/* 语音波纹动画 */}
+                {speaking && (
+                  <div className="flex items-end gap-1 mt-5 h-6">
+                    {[0, 1, 2, 3, 4].map((i) => (
+                      <span
+                        key={i}
+                        className="w-1.5 rounded-full bg-[#C46A4A] animate-pulse"
+                        style={{ height: `${12 + (i % 3) * 8}px`, animationDelay: `${i * 0.15}s` }}
+                      />
+                    ))}
+                  </div>
+                )}
+                <p className="text-zinc-400 text-sm mt-3">{statusText}</p>
+              </div>
+              <div className="absolute bottom-3 left-3 px-3 py-1 rounded-full bg-black/50 text-white text-xs">
+                {currentInterviewer
+                  ? `${currentInterviewer.title ? (language.startsWith("zh") ? currentInterviewer.title.zh : currentInterviewer.title.en) + " · " : ""}${currentInterviewer.name} · ${currentInterviewer.company}`
+                  : t("mockInterview.interviewer")}
               </div>
 
-              {/* 面试官身份卡 */}
-              {currentInterviewer && (
-                <div className="mt-6 flex flex-col items-center">
-                  <p className="text-white text-lg md:text-xl font-medium">{currentInterviewer.name}</p>
-                  <p className="text-zinc-500 text-xs md:text-sm mt-1">
+              {/* 轮次切换覆盖层 */}
+              {roundTransition && currentInterviewer && (
+                <div className="absolute inset-0 z-10 flex flex-col items-center justify-center bg-zinc-950/95 backdrop-blur animate-in fade-in duration-300">
+                  <p className="text-[#C46A4A] text-xs font-medium tracking-widest uppercase mb-2">
+                    {t("mockInterview.roundProgress").replace("{current}", String(currentRound)).replace("{total}", String(totalRounds))}
+                  </p>
+                  <p className="text-zinc-500 text-xs mb-4">{t("mockInterview.newInterviewer")}</p>
+                  <div className="h-16 w-16 rounded-full bg-gradient-to-br from-[#C46A4A] to-[#B5BEB0] flex items-center justify-center mb-3">
+                    <span className="text-white text-2xl font-light">{currentInterviewer.name.charAt(0).toUpperCase()}</span>
+                  </div>
+                  <p className="text-white text-xl font-medium">{currentInterviewer.name}</p>
+                  <p className="text-zinc-400 text-sm">
                     {currentInterviewer.title ? `${language.startsWith("zh") ? currentInterviewer.title.zh : currentInterviewer.title.en} · ` : ""}{currentInterviewer.company}
                   </p>
                 </div>
               )}
 
-              {/* 状态指示 */}
-              <div className="mt-5 flex items-center gap-2">
-                {speaking && (
-                  <div className="flex items-end gap-1 h-4">
-                    {[0, 1, 2, 3].map((i) => (
-                      <span
-                        key={i}
-                        className="w-1 rounded-full bg-[#C46A4A] animate-pulse"
-                        style={{ height: `${8 + (i % 3) * 5}px`, animationDelay: `${i * 0.15}s` }}
-                      />
-                    ))}
-                  </div>
-                )}
-                <p className="text-zinc-500 text-sm">{statusText}</p>
-              </div>
+              {/* 等待焦虑覆盖层：面试官正在撰写评价 */}
+              {waitingNextRound && (
+                <div className="absolute inset-0 z-20 flex flex-col items-center justify-center bg-zinc-950/95 backdrop-blur animate-in fade-in duration-500">
+                  <Loader2 className="h-10 w-10 text-[#C46A4A] animate-spin mb-5" />
+                  <p className="text-zinc-300 text-sm mb-2">{t("mockInterview.writingEvaluation")}</p>
+                  <p className="text-zinc-600 text-xs mb-8">
+                    {t("mockInterview.roundProgress").replace("{current}", String(currentRound - 1)).replace("{total}", String(totalRounds))}
+                  </p>
+                  {earlyReady && (
+                    <button
+                      onClick={finishRoundWait}
+                      className="flex items-center gap-2 px-5 py-2.5 rounded-full bg-[#C46A4A] text-white text-sm font-medium animate-pulse hover:bg-[#b05a3c] transition-colors"
+                    >
+                      <Zap className="h-4 w-4" />
+                      {t("mockInterview.earlyReady")}
+                    </button>
+                  )}
+                </div>
+              )}
             </div>
 
-            {/* 候选人画中画 */}
-            <div className="absolute bottom-28 md:bottom-8 right-4 md:right-6 w-36 md:w-52 aspect-video rounded-2xl overflow-hidden border border-white/10 shadow-2xl bg-black z-10">
+            {/* 候选人画面（摄像头） */}
+            <div className="flex-1 relative rounded-3xl overflow-hidden bg-black border border-zinc-800" style={{ aspectRatio: "16/9" }}>
               {/* video 始终渲染，CSS 控制显隐（WebRTC 规范） */}
               <video
                 ref={videoRef}
@@ -1181,159 +1220,90 @@ export default function MockInterviewPage() {
                 className={`w-full h-full object-cover ${cameraOn ? "block" : "hidden"}`}
               />
               {!cameraOn && (
-                <div className="absolute inset-0 flex flex-col items-center justify-center text-zinc-600">
-                  {cameraError ? <VideoOff className="h-6 w-6" /> : <User className="h-6 w-6" />}
-                  <button onClick={startCamera} className="mt-2 text-[10px] text-zinc-400 underline underline-offset-2">
+                <div className="absolute inset-0 flex flex-col items-center justify-center text-zinc-500">
+                  {cameraError ? (
+                    <>
+                      <VideoOff className="h-12 w-12 mb-3" />
+                      <p className="text-sm px-4 text-center">{t("mockInterview.cameraError")}</p>
+                    </>
+                  ) : (
+                    <>
+                      <User className="h-12 w-12 mb-3" />
+                      <p className="text-sm">{t("mockInterview.cameraOff")}</p>
+                    </>
+                  )}
+                  <Button onClick={startCamera} variant="outline" className="mt-4 rounded-full border-zinc-700 text-zinc-300 hover:bg-zinc-800">
+                    <Video className="h-4 w-4 mr-2" />
                     {t("mockInterview.start")}
-                  </button>
+                  </Button>
                 </div>
               )}
-              <div className="absolute bottom-1.5 left-2 px-2 py-0.5 rounded-full bg-black/60 text-white text-[10px]">
+              <div className="absolute bottom-3 left-3 px-3 py-1 rounded-full bg-black/50 text-white text-xs">
                 {t("mockInterview.you")}
               </div>
               {recording && (
-                <div className="absolute top-1.5 right-1.5 flex items-center gap-1 px-2 py-0.5 rounded-full bg-red-600 text-white text-[10px]">
-                  <span className="h-1.5 w-1.5 rounded-full bg-white animate-ping" />
+                <div className="absolute top-3 right-3 flex items-center gap-2 px-3 py-1 rounded-full bg-red-600 text-white text-xs">
+                  <span className="h-2 w-2 rounded-full bg-white animate-ping" />
                   REC
                 </div>
               )}
             </div>
-
-            {/* 电影式字幕浮层 */}
-            {showSubtitle && lastMsg && lastMsg.content && !waitingNextRound && !roundTransition && (
-              <div className="absolute bottom-28 md:bottom-8 inset-x-0 flex justify-center px-4 pointer-events-none z-10">
-                <div className="max-w-3xl w-full md:w-auto rounded-2xl bg-black/60 backdrop-blur-md border border-white/10 px-5 py-3.5">
-                  <p className="text-sm md:text-base leading-relaxed">
-                    <span className={`font-medium mr-2 ${lastMsg.role === "interviewer" ? "text-[#C46A4A]" : "text-[#B5BEB0]"}`}>
-                      {lastMsg.role === "interviewer" ? (currentInterviewer?.name || t("mockInterview.interviewer")) : t("mockInterview.you")}
-                    </span>
-                    <span className="text-zinc-100">{lastMsg.content}</span>
-                    {streaming && lastMsg.role === "interviewer" && (
-                      <span className="inline-block w-1.5 h-4 ml-1 bg-[#C46A4A] animate-pulse align-middle" />
-                    )}
-                  </p>
-                </div>
-              </div>
-            )}
-
-            {/* 轮次切换覆盖层 */}
-            {roundTransition && currentInterviewer && (
-              <div className="absolute inset-0 z-20 flex flex-col items-center justify-center bg-zinc-950/95 backdrop-blur-xl animate-in fade-in duration-300">
-                <p className="text-[#C46A4A] text-xs font-medium tracking-widest uppercase mb-2">
-                  {t("mockInterview.roundProgress").replace("{current}", String(currentRound)).replace("{total}", String(totalRounds))}
-                </p>
-                <p className="text-zinc-500 text-xs mb-4">{t("mockInterview.newInterviewer")}</p>
-                <div className="h-20 w-20 rounded-full bg-gradient-to-br from-[#C46A4A] to-[#B5BEB0] flex items-center justify-center mb-4 shadow-2xl shadow-[#C46A4A]/20">
-                  <span className="text-white text-3xl font-light">{currentInterviewer.name.charAt(0).toUpperCase()}</span>
-                </div>
-                <p className="text-white text-2xl font-medium">{currentInterviewer.name}</p>
-                <p className="text-zinc-400 text-sm mt-1">
-                  {currentInterviewer.title ? `${language.startsWith("zh") ? currentInterviewer.title.zh : currentInterviewer.title.en} · ` : ""}{currentInterviewer.company}
-                </p>
-              </div>
-            )}
-
-            {/* 等待焦虑覆盖层：面试官正在撰写评价 */}
-            {waitingNextRound && (
-              <div className="absolute inset-0 z-20 flex flex-col items-center justify-center bg-zinc-950/95 backdrop-blur-xl animate-in fade-in duration-500">
-                <Loader2 className="h-10 w-10 text-[#C46A4A] animate-spin mb-5" />
-                <p className="text-zinc-300 text-sm mb-2">{t("mockInterview.writingEvaluation")}</p>
-                <p className="text-zinc-600 text-xs mb-8">
-                  {t("mockInterview.roundProgress").replace("{current}", String(currentRound - 1)).replace("{total}", String(totalRounds))}
-                </p>
-                {earlyReady && (
-                  <button
-                    onClick={finishRoundWait}
-                    className="flex items-center gap-2 px-5 py-2.5 rounded-full bg-[#C46A4A] text-white text-sm font-medium animate-pulse hover:bg-[#b05a3c] transition-colors"
-                  >
-                    <Zap className="h-4 w-4" />
-                    {t("mockInterview.earlyReady")}
-                  </button>
-                )}
-              </div>
-            )}
-
-            {/* 面试记录抽屉 */}
-            {showTranscript && (
-              <div className="absolute inset-y-0 right-0 z-40 w-full sm:max-w-sm bg-zinc-950/95 backdrop-blur-xl border-l border-white/10 flex flex-col animate-in slide-in-from-right duration-300">
-                <div className="flex items-center justify-between px-5 py-4 border-b border-white/5">
-                  <p className="text-white text-sm font-medium">{t("mockInterview.transcriptTitle")}</p>
-                  <button
-                    onClick={() => setShowTranscript(false)}
-                    className="h-8 w-8 rounded-full bg-white/5 hover:bg-white/10 flex items-center justify-center transition-colors"
-                  >
-                    <X className="h-4 w-4 text-zinc-400" />
-                  </button>
-                </div>
-                <div className="flex-1 overflow-y-auto px-5 py-4 space-y-3">
-                  {messages.length === 0 ? (
-                    <p className="text-zinc-600 text-sm text-center pt-8">{t("mockInterview.emptyHint")}</p>
-                  ) : (
-                    messages.map((m, i) => (
-                      <div key={i} className={`rounded-2xl px-3.5 py-2.5 ${m.role === "interviewer" ? "bg-white/5" : "bg-[#C46A4A]/10 ml-6"}`}>
-                        <p className={`text-[10px] font-medium mb-1 ${m.role === "interviewer" ? "text-[#C46A4A]" : "text-[#B5BEB0]"}`}>
-                          {m.role === "interviewer" ? (currentInterviewer?.name || t("mockInterview.interviewer")) : t("mockInterview.you")}
-                        </p>
-                        <p className="text-sm text-zinc-300 whitespace-pre-wrap">{m.content}</p>
-                      </div>
-                    ))
-                  )}
-                  <div ref={messagesEndRef} />
-                </div>
-              </div>
-            )}
           </div>
 
-          {/* 底部控制胶囊 */}
-          <div className="relative z-30 pb-5 pt-1 flex flex-col items-center gap-2">
-            {(micError || (noSpeech && !micError)) && (
-              <div className="flex flex-col items-center gap-1 px-4 text-center">
-                <p className={`text-xs ${micError ? "text-red-400" : "text-amber-400"}`}>
-                  {micError
-                    ? micErrorKind === "denied"
-                      ? t("mockInterview.micDenied")
-                      : micErrorKind === "nodevice"
-                        ? t("mockInterview.micNoDevice")
-                        : micErrorKind === "busy"
-                          ? t("mockInterview.micBusy")
-                          : t("mockInterview.micError")
-                    : t("mockInterview.noSpeech")}
-                </p>
-                {micError && micErrorKind === "denied" && (
-                  <p className="text-zinc-500 text-[11px] max-w-md leading-relaxed">
-                    {t("mockInterview.micDeniedGuide")}
-                  </p>
-                )}
-                {micError && inIframe && (
-                  <button
-                    onClick={() => window.open(window.location.href, "_blank")}
-                    className="mt-1 px-3 py-1 rounded-full bg-white/10 hover:bg-white/15 text-zinc-200 text-[11px] transition-colors"
-                  >
-                    {t("mockInterview.openInNewTab")}
-                  </button>
+          {/* 字幕区域 */}
+          {showSubtitle && (
+            <div className="px-4 md:px-6 pb-2">
+              <div className="max-w-4xl mx-auto rounded-2xl bg-zinc-900/80 backdrop-blur border border-zinc-800 px-4 py-3 max-h-28 overflow-y-auto">
+                {messages.length === 0 ? (
+                  <p className="text-zinc-500 text-sm text-center">{t("mockInterview.emptyHint")}</p>
+                ) : (
+                  <div className="space-y-2">
+                    {messages.slice(-4).map((m, i) => (
+                      <p key={i} className="text-sm">
+                        <span className={`font-medium mr-2 ${m.role === "interviewer" ? "text-[#C46A4A]" : "text-[#B5BEB0]"}`}>
+                          {m.role === "interviewer" ? (currentInterviewer?.name || t("mockInterview.interviewer")) : t("mockInterview.you")}:
+                        </span>
+                        <span className="text-zinc-300">{m.content || (streaming && i === messages.slice(-4).length - 1 ? "..." : "")}</span>
+                      </p>
+                    ))}
+                    <div ref={messagesEndRef} />
+                  </div>
                 )}
               </div>
-            )}
-            <div className="flex items-center gap-2.5 md:gap-3 rounded-full bg-zinc-900/70 backdrop-blur-xl border border-white/10 px-3.5 py-2.5 shadow-2xl">
-              {/* 字幕开关 */}
-              <button
-                onClick={() => setShowSubtitle((v) => !v)}
-                title={t("mockInterview.subtitleOn")}
-                className={`h-11 w-11 rounded-full flex items-center justify-center transition-colors ${
-                  showSubtitle ? "bg-white/10 text-white" : "text-zinc-500 hover:text-zinc-300"
-                }`}
-              >
-                <Subtitles className="h-5 w-5" />
-              </button>
-              {/* 面试记录 */}
-              <button
-                onClick={() => setShowTranscript(true)}
-                title={t("mockInterview.transcriptTitle")}
-                className="h-11 w-11 rounded-full flex items-center justify-center text-zinc-500 hover:text-zinc-300 hover:bg-white/5 transition-colors"
-              >
-                <ScrollText className="h-5 w-5" />
-              </button>
-              {/* 麦克风主按钮（按住说话） */}
+            </div>
+          )}
+
+          {/* 底部控制栏：按住说话 */}
+          <div className="px-4 md:px-6 pb-5 pt-2">
+            <div className="max-w-4xl mx-auto flex flex-col items-center gap-3">
+              {(micError || (noSpeech && !micError)) && (
+                <div className="flex flex-col items-center gap-1 px-4 text-center">
+                  <p className={`text-xs ${micError ? "text-red-400" : "text-amber-400"}`}>
+                    {micError
+                      ? micErrorKind === "denied"
+                        ? t("mockInterview.micDenied")
+                        : micErrorKind === "nodevice"
+                          ? t("mockInterview.micNoDevice")
+                          : micErrorKind === "busy"
+                            ? t("mockInterview.micBusy")
+                            : t("mockInterview.micError")
+                      : t("mockInterview.noSpeech")}
+                  </p>
+                  {micError && micErrorKind === "denied" && (
+                    <p className="text-zinc-500 text-[11px] max-w-md leading-relaxed">
+                      {t("mockInterview.micDeniedGuide")}
+                    </p>
+                  )}
+                  {micError && inIframe && (
+                    <button
+                      onClick={() => window.open(window.location.href, "_blank")}
+                      className="mt-1 px-3 py-1 rounded-full bg-white/10 hover:bg-white/15 text-zinc-200 text-[11px] transition-colors"
+                    >
+                      {t("mockInterview.openInNewTab")}
+                    </button>
+                  )}
+                </div>
+              )}
               <button
                 onMouseDown={startRecording}
                 onMouseUp={stopRecording}
@@ -1341,13 +1311,12 @@ export default function MockInterviewPage() {
                 onTouchStart={(e) => { e.preventDefault(); startRecording(); }}
                 onTouchEnd={(e) => { e.preventDefault(); stopRecording(); }}
                 disabled={streaming || recognizing || speaking}
-                title={recording ? t("mockInterview.recording") : t("mockInterview.tapToSpeak")}
-                className={`h-16 w-16 -my-2 rounded-full flex items-center justify-center transition-all select-none touch-none ${
+                className={`h-16 w-16 md:h-20 md:w-20 rounded-full flex items-center justify-center transition-all select-none touch-none ${
                   recording
                     ? "bg-red-500 scale-110 shadow-lg shadow-red-500/40"
                     : streaming || recognizing || speaking
                       ? "bg-zinc-800 cursor-not-allowed"
-                      : "bg-gradient-to-br from-[#C46A4A] to-[#B5BEB0] hover:scale-105 shadow-lg shadow-[#C46A4A]/30"
+                      : "bg-gradient-to-br from-[#C46A4A] to-[#B5BEB0] hover:scale-105 shadow-lg"
                 }`}
               >
                 {recognizing ? (
@@ -1358,19 +1327,10 @@ export default function MockInterviewPage() {
                   <Mic className="h-7 w-7 text-white" />
                 )}
               </button>
-              {/* 结束面试 */}
-              <button
-                onClick={handleEnd}
-                disabled={ending}
-                title={ending ? t("mockInterview.ending") : t("mockInterview.endInterview")}
-                className="h-11 w-11 rounded-full bg-red-500/90 hover:bg-red-500 flex items-center justify-center transition-colors disabled:opacity-50"
-              >
-                {ending ? <Loader2 className="h-5 w-5 text-white animate-spin" /> : <PhoneOff className="h-5 w-5 text-white" />}
-              </button>
+              <p className="text-zinc-400 text-xs">
+                {recording ? t("mockInterview.recording") : recognizing ? t("mockInterview.recognizing") : t("mockInterview.tapToSpeak")}
+              </p>
             </div>
-            <p className="text-zinc-600 text-[11px]">
-              {recording ? t("mockInterview.recording") : recognizing ? t("mockInterview.recognizing") : t("mockInterview.tapToSpeak")}
-            </p>
           </div>
         </div>
       </AccessGuard>
