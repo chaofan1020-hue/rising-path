@@ -322,6 +322,10 @@ export default function MockInterviewPage() {
   // 视频/语音状态
   const [cameraOn, setCameraOn] = useState(false);
   const [micError, setMicError] = useState(false);
+  // 免提模式：麦克风常开 + VAD 语音活动检测
+  const [listening, setListening] = useState(false);
+  const [voiceActive, setVoiceActive] = useState(false); // 检测到正在说话
+  const vadRafRef = useRef<number | null>(null);
   // 麦克风错误细分：denied=权限被拒 nodevice=无设备 busy=被占用 unknown=其他
   const [micErrorKind, setMicErrorKind] = useState<"denied" | "nodevice" | "busy" | "unknown" | null>(null);
   // 是否运行在嵌入预览（iframe）中：iframe 内浏览器会直接禁止麦克风权限请求
@@ -342,7 +346,6 @@ export default function MockInterviewPage() {
 
   const videoRef = useRef<HTMLVideoElement>(null);
   const streamRef = useRef<MediaStream | null>(null);
-  const mediaRecorderRef = useRef<MediaRecorder | null>(null);
   const audioChunksRef = useRef<Blob[]>([]);
   const audioRef = useRef<HTMLAudioElement | null>(null);
   // 面试官音波图：Web Audio 频谱分析
@@ -727,64 +730,37 @@ export default function MockInterviewPage() {
     }
   };
 
-  // 开始录音（按住说话）
-  const startRecording = async () => {
-    if (streaming || recognizing || speaking) return;
-    // 借用户手势激活 AudioContext（自动播放策略要求）
-    ensureAudioGraph();
-    if (audioCtxRef.current?.state === "suspended") {
-      audioCtxRef.current.resume().catch(() => {});
-    }
-    try {
-      let stream = streamRef.current;
-      // 复用流必须含活跃音轨：摄像头流可能只有视频轨（用户单独拒绝了音频），需重新请求
-      const hasLiveAudio = !!stream?.getAudioTracks().some((tr) => tr.readyState === "live");
-      if (!stream || !hasLiveAudio) {
-        const audioStream = await navigator.mediaDevices.getUserMedia({ audio: true });
-        if (stream && stream.getVideoTracks().some((tr) => tr.readyState === "live")) {
-          // 保留摄像头视频轨，替换音轨
-          stream.getAudioTracks().forEach((tr) => { tr.stop(); stream!.removeTrack(tr); });
-          audioStream.getAudioTracks().forEach((tr) => stream!.addTrack(tr));
-        } else {
-          stream?.getTracks().forEach((tr) => tr.stop());
-          stream = audioStream;
-        }
-        streamRef.current = stream;
+  // 获取含活跃音轨的麦克风流（复用摄像头流；音轨缺失时重新请求并合并）
+  const getMicStream = async (): Promise<MediaStream> => {
+    let stream = streamRef.current;
+    const hasLiveAudio = !!stream?.getAudioTracks().some((tr) => tr.readyState === "live");
+    if (!stream || !hasLiveAudio) {
+      const audioStream = await navigator.mediaDevices.getUserMedia({ audio: true });
+      if (stream && stream.getVideoTracks().some((tr) => tr.readyState === "live")) {
+        // 保留摄像头视频轨，替换音轨
+        stream.getAudioTracks().forEach((tr) => { tr.stop(); stream!.removeTrack(tr); });
+        audioStream.getAudioTracks().forEach((tr) => stream!.addTrack(tr));
+      } else {
+        stream?.getTracks().forEach((tr) => tr.stop());
+        stream = audioStream;
       }
-      audioChunksRef.current = [];
-      const mimeType = MediaRecorder.isTypeSupported("audio/webm") ? "audio/webm" : "audio/mp4";
-      const recorder = new MediaRecorder(stream, { mimeType });
-      mediaRecorderRef.current = recorder;
-      recorder.ondataavailable = (e) => {
-        if (e.data.size > 0) audioChunksRef.current.push(e.data);
-      };
-      recorder.start();
-      setRecording(true);
-      setMicError(false);
-      setMicErrorKind(null);
-    } catch (err) {
-      // 细分错误类型，给出可操作的引导
-      const name = err instanceof DOMException ? err.name : "";
-      if (name === "NotAllowedError" || name === "SecurityError") setMicErrorKind("denied");
-      else if (name === "NotFoundError" || name === "OverconstrainedError") setMicErrorKind("nodevice");
-      else if (name === "NotReadableError" || name === "AbortError") setMicErrorKind("busy");
-      else setMicErrorKind("unknown");
-      setMicError(true);
+      streamRef.current = stream;
     }
+    return stream;
   };
 
-  // 结束录音并识别
-  const stopRecording = async () => {
-    const recorder = mediaRecorderRef.current;
-    if (!recorder || recorder.state === "inactive") return;
-    setRecording(false);
-    recorder.stop();
-    await new Promise((resolve) => {
-      recorder.onstop = resolve;
-    });
-    const blob = new Blob(audioChunksRef.current, { type: recorder.mimeType });
-    if (blob.size < 1000) return; // 录音太短忽略
+  // 处理麦克风错误（细分类型，给出可操作引导）
+  const handleMicError = (err: unknown) => {
+    const name = err instanceof DOMException ? err.name : "";
+    if (name === "NotAllowedError" || name === "SecurityError") setMicErrorKind("denied");
+    else if (name === "NotFoundError" || name === "OverconstrainedError") setMicErrorKind("nodevice");
+    else if (name === "NotReadableError" || name === "AbortError") setMicErrorKind("busy");
+    else setMicErrorKind("unknown");
+    setMicError(true);
+  };
 
+  // 录音转文字并提交回答
+  const recognizeBlob = async (blob: Blob) => {
     setRecognizing(true);
     try {
       const arrayBuffer = await blob.arrayBuffer();
@@ -813,6 +789,103 @@ export default function MockInterviewPage() {
     }
   };
 
+  // 免提模式：VAD 语音活动检测——说话自动录音，停顿 1.2s 自动识别提交；
+  // 面试官说话/思考/识别期间自动暂停监听，结束后自动恢复
+  useEffect(() => {
+    if (!listening || stage !== "interview") return;
+    if (speaking || streaming || recognizing) return;
+    let cancelled = false;
+    let localCtx: AudioContext | null = null;
+    let recorder: MediaRecorder | null = null;
+
+    const run = async () => {
+      try {
+        const stream = await getMicStream();
+        if (cancelled) return;
+        setMicError(false);
+        setMicErrorKind(null);
+        const Ctor = window.AudioContext ||
+          (window as unknown as { webkitAudioContext?: typeof AudioContext }).webkitAudioContext;
+        if (!Ctor) return;
+        localCtx = new Ctor();
+        const source = localCtx.createMediaStreamSource(stream);
+        const analyser = localCtx.createAnalyser();
+        analyser.fftSize = 512;
+        source.connect(analyser); // 不接 destination，避免回放自己的声音
+        const data = new Uint8Array(analyser.fftSize);
+        let hasVoice = false;
+        let silenceStart: number | null = null;
+
+        const loop = () => {
+          if (cancelled) return;
+          analyser.getByteTimeDomainData(data);
+          let sum = 0;
+          for (let i = 0; i < data.length; i++) {
+            const v = (data[i] - 128) / 128;
+            sum += v * v;
+          }
+          const rms = Math.sqrt(sum / data.length);
+          const now = Date.now();
+          if (rms > 0.02) {
+            // 检测到语音：开始/继续录音
+            hasVoice = true;
+            silenceStart = null;
+            setVoiceActive(true);
+            if (!recorder || recorder.state === "inactive") {
+              audioChunksRef.current = [];
+              const mimeType = MediaRecorder.isTypeSupported("audio/webm") ? "audio/webm" : "audio/mp4";
+              recorder = new MediaRecorder(stream, { mimeType });
+              recorder.ondataavailable = (e) => {
+                if (e.data.size > 0) audioChunksRef.current.push(e.data);
+              };
+              recorder.start();
+              setRecording(true);
+            }
+          } else {
+            setVoiceActive(false);
+            if (hasVoice && recorder && recorder.state === "recording") {
+              if (silenceStart === null) silenceStart = now;
+              if (now - silenceStart > 1200) {
+                // 停顿超时：说完一段话，停止录音并送识别
+                hasVoice = false;
+                silenceStart = null;
+                setRecording(false);
+                const rec = recorder;
+                recorder = null;
+                rec.onstop = () => {
+                  const blob = new Blob(audioChunksRef.current, { type: rec.mimeType });
+                  if (blob.size >= 1000) recognizeBlob(blob);
+                };
+                rec.stop();
+              }
+            }
+          }
+          vadRafRef.current = requestAnimationFrame(loop);
+        };
+        loop();
+      } catch (err) {
+        if (!cancelled) {
+          handleMicError(err);
+          setListening(false);
+        }
+      }
+    };
+    run();
+
+    return () => {
+      cancelled = true;
+      if (vadRafRef.current) cancelAnimationFrame(vadRafRef.current);
+      localCtx?.close().catch(() => {});
+      if (recorder && recorder.state === "recording") {
+        recorder.onstop = null;
+        recorder.stop(); // 丢弃未完成的录音
+      }
+      setVoiceActive(false);
+      setRecording(false);
+    };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [listening, stage, speaking, streaming, recognizing]);
+
   // 提交回答
   const submitAnswer = async (text: string) => {
     if (!text.trim() || streaming) return;
@@ -830,6 +903,7 @@ export default function MockInterviewPage() {
     if (!sessionId || ending) return;
     if (!confirm(t("mockInterview.endConfirm"))) return;
     setEnding(true);
+    setListening(false);
     stopCamera();
     clearPressure();
     audioRef.current?.pause();
@@ -923,6 +997,7 @@ export default function MockInterviewPage() {
     setCurrentInterviewer(null);
     setRoundTransition(false);
     setRoundRoleLabel(null);
+    setListening(false);
     clearPressure();
   };
 
@@ -1371,15 +1446,21 @@ export default function MockInterviewPage() {
                 </div>
               )}
               <button
-                onMouseDown={startRecording}
-                onMouseUp={stopRecording}
-                onMouseLeave={() => recording && stopRecording()}
-                onTouchStart={(e) => { e.preventDefault(); startRecording(); }}
-                onTouchEnd={(e) => { e.preventDefault(); stopRecording(); }}
-                disabled={streaming || recognizing || speaking}
-                className={`h-16 w-16 md:h-20 md:w-20 rounded-full flex items-center justify-center transition-all select-none touch-none ${
-                  recording
-                    ? "bg-red-500 scale-110 shadow-lg shadow-red-500/40"
+                onClick={() => {
+                  // 借用户手势激活 AudioContext（自动播放策略要求）
+                  ensureAudioGraph();
+                  if (audioCtxRef.current?.state === "suspended") {
+                    audioCtxRef.current.resume().catch(() => {});
+                  }
+                  setListening((v) => !v);
+                }}
+                disabled={!listening && (streaming || recognizing || speaking)}
+                title={listening ? t("mockInterview.micAlwaysOn") : t("mockInterview.tapToSpeak")}
+                className={`h-16 w-16 md:h-20 md:w-20 rounded-full flex items-center justify-center transition-all select-none ${
+                  listening
+                    ? voiceActive
+                      ? "bg-red-500 scale-110 shadow-lg shadow-red-500/40"
+                      : "bg-red-500/80 shadow-lg shadow-red-500/30 animate-pulse"
                     : streaming || recognizing || speaking
                       ? "bg-zinc-800 cursor-not-allowed"
                       : "bg-gradient-to-br from-[#C46A4A] to-[#B5BEB0] hover:scale-105 shadow-lg"
@@ -1387,14 +1468,20 @@ export default function MockInterviewPage() {
               >
                 {recognizing ? (
                   <Loader2 className="h-7 w-7 text-white animate-spin" />
-                ) : recording ? (
+                ) : listening ? (
                   <Square className="h-6 w-6 text-white" />
                 ) : (
                   <Mic className="h-7 w-7 text-white" />
                 )}
               </button>
               <p className="text-zinc-400 text-xs">
-                {recording ? t("mockInterview.recording") : recognizing ? t("mockInterview.recognizing") : t("mockInterview.tapToSpeak")}
+                {listening
+                  ? voiceActive
+                    ? t("mockInterview.voiceDetected")
+                    : t("mockInterview.micAlwaysOn")
+                  : recognizing
+                    ? t("mockInterview.recognizing")
+                    : t("mockInterview.tapToSpeak")}
               </p>
             </div>
           </div>
