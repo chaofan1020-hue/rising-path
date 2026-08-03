@@ -554,9 +554,9 @@ export default function MockInterviewPage() {
   }, []);
 
   // 启动每轮倒计时（8 分钟）
-  const startRoundTimer = useCallback(() => {
+  const startRoundTimer = useCallback((minutes = 8) => {
     if (roundTimerRef.current) clearInterval(roundTimerRef.current);
-    setRoundSecondsLeft(8 * 60);
+    setRoundSecondsLeft(minutes * 60);
     roundTimerRef.current = setInterval(() => {
       setRoundSecondsLeft((prev) => {
         if (prev === null || prev <= 0) {
@@ -676,24 +676,24 @@ export default function MockInterviewPage() {
             if (data.eliminated) {
               // 轮末淘汰：附带当前面试官信息（音色供结束语 TTS 使用）
               eliminatedInfo = { round: data.round || 1 };
-              if (data.interviewer) {
-                activeInterviewer = data.interviewer;
-                setCurrentInterviewer(data.interviewer);
-              }
             }
-            if (data.roundStart && data.interviewer) {
+            if (data.interviewer) {
+              // 淘汰帧/轮次切换帧/同轮追问帧都会携带面试官信息——
+              // 每次回复都刷新，保证 TTS 音色始终一致（修复同一面试官音色漂移）
               activeInterviewer = data.interviewer;
               setCurrentInterviewer(data.interviewer);
+            }
+            if (data.roundStart && data.interviewer) {
               setRoundRoleLabel(data.roundRoleLabel || null);
-              startRoundTimer();
+              startRoundTimer(typeof data.timeLimit === "number" ? data.timeLimit : 8);
               if (data.round > 1) {
-                // 轮次切换：进入"等待焦虑"——内容后台累积，随机 15-40 秒等待
+                // 轮次切换：进入"等待焦虑"——内容后台累积，随机 8-16 秒等待
                 setCurrentRound(data.round);
                 holding = true;
                 setWaitingNextRound(true);
                 setEarlyReady(false);
                 playNotify();
-                const waitMs = 15000 + Math.random() * 25000;
+                const waitMs = 8000 + Math.random() * 8000;
                 // 35% 概率面试官"提前准备好"
                 if (Math.random() < 0.35) {
                   earlyTimerRef.current = setTimeout(() => {
@@ -971,7 +971,7 @@ export default function MockInterviewPage() {
       const { fullContent, activeInterviewer, eliminatedInfo } = await streamInterviewer({ sessionId, answer: text });
       if (eliminatedInfo) {
         // 轮末淘汰：等面试官结束语播完 → 停设备 → 淘汰覆盖层 → 自动进入评估
-        await playInterviewerAudio(fullContent, activeInterviewer?.voice, activeInterviewer?.speechRate);
+        await playInterviewerAudio(fullContent, (activeInterviewer ?? currentInterviewer)?.voice, (activeInterviewer ?? currentInterviewer)?.speechRate);
         setEliminated(true);
         setEliminatedRound(eliminatedInfo.round);
         setListening(false);
@@ -980,7 +980,7 @@ export default function MockInterviewPage() {
         await generateSummary(eliminatedInfo.round);
         return;
       }
-      playInterviewerAudio(fullContent, activeInterviewer?.voice, activeInterviewer?.speechRate);
+      playInterviewerAudio(fullContent, (activeInterviewer ?? currentInterviewer)?.voice, (activeInterviewer ?? currentInterviewer)?.speechRate);
     } catch {
       alert(t("mockInterview.sendFailed"));
     }

@@ -559,6 +559,23 @@ export const GAUNTLET_SCRIPTS: Record<number, RoundRole[]> = {
   7: ['screener', 'griller', 'cross', 'griller', 'cross', 'griller', 'executive'],
 };
 
+// 各角色轮次题数配额（对齐真实面试节奏：HR 初筛轻量、业务深挖面最重、
+// 交叉面中等、高管终面少而尖锐——真实终面往往聊不满就结束了）
+export const ROUND_QUESTION_QUOTA: Record<RoundRole, number> = {
+  screener: 2,
+  griller: 3,
+  cross: 2,
+  executive: 1,
+};
+
+// 各角色轮次倒计时（分钟）：深挖面给足时间，初筛/终面短促
+export const ROUND_TIME_LIMIT: Record<RoundRole, number> = {
+  screener: 6,
+  griller: 10,
+  cross: 7,
+  executive: 5,
+};
+
 // 轮次角色在目标公司内的职位头衔
 export const ROLE_TITLES: Record<RoundRole, { zh: string; en: string }> = {
   screener: { zh: 'HR 经理', en: 'HR Manager' },
