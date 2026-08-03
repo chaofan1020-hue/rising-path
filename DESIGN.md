@@ -46,3 +46,11 @@
 - 控制栏：底部居中大圆麦克风按钮（点击开关免提，VAD 语音活动检测自动断句：RMS>0.02 判说话、停顿 1.2s 自动提交 ASR；AI 说话/思考/识别期间自动暂停监听，结束自动恢复）；常开时红色呼吸灯、检测到语音时红色放大；上方为麦克风错误分级提示区
 - 顶部栏：深色毛玻璃条（面试官信息 + 闯关轮次进度点 + 角色标签 + 倒计时 + 字幕开关 + 结束按钮）
 - 覆盖层：轮次切换/等待焦虑覆盖面试官画面（zinc-950/95 + backdrop-blur，随机 8-16 秒短等待）；淘汰为全屏覆盖层（fixed inset-0、zinc-950/95，PhoneOff 红色图标 + 标题 + 说明 + 转圈），面试官主动收尾的自然结束为同构覆盖层（Check 中性 zinc 图标），两者展示后均自动进入评估
+
+## 简历管理页（极简黑白灰语言，参考 ResumeGPT footer 美学）
+- 整体：不使用品牌主题色，全面 zinc 系单色——白底（暗色 zinc-950）、zinc-200/800 细腻边框、zinc-500 辅助文字、zinc-900 实心黑主按钮（暗色反转为白）
+- Hero：页面顶部超大半透明水印文字 "RESUME"（text-[16vw+]、tracking-tighter、不透明度 ~4-5%、pointer-events-none、select-none、overflow 裁切），其上居中叠放黑色圆角图标方块（w-16 h-16 rounded-2xl bg-zinc-900 shadow-2xl，暗色反转白）+ 标题（tracking-tight）+ zinc-500 副标题
+- 上传区：大圆角（rounded-2xl）虚线 dropzone（border-dashed zinc-200 hover:border-zinc-400），居中图标 + 文案引导，选中文件后以 chip 展示 + 实心黑上传按钮
+- 简历卡片：白底 zinc-200 边框、hover 时细腻阴影（shadow-zinc-900/5）；文件图标为黑色圆角小方块（与 Hero 方块同语言）；操作按钮为 ghost/outline 中性风，删除按钮仅 hover 显红
+- 分层确认卡片：同页内嵌套使用，中性 zinc 系（去品牌渐变底），信息层级靠字重与灰度区分
+- 排版：充裕留白（区块间距 mb-10+）、字重对比（标题 semibold tracking-tight / 正文 zinc-500）

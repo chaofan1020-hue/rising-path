@@ -2,9 +2,7 @@
 
 import { useState, useCallback, useEffect } from 'react';
 import { Button } from '@/components/ui/button';
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
-import { Input } from '@/components/ui/input';
-import { Textarea } from '@/components/ui/textarea';
+import { Card, CardContent } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
 import { Progress } from '@/components/ui/progress';
 import {
@@ -15,23 +13,19 @@ import {
   DialogTitle,
   DialogTrigger,
 } from '@/components/ui/dialog';
-import { 
-  Upload, 
-  FileText, 
-  Trash2, 
-  Download, 
-  Loader2, 
+import {
+  Upload,
+  FileText,
+  Trash2,
+  Loader2,
   CheckCircle,
-  Briefcase,
   User,
   Calendar,
-  Link as LinkIcon,
   Languages,
   Sparkles,
   Map,
 } from 'lucide-react';
 import Link from 'next/link';
-import Image from 'next/image';
 import { AccessGuard, useAccessCode } from '@/components/access-guard';
 import { Header1 } from '@/components/header1';
 import { SegmentationCard, type Segmentation } from '@/components/segmentation-card';
@@ -260,178 +254,181 @@ function ResumeContent() {
   }, [accessCodeId]);
 
   return (
-    <div className="min-h-screen bg-background">
+    <div className="min-h-screen bg-white dark:bg-zinc-950">
       <Header1 />
-      <main className="container mx-auto px-4 py-4 md:py-8 pt-20">
-        {/* Page Title */}
-        <div className="mb-8 md:mb-12 text-center">
-          <h1 className="text-3xl md:text-4xl font-light mb-3 md:mb-4 text-black dark:text-white">{t('resume.title')}</h1>
-          <p className="text-base md:text-lg text-gray-500 dark:text-gray-400 max-w-2xl mx-auto">{t('resume.subtitle')}</p>
+      <main className="relative container mx-auto px-4 pt-24 md:pt-28 pb-16">
+        {/* 超大半透明水印背景（极简黑白灰语言） */}
+        <div aria-hidden className="pointer-events-none absolute inset-x-0 top-14 md:top-20 overflow-hidden select-none">
+          <span className="block text-center text-[24vw] md:text-[17vw] leading-[0.85] font-bold tracking-tighter text-zinc-900/[0.045] dark:text-white/[0.05]">
+            RESUME
+          </span>
+        </div>
+
+        {/* Hero：黑色圆角图标方块 + 居中标题（悬浮于水印之上） */}
+        <div className="relative mb-10 md:mb-14 text-center">
+          <div className="mx-auto mb-6 w-16 h-16 rounded-2xl bg-zinc-900 dark:bg-white shadow-2xl shadow-zinc-900/25 dark:shadow-black/50 flex items-center justify-center">
+            <FileText className="h-7 w-7 text-white dark:text-zinc-900" />
+          </div>
+          <h1 className="text-3xl md:text-4xl font-semibold tracking-tight text-zinc-900 dark:text-white mb-3">{t('resume.title')}</h1>
+          <p className="text-sm md:text-base text-zinc-500 dark:text-zinc-400 max-w-xl mx-auto">{t('resume.subtitle')}</p>
+        </div>
+
+        {/* 上传 Dropzone */}
+        <div className="relative mb-8 md:mb-10 max-w-2xl mx-auto">
+          <label
+            className={`block rounded-2xl border-2 border-dashed border-zinc-200 dark:border-zinc-800 bg-white/60 dark:bg-zinc-950/60 backdrop-blur-sm transition-colors cursor-pointer hover:border-zinc-400 dark:hover:border-zinc-600 ${uploading ? 'pointer-events-none opacity-60' : ''}`}
+          >
+            <input
+              type="file"
+              accept=".pdf,.doc,.docx,.txt"
+              onChange={handleFileSelect}
+              disabled={uploading}
+              className="hidden"
+            />
+            <div className="flex flex-col items-center gap-3 py-9 md:py-12 px-4">
+              <div className="w-12 h-12 rounded-xl bg-zinc-100 dark:bg-zinc-800 flex items-center justify-center">
+                <Upload className="h-5 w-5 text-zinc-500 dark:text-zinc-400" />
+              </div>
+              <p className="text-sm font-medium text-zinc-700 dark:text-zinc-200">{t('resume.upload.title')}</p>
+              <p className="text-xs text-zinc-400 dark:text-zinc-500 text-center">{t('resume.upload.hint')}</p>
+            </div>
+          </label>
+
+          {selectedFile && (
+            <div className="mt-4 flex flex-wrap items-center justify-center gap-3">
+              <span className="inline-flex items-center gap-1.5 rounded-full border border-zinc-200 dark:border-zinc-700 px-3 py-1.5 text-xs text-zinc-600 dark:text-zinc-300 max-w-[220px]">
+                <FileText className="h-3 w-3 flex-shrink-0" />
+                <span className="truncate">{selectedFile.name}</span>
+              </span>
+              <Button
+                onClick={handleUpload}
+                disabled={uploading}
+                size="sm"
+                className="h-8 bg-zinc-900 text-white hover:bg-zinc-800 dark:bg-white dark:text-zinc-900 dark:hover:bg-zinc-200"
+              >
+                {uploading ? (
+                  <>
+                    <Loader2 className="mr-1.5 h-3.5 w-3.5 animate-spin" />
+                    {t('resume.upload.uploading')}
+                  </>
+                ) : (
+                  <>
+                    <Upload className="mr-1.5 h-3.5 w-3.5" />
+                    {t('resume.upload.button')}
+                  </>
+                )}
+              </Button>
+            </div>
+          )}
+
+          {uploading && (
+            <div className="mt-4 max-w-sm mx-auto">
+              <Progress value={uploadProgress} className="h-1.5" />
+              <p className="text-xs text-zinc-400 mt-2 text-center">
+                {uploadProgress < 100 ? t('resume.upload.parsing') : t('resume.upload.complete')}
+              </p>
+            </div>
+          )}
         </div>
 
         {/* 状态引导区域 */}
         {resumes.length > 0 ? (
-          /* 已上传简历 - 显示简历状态和快捷操作 */
-          <Card className="mb-4 md:mb-8 border-green-200 dark:border-green-900 bg-green-50/50 dark:bg-green-950/20">
-            <CardContent className="pt-4 pb-4">
-              <div className="flex flex-col md:flex-row md:items-center justify-between gap-4">
-                <div className="flex items-center gap-3">
-                  <div className="w-10 h-10 rounded-full bg-green-100 dark:bg-green-900/50 flex items-center justify-center">
-                    <CheckCircle2 className="h-5 w-5 text-green-600 dark:text-green-400" />
-                  </div>
-                  <div>
-                    <p className="font-medium text-sm md:text-base">{t('resume.uploaded')} {resumes.length} {t('resume.resumesUnit')}</p>
-                    <p className="text-xs text-muted-foreground">{t('resume.nextStep')}</p>
-                  </div>
+          <div className="relative mb-8 md:mb-10 max-w-2xl mx-auto rounded-2xl border border-zinc-200 dark:border-zinc-800 bg-white dark:bg-zinc-900/40 px-4 md:px-5 py-4">
+            <div className="flex flex-col md:flex-row md:items-center justify-between gap-4">
+              <div className="flex items-center gap-3">
+                <div className="w-9 h-9 rounded-xl bg-zinc-100 dark:bg-zinc-800 flex items-center justify-center flex-shrink-0">
+                  <CheckCircle2 className="h-5 w-5 text-zinc-700 dark:text-zinc-300" />
                 </div>
-                <div className="flex items-center gap-2">
-                  <Link href="/ai-match">
-                    <Button size="sm" className="gap-1">
-                      <Target className="h-3.5 w-3.5" />
-                      {t('resume.aiMatch')}
-                    </Button>
-                  </Link>
-                  <Link href="/optimize">
-                    <Button variant="outline" size="sm" className="gap-1">
-                      <Wand2 className="h-3.5 w-3.5" />
-                      {t('resume.optimize')}
-                    </Button>
-                  </Link>
+                <div>
+                  <p className="font-medium text-sm text-zinc-800 dark:text-zinc-100">{t('resume.uploaded')} {resumes.length} {t('resume.resumesUnit')}</p>
+                  <p className="text-xs text-zinc-400 dark:text-zinc-500">{t('resume.nextStep')}</p>
                 </div>
               </div>
-            </CardContent>
-          </Card>
+              <div className="flex items-center gap-2">
+                <Link href="/ai-match">
+                  <Button size="sm" className="gap-1.5 bg-zinc-900 text-white hover:bg-zinc-800 dark:bg-white dark:text-zinc-900 dark:hover:bg-zinc-200">
+                    <Target className="h-3.5 w-3.5" />
+                    {t('resume.aiMatch')}
+                  </Button>
+                </Link>
+                <Link href="/optimize">
+                  <Button variant="outline" size="sm" className="gap-1.5 border-zinc-200 dark:border-zinc-700">
+                    <Wand2 className="h-3.5 w-3.5" />
+                    {t('resume.optimize')}
+                  </Button>
+                </Link>
+              </div>
+            </div>
+          </div>
         ) : (
-          /* 未上传简历 - 显示引导卡片 */
-          <Card className="mb-4 md:mb-8 border-dashed">
-            <CardContent className="pt-4 pb-4">
-              <div className="text-center py-4">
-                <p className="text-sm text-muted-foreground mb-3">{t('resume.noResume')}</p>
-                <div className="grid grid-cols-3 gap-2 max-w-md mx-auto text-xs">
-                  <div className="flex flex-col items-center gap-1 p-2 rounded-lg bg-muted/50">
-                    <Target className="h-4 w-4 text-primary" />
-                    <span>{t('resume.feature.aiMatch')}</span>
-                  </div>
-                  <div className="flex flex-col items-center gap-1 p-2 rounded-lg bg-muted/50">
-                    <Wand2 className="h-4 w-4 text-primary" />
-                    <span>{t('resume.feature.optimize')}</span>
-                  </div>
-                  <div className="flex flex-col items-center gap-1 p-2 rounded-lg bg-muted/50">
-                    <Send className="h-4 w-4 text-primary" />
-                    <span>{t('resume.feature.autoApply')}</span>
-                  </div>
-                </div>
+          <div className="relative mb-8 md:mb-10 max-w-2xl mx-auto rounded-2xl border border-dashed border-zinc-200 dark:border-zinc-800 px-4 py-6">
+            <p className="text-sm text-zinc-400 dark:text-zinc-500 text-center mb-4">{t('resume.noResume')}</p>
+            <div className="grid grid-cols-3 gap-2 max-w-md mx-auto text-xs">
+              <div className="flex flex-col items-center gap-1.5 p-3 rounded-xl bg-zinc-50 dark:bg-zinc-900/60 text-zinc-600 dark:text-zinc-300">
+                <Target className="h-4 w-4" />
+                <span>{t('resume.feature.aiMatch')}</span>
               </div>
-            </CardContent>
-          </Card>
+              <div className="flex flex-col items-center gap-1.5 p-3 rounded-xl bg-zinc-50 dark:bg-zinc-900/60 text-zinc-600 dark:text-zinc-300">
+                <Wand2 className="h-4 w-4" />
+                <span>{t('resume.feature.optimize')}</span>
+              </div>
+              <div className="flex flex-col items-center gap-1.5 p-3 rounded-xl bg-zinc-50 dark:bg-zinc-900/60 text-zinc-600 dark:text-zinc-300">
+                <Send className="h-4 w-4" />
+                <span>{t('resume.feature.autoApply')}</span>
+              </div>
+            </div>
+          </div>
         )}
 
-        {/* Upload Section */}
-        <Card className="mb-4 md:mb-8">
-          <CardHeader className="pb-2 md:pb-4">
-            <CardTitle className="flex items-center gap-2 text-base md:text-lg">
-              <Upload className="h-4 w-4 md:h-5 md:w-5" />
-              {t('resume.upload.title')}
-            </CardTitle>
-            <CardDescription className="text-xs md:text-sm">
-              {t('resume.upload.description')}
-            </CardDescription>
-          </CardHeader>
-          <CardContent>
-            <div className="space-y-2">
-              <div className="flex flex-col md:flex-row gap-3">
-                <Input
-                  type="file"
-                  accept=".pdf,.doc,.docx,.txt"
-                  onChange={handleFileSelect}
-                  disabled={uploading}
-                  className="text-sm h-10 flex-1"
-                />
-                <Button onClick={handleUpload} disabled={!selectedFile || uploading} className="w-full md:w-auto h-10">
-                  {uploading ? (
-                    <>
-                      <Loader2 className="mr-2 h-4 w-4 animate-spin" />
-                      {t('resume.upload.uploading')}
-                    </>
-                  ) : (
-                    <>
-                      <Upload className="mr-2 h-4 w-4" />
-                      {t('resume.upload.button')}
-                    </>
-                  )}
-                </Button>
-              </div>
-              <p className="text-xs text-muted-foreground hidden md:block">
-                {t('resume.upload.hint')}
-              </p>
-              {selectedFile && (
-                <p className="text-xs md:text-sm text-muted-foreground">
-                  {t('resume.upload.selected')}: {selectedFile.name}
-                </p>
-              )}
-            </div>
-            {uploading && (
-              <div className="mt-4">
-                <Progress value={uploadProgress} className="h-2" />
-                <p className="text-sm text-muted-foreground mt-2 text-center">
-                  {uploadProgress < 100 ? t('resume.upload.parsing') : t('resume.upload.complete')}
-                </p>
-              </div>
-            )}
-          </CardContent>
-        </Card>
-
         {/* Resume List */}
-        <div className="space-y-4">
+        <div className="relative space-y-4 max-w-3xl mx-auto">
           <div className="flex items-center justify-between">
-            <h2 className="text-lg md:text-xl font-semibold">{t('resume.myResumes')}</h2>
-            <Button variant="outline" size="sm" className="text-xs md:text-sm" onClick={fetchResumes}>
+            <h2 className="text-base md:text-lg font-semibold tracking-tight text-zinc-800 dark:text-zinc-100">{t('resume.myResumes')}</h2>
+            <Button variant="ghost" size="sm" className="text-xs text-zinc-500 hover:text-zinc-900 dark:hover:text-zinc-100" onClick={fetchResumes}>
               {t('resume.refresh')}
             </Button>
           </div>
           {loading ? (
-            <div className="text-center py-12 text-muted-foreground">
-              <Loader2 className="h-8 w-8 animate-spin mx-auto mb-2" />
-              {t('resume.loading')}
+            <div className="text-center py-16 text-zinc-400">
+              <Loader2 className="h-7 w-7 animate-spin mx-auto mb-3" />
+              <p className="text-sm">{t('resume.loading')}</p>
             </div>
           ) : resumes.length === 0 ? (
-            <Card>
-              <CardContent className="py-12 text-center text-muted-foreground">
-                <FileText className="h-12 w-12 mx-auto mb-4 opacity-50" />
-                <p>{t('resume.noResumes')}</p>
-              </CardContent>
-            </Card>
+            <div className="rounded-2xl border border-dashed border-zinc-200 dark:border-zinc-800 py-16 text-center text-zinc-400">
+              <FileText className="h-10 w-10 mx-auto mb-3 opacity-40" />
+              <p className="text-sm">{t('resume.noResumes')}</p>
+            </div>
           ) : (
             resumes.map((resume) => (
-              <Card key={resume.id} className="hover:shadow-md transition-shadow">
+              <Card key={resume.id} className="border-zinc-200 dark:border-zinc-800 shadow-none hover:shadow-xl hover:shadow-zinc-900/[0.06] dark:hover:shadow-black/30 transition-shadow duration-300 rounded-2xl">
                 <CardContent className="pt-4 md:pt-6">
                   <div className="flex flex-col gap-4">
                     {/* 文件信息 */}
                     <div className="flex items-start gap-3 md:gap-4">
-                      <div className="w-10 h-10 md:w-12 md:h-12 rounded-lg bg-green-100 dark:bg-green-900 flex items-center justify-center flex-shrink-0">
-                        <FileText className="h-5 w-5 md:h-6 md:w-6 text-green-600" />
+                      <div className="w-10 h-10 md:w-12 md:h-12 rounded-xl bg-zinc-900 dark:bg-white flex items-center justify-center flex-shrink-0 shadow-lg shadow-zinc-900/15 dark:shadow-black/30">
+                        <FileText className="h-5 w-5 md:h-6 md:w-6 text-white dark:text-zinc-900" />
                       </div>
                       <div className="flex-1 min-w-0">
-                        <h3 className="font-semibold text-sm md:text-lg truncate">{resume.file_name}</h3>
+                        <h3 className="font-semibold text-sm md:text-base tracking-tight truncate text-zinc-900 dark:text-zinc-50">{resume.file_name}</h3>
                         <div className="flex flex-wrap gap-1.5 md:gap-2 mt-2">
-                          <Badge variant="secondary" className="text-xs">
+                          <Badge variant="secondary" className="text-xs bg-zinc-100 text-zinc-600 dark:bg-zinc-800 dark:text-zinc-300 hover:bg-zinc-100">
                             <Calendar className="h-3 w-3 mr-1" />
                             {new Date(resume.created_at).toLocaleDateString()}
                           </Badge>
                           {resume.user_info?.name ? (
-                            <Badge variant="outline" className="text-xs">
+                            <Badge variant="outline" className="text-xs border-zinc-200 dark:border-zinc-700 text-zinc-600 dark:text-zinc-300">
                               <User className="h-3 w-3 mr-1" />
                               {resume.user_info.name}
                             </Badge>
                           ) : (
-                            <Badge variant="outline" className="text-xs text-yellow-600">
+                            <Badge variant="outline" className="text-xs border-zinc-200 dark:border-zinc-700 text-zinc-400">
                               <Loader2 className="h-3 w-3 mr-1 animate-spin" />
                               {t('resume.parsing')}
                             </Badge>
                           )}
                         </div>
                         {resume.parsed_content && !resume.parsed_content.includes('正在解析') && (
-                          <p className="text-xs md:text-sm text-muted-foreground mt-2 line-clamp-2 hidden md:block">
+                          <p className="text-xs md:text-sm text-zinc-400 dark:text-zinc-500 mt-2 line-clamp-2 hidden md:block">
                             {resume.parsed_content.substring(0, 150)}...
                           </p>
                         )}
@@ -457,10 +454,10 @@ function ResumeContent() {
                     {/* 操作按钮 - 手机端换行显示 */}
                     <div className="flex flex-wrap gap-2 md:gap-2 pl-0 md:pl-[52px]">
                       {resume.parsed_content && !resume.parsed_content.includes('正在解析') && (
-                        <Button 
-                          variant="outline" 
+                        <Button
+                          variant="outline"
                           size="sm"
-                          className="text-xs h-8"
+                          className="text-xs h-8 border-zinc-200 dark:border-zinc-700 text-zinc-600 dark:text-zinc-300 hover:text-zinc-900 dark:hover:text-zinc-100"
                           onClick={() => extractFields(resume)}
                           disabled={extractingId === resume.id}
                         >
@@ -471,7 +468,7 @@ function ResumeContent() {
                             </>
                           ) : resume.parsed_fields ? (
                             <>
-                              <CheckCircle className="h-3 w-3 mr-1 text-green-600" />
+                              <CheckCircle className="h-3 w-3 mr-1" />
                               {t('resume.extracted')}
                             </>
                           ) : (
@@ -482,10 +479,10 @@ function ResumeContent() {
                           )}
                         </Button>
                       )}
-                      <Button 
-                        variant="outline" 
+                      <Button
+                        variant="outline"
                         size="sm"
-                        className="text-xs h-8"
+                        className="text-xs h-8 border-zinc-200 dark:border-zinc-700 text-zinc-600 dark:text-zinc-300 hover:text-zinc-900 dark:hover:text-zinc-100"
                         onClick={() => translateResume(resume)}
                         disabled={translatingId === resume.id}
                       >
@@ -502,17 +499,17 @@ function ResumeContent() {
                         )}
                       </Button>
                       <Link href="/field-mappings" className="hidden sm:block">
-                        <Button variant="outline" size="sm" className="text-xs h-8">
+                        <Button variant="outline" size="sm" className="text-xs h-8 border-zinc-200 dark:border-zinc-700 text-zinc-600 dark:text-zinc-300 hover:text-zinc-900 dark:hover:text-zinc-100">
                           <Map className="h-3 w-3 mr-1" />
                           {t('resume.fieldMapping')}
                         </Button>
                       </Link>
                       <Dialog>
                         <DialogTrigger asChild>
-                          <Button 
-                            variant="outline" 
+                          <Button
+                            variant="outline"
                             size="sm"
-                            className="text-xs h-8"
+                            className="text-xs h-8 border-zinc-200 dark:border-zinc-700 text-zinc-600 dark:text-zinc-300 hover:text-zinc-900 dark:hover:text-zinc-100"
                             onClick={() => setSelectedResume(resume)}
                           >
                             {t('resume.viewDetail')}
@@ -528,48 +525,50 @@ function ResumeContent() {
                           <div className="space-y-4">
                             {/* 结构化字段 (AI提取) */}
                             {resume.parsed_fields && (
-                              <div className="bg-gradient-to-r from-terracotta-50 to-beige-50 dark:from-terracotta-950/30 dark:to-beige-950/30 p-3 md:p-4 rounded-lg">
+                              <div className="bg-zinc-50 dark:bg-zinc-900/60 border border-zinc-100 dark:border-zinc-800 p-3 md:p-4 rounded-xl">
                                 <div className="flex items-center gap-2 mb-3">
-                                  <Sparkles className="h-4 w-4 text-terracotta-600" />
-                                  <h4 className="font-semibold text-sm md:text-base">{t('resume.structuredFields')}</h4>
-                                  <Badge variant="secondary" className="text-xs">{t('resume.aiExtracted')}</Badge>
+                                  <div className="w-7 h-7 rounded-lg bg-zinc-900 dark:bg-white flex items-center justify-center">
+                                    <Sparkles className="h-3.5 w-3.5 text-white dark:text-zinc-900" />
+                                  </div>
+                                  <h4 className="font-semibold text-sm md:text-base text-zinc-900 dark:text-zinc-50">{t('resume.structuredFields')}</h4>
+                                  <Badge variant="secondary" className="text-xs bg-zinc-100 text-zinc-600 dark:bg-zinc-800 dark:text-zinc-300">{t('resume.aiExtracted')}</Badge>
                                 </div>
-                                
+
                                 <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 text-sm">
                                   {resume.parsed_fields.name && (
                                     <div>
-                                      <span className="text-muted-foreground">{t('resume.name')}:</span>
-                                      <p className="font-medium">{resume.parsed_fields.name}</p>
+                                      <span className="text-zinc-400 dark:text-zinc-500">{t('resume.name')}:</span>
+                                      <p className="font-medium text-zinc-800 dark:text-zinc-100">{resume.parsed_fields.name}</p>
                                     </div>
                                   )}
                                   {resume.parsed_fields.email && (
                                     <div>
-                                      <span className="text-muted-foreground">{t('resume.email')}:</span>
-                                      <p className="font-medium break-all">{resume.parsed_fields.email}</p>
+                                      <span className="text-zinc-400 dark:text-zinc-500">{t('resume.email')}:</span>
+                                      <p className="font-medium break-all text-zinc-800 dark:text-zinc-100">{resume.parsed_fields.email}</p>
                                     </div>
                                   )}
                                   {resume.parsed_fields.phone && (
                                     <div>
-                                      <span className="text-muted-foreground">{t('resume.phone')}:</span>
-                                      <p className="font-medium">{resume.parsed_fields.phone}</p>
+                                      <span className="text-zinc-400 dark:text-zinc-500">{t('resume.phone')}:</span>
+                                      <p className="font-medium text-zinc-800 dark:text-zinc-100">{resume.parsed_fields.phone}</p>
                                     </div>
                                   )}
                                   {resume.parsed_fields.location && (
                                     <div>
-                                      <span className="text-muted-foreground">{t('resume.location')}:</span>
-                                      <p className="font-medium">{resume.parsed_fields.location}</p>
+                                      <span className="text-zinc-400 dark:text-zinc-500">{t('resume.location')}:</span>
+                                      <p className="font-medium text-zinc-800 dark:text-zinc-100">{resume.parsed_fields.location}</p>
                                     </div>
                                   )}
                                 </div>
 
                                 {resume.parsed_fields.education && resume.parsed_fields.education.length > 0 && (
                                   <div className="mt-3">
-                                    <span className="text-sm text-muted-foreground">{t('resume.education')}:</span>
+                                    <span className="text-sm text-zinc-400 dark:text-zinc-500">{t('resume.education')}:</span>
                                     <ul className="mt-1 space-y-1">
                                       {resume.parsed_fields.education.map((edu, i) => (
-                                        <li key={i} className="text-sm">
+                                        <li key={i} className="text-sm text-zinc-800 dark:text-zinc-100">
                                           <strong>{edu.school}</strong> - {edu.degree} {edu.major}
-                                          {edu.duration && <span className="text-muted-foreground"> ({edu.duration})</span>}
+                                          {edu.duration && <span className="text-zinc-400 dark:text-zinc-500"> ({edu.duration})</span>}
                                         </li>
                                       ))}
                                     </ul>
@@ -578,12 +577,12 @@ function ResumeContent() {
 
                                 {resume.parsed_fields.experience && resume.parsed_fields.experience.length > 0 && (
                                   <div className="mt-3">
-                                    <span className="text-sm text-muted-foreground">{t('resume.experience')}:</span>
+                                    <span className="text-sm text-zinc-400 dark:text-zinc-500">{t('resume.experience')}:</span>
                                     <ul className="mt-1 space-y-2">
                                       {resume.parsed_fields.experience.map((exp, i) => (
-                                        <li key={i} className="text-sm">
+                                        <li key={i} className="text-sm text-zinc-800 dark:text-zinc-100">
                                           <strong>{exp.company}</strong> - {exp.title}
-                                          {exp.duration && <span className="text-muted-foreground"> ({exp.duration})</span>}
+                                          {exp.duration && <span className="text-zinc-400 dark:text-zinc-500"> ({exp.duration})</span>}
                                         </li>
                                       ))}
                                     </ul>
@@ -593,17 +592,17 @@ function ResumeContent() {
                                 {resume.parsed_fields.skills && (
                                   <div className="mt-3 flex flex-wrap gap-2">
                                     {resume.parsed_fields.skills.technical?.map((skill, i) => (
-                                      <Badge key={`tech-${i}`} variant="secondary">{skill}</Badge>
+                                      <Badge key={`tech-${i}`} variant="secondary" className="bg-zinc-100 text-zinc-600 dark:bg-zinc-800 dark:text-zinc-300">{skill}</Badge>
                                     ))}
                                     {resume.parsed_fields.skills.languages?.map((skill, i) => (
-                                      <Badge key={`lang-${i}`} variant="outline">{skill}</Badge>
+                                      <Badge key={`lang-${i}`} variant="outline" className="border-zinc-200 dark:border-zinc-700 text-zinc-600 dark:text-zinc-300">{skill}</Badge>
                                     ))}
                                   </div>
                                 )}
 
-                                <div className="mt-3 pt-3 border-t">
+                                <div className="mt-3 pt-3 border-t border-zinc-100 dark:border-zinc-800">
                                   <Link href="/field-mappings">
-                                    <Button variant="outline" size="sm" className="w-full">
+                                    <Button variant="outline" size="sm" className="w-full border-zinc-200 dark:border-zinc-700 text-zinc-600 dark:text-zinc-300 hover:text-zinc-900 dark:hover:text-zinc-100">
                                       <Map className="h-4 w-4 mr-2" />
                                       {t('resume.configureMapping')}
                                     </Button>
@@ -656,10 +655,10 @@ function ResumeContent() {
                           </div>
                         </DialogContent>
                       </Dialog>
-                      <Button 
-                        variant="destructive" 
+                      <Button
+                        variant="ghost"
                         size="sm"
-                        className="text-xs h-8 px-2"
+                        className="text-xs h-8 px-2 text-zinc-400 hover:text-red-600 hover:bg-red-50 dark:hover:bg-red-950/40"
                         onClick={() => deleteResume(resume.id)}
                       >
                         <Trash2 className="h-3 w-3 md:h-4 md:w-4" />

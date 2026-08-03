@@ -134,14 +134,16 @@ export function SegmentationCard({
   };
 
   return (
-    <div className="rounded-xl border border-terracotta-200/60 dark:border-terracotta-800/40 bg-gradient-to-br from-beige-50 to-terracotta-50/40 dark:from-zinc-900 dark:to-zinc-900/60 p-3 md:p-4">
+    <div className="rounded-xl border border-zinc-200 dark:border-zinc-800 bg-zinc-50/80 dark:bg-zinc-900/40 p-3 md:p-4">
       {/* 标题行 */}
       <div className="flex items-center justify-between gap-2">
         <div className="flex items-center gap-2 min-w-0">
-          <GraduationCap className="h-4 w-4 text-terracotta-600 flex-shrink-0" />
-          <span className="text-sm font-semibold truncate">{t('resume.segTitle')}</span>
+          <div className="w-6 h-6 rounded-lg bg-zinc-900 dark:bg-white flex items-center justify-center flex-shrink-0">
+            <GraduationCap className="h-3.5 w-3.5 text-white dark:text-zinc-900" />
+          </div>
+          <span className="text-sm font-semibold truncate text-zinc-900 dark:text-zinc-50">{t('resume.segTitle')}</span>
           {confirmed && (
-            <Badge variant="secondary" className="text-[10px] bg-sage-100 text-sage-700 dark:bg-sage-900 dark:text-sage-300">
+            <Badge variant="secondary" className="text-[10px] bg-zinc-900 text-white dark:bg-white dark:text-zinc-900 hover:bg-zinc-900">
               <CheckCircle2 className="h-3 w-3 mr-0.5" />
               {t('resume.segConfirmed')}
             </Badge>
@@ -150,7 +152,7 @@ export function SegmentationCard({
         <Button
           variant="ghost"
           size="sm"
-          className="h-7 px-2 text-xs text-terracotta-700 dark:text-terracotta-300"
+          className="h-7 px-2 text-xs text-zinc-500 hover:text-zinc-900 dark:text-zinc-400 dark:hover:text-zinc-100"
           onClick={() => setEditing((e) => !e)}
         >
           <PencilLine className="h-3 w-3 mr-1" />
@@ -162,17 +164,17 @@ export function SegmentationCard({
       {/* 画像摘要 */}
       <div className="mt-2.5 grid grid-cols-1 md:grid-cols-2 gap-x-4 gap-y-1.5 text-xs md:text-[13px] text-zinc-700 dark:text-zinc-300">
         <div className="flex items-center gap-1.5 min-w-0">
-          <Briefcase className="h-3.5 w-3.5 text-sage-600 flex-shrink-0" />
+          <Briefcase className="h-3.5 w-3.5 text-zinc-400 flex-shrink-0" />
           <span className="text-muted-foreground">{t('resume.segStage')}:</span>
           <span className="font-medium truncate">{stageLabel(segmentation.careerStage)}</span>
         </div>
         <div className="flex items-center gap-1.5 min-w-0">
-          <MapPin className="h-3.5 w-3.5 text-sage-600 flex-shrink-0" />
+          <MapPin className="h-3.5 w-3.5 text-zinc-400 flex-shrink-0" />
           <span className="text-muted-foreground">{t('resume.segRegion')}:</span>
           <span className="font-medium truncate">{segmentation.regions.map(regionLabel).join(' / ')}</span>
         </div>
         <div className="flex items-center gap-1.5 min-w-0">
-          <GraduationCap className="h-3.5 w-3.5 text-sage-600 flex-shrink-0" />
+          <GraduationCap className="h-3.5 w-3.5 text-zinc-400 flex-shrink-0" />
           <span className="text-muted-foreground">{t('resume.segSchool')}:</span>
           <span className="font-medium truncate">
             {segmentation.qsBand ? `${segmentation.qsBand} · ` : ''}Tier {segmentation.schoolTier}
@@ -180,7 +182,7 @@ export function SegmentationCard({
           </span>
         </div>
         <div className="flex items-center gap-1.5 min-w-0">
-          <Wrench className="h-3.5 w-3.5 text-sage-600 flex-shrink-0" />
+          <Wrench className="h-3.5 w-3.5 text-zinc-400 flex-shrink-0" />
           <span className="text-muted-foreground">{t('resume.segExp')}:</span>
           <span className="font-medium truncate">
             {t('resume.segExpValue')
@@ -202,8 +204,8 @@ export function SegmentationCard({
       )}
 
       {/* 分层结论 */}
-      <div className="mt-2.5 rounded-lg bg-terracotta-100/60 dark:bg-terracotta-900/20 px-2.5 py-1.5">
-        <span className="text-[11px] text-terracotta-700 dark:text-terracotta-300 font-medium">
+      <div className="mt-2.5 rounded-lg bg-zinc-100 dark:bg-zinc-800 px-2.5 py-1.5">
+        <span className="text-[11px] text-zinc-700 dark:text-zinc-200 font-medium">
           {t('resume.segResult')}：{segmentation.summary}
         </span>
       </div>
@@ -261,8 +263,8 @@ export function SegmentationCard({
                   onClick={() => toggleRegion(r)}
                   className={`px-2 py-1 rounded-md text-[11px] border transition-colors ${
                     draft.regions.includes(r)
-                      ? 'bg-terracotta-600 text-white border-terracotta-600'
-                      : 'bg-transparent border-zinc-300 dark:border-zinc-600 text-zinc-600 dark:text-zinc-300 hover:border-terracotta-400'
+                      ? 'bg-zinc-900 text-white border-zinc-900 dark:bg-white dark:text-zinc-900 dark:border-white'
+                      : 'bg-transparent border-zinc-300 dark:border-zinc-600 text-zinc-600 dark:text-zinc-300 hover:border-zinc-500'
                   }`}
                 >
                   {regionLabel(r)}
@@ -271,7 +273,7 @@ export function SegmentationCard({
             </div>
           </div>
           <div className="flex justify-end">
-            <Button size="sm" className="h-7 text-xs" onClick={save} disabled={saving || draft.regions.length === 0}>
+            <Button size="sm" className="h-7 text-xs bg-zinc-900 text-white hover:bg-zinc-800 dark:bg-white dark:text-zinc-900 dark:hover:bg-zinc-200" onClick={save} disabled={saving || draft.regions.length === 0}>
               {saving ? <Loader2 className="h-3 w-3 mr-1 animate-spin" /> : <CheckCircle2 className="h-3 w-3 mr-1" />}
               {saving ? t('resume.segUpdating') : t('resume.segConfirm')}
             </Button>
