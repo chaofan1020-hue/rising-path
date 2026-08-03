@@ -107,12 +107,12 @@ function Header1() {
                                     {item.href ? (
                                         <>
                                             <NavigationMenuLink href={item.href}>
-                                                <Button variant="ghost" className="text-black dark:text-white hover:bg-[#C46A4A]/10 hover:text-[#C46A4A]">{item.title}</Button>
+                                                <Button variant="ghost" className="text-black dark:text-white hover:bg-zinc-100 dark:hover:bg-zinc-800 hover:text-zinc-900 dark:hover:text-zinc-100">{item.title}</Button>
                                             </NavigationMenuLink>
                                         </>
                                     ) : (
                                         <>
-                                            <NavigationMenuTrigger className="font-medium text-sm text-black dark:text-white hover:bg-[#C46A4A]/10 hover:text-[#C46A4A]">
+                                            <NavigationMenuTrigger className="font-medium text-sm text-black dark:text-white hover:bg-zinc-100 dark:hover:bg-zinc-800 hover:text-zinc-900 dark:hover:text-zinc-100 data-[state=open]:bg-zinc-100 dark:data-[state=open]:bg-zinc-800">
                                                 {item.title}
                                             </NavigationMenuTrigger>
                                             <NavigationMenuContent className="!w-[450px] p-4">
@@ -132,7 +132,7 @@ function Header1() {
                                                             <NavigationMenuLink
                                                                 href={subItem.href}
                                                                 key={subItem.title}
-                                                                className="flex flex-row justify-between items-center hover:bg-[#C46A4A]/10 py-2 px-4 rounded"
+                                                                className="flex flex-row justify-between items-center hover:bg-zinc-100 dark:hover:bg-zinc-800 py-2 px-4 rounded"
                                                             >
                                                                 <span className="text-black dark:text-white">{subItem.title}</span>
                                                                 <MoveRight className="w-4 h-4 text-black/60 dark:text-white/60" />
@@ -166,13 +166,13 @@ function Header1() {
                                 <User className="w-4 h-4" />
                                 <span>{accessCodeName}</span>
                             </div>
-                            <Button variant="ghost" onClick={handleLogout} className="hidden md:inline-flex text-black dark:text-white hover:bg-[#C46A4A]/10 hover:text-[#C46A4A]">
+                            <Button variant="ghost" onClick={handleLogout} className="hidden md:inline-flex text-black dark:text-white hover:bg-zinc-100 dark:hover:bg-zinc-800 hover:text-zinc-900 dark:hover:text-zinc-100">
                                 <LogOut className="w-4 h-4 mr-2" />
                                 {t("nav.logout")}
                             </Button>
                         </>
                     ) : (
-                        <Button asChild>
+                        <Button asChild className="bg-zinc-900 text-white hover:bg-zinc-800 dark:bg-white dark:text-zinc-900 dark:hover:bg-zinc-200">
                             <Link href="/access-code">{t("nav.getStarted")}</Link>
                         </Button>
                     )}
