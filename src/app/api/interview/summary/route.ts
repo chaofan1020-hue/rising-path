@@ -34,8 +34,22 @@ interface InterviewReport {
 
 const GRADE_SCORE: Record<string, number> = {
   'A+': 97, 'A': 93, 'A-': 90, 'B+': 87, 'B': 83, 'B-': 80,
-  'C+': 77, 'C': 73, 'C-': 70, 'D': 60,
+  'C+': 77, 'C': 73, 'C-': 70, 'D': 60, 'F': 50,
 };
+
+// 按均分反推合法等级（LLM 偶尔输出枚举外等级如 F/E 时钳制）
+function scoreToGrade(s: number): string {
+  if (s >= 95) return 'A+';
+  if (s >= 92) return 'A';
+  if (s >= 89) return 'A-';
+  if (s >= 86) return 'B+';
+  if (s >= 82) return 'B';
+  if (s >= 79) return 'B-';
+  if (s >= 76) return 'C+';
+  if (s >= 72) return 'C';
+  if (s >= 69) return 'C-';
+  return 'D';
+}
 
 // 从消息记录计算真实统计数据
 function computeStats(messages: ChatMessage[], createdAt: string, updatedAt: string) {
@@ -78,13 +92,67 @@ function computeStats(messages: ChatMessage[], createdAt: string, updatedAt: str
 // 从 LLM 输出中容错提取 JSON 对象
 function extractJson(text: string): InterviewReport | null {
   const start = text.indexOf('{');
-  const end = text.lastIndexOf('}');
-  if (start < 0 || end <= start) return null;
+  if (start < 0) return null;
+  const raw = text.slice(start);
+  // 完整解析优先
   try {
-    return JSON.parse(text.slice(start, end + 1)) as InterviewReport;
+    return JSON.parse(raw) as InterviewReport;
+  } catch {
+    // 继续走抢救流程
+  }
+  // 截断抢救：LLM 输出达到 token 上限时 JSON 不完整，
+  // 回退到上一个完整元素边界并补全未闭合括号，保住已生成的 verdict/committee/radar 等主体
+  return salvageJson(raw) as InterviewReport | null;
+}
+
+// 清理 LLM 常见格式瑕疵：尾逗号
+function parseLoose(json: string): unknown | null {
+  try {
+    return JSON.parse(json.replace(/,\s*([}\]])/g, '$1'));
   } catch {
     return null;
   }
+}
+
+// 截断 JSON 抢救：扫描括号栈（跳过字符串内容），回退未完成的尾部片段后按栈补全闭合
+function salvageJson(raw: string): unknown | null {
+  const scan = (end: number): { stack: string[]; lastSafe: number } => {
+    const stack: string[] = [];
+    let inStr = false;
+    let escaped = false;
+    let lastSafe = -1;
+    for (let i = 0; i < end; i++) {
+      const ch = raw[i];
+      if (inStr) {
+        if (escaped) escaped = false;
+        else if (ch === '\\') escaped = true;
+        else if (ch === '"') inStr = false;
+        continue;
+      }
+      if (ch === '"') { inStr = true; continue; }
+      if (ch === '{' || ch === '[') { stack.push(ch); continue; }
+      if (ch === '}' || ch === ']') {
+        if (!stack.pop()) return { stack: [], lastSafe: -2 }; // 括号不平衡，放弃
+        lastSafe = i; // 一个完整元素的边界，可在此安全截断
+      }
+    }
+    return { stack, lastSafe };
+  };
+
+  const { stack, lastSafe } = scan(raw.length);
+  if (lastSafe === -2) return null;
+  if (stack.length === 0) {
+    // 结构完整但含非法内容：截取到最后一个闭合括号再试
+    return lastSafe >= 0 ? parseLoose(raw.slice(0, lastSafe + 1)) : null;
+  }
+  if (lastSafe < 0) return null; // 连一个完整元素都没有，无法抢救
+  // 回退到上一个完整元素边界，补全该点仍未闭合的括号
+  const { stack: remaining } = scan(lastSafe + 1);
+  let fixed = raw.slice(0, lastSafe + 1);
+  for (let i = remaining.length - 1; i >= 0; i--) {
+    fixed += remaining[i] === '{' ? '}' : ']';
+  }
+  return parseLoose(fixed);
 }
 
 export async function POST(request: NextRequest) {
@@ -207,7 +275,7 @@ export async function POST(request: NextRequest) {
       return p ? `${p.name} (${p.company})` : (language === 'en' ? 'Interviewer' : '面试官');
     };
     const transcript = messages
-      .map((m, idx) => `[#${idx}] ${getInterviewerLabel(m)}: ${m.content}`)
+      .map((m, idx) => `[#${idx}] ${getInterviewerLabel(m)}: ${(m.content || '').slice(0, 600)}`)
       .join('\n\n');
 
     const systemPrompt = language === 'en'
@@ -220,18 +288,18 @@ export async function POST(request: NextRequest) {
   "verdict": { "pass": true|false, "vote": "e.g. 2:1", "grade": "one of A+/A/A-/B+/B/B-/C+/C/C-/D", "hireLevel": "one of Strong Hire/Hire/Lean Hire/No Hire", "headline": "one sharp sentence summarizing the outcome" },
   "committee": [ { "interviewerId": <must be one of the panel ids above>, "tags": ["2-3 behavior tags e.g. High-Pressure, Detail-Obsessed"], "grade": "A+~D", "attitude": "one of Strongly Recommend/Recommend/Neutral/Not Recommend/Strongly Oppose", "comment": "2-4 sentences in THIS interviewer's own persona voice, citing specific moments", "keyMoment": { "question": "the single most sweat-inducing question from this interviewer (quote)", "answer": "the candidate's answer at that moment (quote)", "note": "one-line comment" } } ],
   "radar": [ { "dimension": "...", "score": 0-100 integer, "grade": "A+~D", "diagnosis": "one sentence" } ],  // EXACTLY 6 dimensions: Technical/Professional Skills, Logical & Structured Thinking, Stress & Emotional Control, Communication & Empathy, Culture/Values Fit, Role Readiness
-  "highlights": { "mistakes": [ { "title": "short", "scene": "recreate the moment with quotes", "consequence": "what it cost", "coach": "AI coach analysis" } ], "best": { "title": "...", "scene": "...", "effect": "...", "coach": "..." } },  // 1-3 fatal mistakes
+  "highlights": { "mistakes": [ { "title": "short", "scene": "recreate the moment with quotes", "consequence": "what it cost", "coach": "AI coach analysis" } ], "best": { "title": "...", "scene": "...", "effect": "...", "coach": "..." } },  // 1-2 fatal mistakes
   "actionPlan": { "immediate": ["3-5 things to do NOW if the real interview were tomorrow"], "practice": ["2-3 targeted drills on this platform"], "reading": ["1-3 external books/articles"] },
-  "annotations": [ { "msgIndex": <message number from transcript, 0-based>, "label": "short tag e.g. Vague Wording / Missing Data / Highlight", "note": "one-line annotation" } ]  // 3-8 items, only key moments
+  "annotations": [ { "msgIndex": <message number from transcript, 0-based>, "label": "short tag e.g. Vague Wording / Missing Data / Highlight", "note": "one-line annotation" } ]  // 3-5 items, only key moments
 }`
       : `只输出一个 JSON 对象（不要用 markdown 代码块，不要输出任何其他文字），严格按以下结构：
 {
   "verdict": { "pass": true或false, "vote": "如 2:1", "grade": "A+/A/A-/B+/B/B-/C+/C/C-/D 之一", "hireLevel": "Strong Hire/Hire/Lean Hire/No Hire 之一", "headline": "一句话战报结论，尖锐直接" },
   "committee": [ { "interviewerId": <必须是上面委员会成员的 id>, "tags": ["2-3个行为标签，如 高压型、细节控"], "grade": "A+~D", "attitude": "强烈推荐/推荐/保留意见/不推荐/强烈反对 之一", "comment": "以该面试官【自己人设口吻】写 2-4 句尖锐评语，引用记录中的具体瞬间", "keyMoment": { "question": "该面试官最让候选人冒冷汗的一个问题（引用原文）", "answer": "候选人当时的回答（引用原文）", "note": "一句点评" } } ],
   "radar": [ { "dimension": "维度名", "score": 0-100整数, "grade": "A+~D", "diagnosis": "一句话诊断" } ],  // 恰好 6 个维度：技术/专业硬实力、逻辑与结构化表达、抗压与情绪控制、沟通与共情、文化/价值观匹配、岗位准备度
-  "highlights": { "mistakes": [ { "title": "短标题", "scene": "场景还原（引用对话原文）", "consequence": "造成的后果", "coach": "AI教练分析" } ], "best": { "title": "...", "scene": "...", "effect": "...", "coach": "..." } },  // 致命失误 1-3 个
+  "highlights": { "mistakes": [ { "title": "短标题", "scene": "场景还原（引用对话原文）", "consequence": "造成的后果", "coach": "AI教练分析" } ], "best": { "title": "...", "scene": "...", "effect": "...", "coach": "..." } },  // 致命失误 1-2 个
   "actionPlan": { "immediate": ["3-5条：如果明天就要面目标公司，立即要做的事"], "practice": ["2-3条平台内专项练习推荐"], "reading": ["1-3本/篇外部阅读推荐"] },
-  "annotations": [ { "msgIndex": <面试记录消息序号，从0开始>, "label": "短标签，如 模糊词汇/数据缺失/高光时刻", "note": "一句标注" } ]  // 3-8 条，只标关键时刻
+  "annotations": [ { "msgIndex": <面试记录消息序号，从0开始>, "label": "短标签，如 模糊词汇/数据缺失/高光时刻", "note": "一句标注" } ]  // 3-5 条，只标关键时刻
 }`;
 
     const userPrompt = language === 'en'
@@ -284,11 +352,25 @@ ${jsonSpec}
           }
 
           const report = extractJson(fullContent);
-          if (!report || !report.verdict || !Array.isArray(report.committee)) {
+          if (!report || !report.verdict || !Array.isArray(report.committee) || report.committee.length === 0) {
             controller.enqueue(encoder.encode(`data: ${JSON.stringify({ error: '报告解析失败，请重试' })}\n\n`));
             controller.close();
             return;
           }
+
+          // 截断抢救可能导致尾部字段缺失：兜底默认值，保证报告可用
+          report.radar = Array.isArray(report.radar) ? report.radar : [];
+          report.highlights = report.highlights && typeof report.highlights === 'object'
+            ? report.highlights
+            : { mistakes: [], best: { title: '', scene: '', effect: '', coach: '' } };
+          report.highlights.mistakes = Array.isArray(report.highlights.mistakes) ? report.highlights.mistakes : [];
+          report.actionPlan = report.actionPlan && typeof report.actionPlan === 'object'
+            ? report.actionPlan
+            : { immediate: [], practice: [], reading: [] };
+          report.actionPlan.immediate = Array.isArray(report.actionPlan.immediate) ? report.actionPlan.immediate : [];
+          report.actionPlan.practice = Array.isArray(report.actionPlan.practice) ? report.actionPlan.practice : [];
+          report.actionPlan.reading = Array.isArray(report.actionPlan.reading) ? report.actionPlan.reading : [];
+          report.annotations = Array.isArray(report.annotations) ? report.annotations : [];
 
           // 回填面试官静态信息，防止 LLM 编造
           report.committee = report.committee.map((c) => {
@@ -311,6 +393,11 @@ ${jsonSpec}
           const overallScore = radarScores.length
             ? Math.round(radarScores.reduce((a, b) => a + b, 0) / radarScores.length)
             : gradeScore;
+
+          // 等级钳制：LLM 输出枚举外等级（如 F/E）时按均分反推合法等级
+          if (!report.verdict.grade || !(report.verdict.grade in GRADE_SCORE) || report.verdict.grade === 'F') {
+            report.verdict.grade = scoreToGrade(overallScore ?? 60);
+          }
 
           await client
             .from('interview_sessions')

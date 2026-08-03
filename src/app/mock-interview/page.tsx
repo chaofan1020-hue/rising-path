@@ -300,6 +300,7 @@ export default function MockInterviewPage() {
   const [reportStats, setReportStats] = useState<ReportStats | null>(null);
   const [reportHistory, setReportHistory] = useState<HistoryPoint[]>([]);
   const [reportChars, setReportChars] = useState(0); // 生成中已接收字符数（进度展示）
+  const [reportError, setReportError] = useState(false); // 报告生成失败（可重试）
 
   // 闯关模式状态
   const [interviewMode, setInterviewMode] = useState<"single" | "gauntlet">("single");
@@ -961,6 +962,65 @@ export default function MockInterviewPage() {
     }
   };
 
+  // 生成评估报告（SSE 流式）；失败时进入可重试状态
+  const generateSummary = async () => {
+    if (!sessionId) return;
+    setEnding(true);
+    setReportError(false);
+    try {
+      const res = await fetch("/api/interview/summary", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ accessCodeId, sessionId, language }),
+      });
+      if (!res.ok) throw new Error("failed");
+      const reader = res.body?.getReader();
+      if (!reader) throw new Error("no reader");
+      const decoder = new TextDecoder();
+      let buffer = "";
+      let reportReceived = false;
+      setStage("summary");
+      setSummary("");
+      setReport(null);
+      setReportStats(null);
+      setReportHistory([]);
+      setReportChars(0);
+      while (true) {
+        const { done, value } = await reader.read();
+        if (done) break;
+        buffer += decoder.decode(value, { stream: true });
+        const lines = buffer.split("\n\n");
+        buffer = lines.pop() || "";
+        for (const line of lines) {
+          if (!line.startsWith("data: ")) continue;
+          try {
+            const data = JSON.parse(line.slice(6));
+            if (data.content) {
+              // 生成中：仅更新进度字符数（原始 JSON 不直接展示）
+              setReportChars((c) => c + String(data.content).length);
+            }
+            if (data.report) {
+              reportReceived = true;
+              setReport(data.report as InterviewReport);
+              if (data.stats) setReportStats(data.stats as ReportStats);
+              if (Array.isArray(data.history)) setReportHistory(data.history as HistoryPoint[]);
+              if (data.score) setOverallScore(data.score);
+            }
+            if (data.error) throw new Error(data.error);
+          } catch (e) {
+            if (e instanceof Error && e.message !== "failed") throw e;
+          }
+        }
+      }
+      // 流正常结束但未收到报告：视为失败（理论上后端总会发 report 或 error）
+      if (!reportReceived) setReportError(true);
+    } catch {
+      setReportError(true);
+    } finally {
+      setEnding(false);
+    }
+  };
+
   // 结束面试
   const handleEnd = async () => {
     if (!sessionId || ending) return;
@@ -991,54 +1051,7 @@ export default function MockInterviewPage() {
       return;
     }
 
-    try {
-      const res = await fetch("/api/interview/summary", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ accessCodeId, sessionId, language }),
-      });
-      if (!res.ok) throw new Error("failed");
-      const reader = res.body?.getReader();
-      if (!reader) throw new Error("no reader");
-      const decoder = new TextDecoder();
-      let buffer = "";
-      setStage("summary");
-      setSummary("");
-      setReport(null);
-      setReportStats(null);
-      setReportHistory([]);
-      setReportChars(0);
-      while (true) {
-        const { done, value } = await reader.read();
-        if (done) break;
-        buffer += decoder.decode(value, { stream: true });
-        const lines = buffer.split("\n\n");
-        buffer = lines.pop() || "";
-        for (const line of lines) {
-          if (!line.startsWith("data: ")) continue;
-          try {
-            const data = JSON.parse(line.slice(6));
-            if (data.content) {
-              // 生成中：仅更新进度字符数（原始 JSON 不直接展示）
-              setReportChars((c) => c + String(data.content).length);
-            }
-            if (data.report) {
-              setReport(data.report as InterviewReport);
-              if (data.stats) setReportStats(data.stats as ReportStats);
-              if (Array.isArray(data.history)) setReportHistory(data.history as HistoryPoint[]);
-              if (data.score) setOverallScore(data.score);
-            }
-            if (data.error) throw new Error(data.error);
-          } catch (e) {
-            if (e instanceof Error && e.message !== "failed") throw e;
-          }
-        }
-      }
-    } catch {
-      alert(t("mockInterview.summaryFailed"));
-    } finally {
-      setEnding(false);
-    }
+    await generateSummary();
   };
 
   const handleRestart = () => {
@@ -1047,6 +1060,7 @@ export default function MockInterviewPage() {
     setSummary("");
     setReport(null);
     setReportStats(null);
+    setReportError(false);
     setReportHistory([]);
     setReportChars(0);
     setOverallScore(null);
@@ -1604,14 +1618,37 @@ export default function MockInterviewPage() {
             </div>
 
             {!report ? (
-              /* 报告生成中 */
-              <div className="rounded-3xl bg-gradient-to-br from-[#C46A4A]/5 via-white to-[#E2D0B8]/10 dark:from-[#C46A4A]/10 dark:via-zinc-900 dark:to-[#E2D0B8]/5 shadow-lg p-12 flex flex-col items-center">
-                <Loader2 className="h-10 w-10 animate-spin text-[#C46A4A] mb-5" />
-                <p className="text-gray-700 dark:text-gray-300 text-sm mb-1">{t("mockInterview.reportWriting")}</p>
-                {reportChars > 0 && (
-                  <p className="text-gray-400 text-xs">{t("mockInterview.reportRecorded").replace("{n}", String(reportChars))}</p>
-                )}
-              </div>
+              reportError ? (
+                /* 报告生成失败：提供重试 */
+                <div className="rounded-3xl border border-red-200 dark:border-red-900/50 bg-red-50/60 dark:bg-red-950/20 shadow-lg p-12 flex flex-col items-center">
+                  <p className="text-red-600 dark:text-red-400 text-sm mb-6">{t("mockInterview.summaryFailed")}</p>
+                  <div className="flex gap-3">
+                    <Button
+                      onClick={generateSummary}
+                      disabled={ending}
+                      className="rounded-full bg-zinc-900 hover:bg-zinc-700 dark:bg-white dark:text-zinc-900 dark:hover:bg-zinc-200 text-white px-6"
+                    >
+                      {ending ? (
+                        <><Loader2 className="h-4 w-4 mr-2 animate-spin" />{t("mockInterview.reportWriting")}</>
+                      ) : (
+                        <><RotateCcw className="h-4 w-4 mr-2" />{t("mockInterview.retrySummary")}</>
+                      )}
+                    </Button>
+                    <Button onClick={handleRestart} variant="outline" className="rounded-full px-6">
+                      {t("mockInterview.restart")}
+                    </Button>
+                  </div>
+                </div>
+              ) : (
+                /* 报告生成中 */
+                <div className="rounded-3xl bg-gradient-to-br from-[#C46A4A]/5 via-white to-[#E2D0B8]/10 dark:from-[#C46A4A]/10 dark:via-zinc-900 dark:to-[#E2D0B8]/5 shadow-lg p-12 flex flex-col items-center">
+                  <Loader2 className="h-10 w-10 animate-spin text-[#C46A4A] mb-5" />
+                  <p className="text-gray-700 dark:text-gray-300 text-sm mb-1">{t("mockInterview.reportWriting")}</p>
+                  {reportChars > 0 && (
+                    <p className="text-gray-400 text-xs">{t("mockInterview.reportRecorded").replace("{n}", String(reportChars))}</p>
+                  )}
+                </div>
+              )
             ) : (
               <div className="space-y-8">
                 {/* ===== 模块一：总体战报 ===== */}
