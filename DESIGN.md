@@ -52,5 +52,6 @@
 - Hero：页面顶部超大半透明水印文字 "RESUME"（text-[16vw+]、tracking-tighter、不透明度 ~4-5%、pointer-events-none、select-none、overflow 裁切），其上居中叠放黑色圆角图标方块（w-16 h-16 rounded-2xl bg-zinc-900 shadow-2xl，暗色反转白）+ 标题（tracking-tight）+ zinc-500 副标题
 - 上传区：大圆角（rounded-2xl）虚线 dropzone（border-dashed zinc-200 hover:border-zinc-400），居中图标 + 文案引导，选中文件后以 chip 展示 + 实心黑上传按钮
 - 简历卡片：白底 zinc-200 边框、hover 时细腻阴影（shadow-zinc-900/5）；文件图标为黑色圆角小方块（与 Hero 方块同语言）；操作按钮为 ghost/outline 中性风，删除按钮仅 hover 显红
+- 按钮 hover 高亮：统一中性浅灰底（hover:bg-zinc-100 dark:hover:bg-zinc-800）+ 文字加深（hover:text-zinc-900）——必须显式覆盖 Button 组件 outline/ghost variant 默认的 hover:bg-accent（全局 accent 为灰绿调，与本页语言冲突）
 - 分层确认卡片：同页内嵌套使用，中性 zinc 系（去品牌渐变底），信息层级靠字重与灰度区分
 - 排版：充裕留白（区块间距 mb-10+）、字重对比（标题 semibold tracking-tight / 正文 zinc-500）

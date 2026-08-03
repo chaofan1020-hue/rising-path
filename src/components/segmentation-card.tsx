@@ -152,7 +152,7 @@ export function SegmentationCard({
         <Button
           variant="ghost"
           size="sm"
-          className="h-7 px-2 text-xs text-zinc-500 hover:text-zinc-900 dark:text-zinc-400 dark:hover:text-zinc-100"
+          className="h-7 px-2 text-xs text-zinc-500 hover:bg-zinc-100 hover:text-zinc-900 dark:text-zinc-400 dark:hover:bg-zinc-800 dark:hover:text-zinc-100"
           onClick={() => setEditing((e) => !e)}
         >
           <PencilLine className="h-3 w-3 mr-1" />

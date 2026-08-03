@@ -352,7 +352,7 @@ function ResumeContent() {
                   </Button>
                 </Link>
                 <Link href="/optimize">
-                  <Button variant="outline" size="sm" className="gap-1.5 border-zinc-200 dark:border-zinc-700">
+                  <Button variant="outline" size="sm" className="gap-1.5 border-zinc-200 dark:border-zinc-700 text-zinc-600 dark:text-zinc-300 hover:bg-zinc-100 hover:text-zinc-900 dark:hover:bg-zinc-800 dark:hover:text-zinc-100">
                     <Wand2 className="h-3.5 w-3.5" />
                     {t('resume.optimize')}
                   </Button>
@@ -384,7 +384,7 @@ function ResumeContent() {
         <div className="relative space-y-4 max-w-3xl mx-auto">
           <div className="flex items-center justify-between">
             <h2 className="text-base md:text-lg font-semibold tracking-tight text-zinc-800 dark:text-zinc-100">{t('resume.myResumes')}</h2>
-            <Button variant="ghost" size="sm" className="text-xs text-zinc-500 hover:text-zinc-900 dark:hover:text-zinc-100" onClick={fetchResumes}>
+            <Button variant="ghost" size="sm" className="text-xs text-zinc-500 hover:bg-zinc-100 hover:text-zinc-900 dark:hover:bg-zinc-800 dark:hover:text-zinc-100" onClick={fetchResumes}>
               {t('resume.refresh')}
             </Button>
           </div>
@@ -457,7 +457,7 @@ function ResumeContent() {
                         <Button
                           variant="outline"
                           size="sm"
-                          className="text-xs h-8 border-zinc-200 dark:border-zinc-700 text-zinc-600 dark:text-zinc-300 hover:text-zinc-900 dark:hover:text-zinc-100"
+                          className="text-xs h-8 border-zinc-200 dark:border-zinc-700 text-zinc-600 dark:text-zinc-300 hover:bg-zinc-100 hover:text-zinc-900 dark:hover:bg-zinc-800 dark:hover:text-zinc-100"
                           onClick={() => extractFields(resume)}
                           disabled={extractingId === resume.id}
                         >
@@ -482,7 +482,7 @@ function ResumeContent() {
                       <Button
                         variant="outline"
                         size="sm"
-                        className="text-xs h-8 border-zinc-200 dark:border-zinc-700 text-zinc-600 dark:text-zinc-300 hover:text-zinc-900 dark:hover:text-zinc-100"
+                        className="text-xs h-8 border-zinc-200 dark:border-zinc-700 text-zinc-600 dark:text-zinc-300 hover:bg-zinc-100 hover:text-zinc-900 dark:hover:bg-zinc-800 dark:hover:text-zinc-100"
                         onClick={() => translateResume(resume)}
                         disabled={translatingId === resume.id}
                       >
@@ -499,7 +499,7 @@ function ResumeContent() {
                         )}
                       </Button>
                       <Link href="/field-mappings" className="hidden sm:block">
-                        <Button variant="outline" size="sm" className="text-xs h-8 border-zinc-200 dark:border-zinc-700 text-zinc-600 dark:text-zinc-300 hover:text-zinc-900 dark:hover:text-zinc-100">
+                        <Button variant="outline" size="sm" className="text-xs h-8 border-zinc-200 dark:border-zinc-700 text-zinc-600 dark:text-zinc-300 hover:bg-zinc-100 hover:text-zinc-900 dark:hover:bg-zinc-800 dark:hover:text-zinc-100">
                           <Map className="h-3 w-3 mr-1" />
                           {t('resume.fieldMapping')}
                         </Button>
@@ -509,7 +509,7 @@ function ResumeContent() {
                           <Button
                             variant="outline"
                             size="sm"
-                            className="text-xs h-8 border-zinc-200 dark:border-zinc-700 text-zinc-600 dark:text-zinc-300 hover:text-zinc-900 dark:hover:text-zinc-100"
+                            className="text-xs h-8 border-zinc-200 dark:border-zinc-700 text-zinc-600 dark:text-zinc-300 hover:bg-zinc-100 hover:text-zinc-900 dark:hover:bg-zinc-800 dark:hover:text-zinc-100"
                             onClick={() => setSelectedResume(resume)}
                           >
                             {t('resume.viewDetail')}
@@ -602,7 +602,7 @@ function ResumeContent() {
 
                                 <div className="mt-3 pt-3 border-t border-zinc-100 dark:border-zinc-800">
                                   <Link href="/field-mappings">
-                                    <Button variant="outline" size="sm" className="w-full border-zinc-200 dark:border-zinc-700 text-zinc-600 dark:text-zinc-300 hover:text-zinc-900 dark:hover:text-zinc-100">
+                                    <Button variant="outline" size="sm" className="w-full border-zinc-200 dark:border-zinc-700 text-zinc-600 dark:text-zinc-300 hover:bg-zinc-100 hover:text-zinc-900 dark:hover:bg-zinc-800 dark:hover:text-zinc-100">
                                       <Map className="h-4 w-4 mr-2" />
                                       {t('resume.configureMapping')}
                                     </Button>
