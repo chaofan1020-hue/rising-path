@@ -29,39 +29,43 @@ interface ChatMessage {
 
 const QUESTIONS_PER_ROUND = 2;
 
-// 任意环节淘汰判定：每次候选人作答后，面试官都有权单方面立即终止面试，无需等轮末节点。
-// 判定基于本场全程表现（避免仅因一句话误杀）；严格性控制：prompt 明确"默认继续"，
-// 仅在回答明显空洞敷衍、答非所问、消极放弃、或完全无法胜任时才终止；判定失败同样默认继续。
-async function judgeElimination(
-  llmClient: LLMClient,
-  jobDescription: string,
-  transcriptMessages: ChatMessage[],
-  round: number,
-  totalRounds: number,
-  language: string
-): Promise<boolean> {
-  const transcript = transcriptMessages
-    .map((m) => {
-      const who = m.role === 'interviewer'
-        ? (language === 'en' ? 'Interviewer' : '面试官')
-        : (language === 'en' ? 'Candidate' : '候选人');
-      return `${who}: ${m.content.slice(0, 300)}`;
-    })
-    .join('\n');
-  const prompt = language === 'en'
-    ? `You are a strict but fair interviewer, currently interviewing a candidate for this position (round ${round} of ${totalRounds}):\n${jobDescription.slice(0, 800)}\n\nInterview transcript so far:\n${transcript}\n\nDecide: should this interview be TERMINATED immediately?\nIMPORTANT: Default to "pass" — as long as the candidate is still answering earnestly and there is anything left worth probing, the interview must continue. Only choose "eliminate" when the candidate's answers are clearly empty or perfunctory, severely off-topic, show a giving-up attitude, or demonstrate they are fundamentally unfit for the role. Termination is an irreversible severe verdict — use it sparingly.\nReply with JSON only: {"decision":"pass"} or {"decision":"eliminate"}`
-    : `你是一位严格但公正的面试官，正在对候选人进行以下岗位的面试（共 ${totalRounds} 轮，当前第 ${round} 轮）：\n${jobDescription.slice(0, 800)}\n\n截至目前的面试对话：\n${transcript}\n\n请裁决：是否立即终止本场面试？\n重要：默认继续面试（pass）——只要候选人仍在认真作答、尚有可考察的价值，就必须继续。仅当回答明显空洞敷衍、严重答非所问、表现出消极放弃态度、或显示出完全无法胜任该岗位时，才立即终止（eliminate）。终止是不可逆的严厉裁决，慎用。\n只输出 JSON：{"decision":"pass"} 或 {"decision":"eliminate"}`;
-  try {
-    let out = '';
-    const stream = llmClient.stream([{ role: 'user', content: prompt }], { temperature: 0.2 });
-    for await (const chunk of stream) {
-      if (chunk.content) out += chunk.content.toString();
-    }
-    return /"decision"\s*:\s*"eliminate"/.test(out);
-  } catch {
-    return false;
-  }
+// ===== 面试官节奏控制标记协议 =====
+// 面试官（LLM）在回复最后一行输出标记来自主推进面试：
+// [ROUND_END] 本轮考察足够（切换下一面试官）；[ELIMINATE] 单方面终止面试（淘汰）；
+// [WRAP_UP] 整场面试自然结束（最后一轮/单面可用）。候选人在前端看不到这些标记。
+type ControlMarker = 'round_end' | 'eliminate' | 'wrap_up';
+
+// 流式安全分割：把"可能是控制标记（或其前缀）"的尾部扣下不发，其余内容立即下发。
+// 面试官可能输出协议标记 [ROUND_END]/[ELIMINATE]/[WRAP_UP]，也可能自创其他大写方括号标记（如 [WAIT]）——
+// 两者都必须对候选人不可见：完整标记在此直接剥离（语义记入 markerState），疑似未闭合前缀扣住等待更多数据。
+function splitMarkerSafe(pending: string, markerState: { marker: ControlMarker | null }): [string, string] {
+  // 剥离完整的大写方括号标记（>=2 字符，避免误吞正文中的单字母选项如 [A]）；未知标记同样吞掉不泄漏
+  const stripped = pending.replace(/\[([A-Z_]{2,})\]/g, (_m, name: string) => {
+    if (name === 'ROUND_END') markerState.marker = 'round_end';
+    else if (name === 'ELIMINATE') markerState.marker = 'eliminate';
+    else if (name === 'WRAP_UP') markerState.marker = 'wrap_up';
+    return '';
+  });
+  const idx = stripped.lastIndexOf('[');
+  if (idx === -1) return [stripped, ''];
+  const tail = stripped.slice(idx);
+  // 尾部若是未闭合的疑似标记前缀（"[", "[W", "[ROUND_EN"…），扣住等更多数据再判断
+  if (/^\[[A-Z_]*$/.test(tail)) return [stripped.slice(0, idx), tail];
+  return [stripped, ''];
 }
+
+// 流末清理：pendingTail 只剩未闭合残片（如 "[ROUND_EN"），无法判断语义，剥离丢弃
+function cleanTail(pending: string): string {
+  return pending.replace(/\[[A-Z_]*$/, '').trimEnd();
+}
+
+// 各角色轮次的参考节奏（写进 prompt 供面试官参考，不再是机械硬约束）
+const PACE_HINTS: Record<RoundRole, string> = {
+  screener: '2-3',
+  griller: '3-4',
+  cross: '2-3',
+  executive: '1-2',
+};
 
 const TYPE_LABELS: Record<string, { zh: string; en: string }> = {
   technical: { zh: '技术面试', en: 'Technical Interview' },
@@ -76,7 +80,8 @@ function buildSystemPrompt(
   language: string,
   interviewer: Interviewer | null,
   isNewInterviewer: boolean,
-  roundRole: RoundRole | null
+  roundRole: RoundRole | null,
+  isLastRound: boolean
 ) {
   const typeLabel = TYPE_LABELS[interviewType]?.[language === 'en' ? 'en' : 'zh'] || interviewType;
   const persona = interviewer ? getPersona(interviewer.id) : null;
@@ -111,7 +116,12 @@ Rules you MUST follow (this is a REAL interview):
 6. Talk like a real person: mostly short sentences; natural fillers ("Mm-hmm.", "I see.", "Right.") and quick interrupting follow-ups are welcome. Plain conversational text only — no headings, no bullet lists, no bracketed markers, no essay structures ("Firstly... Secondly..."), no stacked formalities.
 7. Keep each response under 80 words — real interviewers are crisp and never lecture.
 8. If the candidate fails twice in a row to get to the point on a topic, drop it decisively and move to the next area — real interviewers don't flog a dead horse.
-9. NEVER repeat a question that has already been asked in this interview (including earlier rounds), and do not re-ask the same topic in different wording. Each of your questions must cover NEW ground.`;
+9. NEVER repeat a question that has already been asked in this interview (including earlier rounds), and do not re-ask the same topic in different wording. Each of your questions must cover NEW ground.
+10. YOU CONTROL THE PACE. Based on the candidate's performance, decide when to move on — put the control marker on the LAST line of your reply (invisible to the candidate):
+- When this round has covered enough: close with one natural sentence ("Alright, I have what I need."), then output [ROUND_END] on the last line.
+- When the candidate is clearly below the bar and continuing wastes everyone's time: wrap up gracefully in 2-3 sentences, then output [ELIMINATE] on the last line. This is your power — use it when deserved, don't drag it out.${isLastRound ? `\n- When you judge the whole interview can end: close naturally in 2-3 sentences ("That's all for today — our HR will be in touch."), then output [WRAP_UP] on the last line.` : ''}
+These control markers are the ONLY bracketed content you may ever output — never invent any other bracketed markers.
+Reference pace for this round: about ${roundRole ? PACE_HINTS[roundRole] : '3-5'} questions. Wrap up decisively when you've probed enough — never pad with filler questions; but don't bail early if key areas are still uncovered.`;
   }
 
   const zhTitle = roundRole ? ROLE_TITLES[roundRole].zh : '面试官';
@@ -141,7 +151,12 @@ ${personaBlock}${behaviorBlock}${missionBlock}${switchNote}
 6. 说人话：短句为主，允许自然的语气词（嗯、好、这样啊）和打断式短追问；纯对话文本输出，禁止任何标题、列表、方括号标记，禁止"首先/其次/综上所述"这类书面语结构，禁止客套话堆砌。
 7. 每轮回复控制在100字以内——真实面试官说话短促有力，从不长篇大论。
 8. 候选人连续两次答不到点上：果断放弃这个话题，转入下一个考察点。真实面试官不会在榨不出内容的问题上纠缠。
-9. 严禁重复本场面试中已经问过的问题（包括之前轮次），也不得换种说法重问同一主题，每次提问必须覆盖新的考察点。`;
+9. 严禁重复本场面试中已经问过的问题（包括之前轮次），也不得换种说法重问同一主题，每次提问必须覆盖新的考察点。
+10.【节奏由你掌控】根据候选人的表现自主决定何时推进——把控制标记放在回复的【最后一行】（候选人看不到标记）：
+- 本轮考察已足够：用一句话自然收尾（如"好，我这边了解得差不多了"），最后一行输出 [ROUND_END]
+- 候选人明显不达标、继续只是浪费时间：用 2-3 句话体面结束，最后一行输出 [ELIMINATE]——这是你的权力，该用就用，不要硬撑${isLastRound ? '\n- 你认为整场面试可以结束时：用 2-3 句话自然收尾（如"今天就到这里，后续 HR 会与你联系"），最后一行输出 [WRAP_UP]' : ''}
+除上述控制标记外，严禁输出任何其他方括号内容，不要自创标记。
+本轮参考节奏：一般 ${roundRole ? PACE_HINTS[roundRole] : '3-5'} 个问题左右收尾。聊透了就果断结束，不为凑数而追问；关键考察点没覆盖到就继续，不草率收场。`;
 }
 
 function interviewerPayload(interviewer: Interviewer, round: number, totalRounds: number, role: RoundRole | null, sessionInterviewers?: Interviewer[]) {
@@ -248,7 +263,7 @@ export async function POST(request: NextRequest) {
       const script = isGauntlet ? GAUNTLET_SCRIPTS[rounds] ?? null : null;
       const firstRole: RoundRole | null = script ? script[0] : null;
 
-      const systemPrompt = buildSystemPrompt(interviewType, jdText + resumeContext, language, firstInterviewer, false, firstRole);
+      const systemPrompt = buildSystemPrompt(interviewType, jdText + resumeContext, language, firstInterviewer, false, firstRole, rounds === 1);
       const llmMessages = [
         { role: 'system' as const, content: systemPrompt },
         {
@@ -352,57 +367,39 @@ export async function POST(request: NextRequest) {
     const currentRound: number = session.current_round || 1;
     const sessionCompany: string = session.target_company || '';
 
-    // 追加候选人回答（归属当前轮）
     const currentInterviewerId = interviewerIds[currentRound - 1] || null;
-    messages.push({ role: 'candidate', content: answer, round: currentRound, interviewerId: currentInterviewerId ?? undefined, ts: Date.now() });
+    // switchNext：上一轮面试官主动收尾（[ROUND_END]）后，前端请求下一位面试官开场——无候选人新回答
+    const isSwitchNext = body.switchNext === true;
+    if (!isSwitchNext) {
+      if (!answer || !String(answer).trim()) {
+        return new Response(JSON.stringify({ error: '缺少回答内容' }), { status: 400 });
+      }
+      // 追加候选人回答（归属当前轮）
+      messages.push({ role: 'candidate', content: String(answer), round: currentRound, interviewerId: currentInterviewerId ?? undefined, ts: Date.now() });
+    }
 
     const script = sessionMode === 'gauntlet' ? GAUNTLET_SCRIPTS[rounds] ?? null : null;
-
-    // 判断本轮是否答满题数（闯关模式轮末节点；题数配额按轮次角色差异化：
-    // HR 初筛 2 题、业务深挖 3 题、交叉面 2 题、高管终面 1 题）
-    const answersThisRound = messages.filter((m) => m.role === 'candidate' && m.round === currentRound).length;
-    const currentRole: RoundRole | null = script ? script[currentRound - 1] ?? null : null;
-    const questionQuota = currentRole ? ROUND_QUESTION_QUOTA[currentRole] : QUESTIONS_PER_ROUND;
-    const reachedRoundEnd =
-      sessionMode === 'gauntlet' && answersThisRound >= questionQuota && currentRound < rounds;
-
     const llmClient = new LLMClient(new Config(), HeaderUtils.extractForwardHeaders(request.headers));
 
-    // 任意环节淘汰判定：每次候选人作答后，面试官都有权单方面立即终止面试（无需等轮末）。
-    // 判定基于本场全程对话，默认继续——仅明显不达标才淘汰（见 judgeElimination）
-    const eliminated = await judgeElimination(
-      llmClient,
-      session.job_description || '',
-      messages,
-      currentRound,
-      rounds,
-      language
-    );
-    const shouldSwitch = reachedRoundEnd && !eliminated;
-    const nextRound = shouldSwitch ? currentRound + 1 : currentRound;
-    const nextInterviewerId = interviewerIds[nextRound - 1] || currentInterviewerId;
-    const rawInterviewer =
-      INTERVIEWERS.find((i) => i.id === (shouldSwitch ? nextInterviewerId : currentInterviewerId)) || null;
+    // 面试官自主掌控节奏：淘汰、轮末收尾、整场结束全部由面试官（LLM）通过
+    // 标记协议决定——不再有机械题数切换，也没有独立于面试官人格的淘汰裁判
+    const rawInterviewer = INTERVIEWERS.find((i) => i.id === currentInterviewerId) || null;
     // 性格画像分配到本场目标公司（兼容无 target_company 的历史会话）
     const activeInterviewer: Interviewer | null =
       rawInterviewer && sessionCompany ? assignToCompany(rawInterviewer, sessionCompany) : rawInterviewer;
 
-    const activeRole: RoundRole | null = script ? script[nextRound - 1] ?? null : null;
+    const activeRole: RoundRole | null = script ? script[currentRound - 1] ?? null : null;
+    const isLastRound = currentRound >= rounds;
 
-    let systemPrompt = buildSystemPrompt(
+    const systemPrompt = buildSystemPrompt(
       session.interview_type,
       session.job_description || '',
       language,
       activeInterviewer,
-      shouldSwitch,
-      activeRole
+      isSwitchNext,
+      activeRole,
+      isLastRound
     );
-    if (eliminated) {
-      // 淘汰：以面试官人设体面收尾，不评价、不说明理由、不再提问
-      systemPrompt += language === 'en'
-        ? `\n\nIMPORTANT: You have decided to end this interview early — the candidate's performance in your round did not meet the bar. In your persona's tone, wrap up gracefully in 2-3 sentences (e.g. "That's all for today. Thank you for your time — our HR will be in touch about next steps."). Do NOT evaluate their performance, do NOT give reasons, and do NOT ask any more questions.`
-        : `\n\n【重要】你已决定提前结束本场面试——候选人在本轮的表现未达到通过标准。用你人设的语气，2-3 句话体面收尾（例如"今天的面试就到这里，感谢你的时间，后续 HR 会与你联系"）。不要评价表现，不要说明理由，不要再提问。`;
-    }
 
     // 构建 LLM 消息历史（保留最近 30 条，控制上下文）
     const llmMessages: Array<{ role: 'system' | 'user' | 'assistant'; content: string }> = [
@@ -425,19 +422,31 @@ export async function POST(request: NextRequest) {
       ? `\n\nQuestions already asked (including previous rounds). Do NOT repeat them or re-ask the same topic in different wording — but you MAY probe details the candidate just mentioned:\n${askedQuestions}`
       : `\n\n【已问过的问题（含之前轮次）】禁止重复提问或换种说法重问同一主题；但可以针对候选人刚才回答中未展开的细节追问：\n${askedQuestions}`;
 
+    // 兜底催促：超出参考节奏仍未主动收尾时，强制要求本条回复收尾（防失控，正常不会触发）
+    const answersThisRound = messages.filter((m) => m.role === 'candidate' && m.round === currentRound).length;
+    const questionQuota = activeRole ? ROUND_QUESTION_QUOTA[activeRole] : QUESTIONS_PER_ROUND + 1;
+    const overdueNote = !isSwitchNext && answersThisRound > questionQuota
+      ? (language === 'en'
+          ? `\n\n[System note] This round is running way over pace. You MUST wrap up in this reply and put ${isLastRound ? '[WRAP_UP]' : '[ROUND_END]'} on the last line.`
+          : `\n\n【系统提示】本轮已明显超出参考节奏，你必须在本次回复中收尾，并在最后一行输出 ${isLastRound ? '[WRAP_UP]' : '[ROUND_END]'}。`)
+      : '';
+
+    // 防御：switchNext 正常只在上轮 [ROUND_END] 后触发（轮次已推进）；若本轮面试官已开过场
+    // （异常时序/重试），用"继续"文案避免重复自我介绍与重复提问
+    const hasOpeningThisRound = messages.some((m) => m.role === 'interviewer' && m.round === currentRound);
     llmMessages.push({
       role: 'user',
-      content: eliminated
-        ? (language === 'en'
-            ? 'The candidate has finished answering. Now close the interview in character — no more questions.'
-            : '候选人已作答完毕。请以你的人设结束本场面试，不要再提问。')
-        : shouldSwitch
-        ? (language === 'en'
-            ? 'The previous round is over. You are the new interviewer for the next round — begin now.'
-            : '上一轮已结束，你是下一轮的新面试官，请开始。') + noRepeatNote
+      content: isSwitchNext
+        ? (hasOpeningThisRound
+            ? (language === 'en'
+                ? 'Continue the interview — ask your next question (you have already introduced yourself).'
+                : '请继续面试，提出你的下一个问题（你已做过自我介绍，不要重复）。')
+            : (language === 'en'
+                ? 'The previous round is over. You are the new interviewer for this round — begin now.'
+                : '上一轮已结束，你是本轮新接手的面试官，请开始。')) + noRepeatNote
         : (language === 'en'
-            ? 'The candidate has answered. Continue the interview in character — probe deeper or ask your next question. Do NOT evaluate the answer.'
-            : '候选人已回答。请以你的人设继续面试——追问细节或提出下一个问题，不要评价回答。') + noRepeatNote,
+            ? 'The candidate has answered. Continue in character — probe deeper, ask your next question, or close out per your pace control (marker on the last line). Do NOT evaluate the answer.'
+            : '候选人已回答。请以你的人设继续面试——追问细节、提出下一个问题，或按你的节奏判断收尾（标记放在最后一行）。不要评价回答。') + noRepeatNote + overdueNote,
     });
 
     const encoder = new TextEncoder();
@@ -452,55 +461,76 @@ export async function POST(request: NextRequest) {
             const sessionInterviewers = interviewerIds
               .map((id) => INTERVIEWERS.find((i) => i.id === id))
               .filter((i): i is Interviewer => Boolean(i));
-            const payload = interviewerPayload(activeInterviewer, nextRound, rounds, activeRole, sessionInterviewers);
-            if (eliminated) {
-              // 淘汰帧：前端收到后展示"面试提前结束"并自动进入评估流程（不发 roundStart，避免误触发轮间等待）
-              controller.enqueue(
-                encoder.encode(`data: ${JSON.stringify({ eliminated: true, round: currentRound, interviewer: payload.interviewer })}\n\n`)
-              );
-            } else if (shouldSwitch) {
-              // 轮次切换帧
+            const payload = interviewerPayload(activeInterviewer, currentRound, rounds, activeRole, sessionInterviewers);
+            if (isSwitchNext) {
+              // 下一位面试官开场帧（round > 1 时前端触发轮间等待，开场内容后台累积）
               controller.enqueue(
                 encoder.encode(`data: ${JSON.stringify({ roundStart: true, ...payload })}\n\n`)
               );
             } else {
-              // 同轮追问帧：仅携带面试官信息，刷新音色/语速
+              // 同轮帧：仅携带面试官信息，刷新音色/语速
               controller.enqueue(
                 encoder.encode(`data: ${JSON.stringify({ interviewer: payload.interviewer })}\n\n`)
               );
             }
           }
 
+          // 流式输出：剥离控制标记（[ROUND_END]/[ELIMINATE]/[WRAP_UP] 及 LLM 自创的同类标记），候选人永远看不到
+          let pendingTail = '';
+          const markerState: { marker: ControlMarker | null } = { marker: null };
           const stream = llmClient.stream(llmMessages, { temperature: 0.8 });
           for await (const chunk of stream) {
             if (chunk.content) {
-              const text = chunk.content.toString();
-              fullContent += text;
-              controller.enqueue(encoder.encode(`data: ${JSON.stringify({ content: text })}\n\n`));
+              pendingTail += chunk.content.toString();
+              const [emit, rest] = splitMarkerSafe(pendingTail, markerState);
+              pendingTail = rest;
+              if (emit) {
+                fullContent += emit;
+                controller.enqueue(encoder.encode(`data: ${JSON.stringify({ content: emit })}\n\n`));
+              }
             }
           }
 
-          const newMessages: ChatMessage[] = [
-            ...messages,
-            {
+          // 流结束：补发尾部正文残片，确定面试官的节奏决定
+          const tailText = cleanTail(pendingTail);
+          if (tailText) {
+            fullContent += tailText;
+            controller.enqueue(encoder.encode(`data: ${JSON.stringify({ content: tailText })}\n\n`));
+          }
+          // 防御：最后一轮输出 [ROUND_END] 等同于整场结束
+          const finalMarker: ControlMarker | null =
+            markerState.marker === 'round_end' && isLastRound ? 'wrap_up' : markerState.marker;
+
+          const newMessages: ChatMessage[] = [...messages];
+          if (fullContent.trim()) {
+            newMessages.push({
               role: 'interviewer',
               content: fullContent,
-              round: nextRound,
+              round: currentRound,
               interviewerId: activeInterviewer?.id,
               ts: Date.now(),
-            },
-          ];
+            });
+          }
           await client
             .from('interview_sessions')
             .update({
               messages: newMessages,
-              current_round: nextRound,
-              // 淘汰即结束：直接标记完成，后续评估流程只读
-              ...(eliminated ? { status: 'completed' } : {}),
+              // 本轮自然结束：轮次推进，下一位面试官待开场
+              current_round: finalMarker === 'round_end' ? currentRound + 1 : currentRound,
+              // 淘汰/整场结束：会话完成，后续评估流程只读
+              ...(finalMarker === 'eliminate' || finalMarker === 'wrap_up' ? { status: 'completed' } : {}),
               updated_at: new Date().toISOString(),
             })
             .eq('id', sessionId);
 
+          // 节奏事件帧（done 之前下发，前端据此自动衔接下一面试官或进入评估）
+          if (finalMarker === 'round_end') {
+            controller.enqueue(encoder.encode(`data: ${JSON.stringify({ roundEnd: true, round: currentRound })}\n\n`));
+          } else if (finalMarker === 'eliminate') {
+            controller.enqueue(encoder.encode(`data: ${JSON.stringify({ eliminated: true, round: currentRound })}\n\n`));
+          } else if (finalMarker === 'wrap_up') {
+            controller.enqueue(encoder.encode(`data: ${JSON.stringify({ wrapUp: true })}\n\n`));
+          }
           controller.enqueue(encoder.encode(`data: ${JSON.stringify({ done: true })}\n\n`));
           controller.close();
         } catch (error) {

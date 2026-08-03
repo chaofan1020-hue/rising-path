@@ -320,6 +320,8 @@ export default function MockInterviewPage() {
   // 闯关轮末淘汰：面试官判定表现不达标，面试提前结束（自动进入评估）
   const [eliminated, setEliminated] = useState(false);
   const [eliminatedRound, setEliminatedRound] = useState<number | null>(null);
+  // 面试官判断整场面试聊完，主动收尾（自动进入评估）
+  const [interviewWrapped, setInterviewWrapped] = useState(false);
 
   // 轮次间"等待焦虑"状态
   const [waitingNextRound, setWaitingNextRound] = useState(false);
@@ -652,7 +654,9 @@ export default function MockInterviewPage() {
       let buffer = "";
       let newSessionId: number | null = null;
       let activeInterviewer: typeof currentInterviewer = null;
-      let eliminatedInfo: { round: number } | null = null; // 轮末淘汰信息
+      let eliminatedInfo: { round: number } | null = null; // 淘汰信息
+      let roundEnded = false; // 面试官主动结束本轮（衔接下一位）
+      let wrappedUp = false; // 面试官判断整场面试结束（进入评估）
       let holding = false; // 等待焦虑期间：内容后台累积不显示
 
       // 先插入一条空的面试官消息用于流式填充
@@ -674,8 +678,16 @@ export default function MockInterviewPage() {
               setSessionId(data.sessionId);
             }
             if (data.eliminated) {
-              // 轮末淘汰：附带当前面试官信息（音色供结束语 TTS 使用）
+              // 淘汰：面试官单方面终止面试
               eliminatedInfo = { round: data.round || 1 };
+            }
+            if (data.roundEnd) {
+              // 本轮自然结束：面试官主动收尾，需自动衔接下一位
+              roundEnded = true;
+            }
+            if (data.wrapUp) {
+              // 整场面试自然结束：面试官判断聊完了
+              wrappedUp = true;
             }
             if (data.interviewer) {
               // 淘汰帧/轮次切换帧/同轮追问帧都会携带面试官信息——
@@ -733,7 +745,7 @@ export default function MockInterviewPage() {
         });
       }
       setStreaming(false);
-      return { fullContent, newSessionId, activeInterviewer, eliminatedInfo };
+      return { fullContent, newSessionId, activeInterviewer, eliminatedInfo, roundEnded, wrappedUp };
     },
     [accessCodeId, language, startRoundTimer, finishRoundWait]
   );
@@ -968,9 +980,9 @@ export default function MockInterviewPage() {
     if (!text.trim() || streaming) return;
     setMessages((prev) => [...prev, { role: "candidate", content: text }]);
     try {
-      const { fullContent, activeInterviewer, eliminatedInfo } = await streamInterviewer({ sessionId, answer: text });
+      const { fullContent, activeInterviewer, eliminatedInfo, roundEnded, wrappedUp } = await streamInterviewer({ sessionId, answer: text });
       if (eliminatedInfo) {
-        // 轮末淘汰：等面试官结束语播完 → 停设备 → 淘汰覆盖层 → 自动进入评估
+        // 淘汰：面试官单方面终止面试——等结束语播完 → 停设备 → 覆盖层 → 自动进入评估
         await playInterviewerAudio(fullContent, (activeInterviewer ?? currentInterviewer)?.voice, (activeInterviewer ?? currentInterviewer)?.speechRate);
         setEliminated(true);
         setEliminatedRound(eliminatedInfo.round);
@@ -980,7 +992,22 @@ export default function MockInterviewPage() {
         await generateSummary(eliminatedInfo.round);
         return;
       }
+      if (wrappedUp) {
+        // 整场自然结束：面试官判断聊完了——等收尾语播完 → 停设备 → 覆盖层 → 自动进入评估
+        await playInterviewerAudio(fullContent, (activeInterviewer ?? currentInterviewer)?.voice, (activeInterviewer ?? currentInterviewer)?.speechRate);
+        setInterviewWrapped(true);
+        setListening(false);
+        stopCamera();
+        clearPressure();
+        await generateSummary();
+        return;
+      }
       playInterviewerAudio(fullContent, (activeInterviewer ?? currentInterviewer)?.voice, (activeInterviewer ?? currentInterviewer)?.speechRate);
+      if (roundEnded) {
+        // 面试官主动结束本轮：自动请下一位开场（switchNext 响应带 roundStart，触发 8-16s 轮间等待）
+        const next = await streamInterviewer({ sessionId, switchNext: true });
+        playInterviewerAudio(next.fullContent, (next.activeInterviewer ?? currentInterviewer)?.voice, (next.activeInterviewer ?? currentInterviewer)?.speechRate);
+      }
     } catch {
       alert(t("mockInterview.sendFailed"));
     }
@@ -1100,6 +1127,7 @@ export default function MockInterviewPage() {
     setRoundRoleLabel(null);
     setEliminated(false);
     setEliminatedRound(null);
+    setInterviewWrapped(false);
     setListening(false);
     setSetupOpen(true);
     clearPressure();
@@ -1353,6 +1381,20 @@ export default function MockInterviewPage() {
               </h2>
               <p className="text-sm text-zinc-400 mb-8 max-w-sm text-center px-6">
                 {t("mockInterview.eliminatedDesc")}
+              </p>
+              <Loader2 className="h-6 w-6 text-zinc-500 animate-spin" />
+            </div>
+          )}
+          {interviewWrapped && (
+            <div className="fixed inset-0 z-50 flex flex-col items-center justify-center bg-zinc-950/95 backdrop-blur animate-in fade-in duration-500">
+              <div className="h-16 w-16 rounded-full bg-zinc-500/10 border border-zinc-500/20 flex items-center justify-center mb-6">
+                <Check className="h-7 w-7 text-zinc-300" />
+              </div>
+              <h2 className="text-xl font-semibold text-zinc-100 mb-2">
+                {t("mockInterview.wrapUpTitle")}
+              </h2>
+              <p className="text-sm text-zinc-400 mb-8 max-w-sm text-center px-6">
+                {t("mockInterview.wrapUpDesc")}
               </p>
               <Loader2 className="h-6 w-6 text-zinc-500 animate-spin" />
             </div>
