@@ -106,7 +106,7 @@ ${personaBlock}${behaviorBlock}${missionBlock}${switchNote}
 8. 严禁重复本场面试中已经问过的问题（包括之前轮次），也不得换种说法重问同一主题，每次提问必须覆盖新的考察点。`;
 }
 
-function interviewerPayload(interviewer: Interviewer, round: number, totalRounds: number, role: RoundRole | null) {
+function interviewerPayload(interviewer: Interviewer, round: number, totalRounds: number, role: RoundRole | null, sessionInterviewers?: Interviewer[]) {
   const persona = getPersona(interviewer.id);
   const archetype = ARCHETYPE_PARAMS[persona.archetype];
   return {
@@ -121,7 +121,7 @@ function interviewerPayload(interviewer: Interviewer, round: number, totalRounds
       title: role ? { zh: ROLE_TITLES[role].zh, en: ROLE_TITLES[role].en } : null,
       personality: interviewer.personality,
       gender: interviewer.gender,
-      voice: getInterviewerVoice(interviewer),
+      voice: getInterviewerVoice(interviewer, sessionInterviewers),
       speechRate: getInterviewerSpeechRate(interviewer),
       archetype: persona.archetype,
       archetypeLabel: { zh: archetype.labelZh, en: archetype.labelEn },
@@ -250,7 +250,7 @@ export async function POST(request: NextRequest) {
           try {
             controller.enqueue(encoder.encode(`data: ${JSON.stringify({ sessionId: currentSessionId })}\n\n`));
             controller.enqueue(
-              encoder.encode(`data: ${JSON.stringify({ roundStart: true, ...interviewerPayload(firstInterviewer, 1, rounds, firstRole) })}\n\n`)
+              encoder.encode(`data: ${JSON.stringify({ roundStart: true, ...interviewerPayload(firstInterviewer, 1, rounds, firstRole, interviewers) })}\n\n`)
             );
 
             const stream = llmClient.stream(llmMessages, { temperature: 0.8 });
@@ -381,8 +381,13 @@ export async function POST(request: NextRequest) {
         try {
           // 切换轮次时先发送 roundStart 事件
           if (shouldSwitch && activeInterviewer) {
+            // 用 DB 中的 interviewer_ids 重构全场次面试官列表（顺序即剧本顺序），
+            // 供音色分配做场次级去重——同一场面试任意两位面试官音色不同
+            const sessionInterviewers = interviewerIds
+              .map((id) => INTERVIEWERS.find((i) => i.id === id))
+              .filter((i): i is Interviewer => Boolean(i));
             controller.enqueue(
-              encoder.encode(`data: ${JSON.stringify({ roundStart: true, ...interviewerPayload(activeInterviewer, nextRound, rounds, activeRole) })}\n\n`)
+              encoder.encode(`data: ${JSON.stringify({ roundStart: true, ...interviewerPayload(activeInterviewer, nextRound, rounds, activeRole, sessionInterviewers) })}\n\n`)
             );
           }
 

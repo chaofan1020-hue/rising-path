@@ -578,31 +578,54 @@ export function getPersona(id: number): PersonaInfo {
 
 // ===== 语音人性化：音色与语速按人格原型匹配 =====
 // saturn 系列为配音/角色演绎音色，语气和起伏更贴近真人；uranus 通用音色作为补充
+// 每个原型的【首选音色】在六个原型间互不重复，保证不同性格一开口就有辨识度；
+// 同一场面试内再通过 assignSessionVoices 做场次级去重，确保任意两位面试官音色不同
 const VOICE_MAP: Record<InterviewerArchetype, { female: string[]; male: string[] }> = {
   ice_tech: {
-    female: ['zh_female_vv_uranus_bigtts', 'zh_female_mizai_saturn_bigtts'],
-    male: ['zh_male_m191_uranus_bigtts', 'zh_male_dayi_saturn_bigtts'],
+    female: ['zh_female_mizai_saturn_bigtts', 'zh_female_vv_uranus_bigtts', 'zh_female_xiaohe_uranus_bigtts'],
+    male: ['zh_male_m191_uranus_bigtts', 'saturn_zh_male_tiancaitongzhuo_tob', 'zh_male_dayi_saturn_bigtts'],
   },
   pressure_finance: {
-    female: ['zh_female_vv_uranus_bigtts', 'zh_female_jitangnv_saturn_bigtts'],
-    male: ['zh_male_taocheng_uranus_bigtts', 'zh_male_dayi_saturn_bigtts'],
+    female: ['zh_female_jitangnv_saturn_bigtts', 'zh_female_vv_uranus_bigtts', 'zh_female_mizai_saturn_bigtts'],
+    male: ['zh_male_dayi_saturn_bigtts', 'zh_male_taocheng_uranus_bigtts', 'zh_male_m191_uranus_bigtts'],
   },
   warm_mentor: {
-    female: ['zh_female_santongyongns_saturn_bigtts', 'saturn_zh_female_cancan_tob'],
-    male: ['zh_male_ruyayichen_saturn_bigtts', 'zh_male_taocheng_uranus_bigtts'],
+    female: ['zh_female_santongyongns_saturn_bigtts', 'zh_female_xueayi_saturn_bigtts', 'saturn_zh_female_cancan_tob'],
+    male: ['zh_male_ruyayichen_saturn_bigtts', 'zh_male_taocheng_uranus_bigtts', 'zh_male_m191_uranus_bigtts'],
   },
   creative_eclectic: {
-    female: ['zh_female_mizai_saturn_bigtts', 'zh_female_jitangnv_saturn_bigtts'],
-    male: ['zh_male_dayi_saturn_bigtts', 'zh_male_ruyayichen_saturn_bigtts'],
+    female: ['saturn_zh_female_cancan_tob', 'zh_female_jitangnv_saturn_bigtts', 'zh_female_xiaohe_uranus_bigtts'],
+    male: ['saturn_zh_male_shuanglangshaonian_tob', 'saturn_zh_male_tiancaitongzhuo_tob', 'zh_male_ruyayichen_saturn_bigtts'],
   },
   culture_guardian: {
-    female: ['zh_female_xiaohe_uranus_bigtts', 'zh_female_santongyongns_saturn_bigtts'],
-    male: ['zh_male_taocheng_uranus_bigtts', 'zh_male_m191_uranus_bigtts'],
+    female: ['zh_female_xiaohe_uranus_bigtts', 'saturn_zh_female_cancan_tob', 'zh_female_xueayi_saturn_bigtts'],
+    male: ['zh_male_taocheng_uranus_bigtts', 'zh_male_ruyayichen_saturn_bigtts', 'zh_male_dayi_saturn_bigtts'],
   },
   silent_executive: {
-    female: ['zh_female_mizai_saturn_bigtts', 'zh_female_xiaohe_uranus_bigtts'],
-    male: ['zh_male_m191_uranus_bigtts', 'zh_male_dayi_saturn_bigtts'],
+    female: ['zh_female_vv_uranus_bigtts', 'zh_female_xueayi_saturn_bigtts', 'zh_female_mizai_saturn_bigtts'],
+    male: ['saturn_zh_male_tiancaitongzhuo_tob', 'zh_male_m191_uranus_bigtts', 'zh_male_ruyayichen_saturn_bigtts'],
   },
+};
+
+// 全量性别音色池（职业场景可用）：原型偏好都被占用时从这里兜底，保证场次内不重复
+const GENDER_VOICE_POOLS: Record<'female' | 'male', string[]> = {
+  female: [
+    'zh_female_vv_uranus_bigtts',
+    'zh_female_xiaohe_uranus_bigtts',
+    'zh_female_mizai_saturn_bigtts',
+    'zh_female_jitangnv_saturn_bigtts',
+    'zh_female_santongyongns_saturn_bigtts',
+    'saturn_zh_female_cancan_tob',
+    'zh_female_xueayi_saturn_bigtts',
+  ],
+  male: [
+    'zh_male_m191_uranus_bigtts',
+    'zh_male_taocheng_uranus_bigtts',
+    'zh_male_dayi_saturn_bigtts',
+    'zh_male_ruyayichen_saturn_bigtts',
+    'saturn_zh_male_shuanglangshaonian_tob',
+    'saturn_zh_male_tiancaitongzhuo_tob',
+  ],
 };
 
 // 各原型语速微调（-50 ~ 100）：语速变化是真人感的关键——匀速正是 AI 腔的主要来源
@@ -616,7 +639,32 @@ const SPEECH_RATE_MAP: Record<InterviewerArchetype, number> = {
   silent_executive: -10,
 };
 
-export function getInterviewerVoice(it: Interviewer): string {
+// 场次级音色分配：按面试官在剧本中的出场顺序依次分配，
+// 优先使用该原型的首选音色，已被同场占用则顺延，原型偏好用尽后用全量性别池兜底。
+// 纯函数：同一组面试官（顺序一致）每次计算结果相同，保证各请求间音色一致。
+export function assignSessionVoices(interviewers: Interviewer[]): Map<number, string> {
+  const taken = new Set<string>();
+  const assigned = new Map<number, string>();
+  for (const it of interviewers) {
+    const gender = it.gender === 'female' ? 'female' : 'male';
+    const prefs = VOICE_MAP[getPersona(it.id).archetype][gender];
+    let voice = prefs.find((v) => !taken.has(v));
+    if (!voice) voice = GENDER_VOICE_POOLS[gender].find((v) => !taken.has(v));
+    if (!voice) {
+      // 极端情况（同性别面试官超过池大小）：按 id 确定性循环复用
+      const pool = GENDER_VOICE_POOLS[gender];
+      voice = pool[it.id % pool.length];
+    }
+    taken.add(voice);
+    assigned.set(it.id, voice);
+  }
+  return assigned;
+}
+
+export function getInterviewerVoice(it: Interviewer, sessionInterviewers?: Interviewer[]): string {
+  if (sessionInterviewers && sessionInterviewers.some((s) => s.id === it.id)) {
+    return assignSessionVoices(sessionInterviewers).get(it.id)!;
+  }
   const persona = getPersona(it.id);
   const pool = VOICE_MAP[persona.archetype][it.gender === 'female' ? 'female' : 'male'];
   return pool[it.id % pool.length];
