@@ -317,6 +317,9 @@ export default function MockInterviewPage() {
   } | null>(null);
   const [roundTransition, setRoundTransition] = useState(false);
   const [roundRoleLabel, setRoundRoleLabel] = useState<{ zh: string; en: string } | null>(null);
+  // 闯关轮末淘汰：面试官判定表现不达标，面试提前结束（自动进入评估）
+  const [eliminated, setEliminated] = useState(false);
+  const [eliminatedRound, setEliminatedRound] = useState<number | null>(null);
 
   // 轮次间"等待焦虑"状态
   const [waitingNextRound, setWaitingNextRound] = useState(false);
@@ -582,8 +585,9 @@ export default function MockInterviewPage() {
   }, []);
 
   // 播放面试官语音（TTS，支持面试官专属音色与人格语速）
+  // 返回的 Promise 在播放结束（或失败兜底）时 resolve——淘汰流程需要等结束语播完再进评估
   const playInterviewerAudio = useCallback(
-    async (text: string, speaker?: string, speechRate?: number) => {
+    async (text: string, speaker?: string, speechRate?: number): Promise<void> => {
       if (!accessCodeId || !text.trim()) return;
       try {
         setSpeaking(true);
@@ -611,17 +615,17 @@ export default function MockInterviewPage() {
         }
         audio.pause();
         const blobUrl = URL.createObjectURL(new Blob([buf], { type: "audio/mpeg" }));
-        const release = () => URL.revokeObjectURL(blobUrl);
-        audio.src = blobUrl;
-        audio.onended = () => {
-          release();
-          setSpeaking(false);
-        };
-        audio.onerror = () => {
-          release();
-          setSpeaking(false);
-        };
-        await audio.play();
+        await new Promise<void>((resolve) => {
+          const done = () => {
+            URL.revokeObjectURL(blobUrl);
+            setSpeaking(false);
+            resolve();
+          };
+          audio.src = blobUrl;
+          audio.onended = done;
+          audio.onerror = done;
+          audio.play().catch(done); // 自动播放被拒等异常：直接兜底结束
+        });
       } catch {
         setSpeaking(false);
       }
@@ -648,6 +652,7 @@ export default function MockInterviewPage() {
       let buffer = "";
       let newSessionId: number | null = null;
       let activeInterviewer: typeof currentInterviewer = null;
+      let eliminatedInfo: { round: number } | null = null; // 轮末淘汰信息
       let holding = false; // 等待焦虑期间：内容后台累积不显示
 
       // 先插入一条空的面试官消息用于流式填充
@@ -667,6 +672,14 @@ export default function MockInterviewPage() {
             if (data.sessionId) {
               newSessionId = data.sessionId;
               setSessionId(data.sessionId);
+            }
+            if (data.eliminated) {
+              // 轮末淘汰：附带当前面试官信息（音色供结束语 TTS 使用）
+              eliminatedInfo = { round: data.round || 1 };
+              if (data.interviewer) {
+                activeInterviewer = data.interviewer;
+                setCurrentInterviewer(data.interviewer);
+              }
             }
             if (data.roundStart && data.interviewer) {
               activeInterviewer = data.interviewer;
@@ -720,7 +733,7 @@ export default function MockInterviewPage() {
         });
       }
       setStreaming(false);
-      return { fullContent, newSessionId, activeInterviewer };
+      return { fullContent, newSessionId, activeInterviewer, eliminatedInfo };
     },
     [accessCodeId, language, startRoundTimer, finishRoundWait]
   );
@@ -955,7 +968,18 @@ export default function MockInterviewPage() {
     if (!text.trim() || streaming) return;
     setMessages((prev) => [...prev, { role: "candidate", content: text }]);
     try {
-      const { fullContent, activeInterviewer } = await streamInterviewer({ sessionId, answer: text });
+      const { fullContent, activeInterviewer, eliminatedInfo } = await streamInterviewer({ sessionId, answer: text });
+      if (eliminatedInfo) {
+        // 轮末淘汰：等面试官结束语播完 → 停设备 → 淘汰覆盖层 → 自动进入评估
+        await playInterviewerAudio(fullContent, activeInterviewer?.voice, activeInterviewer?.speechRate);
+        setEliminated(true);
+        setEliminatedRound(eliminatedInfo.round);
+        setListening(false);
+        stopCamera();
+        clearPressure();
+        await generateSummary(eliminatedInfo.round);
+        return;
+      }
       playInterviewerAudio(fullContent, activeInterviewer?.voice, activeInterviewer?.speechRate);
     } catch {
       alert(t("mockInterview.sendFailed"));
@@ -963,7 +987,7 @@ export default function MockInterviewPage() {
   };
 
   // 生成评估报告（SSE 流式）；失败时进入可重试状态
-  const generateSummary = async () => {
+  const generateSummary = async (eliminatedAtRound?: number) => {
     if (!sessionId) return;
     setEnding(true);
     setReportError(false);
@@ -971,7 +995,7 @@ export default function MockInterviewPage() {
       const res = await fetch("/api/interview/summary", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ accessCodeId, sessionId, language }),
+        body: JSON.stringify({ accessCodeId, sessionId, language, eliminatedRound: eliminatedAtRound ?? eliminatedRound ?? undefined }),
       });
       if (!res.ok) throw new Error("failed");
       const reader = res.body?.getReader();
@@ -1074,6 +1098,8 @@ export default function MockInterviewPage() {
     setCurrentInterviewer(null);
     setRoundTransition(false);
     setRoundRoleLabel(null);
+    setEliminated(false);
+    setEliminatedRound(null);
     setListening(false);
     setSetupOpen(true);
     clearPressure();
@@ -1316,6 +1342,21 @@ export default function MockInterviewPage() {
         <div className="min-h-screen bg-zinc-950 flex flex-col">
           {/* TTS 播放元素（固定元素，供音波频谱分析） */}
           <audio ref={audioRef} className="hidden" />
+          {/* 轮末淘汰覆盖层：面试官提前结束面试，自动进入评估 */}
+          {eliminated && (
+            <div className="fixed inset-0 z-50 flex flex-col items-center justify-center bg-zinc-950/95 backdrop-blur animate-in fade-in duration-500">
+              <div className="h-16 w-16 rounded-full bg-red-500/10 border border-red-500/20 flex items-center justify-center mb-6">
+                <PhoneOff className="h-7 w-7 text-red-400" />
+              </div>
+              <h2 className="text-xl font-semibold text-zinc-100 mb-2">
+                {t("mockInterview.eliminatedTitle")}
+              </h2>
+              <p className="text-sm text-zinc-400 mb-8 max-w-sm text-center px-6">
+                {t("mockInterview.eliminatedDesc")}
+              </p>
+              <Loader2 className="h-6 w-6 text-zinc-500 animate-spin" />
+            </div>
+          )}
           {/* 顶部栏 */}
           <div className="flex items-center justify-between px-4 md:px-6 py-3 bg-zinc-900/80 backdrop-blur border-b border-zinc-800">
             <div className="flex items-center gap-3">
@@ -1624,7 +1665,7 @@ export default function MockInterviewPage() {
                   <p className="text-red-600 dark:text-red-400 text-sm mb-6">{t("mockInterview.summaryFailed")}</p>
                   <div className="flex gap-3">
                     <Button
-                      onClick={generateSummary}
+                      onClick={() => generateSummary()}
                       disabled={ending}
                       className="rounded-full bg-zinc-900 hover:bg-zinc-700 dark:bg-white dark:text-zinc-900 dark:hover:bg-zinc-200 text-white px-6"
                     >

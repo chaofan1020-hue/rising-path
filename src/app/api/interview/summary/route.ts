@@ -158,7 +158,7 @@ function salvageJson(raw: string): unknown | null {
 export async function POST(request: NextRequest) {
   try {
     const client = getSupabaseClient();
-    const { accessCodeId, sessionId, language = 'zh' } = await request.json();
+    const { accessCodeId, sessionId, language = 'zh', eliminatedRound } = await request.json();
 
     if (!accessCodeId || !sessionId) {
       return new Response(JSON.stringify({ error: '缺少必要参数' }), { status: 400 });
@@ -302,8 +302,15 @@ export async function POST(request: NextRequest) {
   "annotations": [ { "msgIndex": <面试记录消息序号，从0开始>, "label": "短标签，如 模糊词汇/数据缺失/高光时刻", "note": "一句标注" } ]  // 3-5 条，只标关键时刻
 }`;
 
+    // 淘汰上下文：闯关轮末被卡掉时，评议结论必须体现提前淘汰（pass=false，评级下调）
+    const eliminatedNote = eliminatedRound
+      ? (language === 'en'
+          ? `\n\nIMPORTANT: The candidate was ELIMINATED by the interviewer at the end of round ${eliminatedRound} — the interview ended early. The verdict must reflect this early elimination: pass must be false, and grades should be calibrated accordingly.`
+          : `\n\n重要：候选人在第 ${eliminatedRound} 轮结束时被面试官淘汰，面试提前终止。最终结论必须体现这次提前淘汰——pass 必须为 false，评级相应下调。`)
+      : '';
+
     const userPrompt = language === 'en'
-      ? `A ${isGauntlet ? `${rounds}-round gauntlet` : 'single-round'} mock interview (${session.interview_type}) is complete.
+      ? `A ${isGauntlet ? `${rounds}-round gauntlet` : 'single-round'} mock interview (${session.interview_type}) is complete.${eliminatedNote}
 
 Job Description:
 ${session.job_description}
@@ -317,7 +324,7 @@ ${transcript}
 ${jsonSpec}
 
 Requirements: committee array must cover EVERY panel member in round order; every interviewer's voice must match their persona; be brutally specific, cite real transcript moments; keep each comment under 120 words to ensure complete JSON output.`
-      : `一场${isGauntlet ? `${rounds}轮闯关` : '单轮'}模拟面试（${session.interview_type}）已结束。
+      : `一场${isGauntlet ? `${rounds}轮闯关` : '单轮'}模拟面试（${session.interview_type}）已结束。${eliminatedNote}
 
 岗位描述：
 ${session.job_description}

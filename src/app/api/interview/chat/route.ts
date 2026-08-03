@@ -27,6 +27,40 @@ interface ChatMessage {
 
 const QUESTIONS_PER_ROUND = 2;
 
+// 轮末淘汰判定：把本轮问答交给面试官（LLM）裁决，决定候选人放行进入下一轮还是提前淘汰。
+// 严格性控制：prompt 明确"默认放行"，仅在回答明显空洞敷衍、严重答非所问、完全无法胜任时才淘汰；
+// 判定调用失败时同样默认放行，避免误杀。
+async function judgeElimination(
+  llmClient: LLMClient,
+  jobDescription: string,
+  roundMessages: ChatMessage[],
+  round: number,
+  totalRounds: number,
+  language: string
+): Promise<boolean> {
+  const transcript = roundMessages
+    .map((m) => {
+      const who = m.role === 'interviewer'
+        ? (language === 'en' ? 'Interviewer' : '面试官')
+        : (language === 'en' ? 'Candidate' : '候选人');
+      return `${who}: ${m.content.slice(0, 500)}`;
+    })
+    .join('\n');
+  const prompt = language === 'en'
+    ? `You are a strict but fair interviewer reviewing a candidate's performance in round ${round} of ${totalRounds} of an interview for this position:\n${jobDescription.slice(0, 800)}\n\nRound ${round} transcript:\n${transcript}\n\nDecide whether the candidate proceeds to the next round. IMPORTANT: Default to "pass" — most candidates should proceed. Only choose "eliminate" when the answers are clearly empty or perfunctory, severely off-topic, or show the candidate is fundamentally unfit for the role. Reply with JSON only: {"decision":"pass"} or {"decision":"eliminate"}`
+    : `你是一位严格但公正的面试官，正在审议候选人在以下岗位面试第 ${round}/${totalRounds} 轮的表现：\n${jobDescription.slice(0, 800)}\n\n第 ${round} 轮对话：\n${transcript}\n\n请裁决候选人是否进入下一轮。重要：默认放行（pass）——大多数候选人都应进入下一轮；仅当回答明显空洞敷衍、严重答非所问、或表现出完全无法胜任该岗位时才淘汰（eliminate）。只输出 JSON：{"decision":"pass"} 或 {"decision":"eliminate"}`;
+  try {
+    let out = '';
+    const stream = llmClient.stream([{ role: 'user', content: prompt }], { temperature: 0.2 });
+    for await (const chunk of stream) {
+      if (chunk.content) out += chunk.content.toString();
+    }
+    return /"decision"\s*:\s*"eliminate"/.test(out);
+  } catch {
+    return false;
+  }
+}
+
 const TYPE_LABELS: Record<string, { zh: string; en: string }> = {
   technical: { zh: '技术面试', en: 'Technical Interview' },
   behavioral: { zh: '行为面试', en: 'Behavioral Interview' },
@@ -316,10 +350,26 @@ export async function POST(request: NextRequest) {
     const currentInterviewerId = interviewerIds[currentRound - 1] || null;
     messages.push({ role: 'candidate', content: answer, round: currentRound, interviewerId: currentInterviewerId ?? undefined, ts: Date.now() });
 
-    // 判断是否需要切换到下一面试官
+    // 判断本轮是否答满题数（闯关模式轮末节点）
     const answersThisRound = messages.filter((m) => m.role === 'candidate' && m.round === currentRound).length;
-    const shouldSwitch =
+    const reachedRoundEnd =
       sessionMode === 'gauntlet' && answersThisRound >= QUESTIONS_PER_ROUND && currentRound < rounds;
+
+    const llmClient = new LLMClient(new Config(), HeaderUtils.extractForwardHeaders(request.headers));
+
+    // 轮末淘汰判定：面试官有权在任意一轮卡掉表现明显不达标的候选人（默认放行，见 judgeElimination）
+    let eliminated = false;
+    if (reachedRoundEnd) {
+      eliminated = await judgeElimination(
+        llmClient,
+        session.job_description || '',
+        messages.filter((m) => m.round === currentRound),
+        currentRound,
+        rounds,
+        language
+      );
+    }
+    const shouldSwitch = reachedRoundEnd && !eliminated;
     const nextRound = shouldSwitch ? currentRound + 1 : currentRound;
     const nextInterviewerId = interviewerIds[nextRound - 1] || currentInterviewerId;
     const rawInterviewer =
@@ -331,7 +381,7 @@ export async function POST(request: NextRequest) {
     const script = sessionMode === 'gauntlet' ? GAUNTLET_SCRIPTS[rounds] ?? null : null;
     const activeRole: RoundRole | null = script ? script[nextRound - 1] ?? null : null;
 
-    const systemPrompt = buildSystemPrompt(
+    let systemPrompt = buildSystemPrompt(
       session.interview_type,
       session.job_description || '',
       language,
@@ -339,6 +389,12 @@ export async function POST(request: NextRequest) {
       shouldSwitch,
       activeRole
     );
+    if (eliminated) {
+      // 淘汰：以面试官人设体面收尾，不评价、不说明理由、不再提问
+      systemPrompt += language === 'en'
+        ? `\n\nIMPORTANT: You have decided to end this interview early — the candidate's performance in your round did not meet the bar. In your persona's tone, wrap up gracefully in 2-3 sentences (e.g. "That's all for today. Thank you for your time — our HR will be in touch about next steps."). Do NOT evaluate their performance, do NOT give reasons, and do NOT ask any more questions.`
+        : `\n\n【重要】你已决定提前结束本场面试——候选人在本轮的表现未达到通过标准。用你人设的语气，2-3 句话体面收尾（例如"今天的面试就到这里，感谢你的时间，后续 HR 会与你联系"）。不要评价表现，不要说明理由，不要再提问。`;
+    }
 
     // 构建 LLM 消息历史（保留最近 30 条，控制上下文）
     const llmMessages: Array<{ role: 'system' | 'user' | 'assistant'; content: string }> = [
@@ -363,7 +419,11 @@ export async function POST(request: NextRequest) {
 
     llmMessages.push({
       role: 'user',
-      content: shouldSwitch
+      content: eliminated
+        ? (language === 'en'
+            ? 'The candidate has finished answering. Now close the interview in character — no more questions.'
+            : '候选人已作答完毕。请以你的人设结束本场面试，不要再提问。')
+        : shouldSwitch
         ? (language === 'en'
             ? 'The previous round is over. You are the new interviewer for the next round — begin now.'
             : '上一轮已结束，你是下一轮的新面试官，请开始。') + noRepeatNote
@@ -372,15 +432,24 @@ export async function POST(request: NextRequest) {
             : '候选人已回答。请以你的人设继续面试——追问细节或提出下一个问题，不要评价回答。') + noRepeatNote,
     });
 
-    const llmClient = new LLMClient(new Config(), HeaderUtils.extractForwardHeaders(request.headers));
     const encoder = new TextEncoder();
     let fullContent = '';
 
     const readableStream = new ReadableStream({
       async start(controller) {
         try {
-          // 切换轮次时先发送 roundStart 事件
-          if (shouldSwitch && activeInterviewer) {
+          if (eliminated && activeInterviewer) {
+            // 淘汰帧：前端收到后展示"面试提前结束"并自动进入评估流程。
+            // 附带当前面试官 payload（含场次去重后的音色），供结束语 TTS 使用——
+            // 不发 roundStart，避免前端误触发轮次切换等待
+            const sessionInterviewers = interviewerIds
+              .map((id) => INTERVIEWERS.find((i) => i.id === id))
+              .filter((i): i is Interviewer => Boolean(i));
+            const payload = interviewerPayload(activeInterviewer, currentRound, rounds, activeRole, sessionInterviewers);
+            controller.enqueue(
+              encoder.encode(`data: ${JSON.stringify({ eliminated: true, round: currentRound, interviewer: payload.interviewer })}\n\n`)
+            );
+          } else if (shouldSwitch && activeInterviewer) {
             // 用 DB 中的 interviewer_ids 重构全场次面试官列表（顺序即剧本顺序），
             // 供音色分配做场次级去重——同一场面试任意两位面试官音色不同
             const sessionInterviewers = interviewerIds
@@ -415,6 +484,8 @@ export async function POST(request: NextRequest) {
             .update({
               messages: newMessages,
               current_round: nextRound,
+              // 淘汰即结束：直接标记完成，后续评估流程只读
+              ...(eliminated ? { status: 'completed' } : {}),
               updated_at: new Date().toISOString(),
             })
             .eq('id', sessionId);
