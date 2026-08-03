@@ -35,6 +35,7 @@ import Image from 'next/image';
 import { AccessGuard, useAccessCode } from '@/components/access-guard';
 import { Header1 } from '@/components/header1';
 import { SegmentationCard, type Segmentation } from '@/components/segmentation-card';
+import { Footer } from '@/components/footer';
 import { Target, Wand2, Send, CheckCircle2 } from 'lucide-react';
 import { useLanguage } from '@/lib/language-context';
 
@@ -768,6 +769,8 @@ function ResumeContent() {
           )}
         </div>
       </main>
+
+      <Footer />
     </div>
   );
 }

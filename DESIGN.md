@@ -31,6 +31,14 @@
 - 卡片：暖白色背景，微妙阴影
 - 图标：使用主色或辅助色
 
+## 页脚（Footer，src/components/footer.tsx）
+- 结构：品牌名+标语居中 → 导航链接 → 大号背景品牌字（ clamp(3rem,12vw,10rem)，tracking-tighter）→ 底部悬浮 Logo 方块 + 渐变分割线 + 渐隐阴影 → 版权行
+- 大号背景字：品牌渐变渐隐 `from-terracotta-500/25 via-sage-500/15 to-transparent` bg-clip-text
+- 底部 Logo：`from-terracotta-500 to-terracotta-600` 渐变方块 + Route 白色图标（Rising Path 语义）
+- 其余用语义色（border/background/muted-foreground），暗色自适应
+- 导航链接复用 nav.* 翻译；社交外链默认不展示（无真实账号，勿编造 URL）
+- 版权年份客户端注入（useEffect），防 hydration 差异
+
 ## 交互与状态
 - 悬停：颜色加深 10%
 - 激活：颜色加深 20%

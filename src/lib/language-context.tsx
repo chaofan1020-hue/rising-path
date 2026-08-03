@@ -27,6 +27,8 @@ const translations: Record<Locale, Record<string, string>> = {
     "nav.autoApplication": "自动网申",
     "nav.admin": "后台管理",
     "nav.login": "登录",
+    "footer.tagline": "专为海外留学生打造的一站式求职平台",
+    "footer.rights": "版权所有。",
     "nav.getStarted": "登录",
     "nav.logout": "退出",
     // 功能卡片
@@ -456,6 +458,8 @@ const translations: Record<Locale, Record<string, string>> = {
     "nav.autoApplication": "自動網申",
     "nav.admin": "後台管理",
     "nav.login": "登入",
+    "footer.tagline": "專為海外留學生打造的一站式求職平台",
+    "footer.rights": "版權所有。",
     "nav.getStarted": "登錄",
     "nav.logout": "退出",
     // 功能卡片
@@ -885,6 +889,8 @@ const translations: Record<Locale, Record<string, string>> = {
     "nav.autoApplication": "Auto Application",
     "nav.admin": "Admin",
     "nav.login": "Log in",
+    "footer.tagline": "One-stop career platform for international students",
+    "footer.rights": "All rights reserved.",
     "nav.getStarted": "Login",
     "nav.logout": "Log out",
     // Features
