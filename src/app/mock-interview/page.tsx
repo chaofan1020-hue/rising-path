@@ -323,6 +323,17 @@ export default function MockInterviewPage() {
   // 视频/语音状态
   const [cameraOn, setCameraOn] = useState(false);
   const [micError, setMicError] = useState(false);
+  // 麦克风错误细分：denied=权限被拒 nodevice=无设备 busy=被占用 unknown=其他
+  const [micErrorKind, setMicErrorKind] = useState<"denied" | "nodevice" | "busy" | "unknown" | null>(null);
+  // 是否运行在嵌入预览（iframe）中：iframe 内浏览器会直接禁止麦克风权限请求
+  const [inIframe, setInIframe] = useState(false);
+  useEffect(() => {
+    try {
+      setInIframe(window.self !== window.top);
+    } catch {
+      setInIframe(true); // 跨域访问 top 抛错即视为 iframe
+    }
+  }, []);
   const [cameraError, setCameraError] = useState(false);
   const [recording, setRecording] = useState(false);
   const [recognizing, setRecognizing] = useState(false);
@@ -641,8 +652,18 @@ export default function MockInterviewPage() {
     if (streaming || recognizing || speaking) return;
     try {
       let stream = streamRef.current;
-      if (!stream) {
-        stream = await navigator.mediaDevices.getUserMedia({ audio: true });
+      // 复用流必须含活跃音轨：摄像头流可能只有视频轨（用户单独拒绝了音频），需重新请求
+      const hasLiveAudio = !!stream?.getAudioTracks().some((tr) => tr.readyState === "live");
+      if (!stream || !hasLiveAudio) {
+        const audioStream = await navigator.mediaDevices.getUserMedia({ audio: true });
+        if (stream && stream.getVideoTracks().some((tr) => tr.readyState === "live")) {
+          // 保留摄像头视频轨，替换音轨
+          stream.getAudioTracks().forEach((tr) => { tr.stop(); stream!.removeTrack(tr); });
+          audioStream.getAudioTracks().forEach((tr) => stream!.addTrack(tr));
+        } else {
+          stream?.getTracks().forEach((tr) => tr.stop());
+          stream = audioStream;
+        }
         streamRef.current = stream;
       }
       audioChunksRef.current = [];
@@ -655,7 +676,14 @@ export default function MockInterviewPage() {
       recorder.start();
       setRecording(true);
       setMicError(false);
-    } catch {
+      setMicErrorKind(null);
+    } catch (err) {
+      // 细分错误类型，给出可操作的引导
+      const name = err instanceof DOMException ? err.name : "";
+      if (name === "NotAllowedError" || name === "SecurityError") setMicErrorKind("denied");
+      else if (name === "NotFoundError" || name === "OverconstrainedError") setMicErrorKind("nodevice");
+      else if (name === "NotReadableError" || name === "AbortError") setMicErrorKind("busy");
+      else setMicErrorKind("unknown");
       setMicError(true);
     }
   };
@@ -1259,9 +1287,32 @@ export default function MockInterviewPage() {
           {/* 底部控制胶囊 */}
           <div className="relative z-30 pb-5 pt-1 flex flex-col items-center gap-2">
             {(micError || (noSpeech && !micError)) && (
-              <p className={`text-xs ${micError ? "text-red-400" : "text-amber-400"}`}>
-                {micError ? t("mockInterview.micError") : t("mockInterview.noSpeech")}
-              </p>
+              <div className="flex flex-col items-center gap-1 px-4 text-center">
+                <p className={`text-xs ${micError ? "text-red-400" : "text-amber-400"}`}>
+                  {micError
+                    ? micErrorKind === "denied"
+                      ? t("mockInterview.micDenied")
+                      : micErrorKind === "nodevice"
+                        ? t("mockInterview.micNoDevice")
+                        : micErrorKind === "busy"
+                          ? t("mockInterview.micBusy")
+                          : t("mockInterview.micError")
+                    : t("mockInterview.noSpeech")}
+                </p>
+                {micError && micErrorKind === "denied" && (
+                  <p className="text-zinc-500 text-[11px] max-w-md leading-relaxed">
+                    {t("mockInterview.micDeniedGuide")}
+                  </p>
+                )}
+                {micError && inIframe && (
+                  <button
+                    onClick={() => window.open(window.location.href, "_blank")}
+                    className="mt-1 px-3 py-1 rounded-full bg-white/10 hover:bg-white/15 text-zinc-200 text-[11px] transition-colors"
+                  >
+                    {t("mockInterview.openInNewTab")}
+                  </button>
+                )}
+              </div>
             )}
             <div className="flex items-center gap-2.5 md:gap-3 rounded-full bg-zinc-900/70 backdrop-blur-xl border border-white/10 px-3.5 py-2.5 shadow-2xl">
               {/* 字幕开关 */}
