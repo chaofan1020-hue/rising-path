@@ -40,21 +40,21 @@ function OptionSelect({
       <PopoverTrigger asChild>
         <button
           disabled={disabled}
-          className="w-full h-11 inline-flex items-center gap-2 px-4 rounded-xl border border-white/10 bg-zinc-900/60 text-sm text-white hover:border-[#C46A4A]/50 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+          className="w-full h-11 inline-flex items-center gap-2 px-4 rounded-xl border border-gray-200 dark:border-zinc-700 bg-white dark:bg-zinc-900 text-sm text-black dark:text-white hover:border-[#C46A4A]/50 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
         >
-          <Icon className="h-4 w-4 text-zinc-500 flex-shrink-0" />
-          <span className={`flex-1 text-left truncate ${selected ? "" : "text-zinc-500"}`}>
+          <Icon className="h-4 w-4 text-gray-400 flex-shrink-0" />
+          <span className={`flex-1 text-left truncate ${selected ? "" : "text-gray-400 dark:text-gray-500"}`}>
             {selected ? selected.text : placeholder}
           </span>
-          <ChevronDown className="h-4 w-4 text-zinc-500 flex-shrink-0" />
+          <ChevronDown className="h-4 w-4 text-gray-400 flex-shrink-0" />
         </button>
       </PopoverTrigger>
-      <PopoverContent className="w-[var(--radix-popover-trigger-width)] p-1 max-h-64 overflow-y-auto bg-zinc-900 border-white/10 text-zinc-200" align="start">
+      <PopoverContent className="w-[var(--radix-popover-trigger-width)] p-1 max-h-64 overflow-y-auto" align="start">
         <div className="space-y-0.5">
           <button
             onClick={() => { onChange(""); setOpen(false); }}
             className={`w-full flex items-center gap-2 text-left px-3 py-2 rounded-md text-sm transition-colors ${
-              !value ? "bg-[#C46A4A] text-white" : "hover:bg-white/5"
+              !value ? "bg-primary text-primary-foreground" : "hover:bg-muted"
             }`}
           >
             {!value && <Check className="h-3.5 w-3.5" />}
@@ -65,7 +65,7 @@ function OptionSelect({
               key={opt.value}
               onClick={() => { onChange(opt.value); setOpen(false); }}
               className={`w-full flex items-center gap-2 text-left px-3 py-2 rounded-md text-sm transition-colors ${
-                value === opt.value ? "bg-[#C46A4A] text-white" : "hover:bg-white/5"
+                value === opt.value ? "bg-primary text-primary-foreground" : "hover:bg-muted"
               }`}
             >
               {value === opt.value && <Check className="h-3.5 w-3.5 flex-shrink-0" />}
@@ -845,27 +845,22 @@ export default function MockInterviewPage() {
   if (stage === "setup") {
     return (
       <AccessGuard>
-        <div className="min-h-screen bg-zinc-950 relative">
-          {/* 背景微光 */}
-          <div className="pointer-events-none absolute inset-0 overflow-hidden">
-            <div className="absolute -top-32 left-1/4 h-80 w-80 rounded-full bg-[#C46A4A]/10 blur-3xl" />
-            <div className="absolute bottom-0 right-1/4 h-80 w-80 rounded-full bg-[#B5BEB0]/10 blur-3xl" />
-          </div>
+        <div className="min-h-screen bg-white dark:bg-black">
           <Header1 />
-          <main className="relative py-8 md:py-12">
+          <main className="py-8 md:py-12">
             <div className="container mx-auto px-4 max-w-3xl">
               <div className="mb-8 text-center">
-                <div className="inline-flex items-center justify-center h-12 w-12 rounded-2xl bg-gradient-to-br from-[#C46A4A] to-[#B5BEB0] mb-3 shadow-lg shadow-[#C46A4A]/20">
+                <div className="inline-flex items-center justify-center h-12 w-12 rounded-2xl bg-gradient-to-br from-[#C46A4A] to-[#B5BEB0] mb-3">
                   <Bot className="h-6 w-6 text-white" />
                 </div>
-                <h1 className="text-3xl md:text-4xl font-light text-white mb-2">
+                <h1 className="text-3xl md:text-4xl font-light text-black dark:text-white mb-2">
                   {t("mockInterview.title")}
                 </h1>
-                <p className="text-zinc-400">{t("mockInterview.subtitle")}</p>
+                <p className="text-gray-500 dark:text-gray-400">{t("mockInterview.subtitle")}</p>
               </div>
 
-              <div className="rounded-3xl border border-white/10 bg-zinc-900/70 backdrop-blur-xl shadow-2xl p-6 md:p-8">
-                <h2 className="text-xl font-semibold text-white mb-6">
+              <div className="rounded-3xl border-0 bg-gradient-to-br from-[#C46A4A]/5 via-white to-[#E2D0B8]/10 dark:from-[#C46A4A]/10 dark:via-zinc-900 dark:to-[#E2D0B8]/5 shadow-lg p-6 md:p-8">
+                <h2 className="text-xl font-semibold text-black dark:text-white mb-6">
                   {t("mockInterview.setupTitle")}
                 </h2>
 
