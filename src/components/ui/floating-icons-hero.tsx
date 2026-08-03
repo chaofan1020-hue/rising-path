@@ -20,7 +20,6 @@ export interface FloatingIconsHeroProps {
   ctaHref: string;
   icons: IconProps[];
   onCtaClick?: () => void;
-  logo?: React.ReactNode;
 }
 
 // A single icon component with its own motion logic
@@ -107,7 +106,7 @@ const Icon = ({
 const FloatingIconsHero = React.forwardRef<
   HTMLDivElement,
   React.HTMLAttributes<HTMLDivElement> & FloatingIconsHeroProps
->(({ className, title, subtitle, ctaText, ctaHref, icons, onCtaClick, logo, ...props }, ref) => {
+>(({ className, title, subtitle, ctaText, ctaHref, icons, onCtaClick, ...props }, ref) => {
   const mouseX = React.useRef(0);
   const mouseY = React.useRef(0);
 
@@ -139,16 +138,6 @@ const FloatingIconsHero = React.forwardRef<
       </div>
 
       <div className="relative z-10 text-center px-4">
-        {logo && (
-          <motion.div
-            initial={{ opacity: 0, y: -16, scale: 0.9 }}
-            animate={{ opacity: 1, y: 0, scale: 1 }}
-            transition={{ duration: 0.7, ease: [0.22, 1, 0.36, 1] }}
-            className="mb-8 flex justify-center text-black dark:text-white"
-          >
-            {logo}
-          </motion.div>
-        )}
         <h1 className="text-5xl md:text-7xl font-bold tracking-tight text-black dark:text-white">
           {title}
         </h1>

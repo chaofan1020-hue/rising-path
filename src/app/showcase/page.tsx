@@ -94,12 +94,6 @@ export default function ShowcasePage() {
             ctaHref="/home"
             icons={demoIcons}
             onCtaClick={handleCtaClick}
-            logo={
-              <svg viewBox="0 0 40 20" fill="currentColor" aria-hidden="true" className="h-14 md:h-16 w-auto">
-                <path d="M0 0h29a4 4 0 0 1 0 8H0V0z" />
-                <path d="M40 20H11a4 4 0 0 1 0-8h29v8z" />
-              </svg>
-            }
           />
         </motion.div>
       )}
