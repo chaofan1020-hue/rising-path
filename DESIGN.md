@@ -55,3 +55,11 @@
 - 按钮 hover 高亮：统一中性浅灰底（hover:bg-zinc-100 dark:hover:bg-zinc-800）+ 文字加深（hover:text-zinc-900）——必须显式覆盖 Button 组件 outline/ghost variant 默认的 hover:bg-accent（全局 accent 为灰绿调，与本页语言冲突）
 - 分层确认卡片：同页内嵌套使用，中性 zinc 系（去品牌渐变底），信息层级靠字重与灰度区分
 - 排版：充裕留白（区块间距 mb-10+）、字重对比（标题 semibold tracking-tight / 正文 zinc-500）
+
+## AI 选岗页 / ATS 优化页（沿用简历页极简黑白灰语言）
+- 与简历管理页同一套 zinc 单色语言：超大水印（AI 选岗 "MATCH"、ATS 优化 "ATS"，规格同 RESUME）、Hero 黑色圆角方块（选岗 Target / 优化 Wand2 图标）、白底 zinc-200 边框卡片、zinc-900 实心主按钮（暗色反转）
+- 卡片语言：rounded-2xl、border-zinc-200、去渐变去彩色顶条；区块标题图标统一黑色圆角小方块（w-6/7 h-6/7 rounded-lg bg-zinc-900 反白图标）
+- 表单控件：Select/Input/textarea 中性边框；筛选 chip、提示卡（JD 结果/AI 建议/Tips）统一 zinc-50 底 + zinc-100/200 边框，原蓝/琥珀/赤陶提示色全部移除
+- 分数与等级不做彩色语义：匹配分数为大号 zinc-900 黑字，等级徽章 zinc-900 实心（高匹配）或 zinc-100 灰底；原绿/黄/红评分色废弃
+- 按钮 hover 同规范：outline/ghost 必须显式 hover:bg-zinc-100 dark:hover:bg-zinc-800 覆盖全局 accent
+- 简历预览组件（ResumePreview）为"纸张"隐喻：保持白底黑字灰分隔线，不随页面语言改动

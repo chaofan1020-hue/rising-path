@@ -46,7 +46,6 @@ import {
   Eye,
 } from 'lucide-react';
 import Link from 'next/link';
-import Image from 'next/image';
 import { Document, Packer, Paragraph, TextRun, HeadingLevel, AlignmentType } from 'docx';
 import { saveAs } from 'file-saver';
 import { AccessGuard, useAccessCode } from '@/components/access-guard';
@@ -874,69 +873,72 @@ function OptimizeContent() {
   };
 
   return (
-    <div className="min-h-screen bg-background">
+    <div className="min-h-screen bg-white dark:bg-zinc-950">
       <Header1 />
-      <main className="container mx-auto px-4 py-4 md:py-8 pt-20">
-        {/* Page Title */}
-        <div className="mb-8 md:mb-12 text-center">
-          <h1 className="text-3xl md:text-4xl font-light mb-3 md:mb-4 flex items-center justify-center gap-2 md:gap-3 text-black dark:text-white">
-            <span className="p-2 rounded-xl bg-gradient-to-br from-terracotta-500 to-sage-500 inline-flex">
-              <svg className="h-6 w-6 md:h-8 md:w-8 text-white" fill="currentColor" viewBox="0 0 24 24">
-                <path d="M7 2v11h3v9l7-12h-4l4-8z" />
-              </svg>
-            </span>
-            {t('optimize.title')}
-          </h1>
-          <p className="text-base md:text-lg text-gray-500 dark:text-gray-400 max-w-2xl mx-auto">
-            {t('optimize.subtitle')}
-          </p>
+      <main className="relative container mx-auto px-4 pt-24 md:pt-28 pb-16">
+        {/* 超大半透明水印背景（极简黑白灰语言） */}
+        <div aria-hidden className="pointer-events-none absolute inset-x-0 top-14 md:top-20 overflow-hidden select-none">
+          <span className="block text-center text-[24vw] md:text-[17vw] leading-[0.85] font-bold tracking-tighter text-zinc-900/[0.045] dark:text-white/[0.05]">
+            ATS
+          </span>
+        </div>
+
+        {/* Hero：黑色圆角图标方块 + 居中标题（悬浮于水印之上） */}
+        <div className="relative mb-10 md:mb-14 text-center">
+          <div className="mx-auto mb-6 w-16 h-16 rounded-2xl bg-zinc-900 dark:bg-white shadow-2xl shadow-zinc-900/25 dark:shadow-black/50 flex items-center justify-center">
+            <Wand2 className="h-7 w-7 text-white dark:text-zinc-900" />
+          </div>
+          <h1 className="text-3xl md:text-4xl font-semibold tracking-tight text-zinc-900 dark:text-white mb-3">{t('optimize.title')}</h1>
+          <p className="text-sm md:text-base text-zinc-500 dark:text-zinc-400 max-w-xl mx-auto">{t('optimize.subtitle')}</p>
         </div>
 
         {/* 历史记录 */}
         {savedRecords.length > 0 && (
-          <Card className="mb-6 md:mb-8">
+          <Card className="relative mb-6 md:mb-8 rounded-2xl border-zinc-200 dark:border-zinc-800 shadow-none">
             <CardHeader className="pb-2 md:pb-4">
-              <CardTitle className="flex items-center gap-2 text-base md:text-lg">
-                <Clock className="h-4 w-4 md:h-5 md:w-5" />
+              <CardTitle className="flex items-center gap-2.5 text-base md:text-lg tracking-tight text-zinc-900 dark:text-zinc-50">
+                <span className="w-7 h-7 rounded-lg bg-zinc-900 dark:bg-white flex items-center justify-center">
+                  <Clock className="h-4 w-4 text-white dark:text-zinc-900" />
+                </span>
                 {t('optimize.history')}
               </CardTitle>
             </CardHeader>
             <CardContent>
               <div className="space-y-2">
                 {savedRecords.slice(0, 5).map((record) => (
-                  <div 
+                  <div
                     key={record.id}
-                    className="flex items-center justify-between p-2 md:p-3 rounded-lg bg-muted/50 hover:bg-muted transition-colors cursor-pointer group"
+                    className="flex items-center justify-between p-2 md:p-3 rounded-xl bg-zinc-50 dark:bg-zinc-900/60 border border-zinc-100 dark:border-zinc-800 hover:bg-zinc-100 dark:hover:bg-zinc-800/80 transition-colors cursor-pointer group"
                     onClick={() => loadRecord(record)}
                   >
                     <div className="flex-1 min-w-0">
                       <div className="flex items-center gap-2">
-                        <span className="text-xs md:text-sm font-medium truncate">
+                        <span className="text-xs md:text-sm font-medium truncate text-zinc-900 dark:text-zinc-100">
                           {record.targetPosition}
                         </span>
                         {record.targetCompany && (
-                          <Badge variant="secondary" className="text-[10px] md:text-xs">
+                          <Badge variant="secondary" className="text-[10px] md:text-xs bg-zinc-100 text-zinc-600 dark:bg-zinc-800 dark:text-zinc-300 hover:bg-zinc-100">
                             {record.targetCompany}
                           </Badge>
                         )}
-                        <Badge variant="outline" className="text-[10px] md:text-xs">
+                        <Badge variant="outline" className="text-[10px] md:text-xs border-zinc-200 dark:border-zinc-700 text-zinc-500 dark:text-zinc-400">
                           {record.isEnglish ? t('optimize.english') : t('optimize.chinese')}
                         </Badge>
                       </div>
                       <div className="flex items-center gap-2 mt-0.5">
-                        <span className="text-[10px] md:text-xs text-muted-foreground truncate">
+                        <span className="text-[10px] md:text-xs text-zinc-400 dark:text-zinc-500 truncate">
                           {record.resumeName}
                         </span>
-                        <span className="text-[10px] md:text-xs text-muted-foreground">
+                        <span className="text-[10px] md:text-xs text-zinc-400 dark:text-zinc-500">
                           {new Date(record.createdAt).toLocaleDateString()}
                         </span>
                       </div>
                     </div>
                     <div className="flex items-center gap-1 ml-2">
-                      <Button 
-                        variant="ghost" 
-                        size="sm" 
-                        className="h-7 w-7 p-0 opacity-0 group-hover:opacity-100 transition-opacity"
+                      <Button
+                        variant="ghost"
+                        size="sm"
+                        className="h-7 w-7 p-0 opacity-0 group-hover:opacity-100 transition-opacity text-zinc-400 hover:text-red-600 hover:bg-red-50 dark:hover:bg-red-950/40"
                         onClick={(e) => {
                           e.stopPropagation();
                           deleteRecord(record.id);
@@ -953,13 +955,15 @@ function OptimizeContent() {
         )}
 
         {/* Optimization Form */}
-        <Card className="mb-6 md:mb-8">
+        <Card className="relative mb-6 md:mb-8 rounded-2xl border-zinc-200 dark:border-zinc-800 shadow-none">
           <CardHeader className="pb-2 md:pb-4">
-            <CardTitle className="flex items-center gap-2 text-base md:text-lg">
-              <Target className="h-4 w-4 md:h-5 md:w-5" />
+            <CardTitle className="flex items-center gap-2.5 text-base md:text-lg tracking-tight text-zinc-900 dark:text-zinc-50">
+              <span className="w-7 h-7 rounded-lg bg-zinc-900 dark:bg-white flex items-center justify-center">
+                <Target className="h-4 w-4 text-white dark:text-zinc-900" />
+              </span>
               {t('optimize.settings')}
             </CardTitle>
-            <CardDescription className="text-xs md:text-sm">
+            <CardDescription className="text-xs md:text-sm text-zinc-500 dark:text-zinc-400">
               {t('optimize.settingsDesc')}
             </CardDescription>
           </CardHeader>
@@ -989,12 +993,12 @@ function OptimizeContent() {
                     onChange={(e) => setTargetCompany(e.target.value)}
                     className="h-9 md:h-10 flex-1"
                   />
-                  <Button 
-                    variant="outline" 
+                  <Button
+                    variant="outline"
                     size="sm"
                     onClick={handleSearchJD}
                     disabled={!targetCompany || !targetPosition || searchingJD}
-                    className="h-9 md:h-10 px-3"
+                    className="h-9 md:h-10 px-3 border-zinc-200 dark:border-zinc-700 text-zinc-600 dark:text-zinc-300 hover:bg-zinc-100 hover:text-zinc-900 dark:hover:bg-zinc-800 dark:hover:text-zinc-100"
                     title={t('optimize.searchJdTitle')}
                   >
                     {searchingJD ? (
@@ -1031,10 +1035,10 @@ function OptimizeContent() {
                   </SelectContent>
                 </Select>
               </div>
-              <Button 
+              <Button
                 onClick={handleOptimize}
                 disabled={!selectedResumeId || !targetPosition || optimizing}
-                className="bg-gradient-to-r from-terracotta-600 to-sage-600 hover:from-terracotta-700 hover:to-sage-700 h-9 md:h-10"
+                className="h-9 md:h-10 bg-zinc-900 text-white hover:bg-zinc-800 dark:bg-white dark:text-zinc-900 dark:hover:bg-zinc-200"
               >
                 {optimizing ? (
                   <>
@@ -1049,7 +1053,7 @@ function OptimizeContent() {
                 )}
               </Button>
               {jdContent && (
-                <Button 
+                <Button
                   variant="outline"
                   size="sm"
                   onClick={() => {
@@ -1057,7 +1061,7 @@ function OptimizeContent() {
                     setJdResults([]);
                     setSuggestions('');
                   }}
-                  className="h-9 md:h-10"
+                  className="h-9 md:h-10 border-zinc-200 dark:border-zinc-700 text-zinc-600 dark:text-zinc-300 hover:bg-zinc-100 hover:text-zinc-900 dark:hover:bg-zinc-800 dark:hover:text-zinc-100"
                 >
                   {t('optimize.clearJd')}
                 </Button>
@@ -1068,30 +1072,32 @@ function OptimizeContent() {
             <div className="mt-3 md:mt-4">
               <div className="flex items-center justify-between mb-1.5 md:mb-2">
                 <label className="text-xs md:text-sm font-medium">{t('optimize.jdLabel')}</label>
-                <span className="text-[10px] md:text-xs text-muted-foreground">{t('optimize.jdHint')}</span>
+                <span className="text-[10px] md:text-xs text-zinc-400 dark:text-zinc-500">{t('optimize.jdHint')}</span>
               </div>
               <textarea
                 placeholder={t('optimize.jdPlaceholder')}
                 value={jdContent}
                 onChange={(e) => setJdContent(e.target.value)}
-                className="w-full min-h-[100px] md:min-h-[120px] p-3 text-xs md:text-sm rounded-lg border border-input bg-background resize-y focus:outline-none focus:ring-2 focus:ring-ring focus:ring-offset-2 placeholder:text-muted-foreground/60"
+                className="w-full min-h-[100px] md:min-h-[120px] p-3 text-xs md:text-sm rounded-lg border border-zinc-200 dark:border-zinc-700 bg-white dark:bg-zinc-900 resize-y focus:outline-none focus:ring-2 focus:ring-zinc-300 dark:focus:ring-zinc-600 placeholder:text-zinc-400/70"
               />
             </div>
 
             {/* JD搜索结果 */}
             {jdContent && (
-              <div className="mt-3 md:mt-4 p-3 md:p-4 rounded-lg bg-blue-50 dark:bg-blue-950/30 border border-blue-200 dark:border-blue-800">
+              <div className="mt-3 md:mt-4 p-3 md:p-4 rounded-xl bg-zinc-50 dark:bg-zinc-900/60 border border-zinc-200 dark:border-zinc-800">
                 <div className="flex items-center gap-2 mb-2">
-                  <Target className="h-4 w-4 text-blue-600" />
-                  <span className="text-xs md:text-sm font-medium text-blue-700 dark:text-blue-400">
+                  <span className="w-6 h-6 rounded-lg bg-zinc-900 dark:bg-white flex items-center justify-center">
+                    <Target className="h-3.5 w-3.5 text-white dark:text-zinc-900" />
+                  </span>
+                  <span className="text-xs md:text-sm font-medium text-zinc-900 dark:text-zinc-100">
                     {t('optimize.jdSet')}
                   </span>
                 </div>
-                <p className="text-xs md:text-sm text-blue-600/80 mb-2">
+                <p className="text-xs md:text-sm text-zinc-500 dark:text-zinc-400 mb-2">
                   {t('optimize.jdSetDesc')}
                 </p>
                 <div className="max-h-32 md:max-h-40 overflow-y-auto">
-                  <p className="text-xs md:text-sm text-muted-foreground whitespace-pre-wrap">
+                  <p className="text-xs md:text-sm text-zinc-600 dark:text-zinc-300 whitespace-pre-wrap">
                     {jdContent}
                   </p>
                 </div>
@@ -1100,14 +1106,16 @@ function OptimizeContent() {
 
             {/* AI匹配优化建议 */}
             {suggestions && (
-              <div className="mt-3 md:mt-4 p-3 md:p-4 rounded-lg bg-terracotta-50 dark:bg-terracotta-950/30 border border-terracotta-200 dark:border-terracotta-800">
+              <div className="mt-3 md:mt-4 p-3 md:p-4 rounded-xl bg-zinc-50 dark:bg-zinc-900/60 border border-zinc-200 dark:border-zinc-800">
                 <div className="flex items-start gap-2 md:gap-3">
-                  <Sparkles className="h-4 w-4 md:h-5 md:w-5 text-terracotta-600 mt-0.5 flex-shrink-0" />
+                  <span className="w-6 h-6 rounded-lg bg-zinc-900 dark:bg-white flex items-center justify-center mt-0.5 flex-shrink-0">
+                    <Sparkles className="h-3.5 w-3.5 text-white dark:text-zinc-900" />
+                  </span>
                   <div className="flex-1">
-                    <h4 className="font-medium text-terracotta-700 dark:text-terracotta-300 mb-1.5 md:mb-2 text-sm md:text-base">
+                    <h4 className="font-medium text-zinc-900 dark:text-zinc-100 mb-1.5 md:mb-2 text-sm md:text-base tracking-tight">
                       {t('optimize.suggestionsTitle')}
                     </h4>
-                    <p className="text-xs md:text-sm text-terracotta-600 dark:text-terracotta-400 whitespace-pre-wrap">
+                    <p className="text-xs md:text-sm text-zinc-600 dark:text-zinc-300 whitespace-pre-wrap">
                       {suggestions}
                     </p>
                   </div>
@@ -1118,7 +1126,7 @@ function OptimizeContent() {
             {optimizing && (
               <div className="mt-3 md:mt-4">
                 <div className="flex items-center justify-between mb-2">
-                  <span className="text-xs md:text-sm text-muted-foreground">{t('optimize.optimizingProgress')}</span>
+                  <span className="text-xs md:text-sm text-zinc-400 dark:text-zinc-500">{t('optimize.optimizingProgress')}</span>
                   <span className="text-xs md:text-sm font-medium">{optimizeProgress}%</span>
                 </div>
                 <Progress value={optimizeProgress} className="h-1.5 md:h-2" />
@@ -1128,30 +1136,36 @@ function OptimizeContent() {
         </Card>
 
         {/* Features */}
-        <div className="grid grid-cols-1 md:grid-cols-3 gap-4 md:gap-6 mb-6 md:mb-8">
-          <Card>
+        <div className="relative grid grid-cols-1 md:grid-cols-3 gap-4 md:gap-6 mb-6 md:mb-8">
+          <Card className="rounded-2xl border-zinc-200 dark:border-zinc-800 shadow-none hover:shadow-lg hover:shadow-zinc-900/[0.05] dark:hover:shadow-black/30 transition-shadow">
             <CardContent className="pt-4 md:pt-6">
-              <CheckCircle className="h-8 w-8 md:h-10 md:w-10 text-green-600 mb-3 md:mb-4" />
-              <h3 className="font-semibold mb-1.5 md:mb-2 text-sm md:text-base">{t('optimize.feature1Title')}</h3>
-              <p className="text-xs md:text-sm text-muted-foreground">
+              <div className="w-10 h-10 rounded-xl bg-zinc-900 dark:bg-white flex items-center justify-center mb-3 md:mb-4">
+                <CheckCircle className="h-5 w-5 text-white dark:text-zinc-900" />
+              </div>
+              <h3 className="font-semibold tracking-tight mb-1.5 md:mb-2 text-sm md:text-base text-zinc-900 dark:text-zinc-50">{t('optimize.feature1Title')}</h3>
+              <p className="text-xs md:text-sm text-zinc-500 dark:text-zinc-400">
                 {t('optimize.feature1Desc')}
               </p>
             </CardContent>
           </Card>
-          <Card>
+          <Card className="rounded-2xl border-zinc-200 dark:border-zinc-800 shadow-none hover:shadow-lg hover:shadow-zinc-900/[0.05] dark:hover:shadow-black/30 transition-shadow">
             <CardContent className="pt-4 md:pt-6">
-              <Target className="h-8 w-8 md:h-10 md:w-10 text-blue-600 mb-3 md:mb-4" />
-              <h3 className="font-semibold mb-1.5 md:mb-2 text-sm md:text-base">{t('optimize.feature2Title')}</h3>
-              <p className="text-xs md:text-sm text-muted-foreground">
+              <div className="w-10 h-10 rounded-xl bg-zinc-900 dark:bg-white flex items-center justify-center mb-3 md:mb-4">
+                <Target className="h-5 w-5 text-white dark:text-zinc-900" />
+              </div>
+              <h3 className="font-semibold tracking-tight mb-1.5 md:mb-2 text-sm md:text-base text-zinc-900 dark:text-zinc-50">{t('optimize.feature2Title')}</h3>
+              <p className="text-xs md:text-sm text-zinc-500 dark:text-zinc-400">
                 {t('optimize.feature2Desc')}
               </p>
             </CardContent>
           </Card>
-          <Card>
+          <Card className="rounded-2xl border-zinc-200 dark:border-zinc-800 shadow-none hover:shadow-lg hover:shadow-zinc-900/[0.05] dark:hover:shadow-black/30 transition-shadow">
             <CardContent className="pt-4 md:pt-6">
-              <Sparkles className="h-8 w-8 md:h-10 md:w-10 text-terracotta-600 mb-3 md:mb-4" />
-              <h3 className="font-semibold mb-1.5 md:mb-2 text-sm md:text-base">{t('optimize.feature3Title')}</h3>
-              <p className="text-xs md:text-sm text-muted-foreground">
+              <div className="w-10 h-10 rounded-xl bg-zinc-900 dark:bg-white flex items-center justify-center mb-3 md:mb-4">
+                <Sparkles className="h-5 w-5 text-white dark:text-zinc-900" />
+              </div>
+              <h3 className="font-semibold tracking-tight mb-1.5 md:mb-2 text-sm md:text-base text-zinc-900 dark:text-zinc-50">{t('optimize.feature3Title')}</h3>
+              <p className="text-xs md:text-sm text-zinc-500 dark:text-zinc-400">
                 {t('optimize.feature3Desc')}
               </p>
             </CardContent>
@@ -1159,13 +1173,13 @@ function OptimizeContent() {
         </div>
 
         {/* Tips */}
-        <Card className="border-amber-200 bg-amber-50 dark:bg-amber-950/20">
+        <Card className="relative rounded-2xl border-dashed border-zinc-200 dark:border-zinc-800 shadow-none bg-zinc-50/60 dark:bg-zinc-900/30">
           <CardContent className="pt-4 md:pt-6">
             <div className="flex items-start gap-2 md:gap-3">
-              <AlertCircle className="h-4 w-4 md:h-5 md:w-5 text-amber-600 mt-0.5" />
+              <AlertCircle className="h-4 w-4 md:h-5 md:w-5 text-zinc-400 dark:text-zinc-500 mt-0.5" />
               <div>
-                <h4 className="font-medium mb-1.5 md:mb-2 text-sm md:text-base">{t('optimize.tipsTitle')}</h4>
-                <ul className="text-xs md:text-sm text-muted-foreground space-y-0.5 md:space-y-1">
+                <h4 className="font-medium tracking-tight mb-1.5 md:mb-2 text-sm md:text-base text-zinc-900 dark:text-zinc-100">{t('optimize.tipsTitle')}</h4>
+                <ul className="text-xs md:text-sm text-zinc-500 dark:text-zinc-400 space-y-0.5 md:space-y-1">
                   <li>• {t('optimize.tip1')}</li>
                   <li>• {t('optimize.tip2')}</li>
                   <li>• {t('optimize.tip3')}</li>
@@ -1181,15 +1195,17 @@ function OptimizeContent() {
       <Dialog open={showResult} onOpenChange={setShowResult}>
         <DialogContent className="!max-w-none w-[95vw] md:w-[90vw] max-h-[90vh] md:h-[85vh] overflow-hidden flex flex-col p-3 md:p-4">
           <DialogHeader className="flex-shrink-0">
-            <DialogTitle className="flex items-center gap-2 text-base md:text-lg">
-              <CheckCircle className="h-4 w-4 md:h-5 md:w-5 text-green-600" />
+            <DialogTitle className="flex items-center gap-2.5 text-base md:text-lg tracking-tight text-zinc-900 dark:text-zinc-50">
+              <span className="w-7 h-7 rounded-lg bg-zinc-900 dark:bg-white flex items-center justify-center">
+                <CheckCircle className="h-4 w-4 text-white dark:text-zinc-900" />
+              </span>
               {t('optimize.resultTitle')}
             </DialogTitle>
-            <DialogDescription className="text-xs md:text-sm">
+            <DialogDescription className="text-xs md:text-sm text-zinc-500 dark:text-zinc-400">
               {t('optimize.resultDesc')}
             </DialogDescription>
           </DialogHeader>
-          
+
           {/* 操作按钮 */}
           <div className="flex flex-wrap justify-end gap-2 mb-2 flex-shrink-0">
             <Button
@@ -1208,7 +1224,7 @@ function OptimizeContent() {
                 }
                 setIsEditing(!isEditing);
               }}
-              className="h-9 text-xs items-center"
+              className={`h-9 text-xs items-center ${isEditing ? 'bg-zinc-900 text-white hover:bg-zinc-800 dark:bg-white dark:text-zinc-900 dark:hover:bg-zinc-200' : 'border-zinc-200 dark:border-zinc-700 text-zinc-600 dark:text-zinc-300 hover:bg-zinc-100 hover:text-zinc-900 dark:hover:bg-zinc-800 dark:hover:text-zinc-100'}`}
             >
               {isEditing ? (
                 <>
@@ -1222,16 +1238,16 @@ function OptimizeContent() {
                 </>
               )}
             </Button>
-            <Button variant="outline" size="sm" onClick={handleCopy} className="h-9 text-xs items-center">
+            <Button variant="outline" size="sm" onClick={handleCopy} className="h-9 text-xs items-center border-zinc-200 dark:border-zinc-700 text-zinc-600 dark:text-zinc-300 hover:bg-zinc-100 hover:text-zinc-900 dark:hover:bg-zinc-800 dark:hover:text-zinc-100">
               <Copy className="mr-1.5 h-3.5 w-3.5" />
               {t('optimize.copy')}
             </Button>
             {resumeData && (
-              <Button variant="outline" size="sm" onClick={handleSave} className="h-9 text-xs items-center relative">
+              <Button variant="outline" size="sm" onClick={handleSave} className="h-9 text-xs items-center relative border-zinc-200 dark:border-zinc-700 text-zinc-600 dark:text-zinc-300 hover:bg-zinc-100 hover:text-zinc-900 dark:hover:bg-zinc-800 dark:hover:text-zinc-100">
                 <Save className="mr-1.5 h-3.5 w-3.5" />
                 {t('optimize.save')}
                 {showSavedToast && (
-                  <span className="absolute -top-8 left-1/2 -translate-x-1/2 bg-green-600 text-white text-xs px-2 py-1 rounded whitespace-nowrap">
+                  <span className="absolute -top-8 left-1/2 -translate-x-1/2 bg-zinc-900 dark:bg-white dark:text-zinc-900 text-white text-xs px-2 py-1 rounded whitespace-nowrap">
                     {t('optimize.saved')}
                   </span>
                 )}
@@ -1240,7 +1256,7 @@ function OptimizeContent() {
             {resumeData && (
               <DropdownMenu>
                 <DropdownMenuTrigger asChild>
-                  <Button variant="outline" size="sm" disabled={translating} className="h-9 text-xs items-center">
+                  <Button variant="outline" size="sm" disabled={translating} className="h-9 text-xs items-center border-zinc-200 dark:border-zinc-700 text-zinc-600 dark:text-zinc-300 hover:bg-zinc-100 hover:text-zinc-900 dark:hover:bg-zinc-800 dark:hover:text-zinc-100">
                     {translating ? (
                       <>
                         <Loader2 className="mr-1.5 h-3.5 w-3.5 animate-spin" />
@@ -1274,7 +1290,7 @@ function OptimizeContent() {
                 </DropdownMenuContent>
               </DropdownMenu>
             )}
-            <Button size="sm" className="h-9 text-xs items-center" onClick={handleDownload} disabled={downloading}>
+            <Button size="sm" className="h-9 text-xs items-center bg-zinc-900 text-white hover:bg-zinc-800 dark:bg-white dark:text-zinc-900 dark:hover:bg-zinc-200" onClick={handleDownload} disabled={downloading}>
               {downloading ? (
                 <>
                   <Loader2 className="mr-1.5 h-3.5 w-3.5 animate-spin" />
@@ -1294,27 +1310,27 @@ function OptimizeContent() {
             {/* 原简历 */}
             <div className="flex flex-col min-h-0 overflow-hidden">
               <div className="flex items-center gap-1.5 md:gap-2 mb-1.5 md:mb-2 flex-shrink-0">
-                <FileText className="h-3.5 w-3.5 md:h-4 md:w-4 text-gray-500" />
-                <h3 className="font-medium text-gray-600 text-xs md:text-sm">{t('optimize.originalResume')}</h3>
+                <FileText className="h-3.5 w-3.5 md:h-4 md:w-4 text-zinc-400" />
+                <h3 className="font-medium text-zinc-500 dark:text-zinc-400 text-xs md:text-sm">{t('optimize.originalResume')}</h3>
               </div>
-              <div className="bg-gray-100 p-2 md:p-3 rounded-lg flex-1 overflow-y-auto min-h-[150px] md:min-h-0">
+              <div className="bg-zinc-100 dark:bg-zinc-800/60 p-2 md:p-3 rounded-lg flex-1 overflow-y-auto min-h-[150px] md:min-h-0">
                 <div className="bg-white p-3 md:p-6 shadow rounded-lg text-xs md:text-sm text-gray-700 whitespace-pre-wrap leading-relaxed">
                   {originalContent}
                 </div>
               </div>
             </div>
-            
+
             {/* 优化后简历 */}
             <div className="flex flex-col min-h-0 overflow-hidden">
               <div className="flex items-center gap-1.5 md:gap-2 mb-1.5 md:mb-2 flex-shrink-0">
-                <Sparkles className="h-3.5 w-3.5 md:h-4 md:w-4 text-green-600" />
-                <h3 className="font-medium text-green-600 text-xs md:text-sm">{t('optimize.optimizedResume')}</h3>
-                <Badge variant="secondary" className="ml-0.5 text-[10px] md:text-xs h-4 md:h-5">{t('optimize.atsBadge')}</Badge>
+                <Sparkles className="h-3.5 w-3.5 md:h-4 md:w-4 text-zinc-900 dark:text-zinc-100" />
+                <h3 className="font-medium text-zinc-900 dark:text-zinc-100 text-xs md:text-sm">{t('optimize.optimizedResume')}</h3>
+                <Badge variant="secondary" className="ml-0.5 text-[10px] md:text-xs h-4 md:h-5 bg-zinc-900 text-white dark:bg-white dark:text-zinc-900 hover:bg-zinc-900">{t('optimize.atsBadge')}</Badge>
               </div>
-              <div className="bg-gray-100 p-2 md:p-3 rounded-lg flex-1 overflow-y-auto min-h-[200px] md:min-h-0">
+              <div className="bg-zinc-100 dark:bg-zinc-800/60 p-2 md:p-3 rounded-lg flex-1 overflow-y-auto min-h-[200px] md:min-h-0">
                 {isEditing ? (
                   <textarea
-                    className="w-full h-full min-h-[300px] bg-white p-3 md:p-6 rounded-lg text-xs md:text-sm text-gray-700 leading-relaxed resize-none focus:outline-none focus:ring-2 focus:ring-primary/30"
+                    className="w-full h-full min-h-[300px] bg-white p-3 md:p-6 rounded-lg text-xs md:text-sm text-gray-700 leading-relaxed resize-none focus:outline-none focus:ring-2 focus:ring-zinc-300 dark:focus:ring-zinc-600"
                     value={editedContent}
                     onChange={(e) => setEditedContent(e.target.value)}
                   />
