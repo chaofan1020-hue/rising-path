@@ -345,6 +345,34 @@ export default function MockInterviewPage() {
   const mediaRecorderRef = useRef<MediaRecorder | null>(null);
   const audioChunksRef = useRef<Blob[]>([]);
   const audioRef = useRef<HTMLAudioElement | null>(null);
+  // 面试官音波图：Web Audio 频谱分析
+  const audioCtxRef = useRef<AudioContext | null>(null);
+  const analyserRef = useRef<AnalyserNode | null>(null);
+  const graphReadyRef = useRef(false);
+  const waveCanvasRef = useRef<HTMLCanvasElement>(null);
+
+  // 建立音频分析图（固定 audio 元素，只建一次）；失败则音波降级为伪动画
+  const ensureAudioGraph = useCallback(() => {
+    const el = audioRef.current;
+    if (!el || graphReadyRef.current) return;
+    try {
+      const Ctor = window.AudioContext ||
+        (window as unknown as { webkitAudioContext?: typeof AudioContext }).webkitAudioContext;
+      if (!Ctor) return;
+      const ctx = new Ctor();
+      const source = ctx.createMediaElementSource(el);
+      const analyser = ctx.createAnalyser();
+      analyser.fftSize = 128; // 64 个频点
+      analyser.smoothingTimeConstant = 0.75;
+      source.connect(analyser);
+      analyser.connect(ctx.destination);
+      audioCtxRef.current = ctx;
+      analyserRef.current = analyser;
+      graphReadyRef.current = true;
+    } catch {
+      // 浏览器不支持：保持静默降级
+    }
+  }, []);
   const messagesEndRef = useRef<HTMLDivElement>(null);
   const waitTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const earlyTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
@@ -395,6 +423,53 @@ export default function MockInterviewPage() {
   useEffect(() => {
     scrollToBottom();
   }, [messages, summary]);
+
+  // 面试官音波图：真实音频频谱驱动（AnalyserNode），不可用时降级为正弦伪音波
+  useEffect(() => {
+    if (stage !== "interview") return;
+    const canvas = waveCanvasRef.current;
+    if (!canvas) return;
+    const ctx2d = canvas.getContext("2d");
+    if (!ctx2d) return;
+    let raf = 0;
+    const dataArr = new Uint8Array(64);
+    const render = () => {
+      raf = requestAnimationFrame(render);
+      const W = canvas.width;
+      const H = canvas.height;
+      ctx2d.clearRect(0, 0, W, H);
+      const analyser = analyserRef.current;
+      let hasData = false;
+      if (analyser) {
+        analyser.getByteFrequencyData(dataArr);
+        hasData = true;
+      }
+      const bars = 56;
+      const gap = 3;
+      const bw = (W - gap * (bars - 1)) / bars;
+      const t = Date.now() / 1000;
+      const grad = ctx2d.createLinearGradient(0, 0, W, 0);
+      grad.addColorStop(0, "#C46A4A");
+      grad.addColorStop(1, "#B5BEB0");
+      ctx2d.fillStyle = grad;
+      for (let i = 0; i < bars; i++) {
+        let amp: number;
+        if (hasData) {
+          // 幂次分布聚焦人声频段，保留静默基线
+          const idx = Math.min(dataArr.length - 1, Math.floor(Math.pow(i / bars, 1.5) * dataArr.length));
+          amp = Math.max(dataArr[idx] / 255, 0.05);
+        } else if (speaking) {
+          amp = 0.25 + 0.55 * Math.abs(Math.sin(t * 3.2 + i * 0.32)) * (0.5 + 0.5 * Math.sin(t * 1.3 + i * 0.11));
+        } else {
+          amp = 0.05 + 0.015 * Math.sin(t * 1.5 + i * 0.4);
+        }
+        const h = Math.max(3, amp * H * 0.92);
+        ctx2d.fillRect(i * (bw + gap), (H - h) / 2, bw, h);
+      }
+    };
+    render();
+    return () => cancelAnimationFrame(raf);
+  }, [stage, speaking]);
 
   // 开启摄像头（遵循 WebRTC 规范：始终渲染 video，等待 loadedmetadata）
   const startCamera = useCallback(async () => {
@@ -495,11 +570,18 @@ export default function MockInterviewPage() {
         if (!res.ok) throw new Error("TTS failed");
         const data = await res.json();
         if (data.audioUri) {
-          if (audioRef.current) {
-            audioRef.current.pause();
+          const audio = audioRef.current;
+          if (!audio) {
+            setSpeaking(false);
+            return;
           }
-          const audio = new Audio(data.audioUri);
-          audioRef.current = audio;
+          // 接入频谱分析（音波图），并确保 AudioContext 处于运行态
+          ensureAudioGraph();
+          if (audioCtxRef.current?.state === "suspended") {
+            audioCtxRef.current.resume().catch(() => {});
+          }
+          audio.pause();
+          audio.src = data.audioUri;
           audio.onended = () => setSpeaking(false);
           audio.onerror = () => setSpeaking(false);
           await audio.play();
@@ -510,7 +592,7 @@ export default function MockInterviewPage() {
         setSpeaking(false);
       }
     },
-    [accessCodeId, language]
+    [accessCodeId, language, ensureAudioGraph]
   );
 
   // 流式请求面试官（复用逻辑：开始面试 / 提交回答）
@@ -648,6 +730,11 @@ export default function MockInterviewPage() {
   // 开始录音（按住说话）
   const startRecording = async () => {
     if (streaming || recognizing || speaking) return;
+    // 借用户手势激活 AudioContext（自动播放策略要求）
+    ensureAudioGraph();
+    if (audioCtxRef.current?.state === "suspended") {
+      audioCtxRef.current.resume().catch(() => {});
+    }
     try {
       let stream = streamRef.current;
       // 复用流必须含活跃音轨：摄像头流可能只有视频轨（用户单独拒绝了音频），需重新请求
@@ -1050,6 +1137,8 @@ export default function MockInterviewPage() {
     return (
       <AccessGuard>
         <div className="min-h-screen bg-zinc-950 flex flex-col">
+          {/* TTS 播放元素（固定元素，供音波频谱分析） */}
+          <audio ref={audioRef} className="hidden" />
           {/* 顶部栏 */}
           <div className="flex items-center justify-between px-4 md:px-6 py-3 bg-zinc-900/80 backdrop-blur border-b border-zinc-800">
             <div className="flex items-center gap-3">
@@ -1129,41 +1218,18 @@ export default function MockInterviewPage() {
           <div className="flex-1 flex flex-col md:flex-row gap-3 p-3 md:p-4 max-w-7xl w-full mx-auto">
             {/* AI 面试官画面 */}
             <div className="flex-1 relative rounded-3xl overflow-hidden bg-gradient-to-br from-zinc-900 to-zinc-800 border border-zinc-800" style={{ aspectRatio: "16/9" }}>
-              <div className="absolute inset-0 flex flex-col items-center justify-center">
-                {/* 头像 + 说话波纹 */}
-                <div className="relative flex items-center justify-center">
-                  {speaking && (
-                    <>
-                      <span className="absolute inset-0 rounded-full bg-[#C46A4A]/30 animate-ping" style={{ animationDuration: "1.6s" }} />
-                      <span className="absolute -inset-4 rounded-full bg-[#C46A4A]/15 animate-ping" style={{ animationDuration: "2.2s" }} />
-                    </>
-                  )}
-                  <div className={`relative h-24 w-24 md:h-32 md:w-32 rounded-full bg-gradient-to-br from-[#C46A4A] to-[#B5BEB0] flex items-center justify-center shadow-2xl shadow-[#C46A4A]/20 transition-transform duration-500 ${speaking ? "scale-105" : "scale-100"}`}>
-                    {currentInterviewer ? (
-                      <span className="text-white text-3xl md:text-5xl font-light">
-                        {currentInterviewer.name.charAt(0).toUpperCase()}
-                      </span>
-                    ) : (
-                      <Bot className="h-12 w-12 md:h-16 md:w-16 text-white" />
-                    )}
-                  </div>
-                </div>
+              <div className="absolute inset-0 flex flex-col items-center justify-center px-6">
+                {/* 面试官音波图（真实音频频谱驱动） */}
+                <canvas
+                  ref={waveCanvasRef}
+                  width={560}
+                  height={128}
+                  className="w-full max-w-sm md:max-w-md h-20 md:h-28"
+                />
                 {currentInterviewer && (
-                  <p className="text-white text-sm md:text-base font-medium mt-3">{currentInterviewer.name}</p>
+                  <p className="text-white text-sm md:text-base font-medium mt-4">{currentInterviewer.name}</p>
                 )}
-                {/* 语音波纹动画 */}
-                {speaking && (
-                  <div className="flex items-end gap-1 mt-5 h-6">
-                    {[0, 1, 2, 3, 4].map((i) => (
-                      <span
-                        key={i}
-                        className="w-1.5 rounded-full bg-[#C46A4A] animate-pulse"
-                        style={{ height: `${12 + (i % 3) * 8}px`, animationDelay: `${i * 0.15}s` }}
-                      />
-                    ))}
-                  </div>
-                )}
-                <p className="text-zinc-400 text-sm mt-3">{statusText}</p>
+                <p className="text-zinc-400 text-sm mt-2">{statusText}</p>
               </div>
               <div className="absolute bottom-3 left-3 px-3 py-1 rounded-full bg-black/50 text-white text-xs">
                 {currentInterviewer
