@@ -34,6 +34,7 @@ import Link from 'next/link';
 import Image from 'next/image';
 import { AccessGuard, useAccessCode } from '@/components/access-guard';
 import { Header1 } from '@/components/header1';
+import { SegmentationCard, type Segmentation } from '@/components/segmentation-card';
 import { Target, Wand2, Send, CheckCircle2 } from 'lucide-react';
 import { useLanguage } from '@/lib/language-context';
 
@@ -69,6 +70,12 @@ interface Resume {
   file_name: string;
   parsed_content: string;
   parsed_fields?: ParsedFields;
+  segmentation?: Segmentation | null;
+  segmentation_confirmed?: boolean;
+  profile?: {
+    education?: Array<{ school: string; degree?: string; major?: string }>;
+    skills?: string[];
+  } | null;
   user_info: {
     name?: string;
     email?: string;
@@ -430,6 +437,22 @@ function ResumeContent() {
                         )}
                       </div>
                     </div>
+
+                    {/* 分层确认卡片：求职画像透明展示 + 可修正 */}
+                    {resume.segmentation && (
+                      <SegmentationCard
+                        resumeId={resume.id}
+                        segmentation={resume.segmentation}
+                        confirmed={resume.segmentation_confirmed}
+                        skills={resume.profile?.skills}
+                        schoolLine={resume.profile?.education?.[0]
+                          ? `${resume.profile.education[0].school}${resume.profile.education[0].major ? ` · ${resume.profile.education[0].major}` : ''}${resume.profile.education[0].degree ? ` · ${resume.profile.education[0].degree}` : ''}`
+                          : undefined}
+                        onUpdated={(seg) =>
+                          setResumes((prev) => prev.map((r) => r.id === resume.id ? { ...r, segmentation: seg, segmentation_confirmed: true } : r))
+                        }
+                      />
+                    )}
                     
                     {/* 操作按钮 - 手机端换行显示 */}
                     <div className="flex flex-wrap gap-2 md:gap-2 pl-0 md:pl-[52px]">

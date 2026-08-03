@@ -1,6 +1,8 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { getSupabaseClient } from '@/storage/database/supabase-client';
 import { LLMClient, Config, HeaderUtils } from 'coze-coding-dev-sdk';
+import { buildRegionBlock, resolveRegionKey } from '@/lib/region-dna';
+import type { UserSegmentation } from '@/lib/user-segmentation';
 
 // 地区名称映射
 const REGION_NAMES: Record<string, string> = {
@@ -42,10 +44,23 @@ export async function POST(request: NextRequest) {
     
     const resumeContent = resume.parsed_content || JSON.stringify(resume.user_info);
 
-    // 构建地区信息
-    const regionName = targetRegion ? REGION_NAMES[targetRegion] || targetRegion : null;
-    const regionSection = regionName 
-      ? `\n\n目标地区：${regionName}\n请考虑该地区的招聘习惯和用语习惯进行优化。` 
+    // 构建地区信息：深度地区招聘逻辑（ATS 偏好/简历写法/关键信号），
+    // 优先用户指定地区，其次用简历分层推导的地区（地区为分层第一权重）
+    const seg = resume.segmentation as UserSegmentation | null;
+    const regionKey = resolveRegionKey(targetRegion) || seg?.regions?.[0] || null;
+    const regionSection = regionKey
+      ? `\n\n${buildRegionBlock(regionKey, 'zh')}\n请严格遵循上述地区规则优化简历写法与内容取舍。`
+      : (targetRegion ? `\n\n目标地区：${REGION_NAMES[targetRegion] || targetRegion}\n请考虑该地区的招聘习惯和用语习惯进行优化。` : '');
+
+    // 候选人分层上下文（让 ATS 优化按层级差异化：低年级重课程项目，社招重业务 impact）
+    const stageTips: Record<string, string> = {
+      junior: '该候选人是低年级学生（实习预备）：突出课程项目、竞赛、技能成长潜力，弥补实习经历不足。',
+      senior: '该候选人是应届校招：突出实习成果转化与岗位匹配度，实习描述必须有量化结果。',
+      experienced: '该候选人是社招人士：突出业务 impact、ownership 与职级匹配度，弱化课程/社团等学生气内容。',
+      returning_intern: '该候选人处于实习转正阶段：突出实习期间的独立交付与团队依赖度。',
+    };
+    const segmentSection = seg
+      ? `\n\n【候选人分层】${seg.summary}${stageTips[seg.careerStage] ? `\n${stageTips[seg.careerStage]}` : ''}`
       : '';
 
     // 构建岗位描述部分（如果获取到了）
@@ -63,7 +78,7 @@ export async function POST(request: NextRequest) {
 请根据以下信息优化简历：
 
 目标公司：${targetCompany || '通用'}
-目标岗位：${targetPosition}${regionSection}${jdSection}
+目标岗位：${targetPosition}${regionSection}${segmentSection}${jdSection}
 
 原简历内容：
 ${resumeContent}${suggestionsSection}

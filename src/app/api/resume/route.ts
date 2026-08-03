@@ -3,6 +3,7 @@ import { getSupabaseClient } from '@/storage/database/supabase-client';
 import { LLMClient, Config } from 'coze-coding-dev-sdk';
 import PDFParser from 'pdf2json';
 import mammoth from 'mammoth';
+import { deriveSegmentation, ResumeProfile } from '@/lib/user-segmentation';
 
 // 从PDF提取文本
 async function extractTextFromPDF(buffer: Buffer): Promise<string> {
@@ -253,6 +254,88 @@ export async function POST(request: NextRequest) {
   }
 }
 
+// 使用LLM提取完整简历画像（用于用户分层）
+// 提取字段清单：教育（含入学/毕业时间推断年级）、实习（含时长/转正）、工作（含职级）、项目、技能证书、求职意向、篇幅、语言版本
+async function extractResumeProfile(content: string, meta: { pages?: number }): Promise<ResumeProfile | null> {
+  try {
+    const llmClient = new LLMClient(new Config());
+    const prompt = `你是简历结构化专家。请从以下简历中提取完整画像，严格以 JSON 返回。
+
+简历内容：
+${content.slice(0, 12000)}
+
+返回 JSON 结构（不存在的信息用 null 或空数组，不要编造）：
+{
+  "education": [
+    { "school": "学校全称", "degree": "本科/硕士/博士/MBA", "major": "专业", "startYear": 2021, "endYear": 2025, "gpa": "GPA或学位等级(如First/2:1)", "qsEstimate": 50 }
+  ],
+  "internships": [
+    { "company": "公司", "role": "岗位", "months": 3, "convertedToFulltime": false, "highlights": ["量化成果1"] }
+  ],
+  "workExperience": [
+    { "company": "公司", "role": "岗位", "months": 24, "level": "职级(如P6/ Senior)", "isInternship": false, "highlights": ["量化成果"] }
+  ],
+  "projects": [
+    { "name": "项目名", "role": "角色", "techStack": ["技术"], "outcomes": ["量化结果"] }
+  ],
+  "skills": ["技能1", "技能2"],
+  "certificates": ["证书1"],
+  "languages": ["IELTS 7.5", "TOEFL 110"],
+  "intention": {
+    "roles": ["意向岗位"],
+    "locations": ["意向城市/国家，如'上海'、'新加坡'"],
+    "industries": ["意向行业"]
+  },
+  "meta": {
+    "pages": ${meta.pages || 1},
+    "wordDensity": "sparse/normal/dense",
+    "resumeLanguage": "zh/en/bilingual"
+  }
+}
+
+提取要点：
+1. endYear 是毕业年份（推断年级的关键），在读学生按预计毕业年份填；
+2. qsEstimate：你对该校 QS 世界排名的大致估计（不确定给 null）；
+3. months 为时长月数（起止时间推算）；实习放 internships，全职放 workExperience；
+4. highlights/outcomes 优先保留含数字的量化描述；
+5. intention 仅在简历明确写出时提取（如"求职意向：上海"），否则 null；
+6. wordDensity 按简历内容密度判断；resumeLanguage 判断简历语言版本。
+只返回 JSON，不要任何说明文字。`;
+
+    const response = await llmClient.invoke([
+      { role: 'system', content: '你是专业的简历结构化引擎，只输出合法 JSON。' },
+      { role: 'user', content: prompt },
+    ], { temperature: 0.2 });
+
+    const raw = response.content || '';
+    const jsonMatch = raw.match(/\{[\s\S]*\}/);
+    if (!jsonMatch) {
+      console.error('[profile] LLM 未返回 JSON');
+      return null;
+    }
+    const parsed = JSON.parse(jsonMatch[0]);
+    // 宽松校验：education 必须为数组
+    if (!Array.isArray(parsed.education)) {
+      console.error('[profile] 结构校验失败：education 非数组');
+      return null;
+    }
+    return {
+      education: parsed.education || [],
+      internships: parsed.internships || [],
+      workExperience: parsed.workExperience || [],
+      projects: parsed.projects || [],
+      skills: parsed.skills || [],
+      certificates: parsed.certificates || [],
+      languages: parsed.languages || [],
+      intention: parsed.intention || undefined,
+      meta: parsed.meta || undefined,
+    } as ResumeProfile;
+  } catch (error) {
+    console.error('[profile] 画像提取失败:', error);
+    return null;
+  }
+}
+
 // 后台解析简历
 async function parseResumeInBackground(
   resumeId: number,
@@ -295,12 +378,18 @@ async function parseResumeInBackground(
     // 使用LLM解析简历
     const parsed = await parseResumeContent(textContent);
 
+    // 用户分层：提取完整画像 → 规则推导分层（地区为第一权重）
+    const profile = await extractResumeProfile(textContent, { pages: 1 });
+    const segmentation = profile ? deriveSegmentation(profile) : null;
+
     // 更新数据库
     const { error: updateError } = await client
       .from('resumes')
       .update({
         parsed_content: parsed.parsed_content,
         user_info: parsed.user_info,
+        profile: profile || null,
+        segmentation: segmentation || null,
         updated_at: new Date().toISOString(),
       })
       .eq('id', resumeId);
@@ -308,7 +397,7 @@ async function parseResumeInBackground(
     if (updateError) {
       console.error('Failed to update parsed resume:', updateError);
     } else {
-      console.log('Resume parsed successfully:', resumeId);
+      console.log('Resume parsed successfully:', resumeId, segmentation ? `[分层] ${segmentation.summary}` : '[分层] 画像提取失败，仅基础解析');
     }
   } catch (error) {
     console.error('Background parsing error:', error);

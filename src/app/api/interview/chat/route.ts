@@ -3,6 +3,18 @@ import { getSupabaseClient } from '@/storage/database/supabase-client';
 import { LLMClient, Config, HeaderUtils } from 'coze-coding-dev-sdk';
 import { buildDNABlock } from '@/lib/company-dna';
 import { getCompanyDNA } from '@/lib/company-dna-service';
+import { buildSegmentBlock, type UserSegmentation } from '@/lib/user-segmentation';
+import { buildRegionBlock } from '@/lib/region-dna';
+
+// 分层标尺块：候选人分层（评估标尺）+ 目标地区招聘逻辑（地区为分层第一权重）
+function buildSegmentationBlock(seg: UserSegmentation | null | undefined, language: string): string {
+  if (!seg) return '';
+  const lang = language === 'en' ? 'en' as const : 'zh' as const;
+  const parts = [buildSegmentBlock(seg, lang)];
+  const region = seg.regions?.[0];
+  if (region) parts.push(buildRegionBlock(region, lang));
+  return parts.join('\n\n');
+}
 import {
   INTERVIEWERS,
   selectRoundInterviewers,
@@ -84,13 +96,15 @@ function buildSystemPrompt(
   isNewInterviewer: boolean,
   roundRole: RoundRole | null,
   isLastRound: boolean,
-  dnaBlock = ''
+  dnaBlock = '',
+  segmentBlock = ''
 ) {
   const typeLabel = TYPE_LABELS[interviewType]?.[language === 'en' ? 'en' : 'zh'] || interviewType;
   const persona = interviewer ? getPersona(interviewer.id) : null;
   const archetype = persona ? ARCHETYPE_PARAMS[persona.archetype] : null;
   const roleInfo = roundRole ? ROUND_ROLE_INFO[roundRole] : null;
   const dnaSection = dnaBlock ? `\n\n${dnaBlock}` : '';
+  const segmentSection = segmentBlock ? `\n\n${segmentBlock}` : '';
 
   if (language === 'en') {
     const title = roundRole ? ROLE_TITLES[roundRole].en : 'Interviewer';
@@ -108,12 +122,12 @@ You dislike: ${interviewer.dislikes}`
 
     return `You are conducting a ${typeLabel} for the following position:
 
-${jobDescription}${dnaSection}
+${jobDescription}${dnaSection}${segmentSection}
 ${personaBlock}${behaviorBlock}${missionBlock}${switchNote}
 
 Rules you MUST follow (this is a REAL interview):
 1. Stay fully in character as ${interviewer ? interviewer.name : 'a professional interviewer'} — your persona defines how you speak, probe, and apply pressure.
-2. Conduct the interview entirely in English.${dnaBlock ? '\n2.5 The COMPANY INTERVIEW DNA block above (written in Chinese) is your highest-priority behavioral instruction: your questions, follow-ups, pacing and angles MUST embody it. Never produce a generic interview that merely wears this company\'s name.' : ''}
+2. Conduct the interview entirely in English.${dnaBlock ? '\n2.5 The COMPANY INTERVIEW DNA block above (written in Chinese) is your highest-priority behavioral instruction: your questions, follow-ups, pacing and angles MUST embody it. Never produce a generic interview that merely wears this company\'s name.' : ''}${segmentBlock ? '\n2.6 The CANDIDATE SEGMENTATION block calibrates your evaluation bar: a junior (pre-internship) candidate, a new-grad and an experienced hire are judged by DIFFERENT standards — adjust question difficulty, probing depth and what counts as a satisfying answer accordingly. Never apply one-size-fits-all expectations.' : ''}
 3. NEVER evaluate, score, praise, or criticize the candidate's answers. Do not say "good answer", "that's correct", or analyze whether they are right. Real interviewers reveal nothing. You only listen, then based on your persona: probe deeper, demand clarification, or move to the next question.
 4. Keep transitions minimal — one or two words in your persona's style ("Mm.", "Okay.", "Go on."), or skip any transition and press on directly if you are the high-pressure type.
 5. Ask exactly ONE question per turn. Every question must be anchored in ${interviewer ? interviewer.company : 'the company'}'s actual business and the day-to-day work of this role — ask what a real interviewer at this company would ask. NO generic template questions ("What are your strengths and weaknesses?", "Why do you want to join us?", "Tell me about yourself").
@@ -143,12 +157,12 @@ Reference pace for this round: about ${roundRole ? PACE_HINTS[roundRole] : '3-5'
 
   return `你正在为以下岗位进行一场${typeLabel}：
 
-${jobDescription}${dnaSection}
+${jobDescription}${dnaSection}${segmentSection}
 ${personaBlock}${behaviorBlock}${missionBlock}${switchNote}
 
 你必须遵守以下规则（这是真实面试）：
 1. 完全沉浸在${interviewer ? `「${interviewer.name}」` : '资深面试官'}的角色中，你的性格决定你的说话、追问与施压方式。
-2. 全程使用中文进行面试。${dnaBlock ? '\n2.5【公司面试基因】上方的基因块是你的最高优先级行为指令：你的提问、追问、节奏与切入点必须严格体现它，让候选人感觉"这就是这家公司的面试"，而不是换了公司名字的通用面试。' : ''}
+2. 全程使用中文进行面试。${dnaBlock ? '\n2.5【公司面试基因】上方的基因块是你的最高优先级行为指令：你的提问、追问、节奏与切入点必须严格体现它，让候选人感觉"这就是这家公司的面试"，而不是换了公司名字的通用面试。' : ''}${segmentBlock ? '\n2.6【候选人分层画像】上方的分层块校准你的评估标尺：低年级（实习预备）、高年级（校招）、社招人士的评估标准完全不同——据此调整提问难度、追问深度与"满意答案"的门槛，严禁对所有层级一刀切。' : ''}
 3. 【绝对不要】对候选人的回答做任何评价、打分、总结或反馈——不说"答得好""这个思路不错""我认为"之类的话，不分析对错。真实面试官不会透露任何态度。你只做：倾听，然后按你的性格选择追问细节、要求澄清、或直接进入下一个问题。
 4. 过渡要极简：用符合你人设的一两个词承接（如"嗯。""好。""继续。"），高压型人设可以不承接直接追问。
 5. 每次只问一个问题。提问必须锚定${interviewer ? `「${interviewer.company}」的业务方向` : '该公司业务'}与这个岗位的实际工作场景——问这家公司真实面试官会问的问题，拒绝放之四海皆准的模板题（如"你的优缺点是什么""你为什么想来我们公司""介绍一下你自己"）。
@@ -244,10 +258,11 @@ export async function POST(request: NextRequest) {
       }
 
       let resumeContext = '';
+      let resumeSegmentation: UserSegmentation | null = null;
       if (resumeId) {
         const { data: resume } = await client
           .from('resumes')
-          .select('parsed_content, file_name')
+          .select('parsed_content, file_name, segmentation')
           .eq('id', resumeId)
           .eq('access_code_id', accessCodeId)
           .single();
@@ -256,6 +271,7 @@ export async function POST(request: NextRequest) {
             ? `\n\nCandidate's resume:\n${resume.parsed_content}\n\nUse this resume to ask personalized questions about the candidate's specific experiences and projects.`
             : `\n\n候选人简历：\n${resume.parsed_content}\n\n请结合简历中候选人的具体经历和项目进行针对性提问。`;
         }
+        resumeSegmentation = (resume?.segmentation as UserSegmentation | null) ?? null;
       }
 
       // 闯关模式：按剧本角色抽取 N 位面试官；单面模式：随机 1 位
@@ -269,7 +285,8 @@ export async function POST(request: NextRequest) {
 
       const dnaResult = await getCompanyDNA(company, request.headers).catch(() => null);
       const dnaBlock = dnaResult ? buildDNABlock(dnaResult.dna) : '';
-      const systemPrompt = buildSystemPrompt(interviewType, jdText + resumeContext, language, firstInterviewer, false, firstRole, rounds === 1, dnaBlock);
+      const segmentBlock = buildSegmentationBlock(resumeSegmentation, language);
+      const systemPrompt = buildSystemPrompt(interviewType, jdText + resumeContext, language, firstInterviewer, false, firstRole, rounds === 1, dnaBlock, segmentBlock);
       const llmMessages = [
         { role: 'system' as const, content: systemPrompt },
         {
@@ -293,6 +310,7 @@ export async function POST(request: NextRequest) {
           total_rounds: rounds,
           current_round: 1,
           interviewer_ids: interviewers.map((i) => i.id),
+          resume_id: resumeId ? Number(resumeId) : null,
         })
         .select('id')
         .single();
@@ -412,6 +430,17 @@ export async function POST(request: NextRequest) {
     // 企业面试基因：每次回复都注入（精调/缓存秒回，生成的公司已写回缓存）
     const dnaResult = sessionCompany ? await getCompanyDNA(sessionCompany, request.headers).catch(() => null) : null;
     const dnaBlock = dnaResult ? buildDNABlock(dnaResult.dna) : '';
+    // 候选人分层标尺：从会话关联简历读取（与新会话路径保持同一评估标尺）
+    let resumeSegmentation: UserSegmentation | null = null;
+    if (session.resume_id) {
+      const { data: resume } = await client
+        .from('resumes')
+        .select('segmentation')
+        .eq('id', session.resume_id)
+        .single();
+      resumeSegmentation = (resume?.segmentation as UserSegmentation | null) ?? null;
+    }
+    const segmentBlock = buildSegmentationBlock(resumeSegmentation, language);
     const systemPrompt = buildSystemPrompt(
       session.interview_type,
       session.job_description || '',
@@ -420,7 +449,8 @@ export async function POST(request: NextRequest) {
       isSwitchNext,
       activeRole,
       isLastRound,
-      dnaBlock
+      dnaBlock,
+      segmentBlock
     );
 
     // 构建 LLM 消息历史（保留最近 30 条，控制上下文）

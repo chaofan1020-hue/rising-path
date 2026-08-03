@@ -54,6 +54,27 @@
 ### resumes (简历表)
 - id, file_key, file_name, parsed_content
 - user_info (JSONB), access_code_id, created_at, updated_at
+- **profile (JSONB)**：完整简历画像（教育含毕业年份/实习含时长/项目/技能/求职意向/语言版本）
+- **segmentation (JSONB)**：用户分层结果（careerStage/schoolTier/regions/majorMatch/experienceQuality）
+- **segmentation_overrides (JSONB)**：用户手动修正的分层字段
+- **segmentation_confirmed (BOOLEAN)**：分层是否已确认
+
+### interview_sessions (面试会话表)
+- id, access_code_id, interview_type, job_description, job_id
+- target_company, mode (single/gauntlet), total_rounds, current_round
+- interviewer_ids (JSONB), messages (JSONB), status
+- **resume_id (BIGINT)**：关联简历（分层标尺数据源）
+- report (JSONB), report_grade, overall_score, created_at, updated_at
+
+### company_dna (企业面试基因表)
+- id, company_name, aliases (JSONB), dna (JSONB), source
+- hit_count, **version**, **manually_edited**, **review_notes**, created_at, updated_at
+
+### interview_feedback (面试真实度反馈表)
+- id, session_id (unique FK), access_code_id, company
+- realism_score (1-10), feedback_text, status (pending_review/high_quality/reviewed)
+- dna_source, dna_version（基因版本快照，追溯"评分针对哪版基因"）
+- review_notes, created_at, updated_at
 
 ### applications (网申记录表)
 - id, job_id, resume_id, status, notes
@@ -96,22 +117,37 @@
 ## 核心功能
 
 1. **岗位查询** - 按地区、方向、受众筛选岗位
-2. **简历管理** - 上传、解析、管理简历
-3. **AI选岗** - 基于简历智能匹配岗位
-4. **ATS简历优化** - 针对ATS系统优化简历
-5. **自动网申** - 学习记录网申字段，自动填写表单
-6. **访问码管理** - 生成、管理用户访问权限
+2. **简历管理** - 上传、解析、管理简历（解析后自动生成用户分层画像）
+3. **用户分层** - 求职阶段×院校背景×专业匹配度×地区（第一权重），驱动差异化策略
+4. **AI选岗** - 基于简历智能匹配岗位
+5. **ATS简历优化** - 针对ATS系统优化简历（按地区招聘逻辑+用户分层差异化）
+6. **模拟面试** - 企业面试基因库 + 分层评估标尺 + 真实度反馈闭环
+7. **自动网申** - 学习记录网申字段，自动填写表单
+8. **访问码管理** - 生成、管理用户访问权限
+
+## 关键库文件
+
+- `src/lib/region-dna.ts` - 地区招聘逻辑库（美/英/新/国内一线/国内二三线）
+- `src/lib/user-segmentation.ts` - 用户分层引擎（院校库/推导规则/评估标尺 prompt 块）
+- `src/lib/company-dna.ts` - 企业面试基因库（12 家精调）
+- `src/lib/company-dna-service.ts` - 基因四级获取（manual > curated > cached > generated）
+- `src/components/segmentation-card.tsx` - 简历页分层确认卡片（透明展示+可修正）
 
 ## API 接口清单
 
 | 路径 | 方法 | 功能 |
 |------|------|------|
 | /api/jobs | GET/POST | 获取/创建岗位 |
-| /api/resume | GET/POST | 获取/上传简历 |
-| /api/resume/[id] | DELETE | 删除简历 |
+| /api/resume | GET/POST | 获取/上传简历（后台异步：解析+画像提取+分层推导） |
+| /api/resume/[id] | PATCH/DELETE | 修正用户分层/删除简历 |
 | /api/applications | GET/POST | 获取/创建网申记录 |
 | /api/ai/match | POST | AI岗位匹配 |
-| /api/ai/optimize | POST | AI简历优化 |
+| /api/ai/optimize | POST | AI简历优化（注入地区规则+分层上下文） |
+| /api/interview/chat | POST | 模拟面试（流式；新会话/继续/轮次切换） |
+| /api/interview/feedback | POST | 面试真实度反馈（<6分进人工审查） |
+| /api/company-dna | GET/PATCH | 获取企业基因摘要/人工更新基因（version+1） |
+| /api/admin/dna-feedback | GET | 反馈审查列表 |
+| /api/admin/dna-feedback/[id] | GET/PATCH | 反馈详情（含对话+当前基因）/标记处理 |
 | /api/access-codes | GET/POST | 获取/创建访问码 |
 | /api/access-codes/[id] | PATCH/DELETE | 更新/删除访问码 |
 | /api/access-codes/verify | POST | 验证访问码 |
