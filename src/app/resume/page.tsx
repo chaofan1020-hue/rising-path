@@ -13,22 +13,22 @@ import {
   DialogDescription,
   DialogHeader,
   DialogTitle,
-  DialogTrigger,
 } from '@/components/ui/dialog';
 import { 
   Upload, 
   FileText, 
   Trash2, 
-  Download, 
   Loader2, 
   CheckCircle,
-  Briefcase,
   User,
   Calendar,
-  Link as LinkIcon,
   Languages,
   Sparkles,
   Map,
+  Eye,
+  GraduationCap,
+  FolderKanban,
+  Target as TargetIcon,
 } from 'lucide-react';
 import Link from 'next/link';
 import Image from 'next/image';
@@ -73,8 +73,14 @@ interface Resume {
   segmentation?: Segmentation | null;
   segmentation_confirmed?: boolean;
   profile?: {
-    education?: Array<{ school: string; degree?: string; major?: string }>;
+    education?: Array<{ school: string; degree?: string; major?: string; startYear?: number; endYear?: number; gpa?: string }>;
+    internships?: Array<{ company: string; role: string; months?: number; highlights?: string[] }>;
+    workExperience?: Array<{ company: string; role: string; months?: number; level?: string; highlights?: string[] }>;
+    projects?: Array<{ name: string; role?: string; techStack?: string[]; outcomes?: string[] }>;
     skills?: string[];
+    certificates?: string[];
+    languages?: string[];
+    intention?: { roles?: string[]; locations?: string[]; industries?: string[] };
   } | null;
   user_info: {
     name?: string;
@@ -95,6 +101,7 @@ function ResumeContent() {
   const [uploadProgress, setUploadProgress] = useState(0);
   const [selectedFile, setSelectedFile] = useState<File | null>(null);
   const [selectedResume, setSelectedResume] = useState<Resume | null>(null);
+  const [detailId, setDetailId] = useState<number | null>(null);
   const [translatingId, setTranslatingId] = useState<number | null>(null);
   const [extractingId, setExtractingId] = useState<number | null>(null);
   const { accessCodeId } = useAccessCode();
@@ -170,10 +177,10 @@ function ResumeContent() {
       const data = await response.json();
       
       if (data.resume) {
-        // 等待几秒后刷新列表以获取解析结果
-        setTimeout(() => {
-          fetchResumes();
-        }, 3000);
+        // 轮询刷新列表以获取解析+分层结果（后台两轮 LLM 约 30 秒）
+        [3000, 8000, 15000, 30000, 60000].forEach((ms) => {
+          setTimeout(() => { fetchResumes(); }, ms);
+        });
         setSelectedFile(null);
         setUploadProgress(0);
       } else if (data.error) {
@@ -272,12 +279,12 @@ function ResumeContent() {
         {/* 状态引导区域 */}
         {resumes.length > 0 ? (
           /* 已上传简历 - 显示简历状态和快捷操作 */
-          <Card className="mb-4 md:mb-8 border-green-200 dark:border-green-900 bg-green-50/50 dark:bg-green-950/20">
+          <Card className="mb-4 md:mb-8 border-sage-300 dark:border-sage-800 bg-sage-50/60 dark:bg-sage-950/20">
             <CardContent className="pt-4 pb-4">
               <div className="flex flex-col md:flex-row md:items-center justify-between gap-4">
                 <div className="flex items-center gap-3">
-                  <div className="w-10 h-10 rounded-full bg-green-100 dark:bg-green-900/50 flex items-center justify-center">
-                    <CheckCircle2 className="h-5 w-5 text-green-600 dark:text-green-400" />
+                  <div className="w-10 h-10 rounded-full bg-sage-100 dark:bg-sage-900/50 flex items-center justify-center">
+                    <CheckCircle2 className="h-5 w-5 text-sage-700 dark:text-sage-300" />
                   </div>
                   <div>
                     <p className="font-medium text-sm md:text-base">{t('resume.uploaded')} {resumes.length} {t('resume.resumesUnit')}</p>
@@ -406,10 +413,10 @@ function ResumeContent() {
               <Card key={resume.id} className="hover:shadow-md transition-shadow">
                 <CardContent className="pt-4 md:pt-6">
                   <div className="flex flex-col gap-4">
-                    {/* 文件信息 */}
+                    {/* 文件信息 + 右侧快捷操作 */}
                     <div className="flex items-start gap-3 md:gap-4">
-                      <div className="w-10 h-10 md:w-12 md:h-12 rounded-lg bg-green-100 dark:bg-green-900 flex items-center justify-center flex-shrink-0">
-                        <FileText className="h-5 w-5 md:h-6 md:w-6 text-green-600" />
+                      <div className="w-10 h-10 md:w-12 md:h-12 rounded-lg bg-gradient-to-br from-terracotta-500 to-terracotta-600 flex items-center justify-center flex-shrink-0 shadow-sm">
+                        <FileText className="h-5 w-5 md:h-6 md:w-6 text-white" />
                       </div>
                       <div className="flex-1 min-w-0">
                         <h3 className="font-semibold text-sm md:text-lg truncate">{resume.file_name}</h3>
@@ -430,16 +437,32 @@ function ResumeContent() {
                             </Badge>
                           )}
                         </div>
-                        {resume.parsed_content && !resume.parsed_content.includes('正在解析') && (
-                          <p className="text-xs md:text-sm text-muted-foreground mt-2 line-clamp-2 hidden md:block">
-                            {resume.parsed_content.substring(0, 150)}...
-                          </p>
-                        )}
+                      </div>
+                      {/* 右侧图标操作：详情 / 删除 */}
+                      <div className="flex items-center gap-1 flex-shrink-0">
+                        <Button
+                          variant="ghost"
+                          size="icon"
+                          className="h-8 w-8 text-muted-foreground hover:text-terracotta-600"
+                          onClick={() => setDetailId(resume.id)}
+                          aria-label={t('resume.viewDetail')}
+                        >
+                          <Eye className="h-4 w-4" />
+                        </Button>
+                        <Button
+                          variant="ghost"
+                          size="icon"
+                          className="h-8 w-8 text-muted-foreground hover:text-red-600"
+                          onClick={() => deleteResume(resume.id)}
+                          aria-label={t('resume.delete')}
+                        >
+                          <Trash2 className="h-4 w-4" />
+                        </Button>
                       </div>
                     </div>
 
                     {/* 分层确认卡片：求职画像透明展示 + 可修正 */}
-                    {resume.segmentation && (
+                    {resume.segmentation ? (
                       <SegmentationCard
                         resumeId={resume.id}
                         segmentation={resume.segmentation}
@@ -452,7 +475,22 @@ function ResumeContent() {
                           setResumes((prev) => prev.map((r) => r.id === resume.id ? { ...r, segmentation: seg, segmentation_confirmed: true } : r))
                         }
                       />
-                    )}
+                    ) : !resume.user_info?.name ? (
+                      /* 画像生成中骨架（解析后两轮 LLM 约 30 秒） */
+                      <div className="rounded-xl border border-dashed border-terracotta-300/60 dark:border-terracotta-800/40 bg-beige-50/50 dark:bg-zinc-900/40 p-4">
+                        <div className="flex items-center gap-3">
+                          <Loader2 className="h-4 w-4 animate-spin text-terracotta-600 flex-shrink-0" />
+                          <div className="min-w-0">
+                            <p className="text-sm font-medium">{t('resume.profilePending')}</p>
+                            <p className="text-xs text-muted-foreground mt-0.5">{t('resume.profilePendingHint')}</p>
+                          </div>
+                        </div>
+                        <div className="mt-3 space-y-2">
+                          <div className="h-2.5 rounded bg-terracotta-100/70 dark:bg-zinc-800 animate-pulse w-3/4" />
+                          <div className="h-2.5 rounded bg-terracotta-100/70 dark:bg-zinc-800 animate-pulse w-1/2" />
+                        </div>
+                      </div>
+                    ) : null}
                     
                     {/* 操作按钮 - 手机端换行显示 */}
                     <div className="flex flex-wrap gap-2 md:gap-2 pl-0 md:pl-[52px]">
@@ -471,7 +509,7 @@ function ResumeContent() {
                             </>
                           ) : resume.parsed_fields ? (
                             <>
-                              <CheckCircle className="h-3 w-3 mr-1 text-green-600" />
+                              <CheckCircle className="h-3 w-3 mr-1 text-sage-600" />
                               {t('resume.extracted')}
                             </>
                           ) : (
@@ -501,23 +539,7 @@ function ResumeContent() {
                           </>
                         )}
                       </Button>
-                      <Link href="/field-mappings" className="hidden sm:block">
-                        <Button variant="outline" size="sm" className="text-xs h-8">
-                          <Map className="h-3 w-3 mr-1" />
-                          {t('resume.fieldMapping')}
-                        </Button>
-                      </Link>
-                      <Dialog>
-                        <DialogTrigger asChild>
-                          <Button 
-                            variant="outline" 
-                            size="sm"
-                            className="text-xs h-8"
-                            onClick={() => setSelectedResume(resume)}
-                          >
-                            {t('resume.viewDetail')}
-                          </Button>
-                        </DialogTrigger>
+                      <Dialog open={detailId === resume.id} onOpenChange={(open) => setDetailId(open ? resume.id : null)}>
                         <DialogContent className="max-w-2xl max-h-[85vh] md:max-h-[80vh] overflow-y-auto">
                           <DialogHeader>
                             <DialogTitle className="text-base md:text-lg truncate pr-6">{resume.file_name}</DialogTitle>
@@ -526,6 +548,88 @@ function ResumeContent() {
                             </DialogDescription>
                           </DialogHeader>
                           <div className="space-y-4">
+                            {/* 求职画像（完整 profile 结构化展示） */}
+                            {resume.profile && (
+                              <div className="rounded-lg border border-beige-200 dark:border-zinc-700 bg-beige-50/40 dark:bg-zinc-900/40 p-3 md:p-4 space-y-3">
+                                <div className="flex items-center gap-2">
+                                  <GraduationCap className="h-4 w-4 text-terracotta-600" />
+                                  <h4 className="font-semibold text-sm md:text-base">{t('resume.profileTitle')}</h4>
+                                </div>
+
+                                {resume.profile.education && resume.profile.education.length > 0 && (
+                                  <div>
+                                    <p className="text-xs text-muted-foreground mb-1">{t('resume.education')}</p>
+                                    <ul className="space-y-1">
+                                      {resume.profile.education.map((edu, i) => (
+                                        <li key={i} className="text-sm">
+                                          <strong>{edu.school}</strong>
+                                          {edu.degree ? ` · ${edu.degree}` : ''}{edu.major ? ` · ${edu.major}` : ''}
+                                          {(edu.startYear || edu.endYear) && (
+                                            <span className="text-muted-foreground">（{edu.startYear || '?'}-{edu.endYear || '?'}）</span>
+                                          )}
+                                          {edu.gpa && <span className="text-muted-foreground"> · GPA {edu.gpa}</span>}
+                                        </li>
+                                      ))}
+                                    </ul>
+                                  </div>
+                                )}
+
+                                {((resume.profile.internships?.length ?? 0) > 0 || (resume.profile.workExperience?.length ?? 0) > 0) && (
+                                  <div>
+                                    <p className="text-xs text-muted-foreground mb-1">{t('resume.experience')}</p>
+                                    <ul className="space-y-1.5">
+                                      {(resume.profile.workExperience || []).map((exp, i) => (
+                                        <li key={`w-${i}`} className="text-sm">
+                                          <strong>{exp.company}</strong> · {exp.role}
+                                          {exp.level ? ` · ${exp.level}` : ''}
+                                          {exp.months ? <span className="text-muted-foreground">（{exp.months}{t('resume.monthsUnit')}）</span> : null}
+                                          {exp.highlights?.[0] && <p className="text-xs text-muted-foreground mt-0.5 line-clamp-1">{exp.highlights[0]}</p>}
+                                        </li>
+                                      ))}
+                                      {(resume.profile.internships || []).map((exp, i) => (
+                                        <li key={`i-${i}`} className="text-sm">
+                                          <strong>{exp.company}</strong> · {exp.role}
+                                          {exp.months ? <span className="text-muted-foreground">（{exp.months}{t('resume.monthsUnit')}）</span> : null}
+                                          {exp.highlights?.[0] && <p className="text-xs text-muted-foreground mt-0.5 line-clamp-1">{exp.highlights[0]}</p>}
+                                        </li>
+                                      ))}
+                                    </ul>
+                                  </div>
+                                )}
+
+                                {resume.profile.projects && resume.profile.projects.length > 0 && (
+                                  <div>
+                                    <p className="text-xs text-muted-foreground mb-1 flex items-center gap-1">
+                                      <FolderKanban className="h-3 w-3" />{t('resume.profileProjects')}
+                                    </p>
+                                    <ul className="space-y-1">
+                                      {resume.profile.projects.map((p, i) => (
+                                        <li key={i} className="text-sm">
+                                          <strong>{p.name}</strong>{p.role ? ` · ${p.role}` : ''}
+                                          {p.outcomes?.[0] && <span className="text-muted-foreground"> — {p.outcomes[0]}</span>}
+                                        </li>
+                                      ))}
+                                    </ul>
+                                  </div>
+                                )}
+
+                                {(resume.profile.skills?.length || resume.profile.languages?.length || resume.profile.certificates?.length) ? (
+                                  <div className="flex flex-wrap gap-1.5">
+                                    {resume.profile.skills?.map((s, i) => <Badge key={`s-${i}`} variant="secondary" className="text-xs">{s}</Badge>)}
+                                    {resume.profile.languages?.map((s, i) => <Badge key={`l-${i}`} variant="outline" className="text-xs">{s}</Badge>)}
+                                    {resume.profile.certificates?.map((s, i) => <Badge key={`c-${i}`} variant="outline" className="text-xs">{s}</Badge>)}
+                                  </div>
+                                ) : null}
+
+                                {resume.profile.intention && (resume.profile.intention.roles?.length || resume.profile.intention.locations?.length) ? (
+                                  <p className="text-xs text-muted-foreground flex items-center gap-1">
+                                    <TargetIcon className="h-3 w-3" />
+                                    {t('resume.profileIntention')}：{[...(resume.profile.intention.roles || []), ...(resume.profile.intention.locations || [])].join(' / ')}
+                                  </p>
+                                ) : null}
+                              </div>
+                            )}
+
                             {/* 结构化字段 (AI提取) */}
                             {resume.parsed_fields && (
                               <div className="bg-gradient-to-r from-terracotta-50 to-beige-50 dark:from-terracotta-950/30 dark:to-beige-950/30 p-3 md:p-4 rounded-lg">
@@ -612,8 +716,8 @@ function ResumeContent() {
                               </div>
                             )}
 
-                            {/* 原始解析信息 */}
-                            {resume.user_info?.name && (
+                            {/* 原始解析信息（老数据 fallback：无完整画像时展示） */}
+                            {!resume.profile && resume.user_info?.name && (
                               <div>
                                 <h4 className="font-semibold text-sm md:text-base mb-2">{t('resume.basicInfo')}</h4>
                                 <div className="grid grid-cols-1 sm:grid-cols-2 gap-2 text-sm">
@@ -623,7 +727,7 @@ function ResumeContent() {
                                 </div>
                               </div>
                             )}
-                            {resume.user_info?.education && resume.user_info.education.length > 0 && (
+                            {!resume.profile && resume.user_info?.education && resume.user_info.education.length > 0 && (
                               <div>
                                 <h4 className="font-semibold text-sm md:text-base mb-2">{t('resume.education')}</h4>
                                 <ul className="list-disc list-inside text-sm space-y-1">
@@ -633,7 +737,7 @@ function ResumeContent() {
                                 </ul>
                               </div>
                             )}
-                            {resume.user_info?.experience && resume.user_info.experience.length > 0 && (
+                            {!resume.profile && resume.user_info?.experience && resume.user_info.experience.length > 0 && (
                               <div>
                                 <h4 className="font-semibold text-sm md:text-base mb-2">{t('resume.experience')}</h4>
                                 <ul className="list-disc list-inside text-sm space-y-1">
@@ -643,7 +747,7 @@ function ResumeContent() {
                                 </ul>
                               </div>
                             )}
-                            {resume.user_info?.skills && resume.user_info.skills.length > 0 && (
+                            {!resume.profile && resume.user_info?.skills && resume.user_info.skills.length > 0 && (
                               <div>
                                 <h4 className="font-semibold text-sm md:text-base mb-2">{t('resume.skills')}</h4>
                                 <div className="flex flex-wrap gap-1.5 md:gap-2">
@@ -656,14 +760,6 @@ function ResumeContent() {
                           </div>
                         </DialogContent>
                       </Dialog>
-                      <Button 
-                        variant="destructive" 
-                        size="sm"
-                        className="text-xs h-8 px-2"
-                        onClick={() => deleteResume(resume.id)}
-                      >
-                        <Trash2 className="h-3 w-3 md:h-4 md:w-4" />
-                      </Button>
                     </div>
                   </div>
                 </CardContent>
