@@ -73,7 +73,8 @@ Rules you MUST follow (this is a REAL interview):
 4. Keep transitions minimal — one or two words in your persona's style ("Mm.", "Okay.", "Go on."), or skip any transition and press on directly if you are the high-pressure type.
 5. Ask exactly ONE question per turn, realistic for this role and the job description.
 6. Plain conversational text only. No headings, no bullet lists, no bracketed markers like [Question]. Speak like a real person.
-7. Keep each response under 120 words.`;
+7. Keep each response under 120 words.
+8. NEVER repeat a question that has already been asked in this interview (including earlier rounds), and do not re-ask the same topic in different wording. Each of your questions must cover NEW ground.`;
   }
 
   const zhTitle = roundRole ? ROLE_TITLES[roundRole].zh : '面试官';
@@ -101,7 +102,8 @@ ${personaBlock}${behaviorBlock}${missionBlock}${switchNote}
 4. 过渡要极简：用符合你人设的一两个词承接（如"嗯。""好。""继续。"），高压型人设可以不承接直接追问。
 5. 每次只问一个问题，问题要贴合该岗位的真实面试场景。
 6. 纯对话文本输出，禁止任何标题、列表、方括号标记（如[提问]）。像真人说话一样。
-7. 每轮回复控制在150字以内。`;
+7. 每轮回复控制在150字以内。
+8. 严禁重复本场面试中已经问过的问题（包括之前轮次），也不得换种说法重问同一主题，每次提问必须覆盖新的考察点。`;
 }
 
 function interviewerPayload(interviewer: Interviewer, round: number, totalRounds: number, role: RoundRole | null) {
@@ -338,26 +340,36 @@ export async function POST(request: NextRequest) {
       activeRole
     );
 
-    // 构建 LLM 消息历史（仅保留最近 12 条，控制上下文）
+    // 构建 LLM 消息历史（保留最近 30 条，控制上下文）
     const llmMessages: Array<{ role: 'system' | 'user' | 'assistant'; content: string }> = [
       { role: 'system', content: systemPrompt },
     ];
-    const recent = messages.slice(-12);
+    const recent = messages.slice(-30);
     for (const msg of recent) {
       llmMessages.push({
         role: msg.role === 'interviewer' ? 'assistant' : 'user',
         content: msg.content,
       });
     }
+
+    // 全量已问问题清单：历史窗口可能截断早期对话，显式列出防止重复提问
+    const askedQuestions = messages
+      .filter((m) => m.role === 'interviewer')
+      .map((m, i) => `${i + 1}. ${m.content}`)
+      .join('\n');
+    const noRepeatNote = language === 'en'
+      ? `\n\nQuestions already asked (including previous rounds). Do NOT repeat them or re-ask the same topic in different wording — but you MAY probe details the candidate just mentioned:\n${askedQuestions}`
+      : `\n\n【已问过的问题（含之前轮次）】禁止重复提问或换种说法重问同一主题；但可以针对候选人刚才回答中未展开的细节追问：\n${askedQuestions}`;
+
     llmMessages.push({
       role: 'user',
       content: shouldSwitch
         ? (language === 'en'
             ? 'The previous round is over. You are the new interviewer for the next round — begin now.'
-            : '上一轮已结束，你是下一轮的新面试官，请开始。')
+            : '上一轮已结束，你是下一轮的新面试官，请开始。') + noRepeatNote
         : (language === 'en'
             ? 'The candidate has answered. Continue the interview in character — probe deeper or ask your next question. Do NOT evaluate the answer.'
-            : '候选人已回答。请以你的人设继续面试——追问细节或提出下一个问题，不要评价回答。'),
+            : '候选人已回答。请以你的人设继续面试——追问细节或提出下一个问题，不要评价回答。') + noRepeatNote,
     });
 
     const llmClient = new LLMClient(new Config(), HeaderUtils.extractForwardHeaders(request.headers));
