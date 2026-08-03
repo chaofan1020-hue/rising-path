@@ -876,12 +876,26 @@ export default function MockInterviewPage() {
             if (!recorder || recorder.state === "inactive") {
               audioChunksRef.current = [];
               const mimeType = MediaRecorder.isTypeSupported("audio/webm") ? "audio/webm" : "audio/mp4";
-              recorder = new MediaRecorder(stream, { mimeType });
-              recorder.ondataavailable = (e) => {
-                if (e.data.size > 0) audioChunksRef.current.push(e.data);
-              };
-              recorder.start();
-              setRecording(true);
+              try {
+                // 用纯音频流录音：摄像头开启时 getMicStream 返回的是视频轨+音轨合并流，
+                // 视频轨与 audio/* 容器冲突会导致 start() 抛 NotSupportedError
+                const audioOnlyStream = new MediaStream(stream.getAudioTracks());
+                const rec = new MediaRecorder(audioOnlyStream, { mimeType });
+                rec.ondataavailable = (e) => {
+                  if (e.data.size > 0) audioChunksRef.current.push(e.data);
+                };
+                rec.start();
+                recorder = rec;
+                setRecording(true);
+              } catch {
+                // 录音启动失败：终止监听循环并提示，避免 rAF 内反复抛错
+                cancelled = true;
+                setRecording(false);
+                setVoiceActive(false);
+                handleMicError(new Error("MediaRecorder start failed"));
+                setListening(false);
+                return;
+              }
             }
           } else {
             setVoiceActive(false);
