@@ -94,7 +94,7 @@ function CompanyLogo({ company, logoUrl, size = 'md' }: { company: string; logoU
   
   if (logoSource && !logoError) {
     return (
-      <div className={`${sizeClasses[size]} rounded-lg border overflow-hidden bg-white flex-shrink-0`}>
+      <div className={`${sizeClasses[size]} rounded-xl border border-zinc-200 dark:border-zinc-700 overflow-hidden bg-white flex-shrink-0`}>
         <img
           src={logoSource}
           alt={`${company} logo`}
@@ -107,19 +107,19 @@ function CompanyLogo({ company, logoUrl, size = 'md' }: { company: string; logoU
 
   const initial = company?.charAt(0)?.toUpperCase() || '?';
   return (
-    <div className={`${sizeClasses[size]} rounded-lg border bg-white flex items-center justify-center flex-shrink-0`}>
-      <span className={`${size === 'lg' ? 'text-2xl' : 'text-lg'} font-bold text-primary`}>{initial}</span>
+    <div className={`${sizeClasses[size]} rounded-xl bg-zinc-900 dark:bg-white flex items-center justify-center flex-shrink-0 shadow-lg shadow-zinc-900/15 dark:shadow-black/30`}>
+      <span className={`${size === 'lg' ? 'text-2xl' : 'text-lg'} font-bold text-white dark:text-zinc-900`}>{initial}</span>
     </div>
   );
 }
 
-// Badge variants
+// Badge variants（极简黑白灰：所有信息徽章统一中性灰底）
 function InfoBadge({ icon: Icon, children, variant = 'default' }: { icon: any; children: React.ReactNode; variant?: 'default' | 'success' | 'warning' | 'info' }) {
   const variants = {
-    default: 'bg-muted text-muted-foreground',
-    success: 'bg-green-100 text-green-700 border-green-200',
-    warning: 'bg-amber-100 text-amber-700 border-amber-200',
-    info: 'bg-blue-100 text-blue-700 border-blue-200',
+    default: 'bg-zinc-100 text-zinc-600 border-zinc-200 dark:bg-zinc-800 dark:text-zinc-300 dark:border-zinc-700',
+    success: 'bg-zinc-100 text-zinc-600 border-zinc-200 dark:bg-zinc-800 dark:text-zinc-300 dark:border-zinc-700',
+    warning: 'bg-zinc-100 text-zinc-600 border-zinc-200 dark:bg-zinc-800 dark:text-zinc-300 dark:border-zinc-700',
+    info: 'bg-zinc-100 text-zinc-600 border-zinc-200 dark:bg-zinc-800 dark:text-zinc-300 dark:border-zinc-700',
   };
   
   return (
@@ -228,18 +228,18 @@ function JobDetailContent() {
 
   if (loading) {
     return (
-      <div className="min-h-screen bg-muted/30 flex items-center justify-center">
-        <Loader2 className="h-8 w-8 animate-spin text-primary" />
+      <div className="min-h-screen bg-white dark:bg-zinc-950 flex items-center justify-center">
+        <Loader2 className="h-8 w-8 animate-spin text-zinc-400" />
       </div>
     );
   }
 
   if (error || !job) {
     return (
-      <div className="min-h-screen bg-muted/30 flex flex-col items-center justify-center gap-4">
-        <AlertCircle className="h-12 w-12 text-muted-foreground" />
-        <p className="text-muted-foreground">{error || '岗位不存在'}</p>
-        <Button onClick={() => router.back()}>
+      <div className="min-h-screen bg-white dark:bg-zinc-950 flex flex-col items-center justify-center gap-4">
+        <AlertCircle className="h-12 w-12 text-zinc-300 dark:text-zinc-600" />
+        <p className="text-zinc-500 dark:text-zinc-400">{error || '岗位不存在'}</p>
+        <Button onClick={() => router.back()} className="bg-zinc-900 text-white hover:bg-zinc-800 dark:bg-white dark:text-zinc-900 dark:hover:bg-zinc-200">
           <ArrowLeft className="h-4 w-4 mr-2" />
           返回岗位列表
         </Button>
@@ -253,16 +253,16 @@ function JobDetailContent() {
   const isHot = (relatedJobs.length > 3);
 
   return (
-    <div className="min-h-screen bg-muted/30">
+    <div className="min-h-screen bg-white dark:bg-zinc-950">
       <div className="container mx-auto px-4 py-4 md:py-8 max-w-4xl">
         {/* 返回按钮 */}
-        <Button variant="ghost" className="mb-4 h-9 text-sm" onClick={() => router.back()}>
+        <Button variant="ghost" className="mb-4 h-9 text-sm text-zinc-500 hover:text-zinc-900 hover:bg-zinc-100 dark:hover:bg-zinc-800 dark:hover:text-zinc-100" onClick={() => router.back()}>
           <ArrowLeft className="h-4 w-4 mr-2" />
           返回岗位列表
         </Button>
 
         {/* 主卡片 - 核心信息 */}
-        <Card className="mb-4">
+        <Card className="mb-4 rounded-2xl border-zinc-200 dark:border-zinc-800 shadow-none">
           <CardContent className="pt-4 md:pt-6">
             {/* Header: Logo + Title */}
             <div className="flex items-start gap-3 md:gap-4 mb-4">
@@ -270,12 +270,12 @@ function JobDetailContent() {
               <div className="flex-1 min-w-0">
                 <div className="flex items-start justify-between gap-2">
                   <div className="flex-1">
-                    <h1 className="text-xl md:text-2xl font-bold mb-1 line-clamp-2">{job.title}</h1>
-                    <p className="text-base md:text-lg text-muted-foreground flex items-center gap-2">
+                    <h1 className="text-xl md:text-2xl font-semibold tracking-tight text-zinc-900 dark:text-zinc-50 mb-1 line-clamp-2">{job.title}</h1>
+                    <p className="text-base md:text-lg text-zinc-500 dark:text-zinc-400 flex items-center gap-2">
                       <Building2 className="h-4 w-4" />
                       {job.company}
-                      {isNew && <Badge className="bg-green-500 text-white text-xs">新发布</Badge>}
-                      {isHot && <Badge variant="outline" className="text-orange-600 border-orange-300 text-xs">热招</Badge>}
+                      {isNew && <Badge className="bg-zinc-900 text-white dark:bg-white dark:text-zinc-900 text-xs hover:bg-zinc-900">新发布</Badge>}
+                      {isHot && <Badge variant="outline" className="border-zinc-300 dark:border-zinc-600 text-zinc-600 dark:text-zinc-300 text-xs">热招</Badge>}
                     </p>
                   </div>
                 </div>
@@ -291,10 +291,10 @@ function JobDetailContent() {
                 <InfoBadge icon={DollarSign} variant="success">{job.salary_range}</InfoBadge>
               )}
               {job.sponsorship && job.sponsorship !== 'unknown' && (
-                <Badge 
-                  className={job.sponsorship === 'yes' 
-                    ? 'bg-green-100 text-green-700 border-green-300 hover:bg-green-100 text-xs md:text-sm font-medium px-2 py-1' 
-                    : 'bg-red-100 text-red-700 border-red-300 hover:bg-red-100 text-xs md:text-sm font-bold px-2 py-1 animate-pulse'
+                <Badge
+                  className={job.sponsorship === 'yes'
+                    ? 'bg-zinc-900 text-white dark:bg-white dark:text-zinc-900 hover:bg-zinc-900 text-xs md:text-sm font-medium px-2 py-1'
+                    : 'bg-zinc-100 text-zinc-500 dark:bg-zinc-800 dark:text-zinc-400 hover:bg-zinc-100 text-xs md:text-sm font-medium px-2 py-1'
                   }
                 >
                   {job.sponsorship === 'yes' ? (
@@ -314,18 +314,18 @@ function JobDetailContent() {
 
             {/* 截止日期 */}
             {job.application_deadline && (
-              <div className="flex items-center gap-2 text-sm text-muted-foreground mb-4">
+              <div className="flex items-center gap-2 text-sm text-zinc-500 dark:text-zinc-400 mb-4">
                 <Calendar className="h-4 w-4" />
                 <span>截止日期：{job.application_deadline}</span>
               </div>
             )}
 
-            <Separator className="my-4" />
+            <Separator className="my-4 bg-zinc-100 dark:bg-zinc-800" />
 
             {/* CTA 按钮 */}
             <div className="flex flex-col sm:flex-row gap-3">
-              <Button 
-                className="bg-green-600 hover:bg-green-700 flex-1"
+              <Button
+                className="bg-zinc-900 text-white hover:bg-zinc-800 dark:bg-white dark:text-zinc-900 dark:hover:bg-zinc-200 flex-1"
                 onClick={handleApply}
                 disabled={applying}
               >
@@ -347,7 +347,7 @@ function JobDetailContent() {
                 )}
               </Button>
               {job.job_url && (
-                <Button variant="outline" asChild className="flex-1 sm:flex-none">
+                <Button variant="outline" asChild className="flex-1 sm:flex-none border-zinc-200 dark:border-zinc-700 text-zinc-600 dark:text-zinc-300 hover:bg-zinc-100 hover:text-zinc-900 dark:hover:bg-zinc-800 dark:hover:text-zinc-100">
                   <a href={job.job_url} target="_blank" rel="noopener noreferrer">
                     <ExternalLink className="h-4 w-4 mr-2" />
                     原链接
@@ -360,46 +360,48 @@ function JobDetailContent() {
 
         {/* 公司信息卡 */}
         {job.company_info && (
-          <Card className="mb-4 bg-gradient-to-r from-[#F5F0EB] to-[#E2D0B8]/30 border-[#C46A4A]/20">
+          <Card className="mb-4 rounded-2xl border-zinc-200 dark:border-zinc-800 shadow-none">
             <CardContent className="pt-4">
               <div className="flex items-start gap-3">
                 <CompanyLogo company={job.company_info.company_name} logoUrl={job.company_info.logo_url} size="md" />
                 <div className="flex-1">
-                  <h3 className="font-semibold text-base mb-1">{job.company_info.company_name}</h3>
+                  <h3 className="font-semibold text-base mb-1 text-zinc-900 dark:text-zinc-50">{job.company_info.company_name}</h3>
                   {job.company_info.short_desc && (
-                    <p className="text-sm text-muted-foreground mb-2">{job.company_info.short_desc}</p>
+                    <p className="text-sm text-zinc-500 dark:text-zinc-400 mb-2">{job.company_info.short_desc}</p>
                   )}
                   {job.company_info.headquarters && (
-                    <p className="text-xs text-muted-foreground flex items-center gap-1 mb-1">
+                    <p className="text-xs text-zinc-500 dark:text-zinc-400 flex items-center gap-1 mb-1">
                       <MapPin className="h-3 w-3" />
                       {job.company_info.headquarters}
                     </p>
                   )}
                   {job.company_info.industry && (
-                    <p className="text-xs text-muted-foreground mb-2">
+                    <p className="text-xs text-zinc-500 dark:text-zinc-400 mb-2">
                       行业：{job.company_info.industry}
                     </p>
                   )}
                 </div>
               </div>
               {job.company_info.full_desc && (
-                <div className="mt-4 pt-4 border-t border-slate-200">
-                  <h4 className="font-medium text-sm mb-2 flex items-center gap-2">
-                    <Building2 className="h-4 w-4 text-black" />
+                <div className="mt-4 pt-4 border-t border-zinc-100 dark:border-zinc-800">
+                  <h4 className="font-medium text-sm mb-2 flex items-center gap-2 text-zinc-900 dark:text-zinc-50">
+                    <span className="w-5 h-5 rounded-md bg-zinc-900 dark:bg-white flex items-center justify-center flex-shrink-0">
+                      <Building2 className="h-3 w-3 text-white dark:text-zinc-900" />
+                    </span>
                     公司介绍
                   </h4>
-                  <p className="text-sm text-muted-foreground leading-relaxed whitespace-pre-wrap">
+                  <p className="text-sm text-zinc-500 dark:text-zinc-400 leading-relaxed whitespace-pre-wrap">
                     {job.company_info.full_desc}
                   </p>
                 </div>
               )}
               {job.company_info.careers_page && (
                 <div className="mt-4">
-                  <a 
+                  <a
                     href={job.company_info.careers_page}
                     target="_blank"
                     rel="noopener noreferrer"
-                    className="inline-flex items-center gap-1 text-sm text-black hover:underline"
+                    className="inline-flex items-center gap-1 text-sm text-zinc-900 dark:text-zinc-100 hover:underline"
                   >
                     <Globe className="h-3 w-3" />
                     查看公司全部职位
@@ -413,13 +415,15 @@ function JobDetailContent() {
 
         {/* 岗位概述 */}
         {job.overview && (
-          <Card className="mb-4 bg-gradient-to-r from-[#B5BEB0]/20 to-[#E2D0B8]/20 border-[#B5BEB0]/30">
+          <Card className="mb-4 rounded-2xl border-zinc-200 dark:border-zinc-800 shadow-none bg-zinc-50/80 dark:bg-zinc-900/40">
             <CardContent className="pt-4">
               <div className="flex items-center gap-2 mb-2">
-                <FileText className="h-4 w-4 text-green-600" />
-                <span className="font-medium text-sm">岗位概述</span>
+                <span className="w-5 h-5 rounded-md bg-zinc-900 dark:bg-white flex items-center justify-center flex-shrink-0">
+                  <FileText className="h-3 w-3 text-white dark:text-zinc-900" />
+                </span>
+                <span className="font-medium text-sm text-zinc-900 dark:text-zinc-50">岗位概述</span>
               </div>
-              <p className="text-sm md:text-base text-foreground leading-relaxed">
+              <p className="text-sm md:text-base text-zinc-600 dark:text-zinc-300 leading-relaxed">
                 {job.overview}
               </p>
             </CardContent>
@@ -434,13 +438,15 @@ function JobDetailContent() {
           const displayItems = showExpand && !showAllResponsibilities ? items.slice(0, initialCount) : items;
           
           return (
-            <Card className="mb-4">
+            <Card className="mb-4 rounded-2xl border-zinc-200 dark:border-zinc-800 shadow-none">
               <CardHeader className="pb-2">
                 <CardTitle className="flex items-center justify-between text-base">
-                  <span className="flex items-center gap-2">
-                    <Target className="h-4 w-4 text-green-600" />
+                  <span className="flex items-center gap-2 text-zinc-900 dark:text-zinc-50">
+                    <span className="w-6 h-6 rounded-lg bg-zinc-900 dark:bg-white flex items-center justify-center flex-shrink-0">
+                      <Target className="h-3.5 w-3.5 text-white dark:text-zinc-900" />
+                    </span>
                     岗位职责
-                    <Badge variant="secondary" className="text-xs ml-1">{items.length}条</Badge>
+                    <Badge variant="secondary" className="text-xs ml-1 bg-zinc-100 text-zinc-500 dark:bg-zinc-800 dark:text-zinc-400 hover:bg-zinc-100">{items.length}条</Badge>
                   </span>
                 </CardTitle>
               </CardHeader>
@@ -448,17 +454,17 @@ function JobDetailContent() {
                 <ul className="space-y-2">
                   {displayItems.map((item: string, index: number) => (
                     <li key={index} className="flex items-start gap-3">
-                      <span className="flex-shrink-0 w-5 h-5 rounded-full bg-green-100 text-green-600 flex items-center justify-center text-xs font-medium mt-0.5">
+                      <span className="flex-shrink-0 w-5 h-5 rounded-full bg-zinc-100 text-zinc-600 dark:bg-zinc-800 dark:text-zinc-300 flex items-center justify-center text-xs font-medium mt-0.5">
                         {index + 1}
                       </span>
-                      <span className="text-sm text-muted-foreground">{item.trim()}</span>
+                      <span className="text-sm text-zinc-500 dark:text-zinc-400">{item.trim()}</span>
                     </li>
                   ))}
                 </ul>
                 {showExpand && (
-                  <Button 
-                    variant="ghost" 
-                    className="w-full mt-3 text-blue-600 hover:text-blue-700 hover:bg-blue-50"
+                  <Button
+                    variant="ghost"
+                    className="w-full mt-3 text-zinc-500 hover:text-zinc-900 hover:bg-zinc-100 dark:hover:bg-zinc-800 dark:hover:text-zinc-100"
                     onClick={() => setShowAllResponsibilities(!showAllResponsibilities)}
                   >
                     {showAllResponsibilities ? (
@@ -487,13 +493,15 @@ function JobDetailContent() {
           const displayItems = showExpand && !showAllRequirements ? items.slice(0, initialCount) : items;
           
           return (
-            <Card className="mb-4">
+            <Card className="mb-4 rounded-2xl border-zinc-200 dark:border-zinc-800 shadow-none">
               <CardHeader className="pb-2">
                 <CardTitle className="flex items-center gap-2 text-base">
-                  <span className="flex items-center gap-2">
-                    <CheckCircle className="h-4 w-4 text-black" />
+                  <span className="flex items-center gap-2 text-zinc-900 dark:text-zinc-50">
+                    <span className="w-6 h-6 rounded-lg bg-zinc-900 dark:bg-white flex items-center justify-center flex-shrink-0">
+                      <CheckCircle className="h-3.5 w-3.5 text-white dark:text-zinc-900" />
+                    </span>
                     任职要求
-                    <Badge variant="secondary" className="text-xs ml-1">{items.length}条</Badge>
+                    <Badge variant="secondary" className="text-xs ml-1 bg-zinc-100 text-zinc-500 dark:bg-zinc-800 dark:text-zinc-400 hover:bg-zinc-100">{items.length}条</Badge>
                   </span>
                 </CardTitle>
               </CardHeader>
@@ -501,15 +509,15 @@ function JobDetailContent() {
                 <ul className="space-y-2">
                   {displayItems.map((item: string, index: number) => (
                     <li key={index} className="flex items-start gap-3">
-                      <CheckCircle className="h-4 w-4 text-black flex-shrink-0 mt-1" />
-                      <span className="text-sm text-muted-foreground">{item.trim()}</span>
+                      <CheckCircle className="h-4 w-4 text-zinc-300 dark:text-zinc-600 flex-shrink-0 mt-1" />
+                      <span className="text-sm text-zinc-500 dark:text-zinc-400">{item.trim()}</span>
                     </li>
                   ))}
                 </ul>
                 {showExpand && (
-                  <Button 
-                    variant="ghost" 
-                    className="w-full mt-3 text-blue-600 hover:text-blue-700 hover:bg-blue-50"
+                  <Button
+                    variant="ghost"
+                    className="w-full mt-3 text-zinc-500 hover:text-zinc-900 hover:bg-zinc-100 dark:hover:bg-zinc-800 dark:hover:text-zinc-100"
                     onClick={() => setShowAllRequirements(!showAllRequirements)}
                   >
                     {showAllRequirements ? (
@@ -532,10 +540,12 @@ function JobDetailContent() {
 
         {/* 加分项 */}
         {job.nice_to_have && (
-          <Card className="mb-4 border-amber-200 bg-amber-50/50">
+          <Card className="mb-4 rounded-2xl border-dashed border-zinc-200 dark:border-zinc-800 shadow-none bg-zinc-50/80 dark:bg-zinc-900/40">
             <CardHeader className="pb-2">
-              <CardTitle className="flex items-center gap-2 text-base text-amber-800">
-                <Star className="h-4 w-4" />
+              <CardTitle className="flex items-center gap-2 text-base text-zinc-900 dark:text-zinc-50">
+                <span className="w-6 h-6 rounded-lg bg-zinc-900 dark:bg-white flex items-center justify-center flex-shrink-0">
+                  <Star className="h-3.5 w-3.5 text-white dark:text-zinc-900" />
+                </span>
                 加分项
               </CardTitle>
             </CardHeader>
@@ -543,8 +553,8 @@ function JobDetailContent() {
               <ul className="space-y-2">
                 {job.nice_to_have.split('|').filter((item: string) => item.trim()).map((item: string, index: number) => (
                   <li key={index} className="flex items-start gap-3">
-                    <Star className="h-4 w-4 text-amber-500 flex-shrink-0 mt-1" />
-                    <span className="text-sm text-amber-700">{item.trim()}</span>
+                    <Star className="h-4 w-4 text-zinc-300 dark:text-zinc-600 flex-shrink-0 mt-1" />
+                    <span className="text-sm text-zinc-500 dark:text-zinc-400">{item.trim()}</span>
                   </li>
                 ))}
               </ul>
@@ -554,15 +564,17 @@ function JobDetailContent() {
 
         {/* 原始岗位描述 - 如果没有结构化数据 */}
         {!job.overview && job.description && (
-          <Card className="mb-4">
+          <Card className="mb-4 rounded-2xl border-zinc-200 dark:border-zinc-800 shadow-none">
             <CardHeader className="pb-2">
-              <CardTitle className="flex items-center gap-2 text-base">
-                <FileText className="h-4 w-4" />
+              <CardTitle className="flex items-center gap-2 text-base text-zinc-900 dark:text-zinc-50">
+                <span className="w-6 h-6 rounded-lg bg-zinc-900 dark:bg-white flex items-center justify-center flex-shrink-0">
+                  <FileText className="h-3.5 w-3.5 text-white dark:text-zinc-900" />
+                </span>
                 岗位描述
               </CardTitle>
             </CardHeader>
             <CardContent>
-              <div className="whitespace-pre-wrap text-sm text-muted-foreground">
+              <div className="whitespace-pre-wrap text-sm text-zinc-500 dark:text-zinc-400">
                 {job.description}
               </div>
             </CardContent>
@@ -571,19 +583,21 @@ function JobDetailContent() {
 
         {/* 同公司其他岗位 - 优先跳转到公司招聘页面 */}
         {(relatedJobs.length > 0 || job.company_info?.careers_page) && (
-          <Card className="mb-4">
+          <Card className="mb-4 rounded-2xl border-zinc-200 dark:border-zinc-800 shadow-none">
             <CardHeader className="pb-2">
               <CardTitle className="flex items-center justify-between text-base">
-                <span className="flex items-center gap-2">
-                  <Building2 className="h-4 w-4 text-black" />
+                <span className="flex items-center gap-2 text-zinc-900 dark:text-zinc-50">
+                  <span className="w-6 h-6 rounded-lg bg-zinc-900 dark:bg-white flex items-center justify-center flex-shrink-0">
+                    <Building2 className="h-3.5 w-3.5 text-white dark:text-zinc-900" />
+                  </span>
                   同公司其他岗位 {relatedJobs.length > 0 && `(${relatedJobs.length})`}
                 </span>
                 {job.company_info?.careers_page && (
-                  <a 
+                  <a
                     href={job.company_info.careers_page}
                     target="_blank"
                     rel="noopener noreferrer"
-                    className="text-xs text-black hover:underline flex items-center gap-1"
+                    className="text-xs text-zinc-500 hover:text-zinc-900 dark:hover:text-zinc-100 flex items-center gap-1 transition-colors"
                     onClick={(e) => e.stopPropagation()}
                   >
                     <Globe className="h-3 w-3" />
@@ -597,28 +611,28 @@ function JobDetailContent() {
               {relatedJobs.length > 0 ? (
                 <div className="space-y-2">
                   {relatedJobs.map((relatedJob) => (
-                    <Link 
+                    <Link
                       key={relatedJob.id}
                       href={`/jobs/${relatedJob.id}`}
-                      className="flex items-center justify-between p-3 rounded-lg hover:bg-muted/50 transition-colors group"
+                      className="flex items-center justify-between p-3 rounded-lg hover:bg-zinc-50 dark:hover:bg-zinc-800/60 transition-colors group"
                     >
                       <div>
-                        <p className="font-medium text-sm group-hover:text-blue-600">{relatedJob.title}</p>
-                        <p className="text-xs text-muted-foreground flex items-center gap-1 mt-0.5">
+                        <p className="font-medium text-sm text-zinc-900 dark:text-zinc-50">{relatedJob.title}</p>
+                        <p className="text-xs text-zinc-400 dark:text-zinc-500 flex items-center gap-1 mt-0.5">
                           <MapPin className="h-3 w-3" />
                           {relatedJob.region}
                         </p>
                       </div>
-                      <ChevronRight className="h-4 w-4 text-muted-foreground group-hover:text-blue-600" />
+                      <ChevronRight className="h-4 w-4 text-zinc-300 dark:text-zinc-600 group-hover:text-zinc-900 dark:group-hover:text-zinc-100 transition-colors" />
                     </Link>
                   ))}
                 </div>
               ) : job.company_info?.careers_page ? (
-                <a 
+                <a
                   href={job.company_info.careers_page}
                   target="_blank"
                   rel="noopener noreferrer"
-                  className="flex items-center justify-center gap-2 p-4 rounded-lg bg-green-50 hover:bg-green-100 transition-colors text-green-700 font-medium"
+                  className="flex items-center justify-center gap-2 p-4 rounded-lg bg-zinc-50 hover:bg-zinc-100 dark:bg-zinc-800/60 dark:hover:bg-zinc-800 transition-colors text-zinc-900 dark:text-zinc-100 font-medium"
                 >
                   <Globe className="h-5 w-5" />
                   去 {job.company} 官网申请
@@ -630,16 +644,16 @@ function JobDetailContent() {
         )}
 
         {/* 底部信息 */}
-        <Card>
+        <Card className="rounded-2xl border-zinc-200 dark:border-zinc-800 shadow-none">
           <CardContent className="pt-4">
-            <div className="flex items-center justify-between text-xs text-muted-foreground">
+            <div className="flex items-center justify-between text-xs text-zinc-400 dark:text-zinc-500">
               <div className="flex items-center gap-1">
                 <Clock className="h-3 w-3" />
                 <span>发布于 {new Date(job.created_at).toLocaleDateString('zh-CN')}</span>
                 <span className="mx-2">·</span>
                 <span>{postedDays === 0 ? '今天' : `${postedDays}天前`}</span>
               </div>
-              <Button variant="ghost" size="sm" className="h-7 text-xs" asChild>
+              <Button variant="ghost" size="sm" className="h-7 text-xs text-zinc-500 hover:text-zinc-900 hover:bg-zinc-100 dark:hover:bg-zinc-800 dark:hover:text-zinc-100" asChild>
                 <a href={`/jobs?company=${encodeURIComponent(job.company)}`}>
                   <Briefcase className="h-3 w-3 mr-1" />
                   查看更多{job.company}岗位

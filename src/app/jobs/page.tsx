@@ -13,7 +13,6 @@ import {
 } from '@/components/ui/popover';
 import { Search, MapPin, Briefcase, Users, ExternalLink, ChevronDown, X, Plus, Check, Loader2 } from 'lucide-react';
 import Link from 'next/link';
-import Image from 'next/image';
 import { AccessGuard, useAccessCode } from '@/components/access-guard';
 import { Header1 } from '@/components/header1';
 import { useLanguage } from '@/lib/language-context';
@@ -43,24 +42,6 @@ interface JobConfig {
   is_active: boolean;
 }
 
-// 根据公司名生成首字母占位符的颜色
-function getCompanyGradient(company: string): string {
-  const gradients = [
-    'from-[#C46A4A] to-[#B5BEB0]',
-    'from-[#B5BEB0] to-[#E2D0B8]',
-    'from-[#E2D0B8] to-[#C5C9CE]',
-    'from-[#C46A4A] to-[#E2D0B8]',
-    'from-[#B5BEB0] to-[#C46A4A]',
-    'from-[#E2D0B8] to-[#B5BEB0]',
-  ];
-  
-  let hash = 0;
-  for (let i = 0; i < company.length; i++) {
-    hash = company.charCodeAt(i) + ((hash << 5) - hash);
-  }
-  return gradients[Math.abs(hash) % gradients.length];
-}
-
 // 获取公司首字母
 function getCompanyInitial(company: string): string {
   // 处理中文公司名
@@ -82,7 +63,7 @@ function CompanyLogo({ company, logoUrl }: { company: string; logoUrl?: string }
   // 如果有logo_url且图片加载成功
   if (logoUrl && !imgError) {
     return (
-      <div className="w-12 h-12 rounded-lg overflow-hidden bg-white border flex-shrink-0">
+      <div className="w-12 h-12 rounded-xl overflow-hidden bg-white border border-zinc-200 dark:border-zinc-700 flex-shrink-0">
         <img
           src={logoUrl}
           alt={company}
@@ -95,13 +76,13 @@ function CompanyLogo({ company, logoUrl }: { company: string; logoUrl?: string }
       </div>
     );
   }
-  
+
   // 尝试使用 Clearbit Logo API
   const clearbitUrl = `https://logo.clearbit.com/${company.toLowerCase().replace(/\s+/g, '')}.com?size=96`;
-  
+
   if (!imgError) {
     return (
-      <div className="w-12 h-12 rounded-lg overflow-hidden bg-white border flex-shrink-0">
+      <div className="w-12 h-12 rounded-xl overflow-hidden bg-white border border-zinc-200 dark:border-zinc-700 flex-shrink-0">
         <img
           src={clearbitUrl}
           alt={company}
@@ -111,11 +92,11 @@ function CompanyLogo({ company, logoUrl }: { company: string; logoUrl?: string }
       </div>
     );
   }
-  
-  // 使用首字母占位符
+
+  // 使用首字母占位符（黑色圆角方块语言）
   return (
-    <div className={`w-12 h-12 rounded-xl bg-gradient-to-br ${getCompanyGradient(company)} flex items-center justify-center flex-shrink-0 shadow-sm`}>
-      <span className="text-white font-bold text-lg">
+    <div className="w-12 h-12 rounded-xl bg-zinc-900 dark:bg-white flex items-center justify-center flex-shrink-0 shadow-lg shadow-zinc-900/15 dark:shadow-black/30">
+      <span className="text-white dark:text-zinc-900 font-bold text-lg">
         {getCompanyInitial(company)}
       </span>
     </div>
@@ -225,15 +206,15 @@ function MultiSelectFilter({
   return (
     <Popover>
       <PopoverTrigger asChild>
-        <button className="inline-flex items-center gap-1.5 md:gap-2 px-2.5 py-1.5 md:px-3 md:py-2 rounded-full hover:bg-accent hover:text-accent-foreground transition-colors text-xs md:text-sm">
-          <Icon className="h-3.5 w-3.5 md:h-4 md:w-4 text-muted-foreground" />
+        <button className="inline-flex items-center gap-1.5 md:gap-2 px-2.5 py-1.5 md:px-3 md:py-2 rounded-full text-zinc-700 dark:text-zinc-200 hover:bg-zinc-100 hover:text-zinc-900 dark:hover:bg-zinc-800 dark:hover:text-zinc-100 transition-colors text-xs md:text-sm">
+          <Icon className="h-3.5 w-3.5 md:h-4 md:w-4 text-zinc-400 dark:text-zinc-500" />
           <span className="font-medium">{label}</span>
           {selected.length > 0 && (
-            <Badge variant="secondary" className="ml-0.5 h-4 md:h-5 px-1 md:px-1.5 rounded-full text-[10px] md:text-xs">
+            <Badge variant="secondary" className="ml-0.5 h-4 md:h-5 px-1 md:px-1.5 rounded-full text-[10px] md:text-xs bg-zinc-900 text-white dark:bg-white dark:text-zinc-900 hover:bg-zinc-900">
               {selected.length}
             </Badge>
           )}
-          <ChevronDown className="h-3 w-3 md:h-3.5 md:w-3.5 text-muted-foreground" />
+          <ChevronDown className="h-3 w-3 md:h-3.5 md:w-3.5 text-zinc-400 dark:text-zinc-500" />
         </button>
       </PopoverTrigger>
       <PopoverContent className="w-44 md:w-48 p-2" align="start">
@@ -242,16 +223,16 @@ function MultiSelectFilter({
             <label
               key={option.id}
               className={`flex items-center gap-2 px-2 py-1.5 rounded-md cursor-pointer transition-colors ${
-                selected.includes(option.config_value) 
-                  ? 'bg-primary/10 text-primary' 
-                  : 'hover:bg-muted'
+                selected.includes(option.config_value)
+                  ? 'bg-zinc-100 text-zinc-900 dark:bg-zinc-800 dark:text-zinc-50'
+                  : 'hover:bg-zinc-50 dark:hover:bg-zinc-800/60'
               }`}
               translate="no"
             >
               <Checkbox
                 checked={selected.includes(option.config_value)}
                 onCheckedChange={() => handleToggle(option.config_value)}
-                className="data-[state=checked]:bg-primary data-[state=checked]:border-primary"
+                className="data-[state=checked]:bg-zinc-900 data-[state=checked]:border-zinc-900 dark:data-[state=checked]:bg-white dark:data-[state=checked]:border-white dark:data-[state=checked]:text-zinc-900"
               />
               <span className="text-sm font-medium">
                 {showFlag ? getRegionDisplayText(option.config_value) : option.config_value}
@@ -260,13 +241,13 @@ function MultiSelectFilter({
           ))}
         </div>
         {options.length === 0 && (
-          <div className="text-center py-2 text-sm text-muted-foreground">{t('jobs.noOptions')}</div>
+          <div className="text-center py-2 text-sm text-zinc-400">{t('jobs.noOptions')}</div>
         )}
         {selected.length > 0 && (
-          <div className="border-t mt-2 pt-2">
+          <div className="border-t border-zinc-100 dark:border-zinc-800 mt-2 pt-2">
             <button
               onClick={() => onChange([])}
-              className="w-full text-xs text-muted-foreground hover:text-foreground transition-colors py-1"
+              className="w-full text-xs text-zinc-400 hover:text-zinc-900 dark:hover:text-zinc-100 transition-colors py-1"
             >
               {t('jobs.clearAll')}
             </button>
@@ -298,15 +279,15 @@ function SingleSelectFilter({
   return (
     <Popover>
       <PopoverTrigger asChild>
-        <button className="inline-flex items-center gap-1.5 md:gap-2 px-2.5 py-1.5 md:px-3 md:py-2 rounded-full hover:bg-accent hover:text-accent-foreground transition-colors text-xs md:text-sm">
-          <Icon className="h-3.5 w-3.5 md:h-4 md:w-4 text-muted-foreground" />
+        <button className="inline-flex items-center gap-1.5 md:gap-2 px-2.5 py-1.5 md:px-3 md:py-2 rounded-full text-zinc-700 dark:text-zinc-200 hover:bg-zinc-100 hover:text-zinc-900 dark:hover:bg-zinc-800 dark:hover:text-zinc-100 transition-colors text-xs md:text-sm">
+          <Icon className="h-3.5 w-3.5 md:h-4 md:w-4 text-zinc-400 dark:text-zinc-500" />
           <span className="font-medium">{label}</span>
           {displayValue && (
-            <Badge variant="secondary" className="ml-0.5 h-4 md:h-5 px-1 md:px-1.5 rounded-full text-[10px] md:text-xs">
+            <Badge variant="secondary" className="ml-0.5 h-4 md:h-5 px-1 md:px-1.5 rounded-full text-[10px] md:text-xs bg-zinc-900 text-white dark:bg-white dark:text-zinc-900 hover:bg-zinc-900">
               {displayValue}
             </Badge>
           )}
-          <ChevronDown className="h-3 w-3 md:h-3.5 md:w-3.5 text-muted-foreground" />
+          <ChevronDown className="h-3 w-3 md:h-3.5 md:w-3.5 text-zinc-400 dark:text-zinc-500" />
         </button>
       </PopoverTrigger>
       <PopoverContent className="w-36 md:w-40 p-1" align="start">
@@ -314,9 +295,9 @@ function SingleSelectFilter({
           <button
             onClick={() => onChange(t('page.all'))}
             className={`w-full text-left px-3 py-2 rounded-md text-sm transition-colors ${
-              selected === t('page.all') 
-                ? 'bg-primary text-primary-foreground' 
-                : 'hover:bg-muted'
+              selected === t('page.all')
+                ? 'bg-zinc-900 text-white dark:bg-white dark:text-zinc-900'
+                : 'hover:bg-zinc-100 dark:hover:bg-zinc-800'
             }`}
           >
             {t('page.all')}
@@ -326,9 +307,9 @@ function SingleSelectFilter({
               key={option.id}
               onClick={() => onChange(option.config_value)}
               className={`w-full text-left px-3 py-2 rounded-md text-sm transition-colors ${
-                selected === option.config_value 
-                  ? 'bg-primary text-primary-foreground' 
-                  : 'hover:bg-muted'
+                selected === option.config_value
+                  ? 'bg-zinc-900 text-white dark:bg-white dark:text-zinc-900'
+                  : 'hover:bg-zinc-100 dark:hover:bg-zinc-800'
               }`}
               translate="no"
             >
@@ -493,40 +474,40 @@ function JobsContent() {
     });
 
   return (
-    <div className="min-h-screen bg-background">
+    <div className="min-h-screen bg-white dark:bg-zinc-950">
       <Header1 />
-      <main className="container mx-auto px-4 py-4 md:py-8 pt-20">
-        {/* Page Title */}
-        <div className="mb-8 md:mb-12 text-center">
-          <h1 className="text-3xl md:text-4xl font-light mb-3 md:mb-4 flex items-center justify-center gap-2 md:gap-3 text-black dark:text-white">
-            <span className="p-2 rounded-xl bg-gradient-to-br from-terracotta-500 to-sage-500 inline-flex">
-              <svg className="h-6 w-6 md:h-8 md:w-8 text-white" fill="currentColor" viewBox="0 0 24 24">
-                <path d="M20 6h-4V4c0-1.11-.89-2-2-2h-4c-1.11 0-2 .89-2 2v2H4c-1.11 0-1.99.89-1.99 2L2 19c0 1.11.89 2 2 2h16c1.11 0 2-.89 2-2V8c0-1.11-.89-2-2-2zm-6 0h-4V4h4v2z" />
-              </svg>
-            </span>
-            {t('page.jobs.title')}
-          </h1>
-          <p className="text-base md:text-lg text-gray-500 dark:text-gray-400 max-w-2xl mx-auto">{t('page.jobs.subtitle')}</p>
+      <main className="relative container mx-auto px-4 pt-24 md:pt-28 pb-16">
+        {/* 超大半透明水印背景（极简黑白灰语言） */}
+        <div aria-hidden className="pointer-events-none absolute inset-x-0 top-14 md:top-20 overflow-hidden select-none">
+          <span className="block text-center text-[24vw] md:text-[17vw] leading-[0.85] font-bold tracking-tighter text-zinc-900/[0.045] dark:text-white/[0.05]">
+            JOBS
+          </span>
+        </div>
+
+        {/* Hero：居中标题（悬浮于水印之上） */}
+        <div className="relative mb-10 md:mb-14 text-center">
+          <h1 className="text-3xl md:text-4xl font-semibold tracking-tight text-zinc-900 dark:text-white mb-3">{t('page.jobs.title')}</h1>
+          <p className="text-sm md:text-base text-zinc-500 dark:text-zinc-400 max-w-xl mx-auto">{t('page.jobs.subtitle')}</p>
         </div>
 
         {/* Filters */}
-        <Card className="mb-4 md:mb-6 border-0 shadow-sm bg-gradient-to-r from-background to-muted/30">
+        <Card className="relative mb-4 md:mb-6 rounded-2xl border-zinc-200 dark:border-zinc-800 shadow-none bg-white dark:bg-zinc-950">
           <CardContent className="pt-4 pb-4 md:pt-5 md:pb-5">
             <div className="flex flex-col gap-3 md:gap-4">
               {/* 搜索框 */}
               <div className="relative w-full md:max-w-md">
-                <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
+                <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-zinc-400 dark:text-zinc-500" />
                 <Input
                   placeholder={t('jobs.searchPlaceholder')}
                   value={searchTerm}
                   onChange={(e) => setSearchTerm(e.target.value)}
-                  className="pl-10 h-10 md:h-11 bg-background text-sm"
+                  className="pl-10 h-10 md:h-11 border-zinc-200 dark:border-zinc-700 bg-white dark:bg-zinc-900 text-sm focus-visible:ring-zinc-300 dark:focus-visible:ring-zinc-600"
                 />
               </div>
               
               {/* 筛选器组 */}
               <div className="flex flex-wrap items-center gap-2 md:gap-3">
-                <span className="text-xs md:text-sm text-muted-foreground">{t('jobs.filter')}</span>
+                <span className="text-xs md:text-sm text-zinc-400 dark:text-zinc-500">{t('jobs.filter')}</span>
                 <MultiSelectFilter
                   label={t('jobs.region')}
                   icon={MapPin}
@@ -561,7 +542,7 @@ function JobsContent() {
                       setSelectedDirections([]);
                       setSelectedAudience(t('page.all'));
                     }}
-                    className="inline-flex items-center gap-1 px-2 py-1 text-xs text-muted-foreground hover:text-foreground transition-colors"
+                    className="inline-flex items-center gap-1 px-2 py-1 text-xs text-zinc-400 hover:text-zinc-900 dark:hover:text-zinc-100 transition-colors"
                   >
                     <X className="h-3 w-3" />
                     {t('jobs.clearAll')}
@@ -573,21 +554,20 @@ function JobsContent() {
         </Card>
 
         {/* Results */}
-        <div className="space-y-3 md:space-y-4">
+        <div className="relative space-y-3 md:space-y-4">
           {loading ? (
-            <div className="text-center py-12 text-muted-foreground">
+            <div className="text-center py-12 text-zinc-400">
               <Loader2 className="h-8 w-8 animate-spin mx-auto mb-2" />
               {t('jobs.loading')}
             </div>
           ) : filteredJobs.length === 0 ? (
-            <Card>
-              <CardContent className="py-12 text-center text-muted-foreground">
-                {t('jobs.noJobs')}
-              </CardContent>
-            </Card>
+            <div className="rounded-2xl border border-dashed border-zinc-200 dark:border-zinc-800 py-14 text-center text-zinc-400">
+              <Briefcase className="h-10 w-10 mx-auto mb-3 opacity-40" />
+              <p className="text-sm">{t('jobs.noJobs')}</p>
+            </div>
           ) : (
             filteredJobs.map((job) => (
-              <Card key={job.id} className="hover:shadow-lg transition-all duration-300 active:scale-[0.99] md:active:scale-100 md:hover:-translate-y-0.5">
+              <Card key={job.id} className="rounded-2xl border-zinc-200 dark:border-zinc-800 shadow-none hover:shadow-xl hover:shadow-zinc-900/[0.06] dark:hover:shadow-black/30 transition-shadow duration-300 bg-white dark:bg-zinc-950">
                 <CardContent className="pt-3 md:pt-4 pb-3">
                   <div className="flex gap-3 md:gap-4">
                     {/* 左侧内容区 */}
@@ -596,69 +576,65 @@ function JobsContent() {
                       <div className="flex items-start gap-3 md:gap-4">
                         <CompanyLogo company={job.company} logoUrl={job.logo_url} />
                         <div className="flex-1 min-w-0">
-                          <h3 className="font-semibold text-base md:text-lg hover:text-primary cursor-pointer transition-colors line-clamp-1">
+                          <h3 className="font-semibold tracking-tight text-base md:text-lg text-zinc-900 dark:text-zinc-50 line-clamp-1">
                             {job.title}
                           </h3>
-                          <p className="text-sm text-muted-foreground truncate">{job.company}</p>
+                          <p className="text-sm text-zinc-500 dark:text-zinc-400 truncate">{job.company}</p>
                         </div>
                       </div>
-                      
+
                       {/* 标签区 */}
                       <div className="flex flex-wrap gap-1.5 md:gap-2">
-                        <Badge variant="secondary" className="rounded-md text-xs" translate="no">
+                        <Badge variant="secondary" className="rounded-md text-xs bg-zinc-100 text-zinc-600 dark:bg-zinc-800 dark:text-zinc-300 hover:bg-zinc-100" translate="no">
                           <MapPin className="h-3 w-3 mr-1" />
                           {getRegionDisplayText(job.region)}
                         </Badge>
-                        <Badge variant="secondary" className="rounded-md text-xs" translate="no">
+                        <Badge variant="secondary" className="rounded-md text-xs bg-zinc-100 text-zinc-600 dark:bg-zinc-800 dark:text-zinc-300 hover:bg-zinc-100" translate="no">
                           <Briefcase className="h-3 w-3 mr-1" />
                           {job.direction}
                         </Badge>
-                        <Badge variant="secondary" className="rounded-md text-xs" translate="no">
+                        <Badge variant="secondary" className="rounded-md text-xs bg-zinc-100 text-zinc-600 dark:bg-zinc-800 dark:text-zinc-300 hover:bg-zinc-100" translate="no">
                           <Users className="h-3 w-3 mr-1" />
                           {job.audience}
                         </Badge>
                         {job.salary_range && (
-                          <Badge variant="outline" className="text-green-600 border-green-600 rounded-md text-xs">
+                          <Badge variant="outline" className="border-zinc-200 dark:border-zinc-700 text-zinc-600 dark:text-zinc-300 rounded-md text-xs">
                             {job.salary_range}
                           </Badge>
                         )}
                         {job.sponsorship && job.sponsorship !== 'unknown' && (
-                          <Badge 
-                            variant="outline" 
-                            className={`rounded-md text-xs ${
-                              job.sponsorship === 'yes' 
-                                ? 'text-green-600 border-green-600' 
-                                : 'text-red-600 border-red-600'
-                            }`}
+                          <Badge
+                            variant="outline"
+                            className="rounded-md text-xs border-zinc-200 dark:border-zinc-700 text-zinc-600 dark:text-zinc-300"
                           >
                             {job.sponsorship === 'yes' ? t('jobs.sponsor') : t('jobs.noSponsor')}
                           </Badge>
                         )}
                         {job.is_active === false ? (
-                          <Badge variant="secondary" className="bg-gray-100 text-gray-600 rounded-md text-xs">
+                          <Badge variant="secondary" className="bg-zinc-100 text-zinc-400 dark:bg-zinc-800 dark:text-zinc-500 rounded-md text-xs hover:bg-zinc-100">
                             {t('jobs.inactive')}
                           </Badge>
                         ) : (
-                          <Badge variant="default" className="bg-green-600 rounded-md text-xs">
+                          <Badge variant="default" className="bg-zinc-900 dark:bg-white dark:text-zinc-900 rounded-md text-xs hover:bg-zinc-900">
                             {t('jobs.active')}
                           </Badge>
                         )}
                       </div>
-                      
+
                       {/* 描述 */}
                       {job.description && (
-                        <p className="text-xs md:text-sm text-muted-foreground line-clamp-2">
+                        <p className="text-xs md:text-sm text-zinc-400 dark:text-zinc-500 line-clamp-2">
                           {job.description}
                         </p>
                       )}
                     </div>
-                    
+
                     {/* 右侧按钮区 - 垂直排列 */}
                     <div className="flex flex-col gap-2 flex-shrink-0">
                       {job.is_active !== false && (
-                        <Button 
-                          size="sm" 
-                          className="rounded-lg text-xs md:text-sm h-9 w-24 md:w-28 bg-green-600 hover:bg-green-700"
+                        <Button
+                          size="sm"
+                          className="rounded-lg text-xs md:text-sm h-9 w-24 md:w-28 bg-zinc-900 text-white hover:bg-zinc-800 dark:bg-white dark:text-zinc-900 dark:hover:bg-zinc-200"
                           onClick={() => handleAdd(job.id)}
                           disabled={applyingJobId === job.id || appliedJobIds.has(job.id)}
                         >
@@ -677,13 +653,13 @@ function JobsContent() {
                           )}
                         </Button>
                       )}
-                      <Button size="sm" variant="outline" asChild className="rounded-lg text-xs md:text-sm h-9 whitespace-nowrap">
+                      <Button size="sm" variant="outline" asChild className="rounded-lg text-xs md:text-sm h-9 whitespace-nowrap border-zinc-200 dark:border-zinc-700 text-zinc-600 dark:text-zinc-300 hover:bg-zinc-100 hover:text-zinc-900 dark:hover:bg-zinc-800 dark:hover:text-zinc-100">
                         <Link href={`/jobs/${job.id}`}>
                           {t('jobs.viewDetail')}
                         </Link>
                       </Button>
                       {job.job_url && (
-                        <Button size="sm" variant="outline" asChild className="rounded-lg text-xs md:text-sm h-9 whitespace-nowrap">
+                        <Button size="sm" variant="outline" asChild className="rounded-lg text-xs md:text-sm h-9 whitespace-nowrap border-zinc-200 dark:border-zinc-700 text-zinc-600 dark:text-zinc-300 hover:bg-zinc-100 hover:text-zinc-900 dark:hover:bg-zinc-800 dark:hover:text-zinc-100">
                           <a href={job.job_url} target="_blank" rel="noopener noreferrer">
                             <ExternalLink className="h-3.5 w-3.5 mr-1 flex-shrink-0" />
                             {t('jobs.originalLink')}
@@ -700,7 +676,7 @@ function JobsContent() {
 
         {/* Results count */}
         {!loading && filteredJobs.length > 0 && (
-          <div className="mt-4 md:mt-6 text-center text-xs md:text-sm text-muted-foreground">
+          <div className="relative mt-4 md:mt-6 text-center text-xs md:text-sm text-zinc-400 dark:text-zinc-500">
             {t('jobs.foundJobs')} {filteredJobs.length} {t('jobs.jobsUnit')}
           </div>
         )}
