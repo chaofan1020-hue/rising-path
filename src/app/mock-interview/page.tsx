@@ -376,6 +376,21 @@ export default function MockInterviewPage() {
       // 浏览器不支持：保持静默降级
     }
   }, []);
+
+  // 首次用户手势（点击/触摸）时建立音频图并激活 AudioContext：
+  // 浏览器自动播放策略要求 AudioContext 在手势上下文中创建/恢复，
+  // 否则 createMediaElementSource 接管 audio 元素后输出静音（面试官无声）
+  useEffect(() => {
+    const activate = () => {
+      ensureAudioGraph();
+      audioCtxRef.current?.resume().catch(() => {});
+      if (graphReadyRef.current) {
+        window.removeEventListener("pointerdown", activate);
+      }
+    };
+    window.addEventListener("pointerdown", activate);
+    return () => window.removeEventListener("pointerdown", activate);
+  }, [ensureAudioGraph]);
   const messagesEndRef = useRef<HTMLDivElement>(null);
   const waitTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const earlyTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
@@ -443,7 +458,8 @@ export default function MockInterviewPage() {
       ctx2d.clearRect(0, 0, W, H);
       const analyser = analyserRef.current;
       let hasData = false;
-      if (analyser) {
+      // 仅当 AudioContext 运行时频谱数据才有效（suspended 时数据冻结为 0，需降级伪音波）
+      if (analyser && audioCtxRef.current?.state === "running") {
         analyser.getByteFrequencyData(dataArr);
         hasData = true;
       }
@@ -571,31 +587,40 @@ export default function MockInterviewPage() {
           body: JSON.stringify({ accessCodeId, text, language, speaker, speechRate }),
         });
         if (!res.ok) throw new Error("TTS failed");
-        const data = await res.json();
-        if (data.audioUri) {
-          const audio = audioRef.current;
-          if (!audio) {
-            setSpeaking(false);
-            return;
-          }
-          // 接入频谱分析（音波图），并确保 AudioContext 处于运行态
-          ensureAudioGraph();
-          if (audioCtxRef.current?.state === "suspended") {
-            audioCtxRef.current.resume().catch(() => {});
-          }
-          audio.pause();
-          audio.src = data.audioUri;
-          audio.onended = () => setSpeaking(false);
-          audio.onerror = () => setSpeaking(false);
-          await audio.play();
-        } else {
+        // 后端已代理为同源音频流：转 blob URL 播放（同源，频谱分析不会被浏览器静音）
+        const buf = await res.arrayBuffer();
+        const audio = audioRef.current;
+        if (!buf.byteLength || !audio) {
           setSpeaking(false);
+          return;
         }
+        // 音频图只在用户手势中建立（见 pointerdown 监听）；此处仅兜底 resume。
+        // 图未建立时直接播放：音波降级为伪动画，但保证首次自动开场白有声音
+        if (audioCtxRef.current?.state === "suspended") {
+          try {
+            await audioCtxRef.current.resume();
+          } catch {
+            // 无用户手势时 resume 被拒绝：忽略，保持直接播放
+          }
+        }
+        audio.pause();
+        const blobUrl = URL.createObjectURL(new Blob([buf], { type: "audio/mpeg" }));
+        const release = () => URL.revokeObjectURL(blobUrl);
+        audio.src = blobUrl;
+        audio.onended = () => {
+          release();
+          setSpeaking(false);
+        };
+        audio.onerror = () => {
+          release();
+          setSpeaking(false);
+        };
+        await audio.play();
       } catch {
         setSpeaking(false);
       }
     },
-    [accessCodeId, language, ensureAudioGraph]
+    [accessCodeId, language]
   );
 
   // 流式请求面试官（复用逻辑：开始面试 / 提交回答）
@@ -796,6 +821,8 @@ export default function MockInterviewPage() {
     if (speaking || streaming || recognizing) return;
     let cancelled = false;
     let localCtx: AudioContext | null = null;
+    let vadSource: MediaStreamAudioSourceNode | null = null;
+    let vadAnalyser: AnalyserNode | null = null;
     let recorder: MediaRecorder | null = null;
 
     const run = async () => {
@@ -804,12 +831,22 @@ export default function MockInterviewPage() {
         if (cancelled) return;
         setMicError(false);
         setMicErrorKind(null);
-        const Ctor = window.AudioContext ||
-          (window as unknown as { webkitAudioContext?: typeof AudioContext }).webkitAudioContext;
-        if (!Ctor) return;
-        localCtx = new Ctor();
-        const source = localCtx.createMediaStreamSource(stream);
-        const analyser = localCtx.createAnalyser();
+        // 优先复用全局 AudioContext（免提按钮手势中已创建并激活）；
+        // 自建的 AudioContext 若处于 suspended 状态，频谱/波形数据被冻结，RMS 恒为 0（说话检测不到）
+        ensureAudioGraph();
+        let ctx = audioCtxRef.current;
+        if (!ctx) {
+          const Ctor = window.AudioContext ||
+            (window as unknown as { webkitAudioContext?: typeof AudioContext }).webkitAudioContext;
+          if (!Ctor) return;
+          ctx = new Ctor();
+          localCtx = ctx; // 仅自建的由本 effect 负责关闭
+        }
+        if (ctx.state === "suspended") ctx.resume().catch(() => {});
+        const source = ctx.createMediaStreamSource(stream);
+        const analyser = ctx.createAnalyser();
+        vadSource = source;
+        vadAnalyser = analyser;
         analyser.fftSize = 512;
         source.connect(analyser); // 不接 destination，避免回放自己的声音
         const data = new Uint8Array(analyser.fftSize);
@@ -875,6 +912,13 @@ export default function MockInterviewPage() {
     return () => {
       cancelled = true;
       if (vadRafRef.current) cancelAnimationFrame(vadRafRef.current);
+      // 断开分析节点（共享 ctx 时仅断开连接；自建的 ctx 才关闭）
+      try {
+        vadSource?.disconnect();
+        vadAnalyser?.disconnect();
+      } catch {
+        // 节点可能已断开：忽略
+      }
       localCtx?.close().catch(() => {});
       if (recorder && recorder.state === "recording") {
         recorder.onstop = null;

@@ -45,7 +45,19 @@ export async function POST(request: NextRequest) {
       speechRate: rate,
     });
 
-    return NextResponse.json({ audioUri: response.audioUri });
+    // 后端代理音频字节（同源返回）：
+    // 对象存储 URL 跨域且无 CORS 头，前端经 createMediaElementSource 做频谱分析时会被浏览器静音，
+    // 因此由后端下载音频直接回传二进制流，前端再转 blob URL 播放
+    const audioRes = await fetch(response.audioUri);
+    if (!audioRes.ok) throw new Error('音频下载失败');
+    const audioBuffer = await audioRes.arrayBuffer();
+
+    return new NextResponse(audioBuffer, {
+      headers: {
+        'Content-Type': 'audio/mpeg',
+        'Cache-Control': 'no-store',
+      },
+    });
   } catch (error) {
     console.error('TTS error:', error);
     return NextResponse.json(
