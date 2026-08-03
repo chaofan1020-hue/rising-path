@@ -28,6 +28,8 @@ const translations: Record<Locale, Record<string, string>> = {
     "nav.admin": "后台管理",
     "nav.login": "登录",
     "nav.getStarted": "登录",
+    "footer.brandDescription": "专为海外留学生打造的一站式求职平台：岗位查询、AI选岗、ATS简历优化与模拟面试。",
+    "footer.rights": "保留所有权利。",
     "nav.logout": "退出",
     // 功能卡片
     "features.title": "核心功能",
@@ -457,6 +459,8 @@ const translations: Record<Locale, Record<string, string>> = {
     "nav.admin": "後台管理",
     "nav.login": "登入",
     "nav.getStarted": "登錄",
+    "footer.brandDescription": "專為海外留學生打造的一站式求職平台：崗位查詢、AI選崗、ATS簡歷優化與模擬面試。",
+    "footer.rights": "保留所有權利。",
     "nav.logout": "退出",
     // 功能卡片
     "features.title": "核心功能",
@@ -874,6 +878,8 @@ const translations: Record<Locale, Record<string, string>> = {
   "en": {
     // Navigation
     "nav.home": "Home",
+    "footer.brandDescription": "One-stop career platform for international students: job search, AI matching, ATS optimization and mock interviews.",
+    "footer.rights": "All rights reserved.",
     "nav.features": "Features",
     "nav.more": "More",
     "nav.jobSearch": "Job Search",

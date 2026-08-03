@@ -7,6 +7,7 @@ import { Input } from '@/components/ui/input';
 import { Textarea } from '@/components/ui/textarea';
 import { Badge } from '@/components/ui/badge';
 import { Progress } from '@/components/ui/progress';
+import { Footer } from '@/components/ui/modem-animated-footer';
 import {
   Dialog,
   DialogContent,
@@ -768,6 +769,19 @@ function ResumeContent() {
           )}
         </div>
       </main>
+
+      <Footer
+        brandName="Rising Path"
+        brandDescription={t('footer.brandDescription')}
+        rightsText={t('footer.rights')}
+        navLinks={[
+          { label: t('nav.jobSearch'), href: '/jobs' },
+          { label: t('nav.aiMatch'), href: '/ai-match' },
+          { label: t('nav.atsOptimize'), href: '/optimize' },
+          { label: t('nav.mockInterview'), href: '/mock-interview' },
+          { label: t('nav.applications'), href: '/applications' },
+        ]}
+      />
     </div>
   );
 }
