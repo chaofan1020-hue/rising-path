@@ -1,6 +1,8 @@
 import { NextRequest } from 'next/server';
 import { getSupabaseClient } from '@/storage/database/supabase-client';
 import { LLMClient, Config, HeaderUtils } from 'coze-coding-dev-sdk';
+import { buildDNABlock } from '@/lib/company-dna';
+import { getCompanyDNA } from '@/lib/company-dna-service';
 import {
   INTERVIEWERS,
   selectRoundInterviewers,
@@ -81,12 +83,14 @@ function buildSystemPrompt(
   interviewer: Interviewer | null,
   isNewInterviewer: boolean,
   roundRole: RoundRole | null,
-  isLastRound: boolean
+  isLastRound: boolean,
+  dnaBlock = ''
 ) {
   const typeLabel = TYPE_LABELS[interviewType]?.[language === 'en' ? 'en' : 'zh'] || interviewType;
   const persona = interviewer ? getPersona(interviewer.id) : null;
   const archetype = persona ? ARCHETYPE_PARAMS[persona.archetype] : null;
   const roleInfo = roundRole ? ROUND_ROLE_INFO[roundRole] : null;
+  const dnaSection = dnaBlock ? `\n\n${dnaBlock}` : '';
 
   if (language === 'en') {
     const title = roundRole ? ROLE_TITLES[roundRole].en : 'Interviewer';
@@ -104,12 +108,12 @@ You dislike: ${interviewer.dislikes}`
 
     return `You are conducting a ${typeLabel} for the following position:
 
-${jobDescription}
+${jobDescription}${dnaSection}
 ${personaBlock}${behaviorBlock}${missionBlock}${switchNote}
 
 Rules you MUST follow (this is a REAL interview):
 1. Stay fully in character as ${interviewer ? interviewer.name : 'a professional interviewer'} — your persona defines how you speak, probe, and apply pressure.
-2. Conduct the interview entirely in English.
+2. Conduct the interview entirely in English.${dnaBlock ? '\n2.5 The COMPANY INTERVIEW DNA block above (written in Chinese) is your highest-priority behavioral instruction: your questions, follow-ups, pacing and angles MUST embody it. Never produce a generic interview that merely wears this company\'s name.' : ''}
 3. NEVER evaluate, score, praise, or criticize the candidate's answers. Do not say "good answer", "that's correct", or analyze whether they are right. Real interviewers reveal nothing. You only listen, then based on your persona: probe deeper, demand clarification, or move to the next question.
 4. Keep transitions minimal — one or two words in your persona's style ("Mm.", "Okay.", "Go on."), or skip any transition and press on directly if you are the high-pressure type.
 5. Ask exactly ONE question per turn. Every question must be anchored in ${interviewer ? interviewer.company : 'the company'}'s actual business and the day-to-day work of this role — ask what a real interviewer at this company would ask. NO generic template questions ("What are your strengths and weaknesses?", "Why do you want to join us?", "Tell me about yourself").
@@ -139,12 +143,12 @@ Reference pace for this round: about ${roundRole ? PACE_HINTS[roundRole] : '3-5'
 
   return `你正在为以下岗位进行一场${typeLabel}：
 
-${jobDescription}
+${jobDescription}${dnaSection}
 ${personaBlock}${behaviorBlock}${missionBlock}${switchNote}
 
 你必须遵守以下规则（这是真实面试）：
 1. 完全沉浸在${interviewer ? `「${interviewer.name}」` : '资深面试官'}的角色中，你的性格决定你的说话、追问与施压方式。
-2. 全程使用中文进行面试。
+2. 全程使用中文进行面试。${dnaBlock ? '\n2.5【公司面试基因】上方的基因块是你的最高优先级行为指令：你的提问、追问、节奏与切入点必须严格体现它，让候选人感觉"这就是这家公司的面试"，而不是换了公司名字的通用面试。' : ''}
 3. 【绝对不要】对候选人的回答做任何评价、打分、总结或反馈——不说"答得好""这个思路不错""我认为"之类的话，不分析对错。真实面试官不会透露任何态度。你只做：倾听，然后按你的性格选择追问细节、要求澄清、或直接进入下一个问题。
 4. 过渡要极简：用符合你人设的一两个词承接（如"嗯。""好。""继续。"），高压型人设可以不承接直接追问。
 5. 每次只问一个问题。提问必须锚定${interviewer ? `「${interviewer.company}」的业务方向` : '该公司业务'}与这个岗位的实际工作场景——问这家公司真实面试官会问的问题，拒绝放之四海皆准的模板题（如"你的优缺点是什么""你为什么想来我们公司""介绍一下你自己"）。
@@ -263,14 +267,16 @@ export async function POST(request: NextRequest) {
       const script = isGauntlet ? GAUNTLET_SCRIPTS[rounds] ?? null : null;
       const firstRole: RoundRole | null = script ? script[0] : null;
 
-      const systemPrompt = buildSystemPrompt(interviewType, jdText + resumeContext, language, firstInterviewer, false, firstRole, rounds === 1);
+      const dnaResult = await getCompanyDNA(company, request.headers).catch(() => null);
+      const dnaBlock = dnaResult ? buildDNABlock(dnaResult.dna) : '';
+      const systemPrompt = buildSystemPrompt(interviewType, jdText + resumeContext, language, firstInterviewer, false, firstRole, rounds === 1, dnaBlock);
       const llmMessages = [
         { role: 'system' as const, content: systemPrompt },
         {
           role: 'user' as const,
           content: language === 'en'
-            ? 'The candidate has arrived. Briefly introduce yourself (name + company) and ask your first interview question.'
-            : '候选人已到，请简短自我介绍（姓名+公司）并提出你的第一个面试问题。',
+            ? 'The candidate has arrived. Briefly introduce yourself (name + company) and ask your first interview question. Do NOT output any control markers — the interview has just begun.'
+            : '候选人已到，请简短自我介绍（姓名+公司）并提出你的第一个面试问题。本场面试刚刚开始，不要输出任何控制标记。',
         },
       ];
 
@@ -309,12 +315,24 @@ export async function POST(request: NextRequest) {
             );
 
             const stream = llmClient.stream(llmMessages, { temperature: 0.8 });
+            // 流式输出：剥离控制标记（开场白阶段不存在合法标记，一律过滤丢弃）
+            let pendingTail = '';
+            const openingMarkerState: { marker: ControlMarker | null } = { marker: null };
             for await (const chunk of stream) {
               if (chunk.content) {
-                const text = chunk.content.toString();
-                fullContent += text;
-                controller.enqueue(encoder.encode(`data: ${JSON.stringify({ content: text })}\n\n`));
+                pendingTail += chunk.content.toString();
+                const [emit, rest] = splitMarkerSafe(pendingTail, openingMarkerState);
+                pendingTail = rest;
+                if (emit) {
+                  fullContent += emit;
+                  controller.enqueue(encoder.encode(`data: ${JSON.stringify({ content: emit })}\n\n`));
+                }
               }
+            }
+            const openingTail = cleanTail(pendingTail);
+            if (openingTail) {
+              fullContent += openingTail;
+              controller.enqueue(encoder.encode(`data: ${JSON.stringify({ content: openingTail })}\n\n`));
             }
 
             const newMessages: ChatMessage[] = [
@@ -391,6 +409,9 @@ export async function POST(request: NextRequest) {
     const activeRole: RoundRole | null = script ? script[currentRound - 1] ?? null : null;
     const isLastRound = currentRound >= rounds;
 
+    // 企业面试基因：每次回复都注入（精调/缓存秒回，生成的公司已写回缓存）
+    const dnaResult = sessionCompany ? await getCompanyDNA(sessionCompany, request.headers).catch(() => null) : null;
+    const dnaBlock = dnaResult ? buildDNABlock(dnaResult.dna) : '';
     const systemPrompt = buildSystemPrompt(
       session.interview_type,
       session.job_description || '',
@@ -398,7 +419,8 @@ export async function POST(request: NextRequest) {
       activeInterviewer,
       isSwitchNext,
       activeRole,
-      isLastRound
+      isLastRound,
+      dnaBlock
     );
 
     // 构建 LLM 消息历史（保留最近 30 条，控制上下文）
@@ -442,8 +464,8 @@ export async function POST(request: NextRequest) {
                 ? 'Continue the interview — ask your next question (you have already introduced yourself).'
                 : '请继续面试，提出你的下一个问题（你已做过自我介绍，不要重复）。')
             : (language === 'en'
-                ? 'The previous round is over. You are the new interviewer for this round — begin now.'
-                : '上一轮已结束，你是本轮新接手的面试官，请开始。')) + noRepeatNote
+                ? 'The previous round is over. You are the new interviewer for this round — begin now. This round has just started; do NOT output any control markers yet.'
+                : '上一轮已结束，你是本轮新接手的面试官，请开始。本轮刚刚开始，不要输出任何控制标记。')) + noRepeatNote
         : (language === 'en'
             ? 'The candidate has answered. Continue in character — probe deeper, ask your next question, or close out per your pace control (marker on the last line). Do NOT evaluate the answer.'
             : '候选人已回答。请以你的人设继续面试——追问细节、提出下一个问题，或按你的节奏判断收尾（标记放在最后一行）。不要评价回答。') + noRepeatNote + overdueNote,

@@ -287,6 +287,26 @@ export default function MockInterviewPage() {
   const [resumes, setResumes] = useState<ResumeItem[]>([]);
   const [selectedResumeId, setSelectedResumeId] = useState<number | null>(null);
 
+  // 企业面试基因预览（设置页）
+  interface DNAPreview {
+    company: string;
+    source: "curated" | "cached" | "generated";
+    tagline: string;
+    focusAreas: { dimension: string; weight: string }[];
+    tone: string;
+    cultureKeywords: string[];
+    signatureQuestions: string[];
+  }
+  const [dnaPreview, setDnaPreview] = useState<DNAPreview | null>(null);
+  const [dnaLoading, setDnaLoading] = useState(false);
+
+  // 真实度问卷（报告生成后弹出：评分分流高/低真实度案例，驱动基因迭代闭环）
+  const [feedbackOpen, setFeedbackOpen] = useState(false);
+  const [realismScore, setRealismScore] = useState<number | null>(null);
+  const [feedbackText, setFeedbackText] = useState("");
+  const [feedbackSubmitting, setFeedbackSubmitting] = useState(false);
+  const [feedbackDone, setFeedbackDone] = useState(false);
+
   // 面试状态
   const [sessionId, setSessionId] = useState<number | null>(null);
   const [overallScore, setOverallScore] = useState<number | null>(null);
@@ -452,6 +472,40 @@ export default function MockInterviewPage() {
   useEffect(() => {
     scrollToBottom();
   }, [messages, summary]);
+
+  // 报告生成完成后自动弹出真实度问卷（每场面试一次）
+  useEffect(() => {
+    if (report && sessionId && !feedbackDone && !feedbackOpen) {
+      const timer = setTimeout(() => setFeedbackOpen(true), 800);
+      return () => clearTimeout(timer);
+    }
+  }, [report, sessionId, feedbackDone, feedbackOpen]);
+
+  // 企业面试基因预览：目标公司变化后防抖拉取（选岗位用岗位公司，手动 JD 用输入公司）
+  useEffect(() => {
+    const company = (selectedJobId ? selectedCompany : targetCompanyInput).trim();
+    if (company.length < 2) {
+      setDnaPreview(null);
+      setDnaLoading(false);
+      return;
+    }
+    setDnaLoading(true);
+    const timer = setTimeout(async () => {
+      try {
+        const res = await fetch(`/api/company-dna?name=${encodeURIComponent(company)}`);
+        if (res.ok) {
+          setDnaPreview(await res.json());
+        } else {
+          setDnaPreview(null);
+        }
+      } catch {
+        setDnaPreview(null);
+      } finally {
+        setDnaLoading(false);
+      }
+    }, 600);
+    return () => clearTimeout(timer);
+  }, [selectedJobId, selectedCompany, targetCompanyInput]);
 
   // 面试官音波图：真实音频频谱驱动（AnalyserNode），不可用时降级为正弦伪音波
   useEffect(() => {
@@ -1105,6 +1159,29 @@ export default function MockInterviewPage() {
     await generateSummary();
   };
 
+  // 提交真实度问卷：评分分流（<6 低真实度进人工审查队列 / >=6 高质量案例沉淀为训练数据）
+  const submitFeedback = async () => {
+    if (!sessionId || !accessCodeId || realismScore === null) return;
+    setFeedbackSubmitting(true);
+    try {
+      await fetch("/api/interview/feedback", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          accessCodeId,
+          sessionId,
+          realismScore,
+          feedbackText: realismScore < 6 ? feedbackText.trim() || undefined : undefined,
+        }),
+      });
+    } catch {
+      // 静默失败：问卷不打断用户流程
+    }
+    setFeedbackSubmitting(false);
+    setFeedbackDone(true);
+    setFeedbackOpen(false);
+  };
+
   const handleRestart = () => {
     setStage("setup");
     setMessages([]);
@@ -1128,6 +1205,10 @@ export default function MockInterviewPage() {
     setEliminated(false);
     setEliminatedRound(null);
     setInterviewWrapped(false);
+    setFeedbackOpen(false);
+    setFeedbackDone(false);
+    setRealismScore(null);
+    setFeedbackText("");
     setListening(false);
     setSetupOpen(true);
     clearPressure();
@@ -1332,6 +1413,49 @@ export default function MockInterviewPage() {
                       rows={4}
                       className="rounded-xl"
                     />
+                  </div>
+                )}
+
+                {/* 企业面试基因预览卡：展示目标公司的考察重心与风格，传递"这家公司特有问法"的差异感 */}
+                {(dnaLoading || dnaPreview) && (
+                  <div className="mb-6 rounded-xl border border-zinc-200 dark:border-zinc-700 bg-zinc-50 dark:bg-zinc-800/50 p-4 animate-in fade-in duration-300">
+                    {dnaLoading && !dnaPreview ? (
+                      <div className="flex items-center gap-2 text-sm text-zinc-500 dark:text-zinc-400">
+                        <Loader2 className="h-3.5 w-3.5 animate-spin" />
+                        {t("mockInterview.dnaLoading")}
+                      </div>
+                    ) : dnaPreview ? (
+                      <>
+                        <div className="flex items-center gap-2 mb-1.5">
+                          <Building2 className="h-4 w-4 text-zinc-700 dark:text-zinc-300" />
+                          <span className="text-sm font-semibold text-zinc-900 dark:text-zinc-100">
+                            {dnaPreview.company} · {t("mockInterview.dnaTitle")}
+                          </span>
+                          <span className="ml-auto text-[10px] px-1.5 py-0.5 rounded-full bg-zinc-200 dark:bg-zinc-700 text-zinc-600 dark:text-zinc-300">
+                            {dnaPreview.source === "curated"
+                              ? t("mockInterview.dnaCurated")
+                              : dnaPreview.source === "cached"
+                                ? t("mockInterview.dnaCached")
+                                : t("mockInterview.dnaGenerated")}
+                          </span>
+                        </div>
+                        <p className="text-xs text-zinc-500 dark:text-zinc-400 mb-2.5">{dnaPreview.tagline}</p>
+                        <div className="flex flex-wrap gap-1.5">
+                          {dnaPreview.focusAreas.map((f) => (
+                            <span
+                              key={f.dimension}
+                              className={`text-[11px] px-2 py-1 rounded-full border ${
+                                f.weight === "core"
+                                  ? "border-zinc-900 dark:border-zinc-200 text-zinc-900 dark:text-zinc-100 font-medium"
+                                  : "border-zinc-300 dark:border-zinc-600 text-zinc-500 dark:text-zinc-400"
+                              }`}
+                            >
+                              {f.dimension}
+                            </span>
+                          ))}
+                        </div>
+                      </>
+                    ) : null}
                   </div>
                 )}
 
@@ -1979,6 +2103,71 @@ export default function MockInterviewPage() {
             )}
           </div>
         </main>
+
+        {/* 真实度问卷：评分驱动基因迭代闭环（<6 进人工审查，>=6 沉淀训练数据） */}
+        <Modal open={feedbackOpen} onOpenChange={setFeedbackOpen}>
+          <ModalContent className="sm:max-w-md">
+            <ModalHeader className="px-6 pt-6 pb-2 text-left">
+              <ModalTitle className="text-lg">{t("mockInterview.feedbackTitle")}</ModalTitle>
+              <ModalDescription className="text-sm text-gray-500 dark:text-gray-400">
+                {t("mockInterview.feedbackSubtitle")}
+              </ModalDescription>
+            </ModalHeader>
+            <ModalBody className="px-6 py-4">
+              {/* 1-10 评分 */}
+              <div className="grid grid-cols-10 gap-1.5 mb-2">
+                {[1, 2, 3, 4, 5, 6, 7, 8, 9, 10].map((n) => (
+                  <button
+                    key={n}
+                    type="button"
+                    onClick={() => setRealismScore(n)}
+                    className={`h-9 rounded-lg text-sm font-medium transition-colors border ${
+                      realismScore === n
+                        ? "bg-zinc-900 text-white border-zinc-900 dark:bg-white dark:text-zinc-900 dark:border-white"
+                        : "border-zinc-200 dark:border-zinc-700 text-zinc-600 dark:text-zinc-300 hover:border-zinc-400"
+                    }`}
+                  >
+                    {n}
+                  </button>
+                ))}
+              </div>
+              <div className="flex justify-between text-[11px] text-zinc-400 mb-4">
+                <span>{t("mockInterview.feedbackScoreLow")}</span>
+                <span>{t("mockInterview.feedbackScoreHigh")}</span>
+              </div>
+              {/* 低分追问差异点（人工审查的关键输入） */}
+              {realismScore !== null && realismScore < 6 && (
+                <Textarea
+                  value={feedbackText}
+                  onChange={(e) => setFeedbackText(e.target.value)}
+                  placeholder={t("mockInterview.feedbackLowPlaceholder")}
+                  rows={3}
+                  className="rounded-xl animate-in fade-in duration-200"
+                />
+              )}
+            </ModalBody>
+            <ModalFooter className="px-6 pb-6 pt-2 flex items-center gap-3">
+              <button
+                type="button"
+                onClick={() => { setFeedbackOpen(false); setFeedbackDone(true); }}
+                className="text-sm text-zinc-400 hover:text-zinc-600 dark:hover:text-zinc-200 transition-colors"
+              >
+                {t("mockInterview.feedbackSkip")}
+              </button>
+              <Button
+                onClick={submitFeedback}
+                disabled={realismScore === null || feedbackSubmitting}
+                className="flex-1 h-11 rounded-full bg-zinc-900 hover:bg-zinc-700 dark:bg-white dark:text-zinc-900 dark:hover:bg-zinc-200 text-white"
+              >
+                {feedbackSubmitting ? (
+                  <><Loader2 className="h-4 w-4 mr-2 animate-spin" />{t("mockInterview.feedbackSubmitting")}</>
+                ) : (
+                  t("mockInterview.feedbackSubmit")
+                )}
+              </Button>
+            </ModalFooter>
+          </ModalContent>
+        </Modal>
       </div>
     </AccessGuard>
   );
