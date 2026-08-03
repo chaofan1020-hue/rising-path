@@ -1,8 +1,4 @@
-<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 200 60" fill="none">
-  <text x="10" y="45" font-family="Arial, sans-serif" font-size="48" font-weight="bold">
-    <tspan fill="#E2D0B8">y</tspan>
-    <tspan fill="#B5BEB0">e</tspan>
-    <tspan fill="#C46A4A">s</tspan>
-    <tspan fill="#C5C9CE">!</tspan>
-  </text>
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 40 20" fill="currentColor" aria-hidden="true">
+  <path d="M0 0h29a4 4 0 0 1 0 8H0V0z" />
+  <path d="M40 20H11a4 4 0 0 1 0-8h29v8z" />
 </svg>

@@ -149,7 +149,13 @@ function Header1() {
                     </NavigationMenu>
                 </div>
                 <div className="flex lg:justify-center">
-                    <Link href="/" className="font-semibold text-lg text-black dark:text-white">Rising Path</Link>
+                    <Link href="/" className="flex items-center gap-2 font-semibold text-lg text-black dark:text-white">
+                        <svg viewBox="0 0 40 20" fill="currentColor" aria-hidden="true" className="h-[18px] w-auto shrink-0">
+                            <path d="M0 0h29a4 4 0 0 1 0 8H0V0z" />
+                            <path d="M40 20H11a4 4 0 0 1 0-8h29v8z" />
+                        </svg>
+                        Rising Path
+                    </Link>
                 </div>
                 <div className="flex justify-end w-full gap-3 items-center">
                     <LanguageSwitcher />
