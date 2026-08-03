@@ -40,7 +40,7 @@ function OptionSelect({
       <PopoverTrigger asChild>
         <button
           disabled={disabled}
-          className="w-full h-11 inline-flex items-center gap-2 px-4 rounded-xl border border-gray-200 dark:border-zinc-700 bg-white dark:bg-zinc-900 text-sm text-black dark:text-white hover:border-[#C46A4A]/50 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+          className="w-full h-11 inline-flex items-center gap-2 px-4 rounded-xl border border-gray-200 dark:border-zinc-700 bg-white dark:bg-zinc-900 text-sm text-black dark:text-white hover:border-zinc-400 dark:hover:border-zinc-500 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
         >
           <Icon className="h-4 w-4 text-gray-400 flex-shrink-0" />
           <span className={`flex-1 text-left truncate ${selected ? "" : "text-gray-400 dark:text-gray-500"}`}>
@@ -937,8 +937,8 @@ export default function MockInterviewPage() {
           <main className="py-8 md:py-12">
             <div className="container mx-auto px-4 max-w-3xl">
               <div className="mb-8 text-center">
-                <div className="inline-flex items-center justify-center h-12 w-12 rounded-2xl bg-gradient-to-br from-[#C46A4A] to-[#B5BEB0] mb-3">
-                  <Bot className="h-6 w-6 text-white" />
+                <div className="inline-flex items-center justify-center h-12 w-12 rounded-2xl bg-zinc-900 dark:bg-white mb-3">
+                  <Bot className="h-6 w-6 text-white dark:text-zinc-900" />
                 </div>
                 <h1 className="text-3xl md:text-4xl font-light text-black dark:text-white mb-2">
                   {t("mockInterview.title")}
@@ -946,7 +946,7 @@ export default function MockInterviewPage() {
                 <p className="text-gray-500 dark:text-gray-400">{t("mockInterview.subtitle")}</p>
               </div>
 
-              <div className="rounded-3xl border-0 bg-gradient-to-br from-[#C46A4A]/5 via-white to-[#E2D0B8]/10 dark:from-[#C46A4A]/10 dark:via-zinc-900 dark:to-[#E2D0B8]/5 shadow-lg p-6 md:p-8">
+              <div className="rounded-3xl border border-gray-200 dark:border-zinc-800 bg-white dark:bg-zinc-900 shadow-lg p-6 md:p-8">
                 <h2 className="text-xl font-semibold text-black dark:text-white mb-6">
                   {t("mockInterview.setupTitle")}
                 </h2>
@@ -963,8 +963,8 @@ export default function MockInterviewPage() {
                         onClick={() => setInterviewType(type)}
                         className={`flex flex-col items-center gap-2 p-4 rounded-2xl border-2 transition-all ${
                           interviewType === type
-                            ? "border-[#C46A4A] bg-[#C46A4A]/5 text-[#C46A4A]"
-                            : "border-gray-200 dark:border-zinc-700 text-gray-600 dark:text-gray-400 hover:border-[#C46A4A]/50"
+                            ? "border-zinc-900 dark:border-white bg-zinc-50 dark:bg-zinc-800 text-zinc-900 dark:text-white"
+                            : "border-gray-200 dark:border-zinc-700 text-gray-600 dark:text-gray-400 hover:border-zinc-400 dark:hover:border-zinc-500"
                         }`}
                       >
                         {TYPE_ICONS[type]}
@@ -985,8 +985,8 @@ export default function MockInterviewPage() {
                       onClick={() => setInterviewMode("single")}
                       className={`flex flex-col items-center gap-2 p-4 rounded-2xl border-2 transition-all ${
                         interviewMode === "single"
-                          ? "border-[#C46A4A] bg-[#C46A4A]/5 text-[#C46A4A]"
-                          : "border-gray-200 dark:border-zinc-700 text-gray-600 dark:text-gray-400 hover:border-[#C46A4A]/50"
+                          ? "border-zinc-900 dark:border-white bg-zinc-50 dark:bg-zinc-800 text-zinc-900 dark:text-white"
+                          : "border-gray-200 dark:border-zinc-700 text-gray-600 dark:text-gray-400 hover:border-zinc-400 dark:hover:border-zinc-500"
                       }`}
                     >
                       <svg className="w-6 h-6" fill="none" stroke="currentColor" strokeWidth={1.8} viewBox="0 0 24 24">
@@ -999,8 +999,8 @@ export default function MockInterviewPage() {
                       onClick={() => setInterviewMode("gauntlet")}
                       className={`flex flex-col items-center gap-2 p-4 rounded-2xl border-2 transition-all ${
                         interviewMode === "gauntlet"
-                          ? "border-[#C46A4A] bg-[#C46A4A]/5 text-[#C46A4A]"
-                          : "border-gray-200 dark:border-zinc-700 text-gray-600 dark:text-gray-400 hover:border-[#C46A4A]/50"
+                          ? "border-zinc-900 dark:border-white bg-zinc-50 dark:bg-zinc-800 text-zinc-900 dark:text-white"
+                          : "border-gray-200 dark:border-zinc-700 text-gray-600 dark:text-gray-400 hover:border-zinc-400 dark:hover:border-zinc-500"
                       }`}
                     >
                       <svg className="w-6 h-6" fill="none" stroke="currentColor" strokeWidth={1.8} viewBox="0 0 24 24">
@@ -1022,7 +1022,7 @@ export default function MockInterviewPage() {
                             onClick={() => setTotalRounds(n)}
                             className={`px-4 py-2 rounded-xl text-sm font-medium transition-all ${
                               totalRounds === n
-                                ? "bg-gradient-to-r from-[#C46A4A] to-[#B5BEB0] text-white shadow-md"
+                                ? "bg-zinc-900 dark:bg-white text-white dark:text-zinc-900 shadow-md"
                                 : "bg-gray-100 dark:bg-zinc-800 text-gray-600 dark:text-gray-400 hover:bg-gray-200 dark:hover:bg-zinc-700"
                             }`}
                           >
@@ -1085,7 +1085,7 @@ export default function MockInterviewPage() {
                 {!selectedJobId && (
                   <div className="mb-6">
                     <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
-                      {t("mockInterview.targetCompany")} <span className="text-[#C46A4A]">*</span>
+                      {t("mockInterview.targetCompany")} <span className="text-red-500">*</span>
                     </label>
                     <Input
                       value={targetCompanyInput}
@@ -1109,7 +1109,7 @@ export default function MockInterviewPage() {
                 <Button
                   onClick={handleStart}
                   disabled={streaming}
-                  className="w-full h-12 rounded-full bg-gradient-to-r from-[#C46A4A] to-[#B5BEB0] hover:opacity-90 text-white text-base shadow-md"
+                  className="w-full h-12 rounded-full bg-zinc-900 hover:bg-zinc-700 dark:bg-white dark:text-zinc-900 dark:hover:bg-zinc-200 text-white text-base shadow-md transition-colors"
                 >
                   {streaming ? (
                     <><Loader2 className="h-5 w-5 mr-2 animate-spin" />{t("mockInterview.starting")}</>
