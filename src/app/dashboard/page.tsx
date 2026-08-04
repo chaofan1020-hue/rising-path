@@ -1,11 +1,18 @@
 'use client';
 
-import { useEffect, useMemo, useState } from 'react';
+import { useCallback, useEffect, useMemo, useState } from 'react';
 import Link from 'next/link';
 import { Header1 } from '@/components/header1';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent } from '@/components/ui/card';
 import { Skeleton } from '@/components/ui/skeleton';
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from '@/components/ui/select';
 import { useLanguage } from '@/lib/language-context';
 import {
   ArrowRight,
@@ -20,6 +27,19 @@ import {
   TrendingUp,
   Zap,
 } from 'lucide-react';
+
+interface PlanItem {
+  timeframe: 'now' | 'week' | 'month';
+  titleKey: string;
+  descriptionKey: string;
+  params?: Record<string, string | number>;
+  href?: string;
+}
+
+interface RegionOption {
+  value: string;
+  labelKey: string;
+}
 
 interface DashboardData {
   phase: string;
@@ -62,18 +82,16 @@ interface DashboardData {
   };
   weeklyApplications: number;
   weeklyGoal: number;
+  selectedRegion: string | null;
+  regionOptions: RegionOption[];
+  latestResumeId: number | null;
   plan: {
     context: {
       region: string;
       stage: string;
       role: string;
     };
-    items: {
-      timeframe: 'now' | 'week' | 'month';
-      title: string;
-      description: string;
-      href?: string;
-    }[];
+    items: PlanItem[];
   } | null;
 }
 
@@ -82,6 +100,7 @@ export default function DashboardPage() {
   const [data, setData] = useState<DashboardData | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+  const [savingRegion, setSavingRegion] = useState(false);
 
   const accessCodeId = useMemo(() => {
     if (typeof window === 'undefined') return '';
@@ -92,12 +111,12 @@ export default function DashboardPage() {
     );
   }, []);
 
-  useEffect(() => {
+  const fetchDashboard = useCallback(() => {
     if (!accessCodeId) {
       setLoading(false);
       return;
     }
-
+    setLoading(true);
     fetch(`/api/dashboard?access_code_id=${accessCodeId}&lang=${locale}`)
       .then((res) => res.json())
       .then((json) => {
@@ -110,6 +129,38 @@ export default function DashboardPage() {
       .catch((err) => setError(err?.message || t('dashboard.loadError') || '加载失败'))
       .finally(() => setLoading(false));
   }, [accessCodeId, locale, t]);
+
+  useEffect(() => {
+    fetchDashboard();
+  }, [fetchDashboard]);
+
+  const handleRegionChange = useCallback(
+    async (value: string) => {
+      if (!data?.latestResumeId) return;
+      setSavingRegion(true);
+      try {
+        const res = await fetch(`/api/resume/${data.latestResumeId}`, {
+          method: 'PATCH',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            accessCodeId: Number(accessCodeId),
+            overrides: { regions: [value] },
+          }),
+        });
+        const json = await res.json().catch(() => ({}));
+        if (!res.ok) {
+          setError(json.error || '保存地区失败');
+        } else {
+          fetchDashboard();
+        }
+      } catch (err) {
+        setError((err as Error)?.message || '保存地区失败');
+      } finally {
+        setSavingRegion(false);
+      }
+    },
+    [data?.latestResumeId, fetchDashboard]
+  );
 
   const planGroups = useMemo(() => {
     if (!data?.plan) return null;
@@ -220,19 +271,55 @@ export default function DashboardPage() {
             {/* 个性化求职规划 */}
             {data.plan && planGroups && (
               <section>
-                <div className="flex items-center justify-between mb-4">
+                <div className="flex flex-col md:flex-row md:items-center md:justify-between gap-4 mb-4">
                   <h3 className="text-sm font-medium text-zinc-400 dark:text-zinc-500 tracking-widest uppercase">
                     {t('dashboard.planTitle')}
                   </h3>
-                  <div className="flex items-center gap-2 text-xs text-zinc-500">
-                    <MapPin className="h-3 w-3" />
-                    <span>
-                      {t('dashboard.planContext', {
-                        region: data.plan.context.region,
-                        stage: data.plan.context.stage,
-                        role: data.plan.context.role,
-                      })}
-                    </span>
+                  <div className="flex flex-col sm:flex-row sm:items-center gap-3 sm:gap-4">
+                    {data.latestResumeId ? (
+                      <div className="flex items-center gap-2">
+                        <MapPin className="h-3.5 w-3.5 text-zinc-400" />
+                        <span className="text-xs text-zinc-500">
+                          {t('dashboard.regionLabel')}
+                        </span>
+                        <Select
+                          value={data.selectedRegion || undefined}
+                          onValueChange={handleRegionChange}
+                          disabled={savingRegion}
+                        >
+                          <SelectTrigger className="h-8 min-w-[10rem] rounded-full border-zinc-200 bg-white text-xs text-zinc-900 hover:border-zinc-400 focus:ring-zinc-400 dark:border-zinc-700 dark:bg-zinc-900 dark:text-zinc-100">
+                            <SelectValue placeholder={t('dashboard.regionPlaceholder')} />
+                          </SelectTrigger>
+                          <SelectContent className="rounded-xl border-zinc-200 dark:border-zinc-800">
+                            {data.regionOptions.map((option) => (
+                              <SelectItem
+                                key={option.value}
+                                value={option.value}
+                                className="text-xs focus:bg-zinc-100 focus:text-zinc-900 dark:focus:bg-zinc-800 dark:focus:text-zinc-100"
+                              >
+                                {t(option.labelKey)}
+                              </SelectItem>
+                            ))}
+                          </SelectContent>
+                        </Select>
+                      </div>
+                    ) : (
+                      <span className="text-xs text-zinc-500">
+                        {t('dashboard.regionHint')}
+                      </span>
+                    )}
+                    <div className="flex items-center gap-2 text-xs text-zinc-500">
+                      <span className="hidden sm:inline text-zinc-300 dark:text-zinc-700">
+                        |
+                      </span>
+                      <span>
+                        {t('dashboard.planContext', {
+                          region: t(data.plan.context.region),
+                          stage: t(data.plan.context.stage),
+                          role: t(data.plan.context.role),
+                        })}
+                      </span>
+                    </div>
                   </div>
                 </div>
                 <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
@@ -240,16 +327,19 @@ export default function DashboardPage() {
                     icon={<Zap className="h-4 w-4" />}
                     label={t('dashboard.planNow')}
                     items={planGroups.now}
+                    translate={t}
                   />
                   <PlanColumn
                     icon={<Calendar className="h-4 w-4" />}
                     label={t('dashboard.planWeek')}
                     items={planGroups.week}
+                    translate={t}
                   />
                   <PlanColumn
                     icon={<LineChart className="h-4 w-4" />}
                     label={t('dashboard.planMonth')}
                     items={planGroups.month}
+                    translate={t}
                   />
                 </div>
               </section>
@@ -432,10 +522,12 @@ function PlanColumn({
   icon,
   label,
   items,
+  translate,
 }: {
   icon: React.ReactNode;
   label: string;
-  items: { title: string; description: string; href?: string }[];
+  items: PlanItem[];
+  translate: (key: string, params?: Record<string, string | number>) => string;
 }) {
   return (
     <Card className="rounded-2xl border-zinc-200 dark:border-zinc-800 bg-zinc-50/50 dark:bg-zinc-900/30">
@@ -457,20 +549,20 @@ function PlanColumn({
                   className="block hover:opacity-80 transition-opacity"
                 >
                   <p className="text-sm font-medium text-zinc-900 dark:text-zinc-100 mb-1 flex items-center gap-1">
-                    {item.title}
+                    {translate(item.titleKey, item.params)}
                     <ArrowRight className="h-3 w-3 text-zinc-400 opacity-0 -translate-x-1 group-hover:opacity-100 group-hover:translate-x-0 transition-all" />
                   </p>
                   <p className="text-xs text-zinc-500 leading-relaxed">
-                    {item.description}
+                    {translate(item.descriptionKey, item.params)}
                   </p>
                 </Link>
               ) : (
                 <>
                   <p className="text-sm font-medium text-zinc-900 dark:text-zinc-100 mb-1">
-                    {item.title}
+                    {translate(item.titleKey, item.params)}
                   </p>
                   <p className="text-xs text-zinc-500 leading-relaxed">
-                    {item.description}
+                    {translate(item.descriptionKey, item.params)}
                   </p>
                 </>
               )}

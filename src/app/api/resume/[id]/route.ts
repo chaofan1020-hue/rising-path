@@ -61,42 +61,43 @@ export async function PATCH(
 
     // 应用覆盖生成生效分层（summary 同步更新）
     const current = resume.segmentation;
-    if (!current) {
-      return NextResponse.json({ error: '该简历尚未完成分层解析' }, { status: 400 });
-    }
-    const next = { ...current };
-    if (overrides.careerStage) {
-      next.careerStage = overrides.careerStage;
-      next.careerStageReason = '用户手动修正';
-    }
-    if (overrides.schoolTier) next.schoolTier = overrides.schoolTier;
-    if (overrides.majorMatch) next.majorMatch = overrides.majorMatch;
-    if (overrides.regions && overrides.regions.length > 0) {
-      next.regions = overrides.regions;
-      next.regionSource = 'intention';
-    }
-    // 目标岗位变化时重算专业匹配
-    if (targetRole && resume.profile?.education?.[0]?.major) {
-      const mm = deriveMajorMatch(resume.profile.education[0].major, targetRole);
-      if (mm) {
-        next.majorMatch = mm.match;
-        next.majorMatchNote = mm.note;
+    const next = current ? { ...current } : null;
+    if (next) {
+      if (overrides.careerStage) {
+        next.careerStage = overrides.careerStage;
+        next.careerStageReason = '用户手动修正';
       }
+      if (overrides.schoolTier) next.schoolTier = overrides.schoolTier;
+      if (overrides.majorMatch) next.majorMatch = overrides.majorMatch;
+      if (overrides.regions && overrides.regions.length > 0) {
+        next.regions = overrides.regions;
+        next.regionSource = 'intention';
+      }
+      // 目标岗位变化时重算专业匹配
+      if (targetRole && resume.profile?.education?.[0]?.major) {
+        const mm = deriveMajorMatch(resume.profile.education[0].major, targetRole);
+        if (mm) {
+          next.majorMatch = mm.match;
+          next.majorMatchNote = mm.note;
+        }
+      }
+      const stageLabel: Record<string, string> = {
+        junior: '低年级（实习预备）', senior: '高年级（校招全职）',
+        experienced: '社招（在职跳槽）', returning_intern: '实习转正',
+      };
+      next.summary = `${stageLabel[next.careerStage] || next.careerStage} × Tier${next.schoolTier}院校 × ${(next.regions || []).length}个目标地区${next.experienceQuality?.internshipCount ? ` × ${next.experienceQuality.internshipCount}段实习` : ''}（已确认）`;
     }
-    const stageLabel: Record<string, string> = {
-      junior: '低年级（实习预备）', senior: '高年级（校招全职）',
-      experienced: '社招（在职跳槽）', returning_intern: '实习转正',
+
+    const updatePayload: Record<string, unknown> = {
+      segmentation_overrides: overrides,
+      segmentation_confirmed: true,
+      updated_at: new Date().toISOString(),
     };
-    next.summary = `${stageLabel[next.careerStage] || next.careerStage} × Tier${next.schoolTier}院校 × ${(next.regions || []).length}个目标地区${next.experienceQuality?.internshipCount ? ` × ${next.experienceQuality.internshipCount}段实习` : ''}（已确认）`;
+    if (next) updatePayload.segmentation = next;
 
     const { error: updateError } = await client
       .from('resumes')
-      .update({
-        segmentation: next,
-        segmentation_overrides: overrides,
-        segmentation_confirmed: true,
-        updated_at: new Date().toISOString(),
-      })
+      .update(updatePayload)
       .eq('id', id);
 
     if (updateError) {
