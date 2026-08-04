@@ -78,16 +78,16 @@ function Header1() {
                     title: t("nav.mockInterview"),
                     href: "/mock-interview",
                 },
+                {
+                    title: t("nav.dashboard"),
+                    href: "/dashboard",
+                },
             ],
         },
         {
             title: t("nav.more"),
             description: "",
             items: [
-                {
-                    title: t("nav.applications"),
-                    href: "/applications",
-                },
                 {
                     title: t("nav.autoApplication"),
                     href: "/field-mappings",
