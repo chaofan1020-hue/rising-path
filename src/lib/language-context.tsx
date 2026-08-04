@@ -196,6 +196,7 @@ const translations: Record<Locale, Record<string, string>> = {
     "accessCode.error.failed": "验证失败，请稍后重试",
     // 功能页面
     "page.jobs.title": "岗位查询",
+    "page.jobs.eyebrow": "岗位探索",
     "page.jobs.subtitle": "浏览海量岗位，找到最适合的机会",
     "page.resume.title": "简历管理",
     "page.resume.subtitle": "上传和管理您的简历",
@@ -249,6 +250,7 @@ const translations: Record<Locale, Record<string, string>> = {
     "jobs.searchPlaceholder": "搜索岗位名称或公司...",
     // 简历管理页面
     "resume.title": "简历管理",
+    "resume.eyebrow": "简历中心",
     "resume.subtitle": "上传、管理你的简历，支持智能解析",
     "resume.uploaded": "已上传",
     "resume.resumesUnit": "份简历",
@@ -329,6 +331,7 @@ const translations: Record<Locale, Record<string, string>> = {
     "resume.extractFailedRetry": "提取失败，请重试",
     // AI智能选岗页面
     "aiMatch.title": "AI智能选岗",
+    "aiMatch.eyebrow": "智能匹配",
     "aiMatch.subtitle": "基于你的简历，AI将智能分析并推荐最匹配的岗位",
     "aiMatch.startMatch": "开始匹配",
     "aiMatch.startMatchDesc": "选择一份简历，AI将分析你的技能和经验，匹配最合适的岗位",
@@ -357,6 +360,7 @@ const translations: Record<Locale, Record<string, string>> = {
     "aiMatch.emptyDesc": "AI将分析你的简历内容，结合岗位要求，为你推荐最匹配的工作机会",
     // ATS简历优化页面
     "optimize.title": "ATS简历优化",
+    "optimize.eyebrow": "ATS 工作台",
     "optimize.subtitle": "针对ATS系统优化简历，提高简历通过率和曝光率",
     "optimize.history": "优化历史",
     "optimize.english": "英文",
@@ -618,6 +622,7 @@ const translations: Record<Locale, Record<string, string>> = {
     "accessCode.error.failed": "驗證失敗，請稍後重試",
     // 功能頁面
     "page.jobs.title": "崗位查詢",
+    "page.jobs.eyebrow": "崗位探索",
     "page.jobs.subtitle": "瀏覽海量崗位，找到最適合的機會",
     "page.resume.title": "簡歷管理",
     "page.resume.subtitle": "上傳和管理您的簡歷",
@@ -671,6 +676,7 @@ const translations: Record<Locale, Record<string, string>> = {
     "jobs.searchPlaceholder": "搜索崗位名稱或公司...",
     // 簡歷管理頁面
     "resume.title": "簡歷管理",
+    "resume.eyebrow": "簡歷中心",
     "resume.subtitle": "上傳、管理你的簡歷，支持智能解析",
     "resume.uploaded": "已上傳",
     "resume.resumesUnit": "份簡歷",
@@ -751,6 +757,7 @@ const translations: Record<Locale, Record<string, string>> = {
     "resume.extractFailedRetry": "提取失敗，請重試",
     // AI智能選崗頁面
     "aiMatch.title": "AI智能選崗",
+    "aiMatch.eyebrow": "智能匹配",
     "aiMatch.subtitle": "基於你的簡歷，AI將智能分析並推薦最匹配的崗位",
     "aiMatch.startMatch": "開始匹配",
     "aiMatch.startMatchDesc": "選擇一份簡歷，AI將分析你的技能和經驗，匹配最合適的崗位",
@@ -779,6 +786,7 @@ const translations: Record<Locale, Record<string, string>> = {
     "aiMatch.emptyDesc": "AI將分析你的簡歷內容，結合崗位要求，為你推薦最匹配的工作機會",
     // ATS簡歷優化頁面
     "optimize.title": "ATS簡歷優化",
+    "optimize.eyebrow": "ATS 工作台",
     "optimize.subtitle": "針對ATS系統優化簡歷，提高簡歷通過率和曝光率",
     "optimize.history": "優化歷史",
     "optimize.english": "英文",
@@ -1040,6 +1048,7 @@ const translations: Record<Locale, Record<string, string>> = {
     "accessCode.error.failed": "Verification failed, please try again later",
     // Feature Pages
     "page.jobs.title": "Job Search",
+    "page.jobs.eyebrow": "Job Explorer",
     "page.jobs.subtitle": "Browse massive job listings and find the best opportunities",
     "page.resume.title": "Resume Manager",
     "page.resume.subtitle": "Upload and manage your resumes",
@@ -1093,6 +1102,7 @@ const translations: Record<Locale, Record<string, string>> = {
     "jobs.searchPlaceholder": "Search job title or company...",
     // Resume Page
     "resume.title": "Resume Manager",
+    "resume.eyebrow": "Resume Center",
     "resume.subtitle": "Upload and manage your resumes with AI parsing",
     "resume.uploaded": "Uploaded",
     "resume.resumesUnit": "resumes",
@@ -1173,6 +1183,7 @@ const translations: Record<Locale, Record<string, string>> = {
     "resume.extractFailedRetry": "Extract failed, please try again",
     // AI Match Page
     "aiMatch.title": "AI Job Match",
+    "aiMatch.eyebrow": "AI Matching",
     "aiMatch.subtitle": "AI analyzes your resume and recommends the best matching jobs",
     "aiMatch.startMatch": "Start Matching",
     "aiMatch.startMatchDesc": "Select a resume and AI will analyze your skills and experience to match the best jobs",
@@ -1201,6 +1212,7 @@ const translations: Record<Locale, Record<string, string>> = {
     "aiMatch.emptyDesc": "AI will analyze your resume and recommend the best job opportunities based on job requirements",
     // ATS Optimize Page
     "optimize.title": "ATS Resume Optimization",
+    "optimize.eyebrow": "ATS Studio",
     "optimize.subtitle": "Optimize your resume for ATS systems to improve pass rate and visibility",
     "optimize.history": "Optimization History",
     "optimize.english": "EN",

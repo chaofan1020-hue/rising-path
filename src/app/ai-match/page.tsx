@@ -240,17 +240,11 @@ function AIMatchContent() {
     <div className="min-h-screen bg-white dark:bg-zinc-950">
       <Header1 />
       <main className="relative container mx-auto px-4 pt-24 md:pt-28 pb-16">
-        {/* 超大半透明水印背景（极简黑白灰语言） */}
-        <div aria-hidden className="pointer-events-none absolute inset-x-0 top-14 md:top-20 overflow-hidden select-none">
-          <span className="block text-center text-[24vw] md:text-[17vw] leading-[0.85] font-bold tracking-tighter text-zinc-900/[0.045] dark:text-white/[0.05]">
-            MATCH
-          </span>
-        </div>
-
-        {/* Hero：居中标题（悬浮于水印之上） */}
-        <div className="relative mb-10 md:mb-14 text-center">
-          <h1 className="text-3xl md:text-4xl font-semibold tracking-tight text-zinc-900 dark:text-white mb-3">{t('aiMatch.title')}</h1>
-          <p className="text-sm md:text-base text-zinc-500 dark:text-zinc-400 max-w-xl mx-auto">{t('aiMatch.subtitle')}</p>
+        {/* Hero：左对齐 eyebrow + 大标题（Tailark 式） */}
+        <div className="relative mb-10 md:mb-14">
+          <p className="text-sm font-medium text-zinc-400 dark:text-zinc-500 mb-3">{t('aiMatch.eyebrow')}</p>
+          <h1 className="text-3xl md:text-5xl font-bold tracking-tight text-zinc-900 dark:text-zinc-50 mb-4">{t('aiMatch.title')}</h1>
+          <p className="text-zinc-500 dark:text-zinc-400 max-w-2xl md:text-lg leading-relaxed">{t('aiMatch.subtitle')}</p>
         </div>
 
         {/* Match Form */}

@@ -49,15 +49,15 @@
 
 ## 简历管理页（极简黑白灰语言，参考 ResumeGPT footer 美学）
 - 整体：不使用品牌主题色，全面 zinc 系单色——白底（暗色 zinc-950）、zinc-200/800 细腻边框、zinc-500 辅助文字、zinc-900 实心黑主按钮（暗色反转为白）
-- Hero：页面顶部超大半透明水印文字 "RESUME"（text-[16vw+]、tracking-tighter、不透明度 ~4-5%、pointer-events-none、select-none、overflow 裁切），其上仅居中叠放标题（tracking-tight）+ zinc-500 副标题（不放主图标方块）
+- Hero（参考 Tailark 式左对齐范式）：无水印、无主图标方块——左对齐 eyebrow 小标签（text-sm font-medium text-zinc-400，模块名如"简历中心"）+ 超大粗体标题（text-3xl md:text-5xl font-bold tracking-tight）+ 灰色副标题（text-zinc-500 max-w-2xl md:text-lg leading-relaxed）
 - 上传区：大圆角（rounded-2xl）虚线 dropzone（border-dashed zinc-200 hover:border-zinc-400），居中图标 + 文案引导，选中文件后以 chip 展示 + 实心黑上传按钮
 - 简历卡片：白底 zinc-200 边框、hover 时细腻阴影（shadow-zinc-900/5）；文件图标为黑色圆角小方块（与 Hero 方块同语言）；操作按钮为 ghost/outline 中性风，删除按钮仅 hover 显红
 - 按钮 hover 高亮：统一中性浅灰底（hover:bg-zinc-100 dark:hover:bg-zinc-800）+ 文字加深（hover:text-zinc-900）——必须显式覆盖 Button 组件 outline/ghost variant 默认的 hover:bg-accent（全局 accent 为灰绿调，与本页语言冲突）
 - 分层确认卡片：同页内嵌套使用，中性 zinc 系（去品牌渐变底），信息层级靠字重与灰度区分
 - 排版：充裕留白（区块间距 mb-10+）、字重对比（标题 semibold tracking-tight / 正文 zinc-500）
 
-## AI 选岗页 / ATS 优化页（沿用简历页极简黑白灰语言）
-- 与简历管理页同一套 zinc 单色语言：超大水印（AI 选岗 "MATCH"、ATS 优化 "ATS"，规格同 RESUME）、Hero 仅标题+副标题（同简历页，不放主图标方块）、白底 zinc-200 边框卡片、zinc-900 实心主按钮（暗色反转）
+## AI 选岗页 / ATS 优化页 / 岗位查询页（沿用简历页极简黑白灰语言）
+- 与简历管理页同一套 zinc 单色语言：Hero 同为 Tailark 式左对齐范式（eyebrow 小标签——选岗"智能匹配"/优化"ATS 工作台"/岗位"岗位探索"+ 超大粗体标题 + 灰色副标题，无水印无主图标）、白底 zinc-200 边框卡片、zinc-900 实心主按钮（暗色反转）
 - 卡片语言：rounded-2xl、border-zinc-200、去渐变去彩色顶条；区块标题图标统一黑色圆角小方块（w-6/7 h-6/7 rounded-lg bg-zinc-900 反白图标）
 - 表单控件：Select/Input/textarea 中性边框；筛选 chip、提示卡（JD 结果/AI 建议/Tips）统一 zinc-50 底 + zinc-100/200 边框，原蓝/琥珀/赤陶提示色全部移除
 - 分数与等级不做彩色语义：匹配分数为大号 zinc-900 黑字，等级徽章 zinc-900 实心（高匹配）或 zinc-100 灰底；原绿/黄/红评分色废弃
