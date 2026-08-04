@@ -4,9 +4,6 @@ import { getSupabaseClient } from '@/storage/database/supabase-client';
 const ONE_DAY_MS = 24 * 60 * 60 * 1000;
 const ONE_WEEK_MS = 7 * ONE_DAY_MS;
 
-function isInterviewStatus(status?: string | null) {
-  return /面试|终面|一面|二面|三面|HR面|hr面/i.test(status || '');
-}
 
 export async function GET(request: NextRequest) {
   try {
@@ -69,12 +66,18 @@ export async function GET(request: NextRequest) {
     if (applicationsError) throw applicationsError;
 
     const applicationCount = applications?.length ?? 0;
-    const interviewApplications =
-      applications?.filter((a) => isInterviewStatus(a.status)).length ?? 0;
-    const conversionRate =
-      applicationCount > 0
-        ? Math.round((interviewApplications / applicationCount) * 100)
-        : 0;
+
+    // 本周投递行动力：以自然周（周一 00:00 起）为周期
+    const nowDate = new Date();
+    const dayOfWeek = nowDate.getDay(); // 0(周日) ~ 6(周六)
+    const daysSinceMonday = dayOfWeek === 0 ? 6 : dayOfWeek - 1;
+    const weekStart = new Date(nowDate);
+    weekStart.setDate(nowDate.getDate() - daysSinceMonday);
+    weekStart.setHours(0, 0, 0, 0);
+    const weekStartMs = weekStart.getTime();
+
+    const weeklyApplications =
+      applications?.filter((a) => new Date(a.created_at).getTime() >= weekStartMs).length ?? 0;
 
     // 5. 收藏岗位与最近更新
     const { data: favorites, error: favoritesError } = await supabase
@@ -112,6 +115,9 @@ export async function GET(request: NextRequest) {
     let phaseTitle = '准备期';
     let phaseDescription = '';
 
+    // 周目标：投递期 10 家/周，其余阶段重点不在投递
+    const weeklyGoal = applicationCount >= 3 ? 10 : 0;
+
     const latestInterviewUpdatedAt = latestInterview?.updated_at
       ? new Date(latestInterview.updated_at).getTime()
       : 0;
@@ -139,15 +145,18 @@ export async function GET(request: NextRequest) {
       phaseTitle = '复盘期';
       phaseDescription =
         '你刚完成一场面试。趁记忆还热，花 5 分钟记录面试官的问题与反思，这比任何面经都值钱。';
-    } else if (applicationCount >= 3 && interviewApplications === 0) {
+    } else if (applicationCount >= 3) {
       phase = 'applying';
       phaseTitle = '投递期';
-      phaseDescription = `已投递 ${applicationCount} 家，平均回应周期约 7 天。若 3 天内无反馈，建议追加 5 家投递。`;
+      phaseDescription = `你目前在投递期。本周已投递 ${weeklyApplications} 家，周目标 ${weeklyGoal} 家。保持节奏，广撒网再精选。`;
     } else {
       phase = 'preparation';
       phaseTitle = '准备期';
       phaseDescription = `你的简历匹配度 ${avgMatchScore}%，建议继续优化关键词；模拟面试已完成 ${interviewCount} 次。`;
     }
+
+    const applicationHealth =
+      weeklyGoal > 0 ? Math.round((weeklyApplications / weeklyGoal) * 100) : 0;
 
     // 行动建议
     const actions: {
@@ -173,7 +182,13 @@ export async function GET(request: NextRequest) {
       actions.push({ title: '查看匹配岗位', href: '/ai-match', priority: 'medium' });
     }
 
-    if (applicationCount < 3) {
+    if (phase === 'applying') {
+      actions.push({
+        title: '继续批量投递',
+        href: '/jobs',
+        priority: weeklyApplications < weeklyGoal ? 'high' : 'medium',
+      });
+    } else if (applicationCount < 3) {
       actions.push({ title: '开始批量投递', href: '/jobs', priority: 'low' });
     }
 
@@ -225,9 +240,11 @@ export async function GET(request: NextRequest) {
           ? `你已完成 ${interviewCount} 次模拟面试。`
           : '还没有模拟面试记录，建议从一次练习开始。',
       mindsetGrowth:
-        applicationCount > 0
-          ? `你已投递 ${applicationCount} 家，转化率 ${conversionRate}%。`
-          : '勇敢投递是第一步，建议先锁定 3 个目标岗位。',
+        weeklyGoal > 0
+          ? `本周已投递 ${weeklyApplications} / ${weeklyGoal} 家，${weeklyApplications >= weeklyGoal ? '节奏很好，继续保持。' : '再加把劲，完成周目标。'}`
+          : applicationCount > 0
+            ? `你已累计投递 ${applicationCount} 家，进入投递期后系统会为你设定周目标。`
+            : '勇敢投递是第一步，建议先锁定 3 个目标岗位。',
     };
 
     return NextResponse.json({
@@ -237,8 +254,10 @@ export async function GET(request: NextRequest) {
       metrics: {
         resumeImpact: avgMatchScore,
         interviewStrength: interviewCount,
-        applicationHealth: conversionRate,
+        applicationHealth,
       },
+      weeklyApplications,
+      weeklyGoal,
       actions,
       reminders,
       story,

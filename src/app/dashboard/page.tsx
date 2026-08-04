@@ -55,6 +55,8 @@ interface DashboardData {
     applications: number;
     favorites: number;
   };
+  weeklyApplications: number;
+  weeklyGoal: number;
 }
 
 const priorityBadge: Record<
@@ -192,8 +194,17 @@ export default function DashboardPage() {
                 <MetricCard
                   icon={<TrendingUp className="h-4 w-4" />}
                   label={t('dashboard.metricHealth')}
-                  value={`${data.metrics.applicationHealth}%`}
+                  value={
+                    data.weeklyGoal > 0
+                      ? `${data.weeklyApplications}/${data.weeklyGoal}`
+                      : '—'
+                  }
                   hint={t('dashboard.metricHealthHint')}
+                  footer={
+                    data.weeklyGoal > 0
+                      ? `${data.metrics.applicationHealth}% ${t('dashboard.metricHealthDone')}`
+                      : t('dashboard.metricHealthNoGoal')
+                  }
                 />
               </div>
             </section>
@@ -303,11 +314,13 @@ function MetricCard({
   label,
   value,
   hint,
+  footer,
 }: {
   icon: React.ReactNode;
   label: string;
   value: string;
   hint: string;
+  footer?: string;
 }) {
   return (
     <Card className="rounded-2xl border-zinc-200 dark:border-zinc-800 hover:shadow-lg hover:shadow-zinc-900/[0.05] transition-shadow">
@@ -322,6 +335,11 @@ function MetricCard({
           {value}
         </div>
         <p className="text-xs text-zinc-500 leading-relaxed">{hint}</p>
+        {footer && (
+          <p className="mt-2 text-xs font-medium text-zinc-700 dark:text-zinc-300">
+            {footer}
+          </p>
+        )}
       </CardContent>
     </Card>
   );
