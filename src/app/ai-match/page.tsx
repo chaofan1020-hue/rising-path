@@ -19,7 +19,7 @@ import {
   PopoverTrigger,
 } from '@/components/ui/popover';
 import { 
-  Brain, 
+ 
   Target, 
   Loader2, 
   CheckCircle, 
@@ -462,10 +462,7 @@ function AIMatchContent() {
         {/* Empty State */}
         {!matching && matchResults.length === 0 && (
           <div className="relative rounded-2xl border border-dashed border-zinc-200 dark:border-zinc-800 bg-white/60 dark:bg-zinc-950/60">
-            <div className="py-14 md:py-20 text-center px-4">
-              <div className="mx-auto mb-5 w-14 h-14 rounded-2xl bg-zinc-900 dark:bg-white shadow-xl shadow-zinc-900/20 dark:shadow-black/40 flex items-center justify-center">
-                <Brain className="h-7 w-7 text-white dark:text-zinc-900" />
-              </div>
+            <div className="py-12 md:py-16 text-center px-4">
               <h3 className="text-lg md:text-xl font-semibold tracking-tight mb-2 text-zinc-900 dark:text-zinc-50">{t('aiMatch.emptyTitle')}</h3>
               <p className="text-sm text-zinc-500 dark:text-zinc-400 max-w-md mx-auto">
                 {t('aiMatch.emptyDesc')}
