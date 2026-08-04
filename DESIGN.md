@@ -49,7 +49,7 @@
 
 ## 简历管理页（极简黑白灰语言，参考 ResumeGPT footer 美学）
 - 整体：不使用品牌主题色，全面 zinc 系单色——白底（暗色 zinc-950）、zinc-200/800 细腻边框、zinc-500 辅助文字、zinc-900 实心黑主按钮（暗色反转为白）
-- Hero（参考 Tailark 式左对齐范式）：无水印、无主图标方块——左对齐 eyebrow 小标签（text-sm font-medium text-zinc-400，模块名如"简历中心"）+ 超大粗体标题（text-3xl md:text-5xl font-bold tracking-tight）+ 灰色副标题（text-zinc-500 max-w-2xl md:text-lg leading-relaxed）
+- Hero（参考 Tailark 式左对齐范式）：无水印、无主图标方块——左对齐 eyebrow 小标签（text-sm font-medium text-zinc-400，模块名如"简历中心"）+ 超大粗体标题（text-2xl md:text-4xl font-bold tracking-tight）+ 灰色副标题（text-zinc-500 max-w-2xl md:text-lg leading-relaxed）
 - 上传区：大圆角（rounded-2xl）虚线 dropzone（border-dashed zinc-200 hover:border-zinc-400），居中图标 + 文案引导，选中文件后以 chip 展示 + 实心黑上传按钮
 - 简历卡片：白底 zinc-200 边框、hover 时细腻阴影（shadow-zinc-900/5）；文件图标为黑色圆角小方块（与 Hero 方块同语言）；操作按钮为 ghost/outline 中性风，删除按钮仅 hover 显红
 - 按钮 hover 高亮：统一中性浅灰底（hover:bg-zinc-100 dark:hover:bg-zinc-800）+ 文字加深（hover:text-zinc-900）——必须显式覆盖 Button 组件 outline/ghost variant 默认的 hover:bg-accent（全局 accent 为灰绿调，与本页语言冲突）
