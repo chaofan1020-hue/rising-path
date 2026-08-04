@@ -372,7 +372,7 @@ function ResumeContent() {
         )}
 
         {/* Resume List */}
-        <div className="relative space-y-4 max-w-3xl mx-auto">
+        <div className="relative space-y-3 max-w-3xl mx-auto">
           <div className="flex items-center justify-between">
             <h2 className="text-base md:text-lg font-semibold tracking-tight text-zinc-800 dark:text-zinc-100">{t('resume.myResumes')}</h2>
             <Button variant="ghost" size="sm" className="text-xs text-zinc-500 hover:bg-zinc-100 hover:text-zinc-900 dark:hover:bg-zinc-800 dark:hover:text-zinc-100" onClick={fetchResumes}>
@@ -392,16 +392,16 @@ function ResumeContent() {
           ) : (
             resumes.map((resume) => (
               <Card key={resume.id} className="border-zinc-200 dark:border-zinc-800 shadow-none hover:shadow-xl hover:shadow-zinc-900/[0.06] dark:hover:shadow-black/30 transition-shadow duration-300 rounded-2xl">
-                <CardContent className="pt-4 md:pt-6">
-                  <div className="flex flex-col gap-4">
+                <CardContent className="p-4 md:p-5">
+                  <div className="flex flex-col gap-3 md:gap-4">
                     {/* 文件信息 */}
-                    <div className="flex items-start gap-3 md:gap-4">
-                      <div className="w-10 h-10 md:w-12 md:h-12 rounded-xl bg-zinc-900 dark:bg-white flex items-center justify-center flex-shrink-0 shadow-lg shadow-zinc-900/15 dark:shadow-black/30">
-                        <FileText className="h-5 w-5 md:h-6 md:w-6 text-white dark:text-zinc-900" />
+                    <div className="flex items-start gap-3">
+                      <div className="w-9 h-9 md:w-10 md:h-10 rounded-lg bg-zinc-900 dark:bg-white flex items-center justify-center flex-shrink-0 shadow-lg shadow-zinc-900/15 dark:shadow-black/30">
+                        <FileText className="h-4 w-4 md:h-5 md:w-5 text-white dark:text-zinc-900" />
                       </div>
                       <div className="flex-1 min-w-0">
-                        <h3 className="font-semibold text-sm md:text-base tracking-tight truncate text-zinc-900 dark:text-zinc-50">{resume.file_name}</h3>
-                        <div className="flex flex-wrap gap-1.5 md:gap-2 mt-2">
+                        <h3 className="font-semibold text-sm tracking-tight truncate text-zinc-900 dark:text-zinc-50">{resume.file_name}</h3>
+                        <div className="flex flex-wrap gap-1.5 mt-1.5">
                           <Badge variant="secondary" className="text-xs bg-zinc-100 text-zinc-600 dark:bg-zinc-800 dark:text-zinc-300 hover:bg-zinc-100">
                             <Calendar className="h-3 w-3 mr-1" />
                             {new Date(resume.created_at).toLocaleDateString()}
@@ -419,8 +419,8 @@ function ResumeContent() {
                           )}
                         </div>
                         {resume.parsed_content && !resume.parsed_content.includes('正在解析') && (
-                          <p className="text-xs md:text-sm text-zinc-400 dark:text-zinc-500 mt-2 line-clamp-2 hidden md:block">
-                            {resume.parsed_content.substring(0, 150)}...
+                          <p className="text-xs text-zinc-400 dark:text-zinc-500 mt-1.5 line-clamp-2 hidden md:block">
+                            {resume.parsed_content.substring(0, 140)}...
                           </p>
                         )}
                       </div>
@@ -443,12 +443,12 @@ function ResumeContent() {
                     )}
                     
                     {/* 操作按钮 - 手机端换行显示 */}
-                    <div className="flex flex-wrap gap-2 md:gap-2 pl-0 md:pl-[52px]">
+                    <div className="flex flex-wrap gap-2 pl-0 md:pl-[48px]">
                       {resume.parsed_content && !resume.parsed_content.includes('正在解析') && (
                         <Button
                           variant="outline"
                           size="sm"
-                          className="text-xs h-8 border-zinc-200 dark:border-zinc-700 text-zinc-600 dark:text-zinc-300 hover:bg-zinc-100 hover:text-zinc-900 dark:hover:bg-zinc-800 dark:hover:text-zinc-100"
+                          className="text-xs h-7 px-2.5 border-zinc-200 dark:border-zinc-700 text-zinc-600 dark:text-zinc-300 hover:bg-zinc-100 hover:text-zinc-900 dark:hover:bg-zinc-800 dark:hover:text-zinc-100"
                           onClick={() => extractFields(resume)}
                           disabled={extractingId === resume.id}
                         >
@@ -473,7 +473,7 @@ function ResumeContent() {
                       <Button
                         variant="outline"
                         size="sm"
-                        className="text-xs h-8 border-zinc-200 dark:border-zinc-700 text-zinc-600 dark:text-zinc-300 hover:bg-zinc-100 hover:text-zinc-900 dark:hover:bg-zinc-800 dark:hover:text-zinc-100"
+                        className="text-xs h-7 px-2.5 border-zinc-200 dark:border-zinc-700 text-zinc-600 dark:text-zinc-300 hover:bg-zinc-100 hover:text-zinc-900 dark:hover:bg-zinc-800 dark:hover:text-zinc-100"
                         onClick={() => translateResume(resume)}
                         disabled={translatingId === resume.id}
                       >
@@ -490,7 +490,7 @@ function ResumeContent() {
                         )}
                       </Button>
                       <Link href="/field-mappings" className="hidden sm:block">
-                        <Button variant="outline" size="sm" className="text-xs h-8 border-zinc-200 dark:border-zinc-700 text-zinc-600 dark:text-zinc-300 hover:bg-zinc-100 hover:text-zinc-900 dark:hover:bg-zinc-800 dark:hover:text-zinc-100">
+                        <Button variant="outline" size="sm" className="text-xs h-7 px-2.5 border-zinc-200 dark:border-zinc-700 text-zinc-600 dark:text-zinc-300 hover:bg-zinc-100 hover:text-zinc-900 dark:hover:bg-zinc-800 dark:hover:text-zinc-100">
                           <Map className="h-3 w-3 mr-1" />
                           {t('resume.fieldMapping')}
                         </Button>
@@ -500,7 +500,7 @@ function ResumeContent() {
                           <Button
                             variant="outline"
                             size="sm"
-                            className="text-xs h-8 border-zinc-200 dark:border-zinc-700 text-zinc-600 dark:text-zinc-300 hover:bg-zinc-100 hover:text-zinc-900 dark:hover:bg-zinc-800 dark:hover:text-zinc-100"
+                            className="text-xs h-7 px-2.5 border-zinc-200 dark:border-zinc-700 text-zinc-600 dark:text-zinc-300 hover:bg-zinc-100 hover:text-zinc-900 dark:hover:bg-zinc-800 dark:hover:text-zinc-100"
                             onClick={() => setSelectedResume(resume)}
                           >
                             {t('resume.viewDetail')}
@@ -649,7 +649,7 @@ function ResumeContent() {
                       <Button
                         variant="ghost"
                         size="sm"
-                        className="text-xs h-8 px-2 text-zinc-400 hover:text-red-600 hover:bg-red-50 dark:hover:bg-red-950/40"
+                        className="text-xs h-7 px-2 text-zinc-400 hover:text-red-600 hover:bg-red-50 dark:hover:bg-red-950/40"
                         onClick={() => deleteResume(resume.id)}
                       >
                         <Trash2 className="h-3 w-3 md:h-4 md:w-4" />
