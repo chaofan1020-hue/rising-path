@@ -4,18 +4,17 @@ import { useEffect, useMemo, useState } from 'react';
 import Link from 'next/link';
 import { Header1 } from '@/components/header1';
 import { Button } from '@/components/ui/button';
-import {
-  Card,
-  CardContent,
-} from '@/components/ui/card';
+import { Card, CardContent } from '@/components/ui/card';
 import { Skeleton } from '@/components/ui/skeleton';
 import { useLanguage } from '@/lib/language-context';
 import {
   ArrowRight,
   Bell,
   Briefcase,
+  Calendar,
   FileText,
   LineChart,
+  MapPin,
   MessageSquare,
   Target,
   TrendingUp,
@@ -63,10 +62,23 @@ interface DashboardData {
   };
   weeklyApplications: number;
   weeklyGoal: number;
+  plan: {
+    context: {
+      region: string;
+      stage: string;
+      role: string;
+    };
+    items: {
+      timeframe: 'now' | 'week' | 'month';
+      title: string;
+      description: string;
+      href?: string;
+    }[];
+  } | null;
 }
 
 export default function DashboardPage() {
-  const { t } = useLanguage();
+  const { locale, t } = useLanguage();
   const [data, setData] = useState<DashboardData | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
@@ -86,7 +98,7 @@ export default function DashboardPage() {
       return;
     }
 
-    fetch(`/api/dashboard?access_code_id=${accessCodeId}`)
+    fetch(`/api/dashboard?access_code_id=${accessCodeId}&lang=${locale}`)
       .then((res) => res.json())
       .then((json) => {
         if (json.error) {
@@ -97,7 +109,16 @@ export default function DashboardPage() {
       })
       .catch((err) => setError(err?.message || t('dashboard.loadError') || '加载失败'))
       .finally(() => setLoading(false));
-  }, [accessCodeId, t]);
+  }, [accessCodeId, locale, t]);
+
+  const planGroups = useMemo(() => {
+    if (!data?.plan) return null;
+    return {
+      now: data.plan.items.filter((i) => i.timeframe === 'now'),
+      week: data.plan.items.filter((i) => i.timeframe === 'week'),
+      month: data.plan.items.filter((i) => i.timeframe === 'month'),
+    };
+  }, [data]);
 
   return (
     <div className="min-h-screen bg-white dark:bg-zinc-950">
@@ -195,6 +216,65 @@ export default function DashboardPage() {
                 />
               </div>
             </section>
+
+            {/* 个性化求职规划 */}
+            {data.plan && planGroups && (
+              <section>
+                <div className="flex items-center justify-between mb-4">
+                  <h3 className="text-sm font-medium text-zinc-400 dark:text-zinc-500 tracking-widest uppercase">
+                    {t('dashboard.planTitle')}
+                  </h3>
+                  <div className="flex items-center gap-2 text-xs text-zinc-500">
+                    <MapPin className="h-3 w-3" />
+                    <span>
+                      {t('dashboard.planContext', {
+                        region: data.plan.context.region,
+                        stage: data.plan.context.stage,
+                        role: data.plan.context.role,
+                      })}
+                    </span>
+                  </div>
+                </div>
+                <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+                  <PlanColumn
+                    icon={<Zap className="h-4 w-4" />}
+                    label={t('dashboard.planNow')}
+                    items={planGroups.now}
+                  />
+                  <PlanColumn
+                    icon={<Calendar className="h-4 w-4" />}
+                    label={t('dashboard.planWeek')}
+                    items={planGroups.week}
+                  />
+                  <PlanColumn
+                    icon={<LineChart className="h-4 w-4" />}
+                    label={t('dashboard.planMonth')}
+                    items={planGroups.month}
+                  />
+                </div>
+              </section>
+            )}
+
+            {!data.plan && (
+              <section>
+                <h3 className="text-sm font-medium text-zinc-400 dark:text-zinc-500 tracking-widest uppercase mb-4">
+                  {t('dashboard.planTitle')}
+                </h3>
+                <Card className="rounded-2xl border-zinc-200 dark:border-zinc-800 border-dashed">
+                  <CardContent className="p-6 text-center">
+                    <p className="text-sm text-zinc-500 max-w-md mx-auto leading-relaxed">
+                      {t('dashboard.planEmpty')}
+                    </p>
+                    <Button
+                      asChild
+                      className="mt-4 rounded-full bg-zinc-900 text-white hover:bg-zinc-800 dark:bg-white dark:text-zinc-900 dark:hover:bg-zinc-200"
+                    >
+                      <Link href="/resume">{t('dashboard.action.uploadResume')}</Link>
+                    </Button>
+                  </CardContent>
+                </Card>
+              </section>
+            )}
 
             <div className="grid grid-cols-1 lg:grid-cols-3 gap-6 md:gap-8">
               {/* 行动建议 */}
@@ -348,6 +428,60 @@ function MetricCard({
   );
 }
 
+function PlanColumn({
+  icon,
+  label,
+  items,
+}: {
+  icon: React.ReactNode;
+  label: string;
+  items: { title: string; description: string; href?: string }[];
+}) {
+  return (
+    <Card className="rounded-2xl border-zinc-200 dark:border-zinc-800 bg-zinc-50/50 dark:bg-zinc-900/30">
+      <CardContent className="p-5">
+        <div className="flex items-center gap-2 mb-4">
+          <span className="flex items-center justify-center w-6 h-6 rounded-lg bg-zinc-900 dark:bg-white text-white dark:text-zinc-900">
+            {icon}
+          </span>
+          <span className="text-sm font-semibold text-zinc-900 dark:text-zinc-100 tracking-wide">
+            {label}
+          </span>
+        </div>
+        <div className="space-y-4">
+          {items.map((item, idx) => (
+            <div key={idx} className="group">
+              {item.href ? (
+                <Link
+                  href={item.href}
+                  className="block hover:opacity-80 transition-opacity"
+                >
+                  <p className="text-sm font-medium text-zinc-900 dark:text-zinc-100 mb-1 flex items-center gap-1">
+                    {item.title}
+                    <ArrowRight className="h-3 w-3 text-zinc-400 opacity-0 -translate-x-1 group-hover:opacity-100 group-hover:translate-x-0 transition-all" />
+                  </p>
+                  <p className="text-xs text-zinc-500 leading-relaxed">
+                    {item.description}
+                  </p>
+                </Link>
+              ) : (
+                <>
+                  <p className="text-sm font-medium text-zinc-900 dark:text-zinc-100 mb-1">
+                    {item.title}
+                  </p>
+                  <p className="text-xs text-zinc-500 leading-relaxed">
+                    {item.description}
+                  </p>
+                </>
+              )}
+            </div>
+          ))}
+        </div>
+      </CardContent>
+    </Card>
+  );
+}
+
 function StoryCard({
   icon,
   title,
@@ -384,6 +518,11 @@ function DashboardSkeleton() {
         <Skeleton className="h-32 rounded-2xl" />
         <Skeleton className="h-32 rounded-2xl" />
         <Skeleton className="h-32 rounded-2xl" />
+      </div>
+      <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+        <Skeleton className="h-64 rounded-2xl" />
+        <Skeleton className="h-64 rounded-2xl" />
+        <Skeleton className="h-64 rounded-2xl" />
       </div>
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-6 md:gap-8">
         <Skeleton className="h-64 lg:col-span-2 rounded-2xl" />
