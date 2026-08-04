@@ -7,8 +7,6 @@ import { Button } from '@/components/ui/button';
 import {
   Card,
   CardContent,
-  CardHeader,
-  CardTitle,
 } from '@/components/ui/card';
 import { Skeleton } from '@/components/ui/skeleton';
 import { useLanguage } from '@/lib/language-context';
@@ -26,27 +24,35 @@ import {
 
 interface DashboardData {
   phase: string;
-  phaseTitle: string;
-  phaseDescription: string;
+  phaseTitleKey: string;
+  phaseTitleParams?: Record<string, string | number>;
+  phaseDescriptionKey: string;
+  phaseDescriptionParams?: Record<string, string | number>;
   metrics: {
     resumeImpact: number;
     interviewStrength: number;
     applicationHealth: number;
   };
   actions: {
-    title: string;
+    titleKey: string;
+    titleParams?: Record<string, string | number>;
     href: string;
     priority: 'high' | 'medium' | 'low';
   }[];
   reminders: {
     type: string;
-    title: string;
-    description: string;
+    titleKey: string;
+    titleParams?: Record<string, string | number>;
+    descriptionKey: string;
+    descriptionParams?: Record<string, string | number>;
   }[];
   story: {
-    resumeGrowth: string;
-    interviewGrowth: string;
-    mindsetGrowth: string;
+    resumeKey: string;
+    resumeParams?: Record<string, string | number>;
+    interviewKey: string;
+    interviewParams?: Record<string, string | number>;
+    mindsetKey: string;
+    mindsetParams?: Record<string, string | number>;
   };
   counts: {
     resumes: number;
@@ -58,25 +64,6 @@ interface DashboardData {
   weeklyApplications: number;
   weeklyGoal: number;
 }
-
-const priorityBadge: Record<
-  'high' | 'medium' | 'low',
-  { label: string; className: string }
-> = {
-  high: {
-    label: '优先',
-    className:
-      'bg-zinc-900 text-white dark:bg-white dark:text-zinc-900',
-  },
-  medium: {
-    label: '建议',
-    className: 'bg-zinc-100 text-zinc-700 dark:bg-zinc-800 dark:text-zinc-200',
-  },
-  low: {
-    label: '可选',
-    className: 'bg-zinc-50 text-zinc-500 dark:bg-zinc-900 dark:text-zinc-400',
-  },
-};
 
 export default function DashboardPage() {
   const { t } = useLanguage();
@@ -108,9 +95,9 @@ export default function DashboardPage() {
           setData(json as DashboardData);
         }
       })
-      .catch((err) => setError(err?.message || '加载失败'))
+      .catch((err) => setError(err?.message || t('dashboard.loadError') || '加载失败'))
       .finally(() => setLoading(false));
-  }, [accessCodeId]);
+  }, [accessCodeId, t]);
 
   return (
     <div className="min-h-screen bg-white dark:bg-zinc-950">
@@ -152,10 +139,10 @@ export default function DashboardPage() {
                         {t('dashboard.phaseLabel')}
                       </div>
                       <h2 className="text-2xl md:text-3xl font-bold tracking-tight">
-                        {data.phaseTitle}
+                        {t(data.phaseTitleKey, data.phaseTitleParams)}
                       </h2>
                       <p className="text-sm md:text-base opacity-80 max-w-2xl leading-relaxed">
-                        {data.phaseDescription}
+                        {t(data.phaseDescriptionKey, data.phaseDescriptionParams)}
                       </p>
                     </div>
                     <Button
@@ -219,7 +206,7 @@ export default function DashboardPage() {
                   <CardContent className="p-0">
                     {data.actions.map((action, idx) => (
                       <Link
-                        key={action.title}
+                        key={`${action.titleKey}-${idx}`}
                         href={action.href}
                         className="group flex items-center justify-between p-4 md:p-5 border-b border-zinc-100 dark:border-zinc-800 last:border-0 hover:bg-zinc-50 dark:hover:bg-zinc-900/50 transition-colors"
                       >
@@ -227,10 +214,10 @@ export default function DashboardPage() {
                           <span
                             className={`text-[10px] font-semibold px-2 py-0.5 rounded-full ${priorityBadge[action.priority].className}`}
                           >
-                            {priorityBadge[action.priority].label}
+                            {t(`dashboard.priority.${action.priority}`)}
                           </span>
                           <span className="text-sm md:text-base font-medium text-zinc-900 dark:text-zinc-100">
-                            {action.title}
+                            {t(action.titleKey, action.titleParams)}
                           </span>
                         </div>
                         <ArrowRight className="h-4 w-4 text-zinc-300 group-hover:text-zinc-900 dark:text-zinc-600 dark:group-hover:text-zinc-100 transition-colors" />
@@ -265,10 +252,10 @@ export default function DashboardPage() {
                           </div>
                           <div>
                             <p className="text-sm font-medium text-zinc-900 dark:text-zinc-100 mb-1">
-                              {reminder.title}
+                              {t(reminder.titleKey, reminder.titleParams)}
                             </p>
                             <p className="text-xs text-zinc-500 leading-relaxed">
-                              {reminder.description}
+                              {t(reminder.descriptionKey, reminder.descriptionParams)}
                             </p>
                           </div>
                         </div>
@@ -288,17 +275,17 @@ export default function DashboardPage() {
                 <StoryCard
                   icon={<LineChart className="h-4 w-4" />}
                   title={t('dashboard.storyResume')}
-                  description={data.story.resumeGrowth}
+                  description={t(data.story.resumeKey, data.story.resumeParams)}
                 />
                 <StoryCard
                   icon={<Zap className="h-4 w-4" />}
                   title={t('dashboard.storyInterview')}
-                  description={data.story.interviewGrowth}
+                  description={t(data.story.interviewKey, data.story.interviewParams)}
                 />
                 <StoryCard
                   icon={<Briefcase className="h-4 w-4" />}
                   title={t('dashboard.storyMindset')}
-                  description={data.story.mindsetGrowth}
+                  description={t(data.story.mindsetKey, data.story.mindsetParams)}
                 />
               </div>
             </section>
@@ -308,6 +295,22 @@ export default function DashboardPage() {
     </div>
   );
 }
+
+const priorityBadge: Record<
+  'high' | 'medium' | 'low',
+  { className: string }
+> = {
+  high: {
+    className:
+      'bg-zinc-900 text-white dark:bg-white dark:text-zinc-900',
+  },
+  medium: {
+    className: 'bg-zinc-100 text-zinc-700 dark:bg-zinc-800 dark:text-zinc-200',
+  },
+  low: {
+    className: 'bg-zinc-50 text-zinc-500 dark:bg-zinc-900 dark:text-zinc-400',
+  },
+};
 
 function MetricCard({
   icon,
