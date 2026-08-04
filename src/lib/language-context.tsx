@@ -1473,8 +1473,14 @@ export function LanguageProvider({ children }: { children: ReactNode }) {
     localStorage.setItem("locale", newLocale);
   };
 
-  const t = (key: string): string => {
-    return translations[locale][key] || key;
+  const t = (key: string, params?: Record<string, string | number>): string => {
+    let text = translations[locale][key] || key;
+    if (params) {
+      Object.entries(params).forEach(([k, v]) => {
+        text = text.replace(new RegExp(`{{${k}}}`, "g"), String(v));
+      });
+    }
+    return text;
   };
 
   return (

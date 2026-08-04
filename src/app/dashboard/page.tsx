@@ -130,7 +130,7 @@ export default function DashboardPage() {
           <div className="space-y-6 md:space-y-8">
             {/* 阶段定位 */}
             <section>
-              <Card className="rounded-2xl border-zinc-200 dark:border-zinc-800 bg-zinc-900 dark:bg-white text-white dark:text-zinc-900 shadow-xl shadow-zinc-900/10">
+              <Card className="rounded-2xl border-zinc-200 dark:border-zinc-800 bg-gradient-to-br from-zinc-800 via-zinc-900 to-zinc-950 dark:from-zinc-200 dark:via-white dark:to-zinc-300 text-white dark:text-zinc-900 shadow-xl shadow-zinc-900/10">
                 <CardContent className="p-6 md:p-10">
                   <div className="flex flex-col md:flex-row md:items-center md:justify-between gap-6">
                     <div className="space-y-3">
