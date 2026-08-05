@@ -1,19 +1,15 @@
 'use client';
 
 import { useEffect, useMemo, useRef, useState } from 'react';
-import { Canvas, extend, useThree, useFrame } from '@react-three/fiber';
-import { useGLTF, useTexture, Environment, Lightformer } from '@react-three/drei';
+import { Canvas, useThree, useFrame } from '@react-three/fiber';
+import { useGLTF, useTexture, Environment, Lightformer, Line } from '@react-three/drei';
 import { BallCollider, CuboidCollider, Physics, RigidBody, useRopeJoint, useSphericalJoint } from '@react-three/rapier';
-import { MeshLineGeometry, MeshLineMaterial } from 'meshline';
 import * as THREE from 'three';
-
-extend({ MeshLineGeometry, MeshLineMaterial });
 
 const MODEL_URL = 'https://assets.vercel.com/image/upload/contentful/image/e5382hct74si/5huRVDzcoDwnbgrKUo1Lzs/53b6dd7d6b4ffcdbd338fa60265949e1/tag.glb';
 const BAND_URL = 'https://assets.vercel.com/image/upload/contentful/image/e5382hct74si/SOT1hmCesOHxEYxL7vkoZ/c57b29c85912047c414311723320c16b/band.jpg';
 
 function Band({ position = [0, 0, 20] as [number, number, number], gravity = [0, -40, 0] as [number, number, number], cardStartY = 0 }) {
-  const band = useRef<any>(null);
   const fixed = useRef<any>(null);
   const j1 = useRef<any>(null);
   const j2 = useRef<any>(null);
@@ -41,6 +37,9 @@ function Band({ position = [0, 0, 20] as [number, number, number], gravity = [0,
 
   const [hovered, hover] = useState(false);
   const [isDragged, setIsDragged] = useState(false);
+
+  // Rope line ref (for dynamic geometry updates via drei Line component)
+  const lineRef = useRef<any>(null);
 
   const bandTexture = useMemo(() => {
     const t = rawBandTexture.clone();
@@ -85,11 +84,25 @@ function Band({ position = [0, 0, 20] as [number, number, number], gravity = [0,
         ref.current.lerped.lerp(ref.current.translation(), delta * (10 + clampedDistance * (50 - 10)));
       });
 
+      // Update curve control points
       curve.points[0].copy(j3.current.translation());
       curve.points[1].copy(j2.current.lerped);
       curve.points[2].copy(j1.current.lerped);
       curve.points[3].copy(fixed.current.translation());
-      band.current.geometry.setPoints(curve.getPoints(32));
+
+      // Update Line2 geometry with interpolated curve points
+      const pts = curve.getPoints(20);
+      const positions: number[] = [];
+      pts.forEach((p: THREE.Vector3) => {
+        positions.push(p.x, p.y, p.z);
+      });
+      if (lineRef.current) {
+        const geom = lineRef.current.geometry;
+        if (geom && typeof geom.setPositions === 'function') {
+          geom.setPositions(positions);
+          lineRef.current.computeLineDistances();
+        }
+      }
 
       a.copy(card.current.angvel());
       r.copy(card.current.rotation());
@@ -157,20 +170,15 @@ function Band({ position = [0, 0, 20] as [number, number, number], gravity = [0,
           </mesh>
         </group>
       </RigidBody>
-      <mesh ref={band}>
-        {/* @ts-expect-error - meshline types not available */}
-        <meshLineGeometry />
-        {/* @ts-expect-error - meshline types not available */}
-        <meshLineMaterial
-          color="white"
-          depthTest={false}
-          resolution={[width, height]}
-          useMap
-          map={bandTexture}
-          repeat={[-3, 1]}
-          lineWidth={3}
-        />
-      </mesh>
+      {/* Rope rendered with drei Line component */}
+      <Line
+        ref={lineRef}
+        points={[[0, 0, 0], [0, 0, 0], [0, 0, 0], [0, 0, 0]]}
+        lineWidth={4}
+        color="#E2D0B8"
+        transparent
+        opacity={0.9}
+      />
     </group>
   );
 }
