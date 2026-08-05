@@ -311,18 +311,6 @@ export async function GET(request: NextRequest) {
     phaseTitleKey = 'dashboard.phase.positioning.title';
     phaseDescriptionKey = 'dashboard.phase.positioning.description';
     phaseDescriptionParams = { count: 3 };
-  } else if (
-    latestInterview &&
-    ['completed', 'ended', 'finished'].includes(latestInterview.status) &&
-    now - new Date(latestInterview.updated_at).getTime() < 7 * 86400000
-  ) {
-    const hoursSinceInterview = Math.floor(
-      (now - new Date(latestInterview.updated_at).getTime()) / 3600000
-    );
-    phase = 'review';
-    phaseTitleKey = 'dashboard.phase.review.title';
-    phaseDescriptionKey = 'dashboard.phase.review.description';
-    phaseDescriptionParams = { hours: hoursSinceInterview };
   } else if (isApplyingSeason) {
     phase = 'applying';
     phaseTitleKey = 'dashboard.phase.applying.title';
@@ -335,6 +323,18 @@ export async function GET(request: NextRequest) {
       goal: 10,
       region: selectedRegion ? REGION_LABEL_KEYS[selectedRegion] : '',
     };
+  } else if (
+    latestInterview &&
+    ['completed', 'ended', 'finished'].includes(latestInterview.status) &&
+    now - new Date(latestInterview.updated_at).getTime() < 7 * 86400000
+  ) {
+    const hoursSinceInterview = Math.floor(
+      (now - new Date(latestInterview.updated_at).getTime()) / 3600000
+    );
+    phase = 'review';
+    phaseTitleKey = 'dashboard.phase.review.title';
+    phaseDescriptionKey = 'dashboard.phase.review.description';
+    phaseDescriptionParams = { hours: hoursSinceInterview };
   } else {
     phase = 'preparation';
     phaseTitleKey = 'dashboard.phase.preparation.title';
