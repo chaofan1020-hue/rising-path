@@ -81,7 +81,6 @@ export default function SubscriptionCelebration({
             cameraPosition={[0, 0.5, 10]}
             cameraFov={35}
             cardStartY={0}
-            badgeColor="#C46A4A"
             onError={handleLanyardError}
           />
         )}

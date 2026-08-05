@@ -9,42 +9,52 @@ import * as THREE from 'three';
 const MODEL_URL = 'https://assets.vercel.com/image/upload/contentful/image/e5382hct74si/5huRVDzcoDwnbgrKUo1Lzs/53b6dd7d6b4ffcdbd338fa60265949e1/tag.glb';
 const BAND_URL = 'https://assets.vercel.com/image/upload/contentful/image/e5382hct74si/SOT1hmCesOHxEYxL7vkoZ/c57b29c85912047c414311723320c16b/band.jpg';
 
-const RIBBON_SEGMENTS = 20;
-const RIBBON_WIDTH = 0.12;
-
-/** Generate a badge texture with the Rising Path logo on a colored background */
-function createBadgeTexture(bgColor: string, logoColor: string): THREE.CanvasTexture {
+/** Generate a badge texture with the Rising Path logo on a white background */
+function createBadgeTexture(): THREE.CanvasTexture {
   const canvas = document.createElement('canvas');
   canvas.width = 512;
   canvas.height = 512;
   const ctx = canvas.getContext('2d')!;
 
-  // Background
-  ctx.fillStyle = bgColor;
+  // White background with subtle rounded rect
+  ctx.fillStyle = '#FFFFFF';
   ctx.beginPath();
   ctx.roundRect(0, 0, 512, 512, 48);
   ctx.fill();
 
-  // Rising Path text
-  ctx.fillStyle = logoColor;
-  ctx.font = 'bold 56px system-ui, -apple-system, sans-serif';
+  // Thin border
+  ctx.strokeStyle = '#E2E2E2';
+  ctx.lineWidth = 4;
+  ctx.beginPath();
+  ctx.roundRect(2, 2, 508, 508, 48);
+  ctx.stroke();
+
+  // Rising Path text (dark gray, modern)
+  ctx.fillStyle = '#1A1A1A';
+  ctx.font = 'bold 52px system-ui, -apple-system, sans-serif';
   ctx.textAlign = 'center';
   ctx.textBaseline = 'middle';
-  ctx.fillText('Rising Path', 256, 256);
+  ctx.fillText('Rising Path', 256, 280);
 
-  // Logo SVG (two bars)
-  const logoScale = 6;
+  // Logo SVG (two bars) in dark gray
+  const logoScale = 5;
   const cx = 256;
-  const cy = 140;
-  // Top bar: M0 0h29a4 4 0 0 1 0 8H0V0z
-  ctx.fillStyle = logoColor;
+  const cy = 150;
+  ctx.fillStyle = '#1A1A1A';
+  // Top bar
   ctx.beginPath();
   ctx.roundRect(cx - 29 * logoScale / 2, cy, 29 * logoScale, 8 * logoScale, 4 * logoScale);
   ctx.fill();
-  // Bottom bar: M40 20H11a4 4 0 0 1 0-8h29v8z
+  // Bottom bar
   ctx.beginPath();
   ctx.roundRect(cx - 29 * logoScale / 2, cy + 16 * logoScale, 29 * logoScale, 8 * logoScale, 4 * logoScale);
   ctx.fill();
+
+  // Subtitle
+  ctx.fillStyle = '#888888';
+  ctx.font = '24px system-ui, -apple-system, sans-serif';
+  ctx.textAlign = 'center';
+  ctx.fillText('求职加速器', 256, 350);
 
   const texture = new THREE.CanvasTexture(canvas);
   texture.needsUpdate = true;
@@ -55,13 +65,11 @@ function Band({
   position = [0, 0, 20] as [number, number, number],
   gravity = [0, -40, 0] as [number, number, number],
   cardStartY = 0,
-  badgeColor = '#C46A4A',
   onError,
 }: {
   position?: [number, number, number];
   gravity?: [number, number, number];
   cardStartY?: number;
-  badgeColor?: string;
   onError?: (err: Error) => void;
 }) {
   const fixed = useRef<any>(null);
@@ -76,7 +84,7 @@ function Band({
   const dir = useRef(new THREE.Vector3());
   const dragOffset = useRef<THREE.Vector3 | null>(null);
 
-  // Load GLTF - wrap in try/catch
+  // Load GLTF
   let nodes: any = {};
   let materials: any = {};
   try {
@@ -84,16 +92,12 @@ function Band({
     nodes = result.nodes;
     materials = result.materials;
   } catch (e) {
-    if (onError) onError(e as Error);
+    onError?.(e as Error);
   }
 
-  const rawBandTexture = useTexture(BAND_URL);
   const { width, height } = useThree((state) => state.size);
 
-  const curveRef = useRef(new THREE.CatmullRomCurve3([
-    new THREE.Vector3(), new THREE.Vector3(), new THREE.Vector3(), new THREE.Vector3()
-  ]));
-
+  // Rope joint chain
   useRopeJoint(fixed, j1, [[0, 0, 0], [0, 0, 0], 1]);
   useRopeJoint(j1, j2, [[0, 0, 0], [0, 0, 0], 1]);
   useRopeJoint(j2, j3, [[0, 0, 0], [0, 0, 0], 1]);
@@ -102,69 +106,35 @@ function Band({
   const [hovered, hover] = useState(false);
   const [isDragged, setIsDragged] = useState(false);
 
-  // Rope mesh ref
-  const ropeRef = useRef<THREE.Mesh>(null);
-  // Ribbon geometry ref for reuse
-  const ribbonGeomRef = useRef<THREE.BufferGeometry | null>(null);
-
-  // Custom badge texture with logo
+  // Custom badge texture (white bg, dark text, Rising Path logo)
   const badgeTexture = useMemo(() => {
     try {
-      return createBadgeTexture(badgeColor, '#FFFFFF');
+      return createBadgeTexture();
     } catch {
       return null;
     }
-  }, [badgeColor]);
+  }, []);
 
-  const bandTexture = useMemo(() => {
-    const t = rawBandTexture.clone();
-    t.wrapS = t.wrapT = THREE.RepeatWrapping;
-    t.repeat.set(1, 1);
-    return t;
-  }, [rawBandTexture]);
+  // Rope tube mesh ref
+  const ropeRef = useRef<THREE.Mesh>(null);
 
-  // Initialize ribbon geometry once
+  // Initialize tube geometry with default curve
   useEffect(() => {
     try {
-      const vertexCount = (RIBBON_SEGMENTS + 1) * 2;
-      const positions = new Float32Array(vertexCount * 3);
-      const uvs = new Float32Array(vertexCount * 2);
-      const indices: number[] = [];
-
-      for (let i = 0; i <= RIBBON_SEGMENTS; i++) {
-        const t = i / RIBBON_SEGMENTS;
-        uvs[i * 4] = 0;
-        uvs[i * 4 + 1] = t;
-        uvs[i * 4 + 2] = 1;
-        uvs[i * 4 + 3] = t;
-
-        if (i < RIBBON_SEGMENTS) {
-          const a = i * 2;
-          const b = i * 2 + 1;
-          const c = (i + 1) * 2;
-          const d = (i + 1) * 2 + 1;
-          indices.push(a, c, b);
-          indices.push(b, c, d);
-        }
-      }
-
-      const geom = new THREE.BufferGeometry();
-      geom.setAttribute('position', new THREE.BufferAttribute(positions, 3));
-      geom.setAttribute('uv', new THREE.BufferAttribute(uvs, 2));
-      geom.setIndex(indices);
-      geom.computeVertexNormals();
-
-      ribbonGeomRef.current = geom;
+      const pts = [
+        new THREE.Vector3(0, 0, 0),
+        new THREE.Vector3(0.5, 0, 0),
+        new THREE.Vector3(1, 0, 0),
+        new THREE.Vector3(1.5, 0, 0),
+      ];
+      const curve = new THREE.CatmullRomCurve3(pts);
+      const geom = new THREE.TubeGeometry(curve, 20, 0.06, 8, false);
       if (ropeRef.current) {
         ropeRef.current.geometry = geom;
       }
     } catch (e) {
-      if (onError) onError(e as Error);
+      onError?.(e as Error);
     }
-  }, []);
-
-  useEffect(() => {
-    curveRef.current.curveType = 'chordal';
   }, []);
 
   useEffect(() => {
@@ -180,7 +150,6 @@ function Band({
       const a = ang.current;
       const r = rot.current;
       const d = dir.current;
-      const curve = curveRef.current;
 
       if (dragOffset.current) {
         v.set(state.pointer.x, state.pointer.y, 0.5).unproject(state.camera);
@@ -195,55 +164,33 @@ function Band({
       }
 
       if (fixed.current) {
+        // Lerp rope joints for smooth rope simulation
         [j1, j2].forEach((ref: any) => {
           if (!ref.current.lerped) ref.current.lerped = new THREE.Vector3().copy(ref.current.translation());
           const clampedDistance = Math.max(0.1, Math.min(1, ref.current.lerped.distanceTo(ref.current.translation())));
           ref.current.lerped.lerp(ref.current.translation(), delta * (10 + clampedDistance * (50 - 10)));
         });
 
-        // Update curve control points from physics joints
-        curve.points[0].copy(j3.current.translation());
-        curve.points[1].copy(j2.current.lerped);
-        curve.points[2].copy(j1.current.lerped);
-        curve.points[3].copy(fixed.current.translation());
-
-        // Update ribbon geometry
-        const geom = ribbonGeomRef.current;
-        if (geom) {
-          const points = curve.getPoints(RIBBON_SEGMENTS);
-          if (points.length > 1) {
-            const posAttr = geom.attributes.position as THREE.BufferAttribute;
-            const posArray = posAttr.array as Float32Array;
-            const tmp = new THREE.Vector3();
-
-            for (let i = 0; i <= RIBBON_SEGMENTS; i++) {
-              const p = points[i];
-              if (i < RIBBON_SEGMENTS) {
-                tmp.copy(points[i + 1]).sub(points[i]).normalize();
-              } else {
-                tmp.copy(points[i]).sub(points[i - 1]).normalize();
-              }
-              const n = new THREE.Vector3(-tmp.y, tmp.x, 0).normalize();
-
-              const idx = i * 6;
-              posArray[idx] = p.x + n.x * RIBBON_WIDTH;
-              posArray[idx + 1] = p.y + n.y * RIBBON_WIDTH;
-              posArray[idx + 2] = p.z + n.z * RIBBON_WIDTH;
-              posArray[idx + 3] = p.x - n.x * RIBBON_WIDTH;
-              posArray[idx + 4] = p.y - n.y * RIBBON_WIDTH;
-              posArray[idx + 5] = p.z - n.z * RIBBON_WIDTH;
-            }
-            posAttr.needsUpdate = true;
-            geom.computeVertexNormals();
-          }
+        // Update rope tube geometry from physics joints
+        if (ropeRef.current) {
+          const pts = [
+            new THREE.Vector3().copy(j3.current.translation()),
+            new THREE.Vector3().copy(j2.current.lerped),
+            new THREE.Vector3().copy(j1.current.lerped),
+            new THREE.Vector3().copy(fixed.current.translation()),
+          ];
+          const curve = new THREE.CatmullRomCurve3(pts);
+          ropeRef.current.geometry.dispose();
+          ropeRef.current.geometry = new THREE.TubeGeometry(curve, 20, 0.06, 8, false);
         }
 
+        // Apply angular damping to card
         a.copy(card.current.angvel());
         r.copy(card.current.rotation());
         card.current.setAngvel({ x: a.x, y: a.y - r.y * 0.25, z: a.z });
       }
     } catch (e) {
-      if (onError) onError(e as Error);
+      onError?.(e as Error);
     }
   });
 
@@ -289,28 +236,34 @@ function Band({
           onPointerUp={handlePointerUp}
           onPointerDown={handlePointerDown}
         >
-          {/* Card face with custom texture */}
+          {/* Card face with white Rising Path badge */}
           <mesh geometry={nodes?.card?.geometry}>
             <meshPhysicalMaterial
               map={badgeTexture || undefined}
-              color={badgeTexture ? undefined : badgeColor}
-              clearcoat={1}
-              clearcoatRoughness={0.15}
-              roughness={0.3}
-              metalness={0.5}
+              color={badgeTexture ? undefined : '#FFFFFF'}
+              clearcoat={0.5}
+              clearcoatRoughness={0.2}
+              roughness={0.2}
+              metalness={0.0}
             />
           </mesh>
           <mesh geometry={nodes?.clip?.geometry}>
-            <meshPhysicalMaterial color="#888888" roughness={0.3} metalness={0.8} />
+            <meshPhysicalMaterial color="#CCCCCC" roughness={0.3} metalness={0.6} />
           </mesh>
           <mesh geometry={nodes?.clamp?.geometry}>
-            <meshPhysicalMaterial color="#888888" roughness={0.3} metalness={0.8} />
+            <meshPhysicalMaterial color="#CCCCCC" roughness={0.3} metalness={0.6} />
           </mesh>
         </group>
       </RigidBody>
-      {/* Flat ribbon lanyard strap with band texture */}
+      {/* Rope tube */}
       <mesh ref={ropeRef}>
-        <meshBasicMaterial map={bandTexture} transparent side={THREE.DoubleSide} />
+        <meshPhysicalMaterial
+          color="#FFFFFF"
+          roughness={0.8}
+          metalness={0.0}
+          transparent
+          opacity={0.85}
+        />
       </mesh>
     </group>
   );
@@ -322,7 +275,6 @@ export default function Lanyard({
   cameraPosition = [0, 0, 13] as [number, number, number],
   cameraFov = 25,
   cardStartY = 0,
-  badgeColor = '#C46A4A',
   onError,
 }: {
   position?: [number, number, number];
@@ -330,7 +282,6 @@ export default function Lanyard({
   cameraPosition?: [number, number, number];
   cameraFov?: number;
   cardStartY?: number;
-  badgeColor?: string;
   onError?: (err: Error) => void;
 }) {
   const [hasError, setHasError] = useState(false);
@@ -355,7 +306,6 @@ export default function Lanyard({
       style={{ width: '100%', height: '100%' }}
       onError={(e) => { console.error('[Canvas] error:', e); handleError(new Error('Canvas error')); }}
       onCreated={(state) => {
-        // Handle WebGL context loss
         const gl = state.gl;
         gl.domElement.addEventListener('webglcontextlost', (e: Event) => {
           e.preventDefault();
@@ -372,7 +322,6 @@ export default function Lanyard({
           position={position}
           gravity={gravity}
           cardStartY={cardStartY}
-          badgeColor={badgeColor}
           onError={handleError}
         />
       </Physics>
