@@ -72,7 +72,7 @@ export default function Lanyard({
   backImage = null,
   imageFit = 'cover',
   lanyardImage = null,
-  lanyardWidth = 1
+  lanyardWidth = 3
 }) {
   const [isMobile, setIsMobile] = useState(() => typeof window !== 'undefined' && window.innerWidth < 768);
   const [webglOk, setWebglOk] = useState(true);
@@ -197,7 +197,9 @@ function Band({
   const vec = new THREE.Vector3(),
     ang = new THREE.Vector3(),
     rot = new THREE.Vector3(),
-    dir = new THREE.Vector3();
+    dir = new THREE.Vector3(),
+    quat = new THREE.Quaternion(),
+    localPt = new THREE.Vector3();
   const segmentProps = { type: 'dynamic', canSleep: true, colliders: false, angularDamping: 4, linearDamping: 4 };
   const { nodes, materials } = useGLTF(cardGLB);
   const texture = useTexture(lanyardImage || lanyard);
@@ -283,9 +285,12 @@ function Band({
           delta * (minSpeed + clampedDistance * (maxSpeed - minSpeed))
         );
       });
-      // Extend curve down to card top so the band passes through the clip frame
+      // Curve starts at card top (rotation-aware) so band follows card swing
       const cardTrans = card.current.translation();
-      curve.points[0].set(cardTrans.x, cardTrans.y + 1.28, cardTrans.z);
+      const cardRot = card.current.rotation();
+      quat.set(cardRot.x, cardRot.y, cardRot.z, cardRot.w);
+      localPt.set(0, 1.32, 0).applyQuaternion(quat);
+      curve.points[0].set(cardTrans.x + localPt.x, cardTrans.y + localPt.y, cardTrans.z + localPt.z);
       curve.points[1].copy(j3.current.translation());
       curve.points[2].copy(j2.current.lerped);
       curve.points[3].copy(j1.current.lerped);
