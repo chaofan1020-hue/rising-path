@@ -1,118 +1,26 @@
-/* eslint-disable react/no-unknown-property */
+/* eslint-disable react/no-unknown-property, react-hooks/immutability */
 'use client';
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { Canvas, extend, useFrame } from '@react-three/fiber';
-import { useTexture, Environment, Lightformer } from '@react-three/drei';
+import { useGLTF, useTexture, Environment, Lightformer } from '@react-three/drei';
 import { BallCollider, CuboidCollider, Physics, RigidBody, useRopeJoint, useSphericalJoint } from '@react-three/rapier';
 import { MeshLineGeometry, MeshLineMaterial } from 'meshline';
+// replace with your own imports, see the usage snippet for details
+const cardGLB = '/card.glb';
+const lanyard = '/lanyard.png';
 import * as THREE from 'three';
 import './Lanyard.css';
-
 extend({ MeshLineGeometry, MeshLineMaterial });
-
-// 1x1 transparent pixel — lets useTexture be called unconditionally
+// 1x1 transparent pixel — lets useTexture be called unconditionally when a
+// front/back image isn't supplied.
 const BLANK_PIXEL =
   'data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mNk+M9QDwADhgGAWjR9awAAAABJRU5ErkJggg==';
-
-// UV rects for card texture atlas (front = left half, back = right half)
+// The card model's front face is UV-mapped to the LEFT half of the texture
+// atlas and the back face to the RIGHT half (measured from card.glb). Each
+// custom image is composited into its own half so the two faces render
+// independently, aspect-preserving (no stretching).
 const FRONT_UV_RECT = { x: 0, y: 0, w: 0.5, h: 0.755 };
 const BACK_UV_RECT = { x: 0.5, y: 0, w: 0.5, h: 0.757 };
-
-// Create a rounded-rect card shape with a lanyard hole at top-center
-function createCardGeometry() {
-  const w = 0.8, h = 1.125, r = 0.06, holeR = 0.035;
-  const shape = new THREE.Shape();
-  const x = -w / 2, y = -h / 2;
-
-  // Rounded rectangle outline
-  shape.moveTo(x + r, y);
-  shape.lineTo(x + w - r, y);
-  shape.quadraticCurveTo(x + w, y, x + w, y + r);
-  shape.lineTo(x + w, y + h - r);
-  shape.quadraticCurveTo(x + w, y + h, x + w - r, y + h);
-  shape.lineTo(x + r, y + h);
-  shape.quadraticCurveTo(x, y + h, x, y + h - r);
-  shape.lineTo(x, y + r);
-  shape.quadraticCurveTo(x, y, x + r, y);
-
-  // Lanyard hole at top-center
-  const hole = new THREE.Path();
-  hole.absarc(0, h / 2 - 0.09, holeR, 0, Math.PI * 2, true);
-  shape.holes.push(hole);
-
-  const geo = new THREE.ExtrudeGeometry(shape, {
-    depth: 0.025,
-    bevelEnabled: true,
-    bevelThickness: 0.003,
-    bevelSize: 0.003,
-    bevelSegments: 3,
-    curveSegments: 16
-  });
-  geo.center();
-  return geo;
-}
-
-// Create card texture with Rising Path branding (clean white + black logo)
-function createCardCanvas() {
-  const canvas = document.createElement('canvas');
-  canvas.width = 512;
-  canvas.height = 640;
-  const ctx = canvas.getContext('2d');
-  if (!ctx) return null;
-
-  // White background
-  ctx.fillStyle = '#FFFFFF';
-  ctx.fillRect(0, 0, 512, 640);
-
-  // Logo: stylized atom/star (like reference) — draw with thick strokes
-  const cx = 256, cy = 280;
-  ctx.strokeStyle = '#1a1a1a';
-  ctx.lineWidth = 14;
-  ctx.lineCap = 'round';
-  ctx.lineJoin = 'round';
-
-  // Outer ellipse (horizontal)
-  ctx.save();
-  ctx.translate(cx, cy);
-  ctx.rotate(-0.3);
-  ctx.beginPath();
-  ctx.ellipse(0, 0, 90, 55, 0, 0, Math.PI * 2);
-  ctx.stroke();
-  ctx.restore();
-
-  // Inner ellipse (vertical)
-  ctx.save();
-  ctx.translate(cx, cy);
-  ctx.rotate(0.6);
-  ctx.beginPath();
-  ctx.ellipse(0, 0, 55, 90, 0, 0, Math.PI * 2);
-  ctx.stroke();
-  ctx.restore();
-
-  // Center dot
-  ctx.fillStyle = '#1a1a1a';
-  ctx.beginPath();
-  ctx.arc(cx, cy, 10, 0, Math.PI * 2);
-  ctx.fill();
-
-  // Brand name below logo
-  ctx.fillStyle = '#1a1a1a';
-  ctx.font = 'bold 32px system-ui, sans-serif';
-  ctx.textAlign = 'center';
-  ctx.fillText('Rising Path', 256, 430);
-
-  // Subtitle
-  ctx.fillStyle = '#999999';
-  ctx.font = '16px system-ui, sans-serif';
-  ctx.fillText('求职加速器', 256, 470);
-
-  // Bottom edge line
-  ctx.fillStyle = '#E8E8E8';
-  ctx.fillRect(60, 530, 392, 1);
-
-  return canvas;
-}
-
 export default function Lanyard({
   position = [0, 0, 30],
   gravity = [0, -40, 0],
@@ -130,7 +38,6 @@ export default function Lanyard({
     window.addEventListener('resize', handleResize);
     return () => window.removeEventListener('resize', handleResize);
   }, []);
-
   return (
     <div className="lanyard-wrapper">
       <Canvas
@@ -184,7 +91,6 @@ export default function Lanyard({
     </div>
   );
 }
-
 function Band({
   maxSpeed = 50,
   minSpeed = 0,
@@ -201,60 +107,33 @@ function Band({
     j2 = useRef(),
     j3 = useRef(),
     card = useRef();
-
   const vec = new THREE.Vector3(),
     ang = new THREE.Vector3(),
     rot = new THREE.Vector3(),
     dir = new THREE.Vector3();
-
-  const segmentProps = {
-    type: 'dynamic',
-    canSleep: true,
-    colliders: false,
-    angularDamping: 4,
-    linearDamping: 4
-  };
-
-  // Load lanyard texture (inside Canvas — R3F hooks work here)
-  const texture = useTexture(lanyardImage || '/lanyard.png');
-
-  // Load front/back card images via useTexture (inside Canvas — safe)
+  const segmentProps = { type: 'dynamic', canSleep: true, colliders: false, angularDamping: 4, linearDamping: 4 };
+  const { nodes, materials } = useGLTF(cardGLB);
+  const texture = useTexture(lanyardImage || lanyard);
+  // useTexture must be called unconditionally; use a blank pixel when an image
+  // isn't supplied for a given face, then skip compositing it below.
   const frontTex = useTexture(frontImage || BLANK_PIXEL);
   const backTex = useTexture(backImage || BLANK_PIXEL);
-
-  // Card geometry with rounded corners and lanyard hole
-  const cardGeometry = useMemo(() => createCardGeometry(), []);
-
-  // Create base texture from branded canvas
-  const fallbackBaseMap = useMemo(() => {
-    const canvas = createCardCanvas();
-    if (!canvas) return null;
-    const tex = new THREE.CanvasTexture(canvas);
-    tex.colorSpace = THREE.SRGBColorSpace;
-    tex.flipY = false;
-    tex.anisotropy = 16;
-    tex.needsUpdate = true;
-    return tex;
-  }, []);
-
-  // Composite the front/back images onto the branded card texture
+  // Composite the front/back images into the card's texture atlas (front = left
+  // half, back = right half). Each image is drawn aspect-preserving (no stretch).
   const cardMap = useMemo(() => {
-    if (!fallbackBaseMap) return null;
-    if (!frontImage && !backImage) return fallbackBaseMap;
-
-    const baseImg = fallbackBaseMap.image;
+    const baseMap = materials.base.map;
+    if (!frontImage && !backImage) return baseMap;
+    const baseImg = baseMap.image;
     const W = baseImg.width;
     const H = baseImg.height;
     const canvas = document.createElement('canvas');
     canvas.width = W;
     canvas.height = H;
     const ctx = canvas.getContext('2d');
-    if (!ctx) return fallbackBaseMap;
-
+    if (!ctx) return baseMap;
+    // Keep the original baked atlas for the card edges and any untouched face.
     ctx.drawImage(baseImg, 0, 0, W, H);
-
     const drawFitted = (img, rect) => {
-      if (!img) return;
       const rx = rect.x * W;
       const ry = rect.y * H;
       const rw = rect.w * W;
@@ -272,26 +151,21 @@ function Band({
       ctx.drawImage(img, dx, dy, dw, dh);
       ctx.restore();
     };
-
     if (frontImage && frontTex.image) drawFitted(frontTex.image, FRONT_UV_RECT);
     if (backImage && backTex.image) drawFitted(backTex.image, BACK_UV_RECT);
-
     const composite = new THREE.CanvasTexture(canvas);
     composite.colorSpace = THREE.SRGBColorSpace;
-    composite.flipY = fallbackBaseMap.flipY ?? false;
+    composite.flipY = baseMap.flipY;
     composite.anisotropy = 16;
     composite.needsUpdate = true;
     return composite;
-  }, [frontImage, backImage, imageFit, frontTex, backTex, fallbackBaseMap]);
-
+  }, [frontImage, backImage, imageFit, frontTex, backTex, materials.base.map]);
   const [curve] = useState(
     () =>
       new THREE.CatmullRomCurve3([new THREE.Vector3(), new THREE.Vector3(), new THREE.Vector3(), new THREE.Vector3()])
   );
-
   const [dragged, drag] = useState(false);
   const [hovered, hover] = useState(false);
-
   useRopeJoint(fixed, j1, [[0, 0, 0], [0, 0, 0], 1]);
   useRopeJoint(j1, j2, [[0, 0, 0], [0, 0, 0], 1]);
   useRopeJoint(j2, j3, [[0, 0, 0], [0, 0, 0], 1]);
@@ -299,14 +173,12 @@ function Band({
     [0, 0, 0],
     [0, 1.5, 0]
   ]);
-
   useEffect(() => {
     if (hovered) {
       document.body.style.cursor = dragged ? 'grabbing' : 'grab';
       return () => void (document.body.style.cursor = 'auto');
     }
   }, [hovered, dragged]);
-
   useFrame((state, delta) => {
     if (dragged) {
       vec.set(state.pointer.x, state.pointer.y, 0.5).unproject(state.camera);
@@ -334,14 +206,8 @@ function Band({
       card.current.setAngvel({ x: ang.x, y: ang.y - rot.y * 0.25, z: ang.z });
     }
   });
-
-  useEffect(() => { curve.curveType = 'chordal'; }, []);
-  useEffect(() => {
-    texture.wrapS = texture.wrapT = THREE.RepeatWrapping;
-  }, [texture]);
-
-
-
+  useEffect(() => { curve.curveType = 'chordal'; }, [curve]);
+  useEffect(() => { texture.wrapS = texture.wrapT = THREE.RepeatWrapping; }, [texture]);
   return (
     <>
       <group position={[0, 4, 0]}>
@@ -355,12 +221,7 @@ function Band({
         <RigidBody position={[1.5, 0, 0]} ref={j3} {...segmentProps}>
           <BallCollider args={[0.1]} />
         </RigidBody>
-        <RigidBody
-          position={[2, 0, 0]}
-          ref={card}
-          {...segmentProps}
-          type={dragged ? 'kinematicPosition' : 'dynamic'}
-        >
+        <RigidBody position={[2, 0, 0]} ref={card} {...segmentProps} type={dragged ? 'kinematicPosition' : 'dynamic'}>
           <CuboidCollider args={[0.8, 1.125, 0.01]} />
           <group
             scale={2.25}
@@ -373,22 +234,18 @@ function Band({
               drag(new THREE.Vector3().copy(e.point).sub(vec.copy(card.current.translation())))
             )}
           >
-            {/* Card body — rounded rect with lanyard hole */}
-            <mesh geometry={cardGeometry}>
+            <mesh geometry={nodes.card.geometry}>
               <meshPhysicalMaterial
                 map={cardMap}
-                map-anisotropy={16}
-                clearcoat={isMobile ? 0 : 0.5}
-                clearcoatRoughness={0.3}
-                roughness={0.6}
-                metalness={0.1}
+
+                clearcoat={isMobile ? 0 : 1}
+                clearcoatRoughness={0.15}
+                roughness={0.9}
+                metalness={0.8}
               />
             </mesh>
-            {/* Clip — small ring through the hole */}
-            <mesh position={[0, 0.65, 0]}>
-              <torusGeometry args={[0.04, 0.015, 8, 16]} />
-              <meshStandardMaterial color="#888888" roughness={0.2} metalness={0.9} />
-            </mesh>
+            <mesh geometry={nodes.clip.geometry} material={materials.metal} />
+            <mesh geometry={nodes.clamp.geometry} material={materials.metal} />
           </group>
         </RigidBody>
       </group>
