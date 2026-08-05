@@ -1,6 +1,6 @@
 'use client';
 
-import { useEffect, useState, useCallback, Suspense } from 'react';
+import { useEffect, useState, useCallback } from 'react';
 import dynamic from 'next/dynamic';
 
 const Lanyard3D = dynamic(() => import('@/components/Lanyard'), { ssr: false });
@@ -68,9 +68,7 @@ export default function SubscriptionCelebration({
       {/* 3D Lanyard */}
       <div className="absolute inset-0">
         {!hasError && (
-          <Suspense fallback={null}>
-            <Lanyard3D />
-          </Suspense>
+          <Lanyard3D />
         )}
       </div>
 
