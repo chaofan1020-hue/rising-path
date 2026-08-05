@@ -3,7 +3,6 @@
 import { useState, useRef, useMemo, useCallback } from 'react';
 import * as THREE from 'three';
 import { useFrame } from '@react-three/fiber';
-import { Environment, ContactShadows } from '@react-three/drei';
 
 interface LanyardProps {
   cardStartY?: number;
@@ -136,17 +135,10 @@ export default function Lanyard({ cardStartY = 5, onError }: LanyardProps) {
         </mesh>
       </group>
 
-      {/* Ground shadow */}
-      <ContactShadows
-        position={[0, -2, 0]}
-        opacity={0.4}
-        scale={10}
-        blur={2.5}
-        far={4}
-      />
-
-      {/* Environment lighting */}
-      <Environment preset="studio" />
+      {/* Lighting */}
+      <ambientLight intensity={0.8} />
+      <directionalLight position={[5, 5, 5]} intensity={0.5} />
+      <directionalLight position={[-5, 5, -5]} intensity={0.3} castShadow />
     </group>
   );
 }
