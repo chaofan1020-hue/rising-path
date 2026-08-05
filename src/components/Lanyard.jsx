@@ -331,19 +331,11 @@ function Band({
                 envMapIntensity={1.2}
               />
             </mesh>
-            <mesh geometry={nodes.clip.geometry}>
-              <meshPhysicalMaterial
-                color={0x2e2e33}
-                metalness={1.0}
-                roughness={0.12}
-                envMapIntensity={1.5}
-              />
-            </mesh>
             <mesh geometry={nodes.clamp.geometry}>
               <meshPhysicalMaterial
                 color={0x2e2e33}
                 metalness={1.0}
-                roughness={0.15}
+                roughness={0.12}
                 envMapIntensity={1.5}
               />
             </mesh>
