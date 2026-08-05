@@ -1,5 +1,14 @@
 /* eslint-disable react/no-unknown-property, react-hooks/immutability */
 'use client';
+// Suppress known harmless library-internal warnings (@react-three/rapier uses deprecated THREE.Clock)
+if (typeof window !== 'undefined') {
+  const origWarn = console.warn.bind(console);
+  console.warn = (...args) => {
+    const msg = typeof args[0] === 'string' ? args[0] : '';
+    if (msg.includes('THREE.Clock') || msg.includes('deprecated parameters')) return;
+    origWarn(...args);
+  };
+}
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { Canvas, extend, useFrame } from '@react-three/fiber';
 import { useGLTF, useTexture, Environment, Lightformer } from '@react-three/drei';
@@ -21,6 +30,15 @@ const BLANK_PIXEL =
 // independently, aspect-preserving (no stretching).
 const FRONT_UV_RECT = { x: 0, y: 0, w: 0.5, h: 0.755 };
 const BACK_UV_RECT = { x: 0.5, y: 0, w: 0.5, h: 0.757 };
+function detectWebGL() {
+  try {
+    const canvas = document.createElement('canvas');
+    return !!(canvas.getContext('webgl2') || canvas.getContext('webgl'));
+  } catch {
+    return false;
+  }
+}
+
 export default function Lanyard({
   position = [0, 0, 30],
   gravity = [0, -40, 0],
@@ -33,18 +51,42 @@ export default function Lanyard({
   lanyardWidth = 1
 }) {
   const [isMobile, setIsMobile] = useState(() => typeof window !== 'undefined' && window.innerWidth < 768);
+  const [webglOk, setWebglOk] = useState(true);
+  const [contextLost, setContextLost] = useState(false);
   useEffect(() => {
     const handleResize = () => setIsMobile(window.innerWidth < 768);
     window.addEventListener('resize', handleResize);
     return () => window.removeEventListener('resize', handleResize);
   }, []);
+  useEffect(() => {
+    setWebglOk(detectWebGL());
+  }, []);
+  if (!webglOk || contextLost) {
+    return (
+      <div className="lanyard-wrapper" style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', minHeight: '300px' }}>
+        <div style={{ textAlign: 'center', opacity: 0.6 }}>
+          <svg width="64" height="64" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" style={{ margin: '0 auto 12px' }}>
+            <rect x="2" y="4" width="20" height="16" rx="2" />
+            <path d="M8 2v4" /><path d="M16 2v4" /><path d="M2 10h20" />
+          </svg>
+          <p style={{ fontSize: '14px' }}>3D 效果暂不可用</p>
+        </div>
+      </div>
+    );
+  }
   return (
     <div className="lanyard-wrapper">
       <Canvas
         camera={{ position: position, fov: fov }}
         dpr={[1, isMobile ? 1.5 : 2]}
-        gl={{ alpha: transparent }}
-        onCreated={({ gl }) => gl.setClearColor(new THREE.Color(0x000000), transparent ? 0 : 1)}
+        gl={{ alpha: transparent, powerPreference: 'high-performance', failIfMajorPerformanceCaveat: false }}
+        onCreated={({ gl }) => {
+          gl.setClearColor(new THREE.Color(0x000000), transparent ? 0 : 1);
+          gl.domElement.addEventListener('webglcontextlost', (e) => {
+            e.preventDefault();
+            setContextLost(true);
+          });
+        }}
       >
         <ambientLight intensity={Math.PI} />
         <Physics gravity={gravity} timeStep={isMobile ? 1 / 30 : 1 / 60}>
