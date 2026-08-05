@@ -1,17 +1,29 @@
 /* eslint-disable react/no-unknown-property, react-hooks/immutability */
 'use client';
-// Fix R3F v9.7.0 + React 19: Next.js dev tools inject data-inspector-* attributes
-// which R3F tries to set as nested props (data.inspector-column) on THREE objects.
-// Ensure every THREE object has a `data` object so the assignment succeeds silently.
+// Fix R3F v9.7.0 + React 19: Next.js dev tools inject data-inspector-* attributes.
+// R3F resolve() first checks `key in root` — registering the full hyphenated prop
+// name as a noop property on THREE prototypes makes that check hit, so R3F treats
+// it as a plain direct assignment (no piercing, no throw).
 import * as THREE from 'three';
 if (typeof window !== 'undefined') {
   const protos = [THREE.Object3D.prototype, THREE.Material.prototype, THREE.BufferGeometry.prototype];
+  const inspectorProps = [
+    'data-inspector-column',
+    'data-inspector-line',
+    'data-inspector-file',
+    'data-inspector-component',
+    'data-inspector-path',
+    'data-inspector-name',
+  ];
   for (const proto of protos) {
-    if (!Object.prototype.hasOwnProperty.call(proto, 'data')) {
-      Object.defineProperty(proto, 'data', {
-        get() { if (!this._data) this._data = {}; return this._data; },
-        configurable: true,
-      });
+    for (const prop of inspectorProps) {
+      if (!Object.prototype.hasOwnProperty.call(proto, prop)) {
+        Object.defineProperty(proto, prop, {
+          get() { return 0; },
+          set() { /* silently accept */ },
+          configurable: true,
+        });
+      }
     }
   }
   // Suppress known harmless library-internal warnings
