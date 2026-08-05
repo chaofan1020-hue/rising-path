@@ -340,10 +340,10 @@ function Band({
             </mesh>
             <mesh geometry={nodes.clamp.geometry}>
               <meshStandardMaterial
-                color={0x111111}
-                metalness={0.6}
-                roughness={0.35}
-                envMapIntensity={0.4}
+                color={0x0a0a0a}
+                metalness={0.7}
+                roughness={0.28}
+                envMapIntensity={0.5}
               />
             </mesh>
           </group>
