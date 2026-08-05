@@ -112,7 +112,8 @@ export default function Lanyard({
           });
         }}
       >
-        <ambientLight intensity={Math.PI} />
+        <ambientLight intensity={Math.PI * 0.6} />
+        <directionalLight position={[5, 8, 10]} intensity={1.2} />
         <Physics gravity={gravity} timeStep={isMobile ? 1 / 30 : 1 / 60}>
           <Band
             isMobile={isMobile}
@@ -123,34 +124,54 @@ export default function Lanyard({
             lanyardWidth={lanyardWidth}
           />
         </Physics>
-        <Environment blur={0.75}>
+        <Environment blur={0.6}>
+          {/* Overhead key light — strong highlight on card top edge and clip */}
           <Lightformer
-            intensity={2}
+            intensity={6}
             color="white"
-            position={[0, -1, 5]}
-            rotation={[0, 0, Math.PI / 3]}
-            scale={[100, 0.1, 1]}
+            position={[0, 8, 4]}
+            rotation={[-Math.PI / 4, 0, 0]}
+            scale={[60, 4, 1]}
           />
+          {/* Front fill — illuminates card face evenly */}
           <Lightformer
             intensity={3}
             color="white"
-            position={[-1, -1, 1]}
-            rotation={[0, 0, Math.PI / 3]}
-            scale={[100, 0.1, 1]}
+            position={[0, 0, 8]}
+            rotation={[0, 0, 0]}
+            scale={[40, 20, 1]}
           />
+          {/* Left rim light — edge highlight for 3D depth */}
+          <Lightformer
+            intensity={4}
+            color="#e8f0ff"
+            position={[-8, 2, 2]}
+            rotation={[0, Math.PI / 3, 0]}
+            scale={[40, 6, 1]}
+          />
+          {/* Right rim light — warm accent */}
           <Lightformer
             intensity={3}
-            color="white"
-            position={[1, 1, 1]}
-            rotation={[0, 0, Math.PI / 3]}
-            scale={[100, 0.1, 1]}
+            color="#fff5e8"
+            position={[8, 1, 2]}
+            rotation={[0, -Math.PI / 3, 0]}
+            scale={[40, 6, 1]}
           />
+          {/* Bottom bounce — subtle fill from below */}
           <Lightformer
-            intensity={10}
+            intensity={1.5}
+            color="#f0ebe5"
+            position={[0, -6, 3]}
+            rotation={[Math.PI / 3, 0, 0]}
+            scale={[60, 2, 1]}
+          />
+          {/* Back strip — metal reflection streak */}
+          <Lightformer
+            intensity={8}
             color="white"
-            position={[-10, 0, 14]}
-            rotation={[0, Math.PI / 2, Math.PI / 3]}
-            scale={[100, 10, 1]}
+            position={[0, 4, -6]}
+            rotation={[0, Math.PI, 0]}
+            scale={[80, 1, 1]}
           />
         </Environment>
       </Canvas>
@@ -303,14 +324,29 @@ function Band({
             <mesh geometry={nodes.card.geometry}>
               <meshPhysicalMaterial
                 map={cardMap}
-                clearcoat={isMobile ? 0 : 0.5}
-                clearcoatRoughness={0.3}
-                roughness={0.7}
+                clearcoat={isMobile ? 0 : 1.0}
+                clearcoatRoughness={0.08}
+                roughness={0.35}
                 metalness={0.0}
+                envMapIntensity={1.2}
               />
             </mesh>
-            <mesh geometry={nodes.clip.geometry} material={materials.metal} material-roughness={0.3} />
-            <mesh geometry={nodes.clamp.geometry} material={materials.metal} />
+            <mesh geometry={nodes.clip.geometry}>
+              <meshPhysicalMaterial
+                color={0x2e2e33}
+                metalness={1.0}
+                roughness={0.12}
+                envMapIntensity={1.5}
+              />
+            </mesh>
+            <mesh geometry={nodes.clamp.geometry}>
+              <meshPhysicalMaterial
+                color={0x2e2e33}
+                metalness={1.0}
+                roughness={0.15}
+                envMapIntensity={1.5}
+              />
+            </mesh>
           </group>
         </RigidBody>
       </group>
