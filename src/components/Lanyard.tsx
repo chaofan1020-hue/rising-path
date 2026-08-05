@@ -1,141 +1,233 @@
 'use client';
 
-import { useEffect, useMemo, useRef, useState, useCallback } from 'react';
-import { Canvas, useThree, useFrame } from '@react-three/fiber';
-import { useGLTF, useTexture, Environment, Lightformer } from '@react-three/drei';
-import { BallCollider, CuboidCollider, Physics, RigidBody, useRopeJoint, useSphericalJoint } from '@react-three/rapier';
+import { useState, useRef, useCallback, useMemo, useEffect } from 'react';
 import * as THREE from 'three';
+import { useFrame } from '@react-three/fiber';
+import { useGLTF, useTexture } from '@react-three/drei';
+import {
+  CubeCamera,
+  Environment,
+  Lightformer,
+  ContactShadows,
+  AccumulativeShadows,
+  RandomizedLight,
+  Html,
+} from '@react-three/drei';
 
-const MODEL_URL = 'https://assets.vercel.com/image/upload/contentful/image/e5382hct74si/5huRVDzcoDwnbgrKUo1Lzs/53b6dd7d6b4ffcdbd338fa60265949e1/tag.glb';
+import {
+  RigidBody,
+  useRopeJoint,
+  useSphericalJoint,
+  BallCollider,
+  CapsuleCollider,
+} from '@react-three/rapier';
 
-/** Generate a badge texture with the Rising Path logo on a white background */
-function createBadgeTexture(): THREE.CanvasTexture {
-  const canvas = document.createElement('canvas');
-  canvas.width = 512;
-  canvas.height = 512;
-  const ctx = canvas.getContext('2d')!;
+import type { GLTF } from 'three-stdlib';
 
-  // White background with subtle rounded rect
-  ctx.fillStyle = '#FFFFFF';
-  ctx.beginPath();
-  ctx.roundRect(0, 0, 512, 512, 48);
-  ctx.fill();
+type GLTFResult = GLTF & {
+  nodes: {
+    card: THREE.Mesh;
+    clip: THREE.Mesh;
+    clamp: THREE.Mesh;
+  };
+  materials: {
+    base: THREE.MeshStandardMaterial;
+    metal: THREE.MeshStandardMaterial;
+  };
+};
 
-  // Thin border
-  ctx.strokeStyle = '#E2E2E2';
-  ctx.lineWidth = 4;
-  ctx.beginPath();
-  ctx.roundRect(2, 2, 508, 508, 48);
-  ctx.stroke();
+const ROPE_SEGMENTS = 3;
+const ROPE_RADIUS = 0.08;
+const ROPE_CURVE_SEGMENTS = 16;
 
-  // Rising Path text (dark gray, modern)
-  ctx.fillStyle = '#1A1A1A';
-  ctx.font = 'bold 52px system-ui, -apple-system, sans-serif';
-  ctx.textAlign = 'center';
-  ctx.textBaseline = 'middle';
-  ctx.fillText('Rising Path', 256, 280);
-
-  // Logo SVG (two bars) in dark gray
-  const logoScale = 5;
-  const cx = 256;
-  const cy = 150;
-  ctx.fillStyle = '#1A1A1A';
-  // Top bar
-  ctx.beginPath();
-  ctx.roundRect(cx - 29 * logoScale / 2, cy, 29 * logoScale, 8 * logoScale, 4 * logoScale);
-  ctx.fill();
-  // Bottom bar
-  ctx.beginPath();
-  ctx.roundRect(cx - 29 * logoScale / 2, cy + 16 * logoScale, 29 * logoScale, 8 * logoScale, 4 * logoScale);
-  ctx.fill();
-
-  // Subtitle
-  ctx.fillStyle = '#888888';
-  ctx.font = '24px system-ui, -apple-system, sans-serif';
-  ctx.textAlign = 'center';
-  ctx.fillText('求职加速器', 256, 350);
-
-  const texture = new THREE.CanvasTexture(canvas);
-  texture.needsUpdate = true;
-  return texture;
+// Manual cubic bezier interpolation (no CatmullRomCurve3 dependency)
+function bezierCurvePoints(
+  p0: THREE.Vector3, p1: THREE.Vector3, p2: THREE.Vector3, p3: THREE.Vector3,
+  segments: number
+): Float32Array {
+  const positions = new Float32Array((segments + 1) * 3);
+  for (let i = 0; i <= segments; i++) {
+    const t = i / segments;
+    const u = 1 - t;
+    const uu = u * u;
+    const uuu = uu * u;
+    const tt = t * t;
+    const ttt = tt * t;
+    positions[i * 3] = uuu * p0.x + 3 * uu * t * p1.x + 3 * u * tt * p2.x + ttt * p3.x;
+    positions[i * 3 + 1] = uuu * p0.y + 3 * uu * t * p1.y + 3 * u * tt * p2.y + ttt * p3.y;
+    positions[i * 3 + 2] = uuu * p0.z + 3 * uu * t * p1.z + 3 * u * tt * p2.z + ttt * p3.z;
+  }
+  return positions;
 }
 
-function Band({
-  position = [0, 0, 20] as [number, number, number],
-  gravity = [0, -40, 0] as [number, number, number],
+// Create a tube geometry from bezier curve
+function createTubeFromBezier(
+  p0: THREE.Vector3, p1: THREE.Vector3, p2: THREE.Vector3, p3: THREE.Vector3,
+  curveSegments: number, radius: number, radialSegments: number
+): THREE.BufferGeometry {
+  // Compute curve points
+  const curvePoints: THREE.Vector3[] = [];
+  for (let i = 0; i <= curveSegments; i++) {
+    const t = i / curveSegments;
+    const u = 1 - t;
+    const uu = u * u;
+    const uuu = uu * u;
+    const tt = t * t;
+    const ttt = tt * t;
+    curvePoints.push(new THREE.Vector3(
+      uuu * p0.x + 3 * uu * t * p1.x + 3 * u * tt * p2.x + ttt * p3.x,
+      uuu * p0.y + 3 * uu * t * p1.y + 3 * u * tt * p2.y + ttt * p3.y,
+      uuu * p0.z + 3 * uu * t * p1.z + 3 * u * tt * p2.z + ttt * p3.z,
+    ));
+  }
+
+  // Compute tangents
+  const tangents: THREE.Vector3[] = [];
+  for (let i = 0; i <= curveSegments; i++) {
+    const prev = curvePoints[Math.max(0, i - 1)];
+    const next = curvePoints[Math.min(curveSegments, i + 1)];
+    const tangent = new THREE.Vector3().copy(next).sub(prev);
+    if (tangent.length() > 0.0001) tangent.normalize();
+    else tangent.set(0, 1, 0);
+    tangents.push(tangent);
+  }
+
+  // Compute initial normal
+  const up = new THREE.Vector3(0, 1, 0);
+  const firstTangent = tangents[0];
+  let normal = new THREE.Vector3().crossVectors(firstTangent, up);
+  if (normal.length() < 0.0001) normal.set(1, 0, 0);
+  normal.normalize();
+
+  const vertexCount = (curveSegments + 1) * (radialSegments + 1);
+  const positions = new Float32Array(vertexCount * 3);
+  const indices: number[] = [];
+
+  for (let i = 0; i <= curveSegments; i++) {
+    const tangent = tangents[i];
+    const point = curvePoints[i];
+
+    // Compute basis vectors
+    const binormal = new THREE.Vector3().crossVectors(tangent, normal).normalize();
+    const normal2 = new THREE.Vector3().crossVectors(binormal, tangent).normalize();
+
+    for (let j = 0; j <= radialSegments; j++) {
+      const theta = (j / radialSegments) * Math.PI * 2;
+      const cos = Math.cos(theta);
+      const sin = Math.sin(theta);
+
+      const idx = i * (radialSegments + 1) + j;
+      positions[idx * 3] = point.x + radius * (cos * normal2.x + sin * (-binormal.x));
+      positions[idx * 3 + 1] = point.y + radius * (cos * normal2.y + sin * (-binormal.y));
+      positions[idx * 3 + 2] = point.z + radius * (cos * normal2.z + sin * (-binormal.z));
+
+      if (i < curveSegments && j < radialSegments) {
+        const a = idx;
+        const b = idx + radialSegments + 1;
+        const c = idx + 1;
+        const d = idx + radialSegments + 2;
+        indices.push(a, b, c);
+        indices.push(c, b, d);
+      }
+    }
+  }
+
+  const geometry = new THREE.BufferGeometry();
+  geometry.setAttribute('position', new THREE.BufferAttribute(positions, 3));
+  geometry.setIndex(indices);
+  geometry.computeVertexNormals();
+  return geometry;
+}
+
+export default function Lanyard({
+  position = [0, 0, 0],
+  gravity = [0, -50, 0],
+  cameraPosition = [0, 0.5, 13],
+  cameraFov = 25,
   cardStartY = 0,
   onError,
 }: {
   position?: [number, number, number];
   gravity?: [number, number, number];
+  cameraPosition?: [number, number, number];
+  cameraFov?: number;
   cardStartY?: number;
   onError?: (err: Error) => void;
 }) {
+  const { nodes, materials } = useGLTF('/tag.glb') as unknown as GLTFResult;
+  const bandTexture = useTexture('https://assets.vercel.com/image/upload/contentful/image/e5382hct74si/SOT1hmCesOHxEYxL7vkoZ/c57b29c85912047c414311723320c16b/band.jpg');
+
+  // Card texture: white with logo
+  const cardTexture = useMemo(() => {
+    const canvas = document.createElement('canvas');
+    canvas.width = 512;
+    canvas.height = 320;
+    const ctx = canvas.getContext('2d')!;
+    ctx.fillStyle = '#FFFFFF';
+    ctx.fillRect(0, 0, 512, 320);
+
+    // Logo bars
+    ctx.fillStyle = '#C46A4A';
+    ctx.fillRect(80, 60, 180, 28);
+    ctx.fillStyle = '#B5BEB0';
+    ctx.fillRect(80, 96, 140, 28);
+
+    // Brand name
+    ctx.fillStyle = '#1a1a1a';
+    ctx.font = 'bold 46px system-ui, sans-serif';
+    ctx.textAlign = 'center';
+    ctx.fillText('Rising Path', 256, 175);
+
+    // Subtitle
+    ctx.fillStyle = '#888888';
+    ctx.font = '18px system-ui, sans-serif';
+    ctx.fillText('求职加速器', 256, 220);
+
+    const tex = new THREE.CanvasTexture(canvas);
+    tex.needsUpdate = true;
+    return tex;
+  }, []);
+
   const fixed = useRef<any>(null);
   const j1 = useRef<any>(null);
   const j2 = useRef<any>(null);
   const j3 = useRef<any>(null);
   const card = useRef<any>(null);
+  const ropeRef = useRef<THREE.Mesh>(null);
+  const ropeGeomRef = useRef<THREE.BufferGeometry | null>(null);
+  const settledRef = useRef(false);
+  const [hovered, setHovered] = useState(false);
+  const [isDragged, setIsDragged] = useState(false);
+  const dragOffset = useRef<THREE.Vector3 | null>(null);
 
   const vec = useRef(new THREE.Vector3());
   const ang = useRef(new THREE.Vector3());
   const rot = useRef(new THREE.Vector3());
   const dir = useRef(new THREE.Vector3());
-  const dragOffset = useRef<THREE.Vector3 | null>(null);
-  const settledRef = useRef(false);
 
-  // Load GLTF
-  let nodes: any = {};
-  let materials: any = {};
-  try {
-    const result = useGLTF(MODEL_URL);
-    nodes = result.nodes;
-    materials = result.materials;
-  } catch (e) {
-    onError?.(e as Error);
-  }
-
-  const { width, height } = useThree((state) => state.size);
-
-  // Rope joint chain (rest length 1 each, total 3)
-  useRopeJoint(fixed, j1, [[0, 0, 0], [0, 0, 0], 1]);
-  useRopeJoint(j1, j2, [[0, 0, 0], [0, 0, 0], 1]);
-  useRopeJoint(j2, j3, [[0, 0, 0], [0, 0, 0], 1]);
-  useSphericalJoint(j3, card, [[0, 0, 0], [0, 1.45, 0]]);
-
-  const [hovered, hover] = useState(false);
-  const [isDragged, setIsDragged] = useState(false);
-
-  // Custom badge texture (white bg, dark text, Rising Path logo)
-  const badgeTexture = useMemo(() => {
-    try {
-      return createBadgeTexture();
-    } catch {
-      return null;
-    }
-  }, []);
-
-  // Rope tube mesh ref
-  const ropeRef = useRef<THREE.Mesh>(null);
-
-  // Initialize tube geometry with default curve
+  // Initialize rope geometry once
   useEffect(() => {
     try {
-      const pts = [
-        new THREE.Vector3(0, 0, 0),
-        new THREE.Vector3(0.5, 0, 0),
-        new THREE.Vector3(1, 0, 0),
-        new THREE.Vector3(1.5, 0, 0),
-      ];
-      const curve = new THREE.CatmullRomCurve3(pts);
-      const geom = new THREE.TubeGeometry(curve, 20, 0.08, 8, false);
+      const initP0 = new THREE.Vector3(0, 0, 0);
+      const initP3 = new THREE.Vector3(0, 1, 0);
+      const initP1 = new THREE.Vector3(0, 0.3, 0.1);
+      const initP2 = new THREE.Vector3(0, 0.7, -0.1);
+      const geom = createTubeFromBezier(initP0, initP1, initP2, initP3, ROPE_CURVE_SEGMENTS, ROPE_RADIUS, 6);
+      ropeGeomRef.current = geom;
       if (ropeRef.current) {
         ropeRef.current.geometry = geom;
       }
     } catch (e) {
-      onError?.(e as Error);
+      // silently handle
     }
   }, []);
+
+  useRopeJoint(fixed, j1, [[0, 0, 0], [0, 0, 0], 1.5]);
+  useRopeJoint(j1, j2, [[0, 0, 0], [0, 0, 0], 1.5]);
+  useRopeJoint(j2, j3, [[0, 0, 0], [0, 0, 0], 1.5]);
+  useSphericalJoint(j3, card, [
+    [0, 0, 0], [0, -1.45, 0]
+  ]);
 
   useEffect(() => {
     if (hovered) {
@@ -146,11 +238,14 @@ function Band({
 
   useFrame((state, delta) => {
     try {
+      if (!fixed.current || !j1.current || !j2.current || !j3.current || !card.current) return;
+
       const v = vec.current;
       const a = ang.current;
       const r = rot.current;
       const d = dir.current;
 
+      // Drag handling
       if (dragOffset.current) {
         v.set(state.pointer.x, state.pointer.y, 0.5).unproject(state.camera);
         d.copy(v).sub(state.camera.position).normalize();
@@ -163,61 +258,65 @@ function Band({
         });
       }
 
-      if (fixed.current) {
-        // Lerp rope joints for smooth rope simulation
-        [j1, j2].forEach((ref: any) => {
-          if (!ref.current.lerped) ref.current.lerped = new THREE.Vector3().copy(ref.current.translation());
-          const clampedDistance = Math.max(0.1, Math.min(1, ref.current.lerped.distanceTo(ref.current.translation())));
-          ref.current.lerped.lerp(ref.current.translation(), delta * (10 + clampedDistance * (50 - 10)));
-        });
+      // Lerp rope joints for smooth simulation
+      [j1, j2].forEach((ref: any) => {
+        if (!ref.current.lerped) ref.current.lerped = new THREE.Vector3().copy(ref.current.translation());
+        const clampedDistance = Math.max(0.1, Math.min(1, ref.current.lerped.distanceTo(ref.current.translation())));
+        ref.current.lerped.lerp(ref.current.translation(), delta * (10 + clampedDistance * (50 - 10)));
+      });
 
-        // Update rope tube geometry from physics joints
-        if (ropeRef.current) {
-          const pts = [
-            new THREE.Vector3().copy(j3.current.translation()),
-            new THREE.Vector3().copy(j2.current.lerped),
-            new THREE.Vector3().copy(j1.current.lerped),
-            new THREE.Vector3().copy(fixed.current.translation()),
-          ];
-          const curve = new THREE.CatmullRomCurve3(pts);
+      // Update rope geometry using manual bezier (no CatmullRomCurve3)
+      if (ropeRef.current) {
+        try {
+          const j3Pos = new THREE.Vector3().copy(j3.current.translation());
+          const j2Pos = j2.current.lerped.clone();
+          const j1Pos = j1.current.lerped.clone();
+          const fixedPos = new THREE.Vector3().copy(fixed.current.translation());
+
+          // Create control points with slight Z variation to avoid flat curve
+          const midY = (fixedPos.y + j3Pos.y) / 2;
+          const sag = Math.abs(fixedPos.y - j3Pos.y) * 0.15 + 0.1;
+
+          const p0 = fixedPos; // fixed point at top
+          const p1 = new THREE.Vector3(j2Pos.x, midY + sag, j2Pos.z * 0.5);
+          const p2 = new THREE.Vector3(j1Pos.x, midY - sag, j1Pos.z * 0.5);
+          const p3 = j3Pos; // card attachment point
+
+          const newGeom = createTubeFromBezier(p0, p1, p2, p3, ROPE_CURVE_SEGMENTS, ROPE_RADIUS, 6);
           ropeRef.current.geometry.dispose();
-          ropeRef.current.geometry = new THREE.TubeGeometry(curve, 20, 0.08, 8, false);
+          ropeRef.current.geometry = newGeom;
+        } catch (_e) {
+          // Skip rope update this frame
         }
+      }
 
-        // Apply angular damping to card
-        a.copy(card.current.angvel());
-        r.copy(card.current.rotation());
-        card.current.setAngvel({ x: a.x, y: a.y - r.y * 0.25, z: a.z });
+      // Apply angular damping
+      a.copy(card.current.angvel());
+      r.copy(card.current.rotation());
+      card.current.setAngvel({ x: a.x, y: a.y - r.y * 0.25, z: a.z });
 
-        // Spring force to pull card toward screen center
-        if (card.current && !dragOffset.current) {
-          const pos = card.current.translation();
-          const vel = card.current.linvel();
+      // Spring force to pull card toward screen center
+      if (!dragOffset.current) {
+        const pos = card.current.translation();
+        const vel = card.current.linvel();
+        const targetX = 0;
+        const targetY = 0.5;
+        const targetZ = 0;
+        const k = 15;
+        const dmp = 5;
 
-          // Target: center of screen in world space (y=0 for group at [0,2.5,0])
-          // The card hangs at the bottom of the rope, spring pulls it to center
-          const targetX = 0;
-          const targetY = 0.5; // center of screen
-          const targetZ = 0;
+        const fx = k * (targetX - pos.x) - dmp * vel.x;
+        const fy = k * (targetY - pos.y) - dmp * vel.y;
+        const fz = k * (targetZ - pos.z) - dmp * vel.z;
 
-          // Strong spring + damping for fast, smooth settling
-          const k = 15; // spring constant
-          const dmp = 5; // damping
+        card.current.addForce({ x: fx, y: fy, z: fz }, true);
 
-          const fx = k * (targetX - pos.x) - dmp * vel.x;
-          const fy = k * (targetY - pos.y) - dmp * vel.y;
-          const fz = k * (targetZ - pos.z) - dmp * vel.z;
-
-          card.current.addForce({ x: fx, y: fy, z: fz }, true);
-
-          // Check if settled
-          const dist = Math.sqrt(
-            (targetX - pos.x) ** 2 + (targetY - pos.y) ** 2 + (targetZ - pos.z) ** 2
-          );
-          const speed = Math.sqrt(vel.x ** 2 + vel.y ** 2 + vel.z ** 2);
-          if (dist < 0.05 && speed < 0.05) {
-            settledRef.current = true;
-          }
+        const dist = Math.sqrt(
+          (targetX - pos.x) ** 2 + (targetY - pos.y) ** 2 + (targetZ - pos.z) ** 2
+        );
+        const speed = Math.sqrt(vel.x ** 2 + vel.y ** 2 + vel.z ** 2);
+        if (dist < 0.05 && speed < 0.05) {
+          settledRef.current = true;
         }
       }
     } catch (e) {
@@ -240,129 +339,60 @@ function Band({
     setIsDragged(true);
   };
 
+  const handlePointerEnter = () => setHovered(true);
+  const handlePointerLeave = () => setHovered(false);
+
   return (
     <group position={position}>
-      <RigidBody ref={fixed} {...(segmentProps as any)} type="fixed" />
-      <RigidBody ref={j1} {...(segmentProps as any)} position={[0.5, 0, 0]}>
-        <BallCollider args={[0.1]} />
+      {/* Rope */}
+      <mesh ref={ropeRef}>
+        <meshBasicMaterial color="#FFFFFF" transparent opacity={0.7} />
+      </mesh>
+
+      {/* Fixed point at top */}
+      <RigidBody ref={fixed} type="fixed" position={[0, 6, 0]}>
+        <BallCollider args={[0.001]} />
       </RigidBody>
-      <RigidBody ref={j2} {...(segmentProps as any)} position={[1, 0, 0]}>
-        <BallCollider args={[0.1]} />
+
+      {/* Rope segments */}
+      <RigidBody ref={j1} position={[0, 4, 0]} {...segmentProps}>
+        <CapsuleCollider args={[0.1, 0.1]} />
       </RigidBody>
-      <RigidBody ref={j3} {...(segmentProps as any)} position={[1.5, 0, 0]}>
-        <BallCollider args={[0.1]} />
+      <RigidBody ref={j2} position={[0, 2, 0]} {...segmentProps}>
+        <CapsuleCollider args={[0.1, 0.1]} />
       </RigidBody>
+      <RigidBody ref={j3} position={[0, 0, 0]} {...segmentProps}>
+        <CapsuleCollider args={[0.1, 0.1]} />
+      </RigidBody>
+
+      {/* Card */}
       <RigidBody
         ref={card}
-        {...(segmentProps as any)}
-        position={[2, cardStartY, 0]}
-        type={isDragged ? 'kinematicPosition' : 'dynamic'}
+        type="dynamic"
+        position={[0, cardStartY, 0]}
+        colliders="hull"
+        mass={2}
+        gravityScale={0.5}
+        canSleep={false}
+        angularDamping={0.5}
+        linearDamping={0.5}
       >
-        <CuboidCollider args={[0.8, 1.125, 0.01]} />
         <group
-          scale={2.25}
-          position={[0, -1.2, -0.05]}
-          onPointerOver={() => hover(true)}
-          onPointerOut={() => hover(false)}
           onPointerUp={handlePointerUp}
           onPointerDown={handlePointerDown}
+          onPointerEnter={handlePointerEnter}
+          onPointerLeave={handlePointerLeave}
         >
-          {/* Card face with white Rising Path badge */}
-          <mesh geometry={nodes?.card?.geometry}>
-            <meshPhysicalMaterial
-              map={badgeTexture || undefined}
-              color={badgeTexture ? undefined : '#FFFFFF'}
-              clearcoat={0.5}
-              clearcoatRoughness={0.2}
-              roughness={0.2}
-              metalness={0.0}
-            />
+          {/* Card body */}
+          <mesh geometry={nodes.card.geometry}>
+            <meshStandardMaterial map={cardTexture} />
           </mesh>
-          <mesh geometry={nodes?.clip?.geometry}>
-            <meshPhysicalMaterial color="#CCCCCC" roughness={0.3} metalness={0.6} />
-          </mesh>
-          <mesh geometry={nodes?.clamp?.geometry}>
-            <meshPhysicalMaterial color="#CCCCCC" roughness={0.3} metalness={0.6} />
-          </mesh>
+
+          {/* Metal clip at top */}
+          <mesh geometry={nodes.clip.geometry} material={materials.metal} />
+          <mesh geometry={nodes.clamp.geometry} material={materials.metal} />
         </group>
       </RigidBody>
-      {/* Rope tube */}
-      <mesh ref={ropeRef}>
-        <meshPhysicalMaterial
-          color="#FFFFFF"
-          roughness={0.8}
-          metalness={0.0}
-          transparent
-          opacity={0.85}
-        />
-      </mesh>
     </group>
-  );
-}
-
-export default function Lanyard({
-  position = [0, 0, 20],
-  gravity = [0, -40, 0],
-  cameraPosition = [0, 0.5, 13] as [number, number, number],
-  cameraFov = 25,
-  cardStartY = 0,
-  onError,
-}: {
-  position?: [number, number, number];
-  gravity?: [number, number, number];
-  cameraPosition?: [number, number, number];
-  cameraFov?: number;
-  cardStartY?: number;
-  onError?: (err: Error) => void;
-}) {
-  const [hasError, setHasError] = useState(false);
-
-  const handleError = useCallback((err: Error) => {
-    console.error('[Lanyard] error:', err);
-    setHasError(true);
-    onError?.(err);
-  }, [onError]);
-
-  if (hasError) {
-    return (
-      <div className="w-full h-full flex items-center justify-center text-white/60 text-sm">
-        加载失败
-      </div>
-    );
-  }
-
-  return (
-    <Canvas
-      camera={{ position: cameraPosition, fov: cameraFov }}
-      style={{ width: '100%', height: '100%' }}
-      onError={(e) => { console.error('[Canvas] error:', e); handleError(new Error('Canvas error')); }}
-      onCreated={(state) => {
-        const gl = state.gl;
-        gl.domElement.addEventListener('webglcontextlost', (e: Event) => {
-          e.preventDefault();
-          console.warn('[Canvas] WebGL context lost');
-        });
-        gl.domElement.addEventListener('webglcontextrestored', () => {
-          console.log('[Canvas] WebGL context restored');
-        });
-      }}
-    >
-      <ambientLight intensity={Math.PI} />
-      <Physics interpolate gravity={gravity} timeStep={1 / 60}>
-        <Band
-          position={position}
-          gravity={gravity}
-          cardStartY={cardStartY}
-          onError={handleError}
-        />
-      </Physics>
-      <Environment background blur={0.75}>
-        <color attach="background" args={['black']} />
-        <Lightformer intensity={2} color="white" position={[0, -1, 5]} rotation={[0, 0, Math.PI / 3]} scale={[100, 0.1, 1]} />
-        <Lightformer intensity={3} color="white" position={[-1, -1, 1]} rotation={[0, 0, Math.PI / 3]} scale={[100, 0.1, 1]} />
-        <Lightformer intensity={3} color="white" position={[1, 1, 1]} rotation={[0, 0, Math.PI / 3]} scale={[100, 0.1, 1]} />
-        <Lightformer intensity={10} color="white" position={[-10, 0, 14]} rotation={[0, Math.PI / 2, Math.PI / 3]} scale={[100, 10, 1]} />
-      </Environment>
-    </Canvas>
   );
 }
