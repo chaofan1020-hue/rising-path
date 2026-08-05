@@ -28,8 +28,8 @@ const BLANK_PIXEL =
 // atlas and the back face to the RIGHT half (measured from card.glb). Each
 // custom image is composited into its own half so the two faces render
 // independently, aspect-preserving (no stretching).
-const FRONT_UV_RECT = { x: 0, y: 0, w: 0.5, h: 0.755 };
-const BACK_UV_RECT = { x: 0.5, y: 0, w: 0.5, h: 0.757 };
+const FRONT_UV_RECT = { x: 0, y: 0, w: 0.5, h: 0.703 };
+const BACK_UV_RECT = { x: 0.5, y: 0, w: 0.5, h: 0.703 };
 function detectWebGL() {
   try {
     const canvas = document.createElement('canvas');
@@ -40,9 +40,9 @@ function detectWebGL() {
 }
 
 export default function Lanyard({
-  position = [0, 0, 30],
+  position = [0, 0, 20],
   gravity = [0, -40, 0],
-  fov = 20,
+  fov = 22,
   transparent = true,
   frontImage = null,
   backImage = null,
@@ -252,7 +252,7 @@ function Band({
   texture.wrapS = texture.wrapT = THREE.RepeatWrapping;
   return (
     <>
-      <group position={[0, 4, 0]}>
+      <group position={[0, 5, 0]}>
         <RigidBody ref={fixed} {...segmentProps} type="fixed" />
         <RigidBody position={[0.5, 0, 0]} ref={j1} {...segmentProps}>
           <BallCollider args={[0.1]} />
@@ -279,11 +279,10 @@ function Band({
             <mesh geometry={nodes.card.geometry}>
               <meshPhysicalMaterial
                 map={cardMap}
-                map-anisotropy={16}
-                clearcoat={isMobile ? 0 : 1}
-                clearcoatRoughness={0.15}
-                roughness={0.9}
-                metalness={0.8}
+                clearcoat={isMobile ? 0 : 0.5}
+                clearcoatRoughness={0.3}
+                roughness={0.7}
+                metalness={0.0}
               />
             </mesh>
             <mesh geometry={nodes.clip.geometry} material={materials.metal} material-roughness={0.3} />
