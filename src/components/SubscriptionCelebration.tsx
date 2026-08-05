@@ -6,9 +6,10 @@ import { X } from 'lucide-react';
 
 const Lanyard3D = dynamic(() => import('@/components/Lanyard'), { ssr: false });
 
-interface SubscriptionCelebrationProps {
+export interface SubscriptionCelebrationProps {
   userName?: string;
   planName?: string;
+  open?: boolean;
   autoShow?: boolean;
   onClose?: () => void;
 }
@@ -16,21 +17,23 @@ interface SubscriptionCelebrationProps {
 export default function SubscriptionCelebration({
   userName = '',
   planName = 'Pro',
+  open: externalOpen,
   autoShow = true,
   onClose,
 }: SubscriptionCelebrationProps) {
-  const [open, setOpen] = useState(autoShow);
+  const [internalOpen, setInternalOpen] = useState(autoShow);
+  const open = externalOpen !== undefined ? externalOpen : internalOpen;
+  const setOpen = externalOpen !== undefined ? (v: boolean) => onClose?.() : setInternalOpen;
 
   useEffect(() => {
-    if (autoShow) {
-      const timer = setTimeout(() => setOpen(true), 500);
+    if (autoShow && externalOpen === undefined) {
+      const timer = setTimeout(() => setInternalOpen(true), 500);
       return () => clearTimeout(timer);
     }
-  }, [autoShow]);
+  }, [autoShow, externalOpen]);
 
   const handleClose = () => {
     setOpen(false);
-    onClose?.();
   };
 
   if (!open) return null;
