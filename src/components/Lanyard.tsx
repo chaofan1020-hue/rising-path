@@ -1,6 +1,6 @@
 'use client';
 
-import { useEffect, useMemo, useRef, useState } from 'react';
+import { useEffect, useMemo, useRef, useState, useCallback } from 'react';
 import { Canvas, useThree, useFrame } from '@react-three/fiber';
 import { useGLTF, useTexture, Environment, Lightformer } from '@react-three/drei';
 import { BallCollider, CuboidCollider, Physics, RigidBody, useRopeJoint, useSphericalJoint } from '@react-three/rapier';
@@ -12,7 +12,58 @@ const BAND_URL = 'https://assets.vercel.com/image/upload/contentful/image/e5382h
 const RIBBON_SEGMENTS = 20;
 const RIBBON_WIDTH = 0.12;
 
-function Band({ position = [0, 0, 20] as [number, number, number], gravity = [0, -40, 0] as [number, number, number], cardStartY = 0 }) {
+/** Generate a badge texture with the Rising Path logo on a colored background */
+function createBadgeTexture(bgColor: string, logoColor: string): THREE.CanvasTexture {
+  const canvas = document.createElement('canvas');
+  canvas.width = 512;
+  canvas.height = 512;
+  const ctx = canvas.getContext('2d')!;
+
+  // Background
+  ctx.fillStyle = bgColor;
+  ctx.beginPath();
+  ctx.roundRect(0, 0, 512, 512, 48);
+  ctx.fill();
+
+  // Rising Path text
+  ctx.fillStyle = logoColor;
+  ctx.font = 'bold 56px system-ui, -apple-system, sans-serif';
+  ctx.textAlign = 'center';
+  ctx.textBaseline = 'middle';
+  ctx.fillText('Rising Path', 256, 256);
+
+  // Logo SVG (two bars)
+  const logoScale = 6;
+  const cx = 256;
+  const cy = 140;
+  // Top bar: M0 0h29a4 4 0 0 1 0 8H0V0z
+  ctx.fillStyle = logoColor;
+  ctx.beginPath();
+  ctx.roundRect(cx - 29 * logoScale / 2, cy, 29 * logoScale, 8 * logoScale, 4 * logoScale);
+  ctx.fill();
+  // Bottom bar: M40 20H11a4 4 0 0 1 0-8h29v8z
+  ctx.beginPath();
+  ctx.roundRect(cx - 29 * logoScale / 2, cy + 16 * logoScale, 29 * logoScale, 8 * logoScale, 4 * logoScale);
+  ctx.fill();
+
+  const texture = new THREE.CanvasTexture(canvas);
+  texture.needsUpdate = true;
+  return texture;
+}
+
+function Band({
+  position = [0, 0, 20] as [number, number, number],
+  gravity = [0, -40, 0] as [number, number, number],
+  cardStartY = 0,
+  badgeColor = '#C46A4A',
+  onError,
+}: {
+  position?: [number, number, number];
+  gravity?: [number, number, number];
+  cardStartY?: number;
+  badgeColor?: string;
+  onError?: (err: Error) => void;
+}) {
   const fixed = useRef<any>(null);
   const j1 = useRef<any>(null);
   const j2 = useRef<any>(null);
@@ -25,7 +76,17 @@ function Band({ position = [0, 0, 20] as [number, number, number], gravity = [0,
   const dir = useRef(new THREE.Vector3());
   const dragOffset = useRef<THREE.Vector3 | null>(null);
 
-  const { nodes, materials } = useGLTF(MODEL_URL);
+  // Load GLTF - wrap in try/catch
+  let nodes: any = {};
+  let materials: any = {};
+  try {
+    const result = useGLTF(MODEL_URL);
+    nodes = result.nodes;
+    materials = result.materials;
+  } catch (e) {
+    if (onError) onError(e as Error);
+  }
+
   const rawBandTexture = useTexture(BAND_URL);
   const { width, height } = useThree((state) => state.size);
 
@@ -46,6 +107,15 @@ function Band({ position = [0, 0, 20] as [number, number, number], gravity = [0,
   // Ribbon geometry ref for reuse
   const ribbonGeomRef = useRef<THREE.BufferGeometry | null>(null);
 
+  // Custom badge texture with logo
+  const badgeTexture = useMemo(() => {
+    try {
+      return createBadgeTexture(badgeColor, '#FFFFFF');
+    } catch {
+      return null;
+    }
+  }, [badgeColor]);
+
   const bandTexture = useMemo(() => {
     const t = rawBandTexture.clone();
     t.wrapS = t.wrapT = THREE.RepeatWrapping;
@@ -55,39 +125,41 @@ function Band({ position = [0, 0, 20] as [number, number, number], gravity = [0,
 
   // Initialize ribbon geometry once
   useEffect(() => {
-    const vertexCount = (RIBBON_SEGMENTS + 1) * 2;
-    const positions = new Float32Array(vertexCount * 3);
-    const uvs = new Float32Array(vertexCount * 2);
-    const indices: number[] = [];
+    try {
+      const vertexCount = (RIBBON_SEGMENTS + 1) * 2;
+      const positions = new Float32Array(vertexCount * 3);
+      const uvs = new Float32Array(vertexCount * 2);
+      const indices: number[] = [];
 
-    for (let i = 0; i <= RIBBON_SEGMENTS; i++) {
-      const t = i / RIBBON_SEGMENTS;
-      // Left vertex
-      uvs[i * 4] = 0;
-      uvs[i * 4 + 1] = t;
-      // Right vertex
-      uvs[i * 4 + 2] = 1;
-      uvs[i * 4 + 3] = t;
+      for (let i = 0; i <= RIBBON_SEGMENTS; i++) {
+        const t = i / RIBBON_SEGMENTS;
+        uvs[i * 4] = 0;
+        uvs[i * 4 + 1] = t;
+        uvs[i * 4 + 2] = 1;
+        uvs[i * 4 + 3] = t;
 
-      if (i < RIBBON_SEGMENTS) {
-        const a = i * 2;
-        const b = i * 2 + 1;
-        const c = (i + 1) * 2;
-        const d = (i + 1) * 2 + 1;
-        indices.push(a, c, b);
-        indices.push(b, c, d);
+        if (i < RIBBON_SEGMENTS) {
+          const a = i * 2;
+          const b = i * 2 + 1;
+          const c = (i + 1) * 2;
+          const d = (i + 1) * 2 + 1;
+          indices.push(a, c, b);
+          indices.push(b, c, d);
+        }
       }
-    }
 
-    const geom = new THREE.BufferGeometry();
-    geom.setAttribute('position', new THREE.BufferAttribute(positions, 3));
-    geom.setAttribute('uv', new THREE.BufferAttribute(uvs, 2));
-    geom.setIndex(indices);
-    geom.computeVertexNormals();
+      const geom = new THREE.BufferGeometry();
+      geom.setAttribute('position', new THREE.BufferAttribute(positions, 3));
+      geom.setAttribute('uv', new THREE.BufferAttribute(uvs, 2));
+      geom.setIndex(indices);
+      geom.computeVertexNormals();
 
-    ribbonGeomRef.current = geom;
-    if (ropeRef.current) {
-      ropeRef.current.geometry = geom;
+      ribbonGeomRef.current = geom;
+      if (ropeRef.current) {
+        ropeRef.current.geometry = geom;
+      }
+    } catch (e) {
+      if (onError) onError(e as Error);
     }
   }, []);
 
@@ -103,73 +175,75 @@ function Band({ position = [0, 0, 20] as [number, number, number], gravity = [0,
   }, [hovered, isDragged]);
 
   useFrame((state, delta) => {
-    const v = vec.current;
-    const a = ang.current;
-    const r = rot.current;
-    const d = dir.current;
-    const curve = curveRef.current;
+    try {
+      const v = vec.current;
+      const a = ang.current;
+      const r = rot.current;
+      const d = dir.current;
+      const curve = curveRef.current;
 
-    if (dragOffset.current) {
-      v.set(state.pointer.x, state.pointer.y, 0.5).unproject(state.camera);
-      d.copy(v).sub(state.camera.position).normalize();
-      v.add(d.multiplyScalar(state.camera.position.length()));
-      [card, j1, j2, j3, fixed].forEach((ref: any) => ref.current?.wakeUp());
-      card.current?.setNextKinematicTranslation({
-        x: v.x - dragOffset.current.x,
-        y: v.y - dragOffset.current.y,
-        z: v.z - dragOffset.current.z,
-      });
-    }
-
-    if (fixed.current) {
-      [j1, j2].forEach((ref: any) => {
-        if (!ref.current.lerped) ref.current.lerped = new THREE.Vector3().copy(ref.current.translation());
-        const clampedDistance = Math.max(0.1, Math.min(1, ref.current.lerped.distanceTo(ref.current.translation())));
-        ref.current.lerped.lerp(ref.current.translation(), delta * (10 + clampedDistance * (50 - 10)));
-      });
-
-      // Update curve control points from physics joints
-      curve.points[0].copy(j3.current.translation());
-      curve.points[1].copy(j2.current.lerped);
-      curve.points[2].copy(j1.current.lerped);
-      curve.points[3].copy(fixed.current.translation());
-
-      // Update ribbon geometry: flat strap (like a real lanyard)
-      const geom = ribbonGeomRef.current;
-      if (geom) {
-        const points = curve.getPoints(RIBBON_SEGMENTS);
-        const posAttr = geom.attributes.position as THREE.BufferAttribute;
-        const posArray = posAttr.array as Float32Array;
-        const tmp = new THREE.Vector3();
-
-        for (let i = 0; i <= RIBBON_SEGMENTS; i++) {
-          const p = points[i];
-          // Compute tangent direction
-          if (i < RIBBON_SEGMENTS) {
-            tmp.copy(points[i + 1]).sub(points[i]).normalize();
-          } else {
-            tmp.copy(points[i]).sub(points[i - 1]).normalize();
-          }
-          // Normal perpendicular to tangent (in XY plane, with slight Z for 3D follow)
-          const n = new THREE.Vector3(-tmp.y, tmp.x, 0).normalize();
-
-          const idx = i * 6;
-          // Left side
-          posArray[idx] = p.x + n.x * RIBBON_WIDTH;
-          posArray[idx + 1] = p.y + n.y * RIBBON_WIDTH;
-          posArray[idx + 2] = p.z + n.z * RIBBON_WIDTH;
-          // Right side
-          posArray[idx + 3] = p.x - n.x * RIBBON_WIDTH;
-          posArray[idx + 4] = p.y - n.y * RIBBON_WIDTH;
-          posArray[idx + 5] = p.z - n.z * RIBBON_WIDTH;
-        }
-        posAttr.needsUpdate = true;
-        geom.computeVertexNormals();
+      if (dragOffset.current) {
+        v.set(state.pointer.x, state.pointer.y, 0.5).unproject(state.camera);
+        d.copy(v).sub(state.camera.position).normalize();
+        v.add(d.multiplyScalar(state.camera.position.length()));
+        [card, j1, j2, j3, fixed].forEach((ref: any) => ref.current?.wakeUp());
+        card.current?.setNextKinematicTranslation({
+          x: v.x - dragOffset.current.x,
+          y: v.y - dragOffset.current.y,
+          z: v.z - dragOffset.current.z,
+        });
       }
 
-      a.copy(card.current.angvel());
-      r.copy(card.current.rotation());
-      card.current.setAngvel({ x: a.x, y: a.y - r.y * 0.25, z: a.z });
+      if (fixed.current) {
+        [j1, j2].forEach((ref: any) => {
+          if (!ref.current.lerped) ref.current.lerped = new THREE.Vector3().copy(ref.current.translation());
+          const clampedDistance = Math.max(0.1, Math.min(1, ref.current.lerped.distanceTo(ref.current.translation())));
+          ref.current.lerped.lerp(ref.current.translation(), delta * (10 + clampedDistance * (50 - 10)));
+        });
+
+        // Update curve control points from physics joints
+        curve.points[0].copy(j3.current.translation());
+        curve.points[1].copy(j2.current.lerped);
+        curve.points[2].copy(j1.current.lerped);
+        curve.points[3].copy(fixed.current.translation());
+
+        // Update ribbon geometry
+        const geom = ribbonGeomRef.current;
+        if (geom) {
+          const points = curve.getPoints(RIBBON_SEGMENTS);
+          if (points.length > 1) {
+            const posAttr = geom.attributes.position as THREE.BufferAttribute;
+            const posArray = posAttr.array as Float32Array;
+            const tmp = new THREE.Vector3();
+
+            for (let i = 0; i <= RIBBON_SEGMENTS; i++) {
+              const p = points[i];
+              if (i < RIBBON_SEGMENTS) {
+                tmp.copy(points[i + 1]).sub(points[i]).normalize();
+              } else {
+                tmp.copy(points[i]).sub(points[i - 1]).normalize();
+              }
+              const n = new THREE.Vector3(-tmp.y, tmp.x, 0).normalize();
+
+              const idx = i * 6;
+              posArray[idx] = p.x + n.x * RIBBON_WIDTH;
+              posArray[idx + 1] = p.y + n.y * RIBBON_WIDTH;
+              posArray[idx + 2] = p.z + n.z * RIBBON_WIDTH;
+              posArray[idx + 3] = p.x - n.x * RIBBON_WIDTH;
+              posArray[idx + 4] = p.y - n.y * RIBBON_WIDTH;
+              posArray[idx + 5] = p.z - n.z * RIBBON_WIDTH;
+            }
+            posAttr.needsUpdate = true;
+            geom.computeVertexNormals();
+          }
+        }
+
+        a.copy(card.current.angvel());
+        r.copy(card.current.rotation());
+        card.current.setAngvel({ x: a.x, y: a.y - r.y * 0.25, z: a.z });
+      }
+    } catch (e) {
+      if (onError) onError(e as Error);
     }
   });
 
@@ -215,21 +289,22 @@ function Band({ position = [0, 0, 20] as [number, number, number], gravity = [0,
           onPointerUp={handlePointerUp}
           onPointerDown={handlePointerDown}
         >
-          <mesh geometry={(nodes as any).card.geometry}>
+          {/* Card face with custom texture */}
+          <mesh geometry={nodes?.card?.geometry}>
             <meshPhysicalMaterial
-              map={(materials as any).base.map}
-              map-anisotropy={16}
+              map={badgeTexture || undefined}
+              color={badgeTexture ? undefined : badgeColor}
               clearcoat={1}
               clearcoatRoughness={0.15}
               roughness={0.3}
               metalness={0.5}
             />
           </mesh>
-          <mesh geometry={(nodes as any).clip.geometry}>
-            <meshPhysicalMaterial {...(materials as any).metal} roughness={0.3} />
+          <mesh geometry={nodes?.clip?.geometry}>
+            <meshPhysicalMaterial color="#888888" roughness={0.3} metalness={0.8} />
           </mesh>
-          <mesh geometry={(nodes as any).clamp.geometry}>
-            <meshPhysicalMaterial {...(materials as any).metal} />
+          <mesh geometry={nodes?.clamp?.geometry}>
+            <meshPhysicalMaterial color="#888888" roughness={0.3} metalness={0.8} />
           </mesh>
         </group>
       </RigidBody>
@@ -247,28 +322,59 @@ export default function Lanyard({
   cameraPosition = [0, 0, 13] as [number, number, number],
   cameraFov = 25,
   cardStartY = 0,
-  frontImage,
-  backImage,
-  imageFit = 'cover',
-  lanyardImage,
-  lanyardWidth = 1,
+  badgeColor = '#C46A4A',
+  onError,
 }: {
   position?: [number, number, number];
   gravity?: [number, number, number];
   cameraPosition?: [number, number, number];
   cameraFov?: number;
   cardStartY?: number;
-  frontImage?: string;
-  backImage?: string;
-  imageFit?: string;
-  lanyardImage?: string;
-  lanyardWidth?: number;
+  badgeColor?: string;
+  onError?: (err: Error) => void;
 }) {
+  const [hasError, setHasError] = useState(false);
+
+  const handleError = useCallback((err: Error) => {
+    console.error('[Lanyard] error:', err);
+    setHasError(true);
+    onError?.(err);
+  }, [onError]);
+
+  if (hasError) {
+    return (
+      <div className="w-full h-full flex items-center justify-center text-white/60 text-sm">
+        加载失败
+      </div>
+    );
+  }
+
   return (
-    <Canvas camera={{ position: cameraPosition, fov: cameraFov }} style={{ width: '100%', height: '100%' }}>
+    <Canvas
+      camera={{ position: cameraPosition, fov: cameraFov }}
+      style={{ width: '100%', height: '100%' }}
+      onError={(e) => { console.error('[Canvas] error:', e); handleError(new Error('Canvas error')); }}
+      onCreated={(state) => {
+        // Handle WebGL context loss
+        const gl = state.gl;
+        gl.domElement.addEventListener('webglcontextlost', (e: Event) => {
+          e.preventDefault();
+          console.warn('[Canvas] WebGL context lost');
+        });
+        gl.domElement.addEventListener('webglcontextrestored', () => {
+          console.log('[Canvas] WebGL context restored');
+        });
+      }}
+    >
       <ambientLight intensity={Math.PI} />
       <Physics interpolate gravity={gravity} timeStep={1 / 60}>
-        <Band position={position} gravity={gravity} cardStartY={cardStartY} />
+        <Band
+          position={position}
+          gravity={gravity}
+          cardStartY={cardStartY}
+          badgeColor={badgeColor}
+          onError={handleError}
+        />
       </Physics>
       <Environment background blur={0.75}>
         <color attach="background" args={['black']} />
