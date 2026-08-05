@@ -64,7 +64,7 @@ function detectWebGL() {
 }
 
 export default function Lanyard({
-  position = [0, 2, 20],
+  position = [0, 2, 15],
   gravity = [0, -40, 0],
   fov = 24,
   transparent = true,
@@ -249,7 +249,7 @@ function Band({
   }, [frontImage, backImage, imageFit, frontTex, backTex, materials.base.map]);
   const [curve] = useState(
     () =>
-      new THREE.CatmullRomCurve3([new THREE.Vector3(), new THREE.Vector3(), new THREE.Vector3(), new THREE.Vector3()])
+      new THREE.CatmullRomCurve3([new THREE.Vector3(), new THREE.Vector3(), new THREE.Vector3(), new THREE.Vector3(), new THREE.Vector3()])
   );
   const [dragged, drag] = useState(false);
   const [hovered, hover] = useState(false);
@@ -283,10 +283,13 @@ function Band({
           delta * (minSpeed + clampedDistance * (maxSpeed - minSpeed))
         );
       });
-      curve.points[0].copy(j3.current.translation());
-      curve.points[1].copy(j2.current.lerped);
-      curve.points[2].copy(j1.current.lerped);
-      curve.points[3].copy(fixed.current.translation());
+      // Extend curve down to card top so the band passes through the clip frame
+      const cardTrans = card.current.translation();
+      curve.points[0].set(cardTrans.x, cardTrans.y + 1.28, cardTrans.z);
+      curve.points[1].copy(j3.current.translation());
+      curve.points[2].copy(j2.current.lerped);
+      curve.points[3].copy(j1.current.lerped);
+      curve.points[4].copy(fixed.current.translation());
       band.current.geometry.setPoints(curve.getPoints(isMobile ? 16 : 32));
       ang.copy(card.current.angvel());
       rot.copy(card.current.rotation());
@@ -297,7 +300,7 @@ function Band({
   texture.wrapS = texture.wrapT = THREE.RepeatWrapping;
   return (
     <>
-      <group position={[0, 4.5, 0]}>
+      <group position={[0, 3.8, 0]}>
         <RigidBody ref={fixed} {...segmentProps} type="fixed" />
         <RigidBody position={[0.5, 0, 0]} ref={j1} {...segmentProps}>
           <BallCollider args={[0.1]} />
