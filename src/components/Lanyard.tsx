@@ -97,7 +97,7 @@ function Band({ position = [0, 0, 20] as [number, number, number], gravity = [0,
     }
   });
 
-  const segmentProps = { type: 'dynamic' as const, canSleep: true, colliders: false as const, angularDamping: 2, linearDamping: 2 };
+  const segmentProps = { type: 'dynamic' as const, canSleep: false, colliders: false as const, angularDamping: 0.5, linearDamping: 0.5 };
 
   const handlePointerUp = (e: any) => {
     e.target.releasePointerCapture(e.pointerId);
@@ -168,7 +168,7 @@ function Band({ position = [0, 0, 20] as [number, number, number], gravity = [0,
           useMap
           map={bandTexture}
           repeat={[-3, 1]}
-          lineWidth={1}
+          lineWidth={3}
         />
       </mesh>
     </group>
