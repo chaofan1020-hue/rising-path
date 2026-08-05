@@ -3,7 +3,6 @@
 import { useState, useRef, useCallback, useMemo, useEffect } from 'react';
 import * as THREE from 'three';
 import { useFrame } from '@react-three/fiber';
-import { useTexture } from '@react-three/drei';
 import {
   CubeCamera,
   Environment,
@@ -140,7 +139,7 @@ export default function Lanyard({
   cardStartY?: number;
   onError?: (err: Error) => void;
 }) {
-  const bandTexture = useTexture('https://assets.vercel.com/image/upload/contentful/image/e5382hct74si/SOT1hmCesOHxEYxL7vkoZ/c57b29c85912047c414311723320c16b/band.jpg');
+  // Rope material - solid white
 
   // Card texture: white with logo
   const cardTexture = useMemo(() => {
