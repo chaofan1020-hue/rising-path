@@ -323,18 +323,6 @@ export async function GET(request: NextRequest) {
       goal: 10,
       region: selectedRegion ? REGION_LABEL_KEYS[selectedRegion] : '',
     };
-  } else if (
-    latestInterview &&
-    ['completed', 'ended', 'finished'].includes(latestInterview.status) &&
-    now - new Date(latestInterview.updated_at).getTime() < 7 * 86400000
-  ) {
-    const hoursSinceInterview = Math.floor(
-      (now - new Date(latestInterview.updated_at).getTime()) / 3600000
-    );
-    phase = 'review';
-    phaseTitleKey = 'dashboard.phase.review.title';
-    phaseDescriptionKey = 'dashboard.phase.review.description';
-    phaseDescriptionParams = { hours: hoursSinceInterview };
   } else {
     phase = 'preparation';
     phaseTitleKey = 'dashboard.phase.preparation.title';
@@ -376,9 +364,6 @@ export async function GET(request: NextRequest) {
     nextAction.titleKey = 'dashboard.nextAction.startSearch';
     nextAction.href = '/jobs';
   } else if (phase === 'applying') {
-    nextAction.titleKey = 'dashboard.nextAction.continueApplying';
-    nextAction.href = '/jobs';
-  } else if (phase === 'review') {
     nextAction.titleKey = 'dashboard.nextAction.continueApplying';
     nextAction.href = '/jobs';
   }
