@@ -97,9 +97,33 @@ export default function Lanyard({
   const cardTexture = useMemo(() => createCardTexture(), []);
   const lanyardTex = useMemo(() => createLanyardTexture(), []);
 
-  // UseTexture for front/back images (must be called unconditionally)
-  const frontTex = useTexture(frontImage || BLANK_PIXEL);
-  const backTex = useTexture(backImage || BLANK_PIXEL);
+  // Load front/back images using native Image() (no R3F Canvas context needed)
+  const [loadedImages, setLoadedImages] = useState({ front: null, back: null });
+  useEffect(() => {
+    let cancelled = false;
+    let frontDone = !frontImage;
+    let backDone = !backImage;
+    const front = new window.Image();
+    const back = new window.Image();
+
+    const check = () => {
+      if (frontDone && backDone && !cancelled) {
+        setLoadedImages({ front: frontDone && frontImage ? front : null, back: backDone && backImage ? back : null });
+      }
+    };
+
+    front.onload = () => { frontDone = true; check(); };
+    front.onerror = () => { frontDone = true; check(); };
+    back.onload = () => { backDone = true; check(); };
+    back.onerror = () => { backDone = true; check(); };
+
+    if (frontImage) front.src = frontImage;
+    else { frontDone = true; check(); }
+    if (backImage) back.src = backImage;
+    else { backDone = true; check(); }
+
+    return () => { cancelled = true; };
+  }, [frontImage, backImage]);
 
   // Composite card texture with front/back images
   const cardMap = useMemo(() => {
@@ -120,6 +144,7 @@ export default function Lanyard({
     const BACK_UV = { x: 0.5, y: 0, w: 0.5, h: 0.757 };
 
     const drawFitted = (img, rect) => {
+      if (!img) return;
       const rx = rect.x * W;
       const ry = rect.y * H;
       const rw = rect.w * W;
@@ -138,8 +163,8 @@ export default function Lanyard({
       ctx.restore();
     };
 
-    if (frontImage && frontTex.image) drawFitted(frontTex.image, FRONT_UV);
-    if (backImage && backTex.image) drawFitted(backTex.image, BACK_UV);
+    drawFitted(loadedImages.front, FRONT_UV);
+    drawFitted(loadedImages.back, BACK_UV);
 
     const composite = new THREE.CanvasTexture(canvas);
     composite.colorSpace = THREE.SRGBColorSpace;
@@ -147,7 +172,7 @@ export default function Lanyard({
     composite.anisotropy = 16;
     composite.needsUpdate = true;
     return composite;
-  }, [frontImage, backImage, imageFit, frontTex, backTex, cardTexture]);
+  }, [frontImage, backImage, imageFit, loadedImages, cardTexture]);
 
   return (
     <div className="lanyard-wrapper">
