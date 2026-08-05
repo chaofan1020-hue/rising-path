@@ -254,8 +254,8 @@ function Band({
     linearDamping: 4
   };
 
-  // UseTexture for lanyard
-  const lanyardTexture = useTexture(lanyardTex || BLANK_PIXEL);
+  // lanyardTex is already a THREE.CanvasTexture, use it directly
+  const lanyardTexture = lanyardTex || null;
 
   const [curve] = useState(
     () =>
@@ -309,7 +309,11 @@ function Band({
   });
 
   useEffect(() => { curve.curveType = 'chordal'; }, []);
-  lanyardTexture.wrapS = lanyardTexture.wrapT = THREE.RepeatWrapping;
+  useEffect(() => {
+    if (lanyardTexture) {
+      lanyardTexture.wrapS = lanyardTexture.wrapT = THREE.RepeatWrapping;
+    }
+  }, [lanyardTexture]);
 
   return (
     <>
