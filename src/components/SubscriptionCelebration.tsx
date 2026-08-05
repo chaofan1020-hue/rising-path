@@ -2,7 +2,6 @@
 
 import { useEffect, useState, useCallback, Suspense } from 'react';
 import dynamic from 'next/dynamic';
-import { Canvas } from '@react-three/fiber';
 
 const Lanyard3D = dynamic(() => import('@/components/Lanyard'), { ssr: false });
 
@@ -69,14 +68,9 @@ export default function SubscriptionCelebration({
       {/* 3D Lanyard */}
       <div className="absolute inset-0">
         {!hasError && (
-          <Canvas camera={{ position: [0, 0.5, 12], fov: 28 }}>
-            <Suspense fallback={null}>
-              <Lanyard3D
-                cardStartY={5}
-                onError={handleLanyardError}
-              />
-            </Suspense>
-          </Canvas>
+          <Suspense fallback={null}>
+            <Lanyard3D />
+          </Suspense>
         )}
       </div>
 
