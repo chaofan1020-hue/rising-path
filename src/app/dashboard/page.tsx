@@ -162,6 +162,22 @@ export default function DashboardPage() {
     [data?.latestResumeId, fetchDashboard]
   );
 
+  const translate = useCallback(
+    (key: string, params?: Record<string, string | number>) => {
+      if (!params) return t(key);
+      const translatedParams: Record<string, string | number> = {};
+      Object.entries(params).forEach(([k, v]) => {
+        if (typeof v === 'string') {
+          translatedParams[k] = t(v);
+        } else {
+          translatedParams[k] = v;
+        }
+      });
+      return t(key, translatedParams);
+    },
+    [t]
+  );
+
   const planGroups = useMemo(() => {
     if (!data?.plan) return null;
     return {
