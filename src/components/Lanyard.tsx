@@ -178,6 +178,8 @@ function Band({ position = [0, 0, 20] as [number, number, number], gravity = [0,
 export default function Lanyard({
   position = [0, 0, 20],
   gravity = [0, -40, 0],
+  cameraPosition = [0, 0, 13] as [number, number, number],
+  cameraFov = 25,
   frontImage,
   backImage,
   imageFit = 'cover',
@@ -186,6 +188,8 @@ export default function Lanyard({
 }: {
   position?: [number, number, number];
   gravity?: [number, number, number];
+  cameraPosition?: [number, number, number];
+  cameraFov?: number;
   frontImage?: string;
   backImage?: string;
   imageFit?: string;
@@ -193,7 +197,7 @@ export default function Lanyard({
   lanyardWidth?: number;
 }) {
   return (
-    <Canvas camera={{ position: [0, 0, 13], fov: 25 }} style={{ width: '100%', height: '100%' }}>
+    <Canvas camera={{ position: cameraPosition, fov: cameraFov }} style={{ width: '100%', height: '100%' }}>
       <ambientLight intensity={Math.PI} />
       <Physics interpolate gravity={gravity} timeStep={1 / 60}>
         <Band position={position} gravity={gravity} />

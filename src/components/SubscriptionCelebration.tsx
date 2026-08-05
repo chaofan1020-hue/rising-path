@@ -2,26 +2,20 @@
 
 import { useEffect, useState } from 'react';
 import dynamic from 'next/dynamic';
-import { X } from 'lucide-react';
 
 const Lanyard3D = dynamic(() => import('@/components/Lanyard'), { ssr: false });
 
-export interface SubscriptionCelebrationProps {
-  userName?: string;
-  planName?: string;
-  open?: boolean;
-  autoShow?: boolean;
-  onClose?: () => void;
-}
-
 export default function SubscriptionCelebration({
-  userName = '',
-  planName = 'Pro',
   open: externalOpen,
   autoShow = true,
   onClose,
-}: SubscriptionCelebrationProps) {
+}: {
+  open?: boolean;
+  autoShow?: boolean;
+  onClose?: () => void;
+}) {
   const [internalOpen, setInternalOpen] = useState(autoShow);
+  const [visible, setVisible] = useState(false);
   const open = externalOpen !== undefined ? externalOpen : internalOpen;
   const setOpen = externalOpen !== undefined ? (v: boolean) => onClose?.() : setInternalOpen;
 
@@ -32,45 +26,49 @@ export default function SubscriptionCelebration({
     }
   }, [autoShow, externalOpen]);
 
-  const handleClose = () => {
-    setOpen(false);
-  };
+  useEffect(() => {
+    if (open) {
+      // 先淡入遮罩，再触发掉落
+      const t = setTimeout(() => setVisible(true), 100);
+      return () => clearTimeout(t);
+    } else {
+      setVisible(false);
+    }
+  }, [open]);
 
   if (!open) return null;
 
   return (
-    <div className="fixed inset-0 z-[9999] flex items-center justify-center bg-black/80 backdrop-blur-sm animate-in fade-in duration-300">
-      <div className="relative w-[90vw] max-w-[480px] h-[600px] mx-auto">
-        {/* 3D Lanyard */}
-        <div className="absolute inset-0">
-          <Lanyard3D position={[0, 0, 20]} gravity={[0, -40, 0]} />
-        </div>
+    <div
+      className="fixed inset-0 z-[9999] bg-black/80 backdrop-blur-sm animate-in fade-in duration-500"
+      onClick={() => setOpen(false)}
+    >
+      {/* 3D Lanyard - 全屏，工牌从顶部掉落 */}
+      <div className="absolute inset-0">
+        <Lanyard3D
+          position={[0, 7, 16]}
+          gravity={[0, -40, 0]}
+          cameraPosition={[0, 0, 5]}
+          cameraFov={35}
+        />
+      </div>
 
-        {/* 关闭按钮 */}
-        <button
-          onClick={handleClose}
-          className="absolute top-4 right-4 z-10 rounded-full bg-white/10 p-2 text-white/70 hover:bg-white/20 hover:text-white transition-colors"
-        >
-          <X className="h-5 w-5" />
-        </button>
-
-        {/* 文字叠加 */}
-        <div className="absolute bottom-12 left-0 right-0 z-10 text-center px-6">
-          <div className="inline-block rounded-full bg-white/10 backdrop-blur-md px-4 py-1 mb-3">
-            <span className="text-xs font-medium text-white/80 uppercase tracking-wider">
-              {planName}
+      {/* 文字叠加 - 底部 */}
+      <div className="absolute bottom-[18%] left-0 right-0 z-10 text-center px-6 pointer-events-none">
+        <div className={`transition-all duration-700 delay-500 ${visible ? 'opacity-100 translate-y-0' : 'opacity-0 translate-y-4'}`}>
+          <div className="inline-block rounded-full bg-white/10 backdrop-blur-md px-5 py-1.5 mb-4">
+            <span className="text-xs font-medium text-white/80 uppercase tracking-widest">
+              Pro
             </span>
           </div>
-          <h2 className="text-2xl font-bold text-white mb-2">
-            🎉 订阅成功！
+          <h2 className="text-4xl font-bold text-white mb-3 tracking-tight">
+            订阅成功！
           </h2>
-          {userName && (
-            <p className="text-white/70 text-sm">
-              {userName}，欢迎加入 Rising Path {planName} 计划
-            </p>
-          )}
-          <p className="text-white/50 text-xs mt-2">
-            你的工牌已生成，开始你的求职之旅吧
+          <p className="text-white/50 text-sm max-w-xs mx-auto">
+            你的专属工牌已生成，开启你的求职之旅
+          </p>
+          <p className="text-white/30 text-xs mt-6">
+            点击任意位置关闭
           </p>
         </div>
       </div>
