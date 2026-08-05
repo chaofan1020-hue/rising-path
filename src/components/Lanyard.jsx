@@ -1,10 +1,10 @@
+/* eslint-disable react/no-unknown-property */
 'use client';
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { Canvas, extend, useFrame } from '@react-three/fiber';
-import { useTexture, Environment, Lightformer } from '@react-three/drei';
+import { useGLTF, useTexture, Environment, Lightformer } from '@react-three/drei';
 import { BallCollider, CuboidCollider, Physics, RigidBody, useRopeJoint, useSphericalJoint } from '@react-three/rapier';
 import { MeshLineGeometry, MeshLineMaterial } from 'meshline';
-
 import * as THREE from 'three';
 import './Lanyard.css';
 
@@ -14,67 +14,9 @@ extend({ MeshLineGeometry, MeshLineMaterial });
 const BLANK_PIXEL =
   'data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mNk+M9QDwADhgGAWjR9awAAAABJRU5ErkJggg==';
 
-// Create card texture with Rising Path branding
-function createCardTexture() {
-  const canvas = document.createElement('canvas');
-  canvas.width = 512;
-  canvas.height = 320;
-  const ctx = canvas.getContext('2d');
-  if (!ctx) return null;
-
-  // White background
-  ctx.fillStyle = '#FFFFFF';
-  ctx.fillRect(0, 0, 512, 320);
-
-  // Logo bars
-  ctx.fillStyle = '#C46A4A';
-  ctx.fillRect(60, 70, 160, 24);
-  ctx.fillStyle = '#B5BEB0';
-  ctx.fillRect(60, 100, 120, 24);
-
-  // Brand name
-  ctx.fillStyle = '#1a1a1a';
-  ctx.font = 'bold 44px system-ui, sans-serif';
-  ctx.textAlign = 'center';
-  ctx.fillText('Rising Path', 256, 180);
-
-  // Subtitle
-  ctx.fillStyle = '#666666';
-  ctx.font = '18px system-ui, sans-serif';
-  ctx.fillText('求职加速器', 256, 225);
-
-  // Bottom line
-  ctx.fillStyle = '#E8E8E8';
-  ctx.fillRect(60, 250, 392, 1);
-
-  const texture = new THREE.CanvasTexture(canvas);
-  texture.colorSpace = THREE.SRGBColorSpace;
-  texture.anisotropy = 16;
-  texture.needsUpdate = true;
-  return texture;
-}
-
-// Create lanyard texture
-function createLanyardTexture() {
-  const canvas = document.createElement('canvas');
-  canvas.width = 64;
-  canvas.height = 16;
-  const ctx = canvas.getContext('2d');
-  if (!ctx) return null;
-
-  // White with subtle pattern
-  ctx.fillStyle = '#FFFFFF';
-  ctx.fillRect(0, 0, 64, 16);
-  ctx.fillStyle = '#F0F0F0';
-  for (let i = 0; i < 64; i += 8) {
-    ctx.fillRect(i, 0, 4, 16);
-  }
-
-  const texture = new THREE.CanvasTexture(canvas);
-  texture.wrapS = texture.wrapT = THREE.RepeatWrapping;
-  texture.needsUpdate = true;
-  return texture;
-}
+// UV rects for card texture atlas (front = left half, back = right half)
+const FRONT_UV_RECT = { x: 0, y: 0, w: 0.5, h: 0.755 };
+const BACK_UV_RECT = { x: 0.5, y: 0, w: 0.5, h: 0.757 };
 
 export default function Lanyard({
   position = [0, 0, 30],
@@ -94,86 +36,6 @@ export default function Lanyard({
     return () => window.removeEventListener('resize', handleResize);
   }, []);
 
-  const cardTexture = useMemo(() => createCardTexture(), []);
-  const lanyardTex = useMemo(() => createLanyardTexture(), []);
-
-  // Load front/back images using native Image() (no R3F Canvas context needed)
-  const [loadedImages, setLoadedImages] = useState({ front: null, back: null });
-  useEffect(() => {
-    let cancelled = false;
-    let frontDone = !frontImage;
-    let backDone = !backImage;
-    const front = new window.Image();
-    const back = new window.Image();
-
-    const check = () => {
-      if (frontDone && backDone && !cancelled) {
-        setLoadedImages({ front: frontDone && frontImage ? front : null, back: backDone && backImage ? back : null });
-      }
-    };
-
-    front.onload = () => { frontDone = true; check(); };
-    front.onerror = () => { frontDone = true; check(); };
-    back.onload = () => { backDone = true; check(); };
-    back.onerror = () => { backDone = true; check(); };
-
-    if (frontImage) front.src = frontImage;
-    else { frontDone = true; check(); }
-    if (backImage) back.src = backImage;
-    else { backDone = true; check(); }
-
-    return () => { cancelled = true; };
-  }, [frontImage, backImage]);
-
-  // Composite card texture with front/back images
-  const cardMap = useMemo(() => {
-    if (!cardTexture) return null;
-    if (!frontImage && !backImage) return cardTexture;
-
-    const W = cardTexture.image.width;
-    const H = cardTexture.image.height;
-    const canvas = document.createElement('canvas');
-    canvas.width = W;
-    canvas.height = H;
-    const ctx = canvas.getContext('2d');
-    if (!ctx) return cardTexture;
-
-    ctx.drawImage(cardTexture.image, 0, 0, W, H);
-
-    const FRONT_UV = { x: 0, y: 0, w: 0.5, h: 0.755 };
-    const BACK_UV = { x: 0.5, y: 0, w: 0.5, h: 0.757 };
-
-    const drawFitted = (img, rect) => {
-      if (!img) return;
-      const rx = rect.x * W;
-      const ry = rect.y * H;
-      const rw = rect.w * W;
-      const rh = rect.h * H;
-      const pick = imageFit === 'contain' ? Math.min : Math.max;
-      const scale = pick(rw / img.width, rh / img.height);
-      const dw = img.width * scale;
-      const dh = img.height * scale;
-      const dx = rx + (rw - dw) / 2;
-      const dy = ry + (rh - dh) / 2;
-      ctx.save();
-      ctx.beginPath();
-      ctx.rect(rx, ry, rw, rh);
-      ctx.clip();
-      ctx.drawImage(img, dx, dy, dw, dh);
-      ctx.restore();
-    };
-
-    drawFitted(loadedImages.front, FRONT_UV);
-    drawFitted(loadedImages.back, BACK_UV);
-
-    const composite = new THREE.CanvasTexture(canvas);
-    composite.colorSpace = THREE.SRGBColorSpace;
-    composite.flipY = false;
-    composite.anisotropy = 16;
-    composite.needsUpdate = true;
-    return composite;
-  }, [frontImage, backImage, imageFit, loadedImages, cardTexture]);
-
   return (
     <div className="lanyard-wrapper">
       <Canvas
@@ -186,8 +48,10 @@ export default function Lanyard({
         <Physics gravity={gravity} timeStep={isMobile ? 1 / 30 : 1 / 60}>
           <Band
             isMobile={isMobile}
-            cardMap={cardMap}
-            lanyardTex={lanyardTex || undefined}
+            frontImage={frontImage}
+            backImage={backImage}
+            imageFit={imageFit}
+            lanyardImage={lanyardImage}
             lanyardWidth={lanyardWidth}
           />
         </Physics>
@@ -230,8 +94,10 @@ function Band({
   maxSpeed = 50,
   minSpeed = 0,
   isMobile = false,
-  cardMap = null,
-  lanyardTex = null,
+  frontImage = null,
+  backImage = null,
+  imageFit = 'cover',
+  lanyardImage = null,
   lanyardWidth = 1
 }) {
   const band = useRef(),
@@ -254,8 +120,78 @@ function Band({
     linearDamping: 4
   };
 
-  // lanyardTex is already a THREE.CanvasTexture, use it directly
-  const lanyardTexture = lanyardTex || null;
+  // Load GLB model and lanyard texture (inside Canvas — R3F hooks work here)
+  const { nodes, materials } = useGLTF('/card.glb');
+  const texture = useTexture(lanyardImage || '/lanyard.png');
+
+  // Load front/back card images via useTexture (inside Canvas — safe)
+  const frontTex = useTexture(frontImage || BLANK_PIXEL);
+  const backTex = useTexture(backImage || BLANK_PIXEL);
+
+  // Create a fallback white base texture when GLB material has no map
+  const fallbackBaseMap = useMemo(() => {
+    const canvas = document.createElement('canvas');
+    canvas.width = 512;
+    canvas.height = 320;
+    const ctx = canvas.getContext('2d');
+    if (!ctx) return null;
+    ctx.fillStyle = '#FFFFFF';
+    ctx.fillRect(0, 0, 512, 320);
+    const tex = new THREE.CanvasTexture(canvas);
+    tex.colorSpace = THREE.SRGBColorSpace;
+    tex.flipY = false;
+    tex.anisotropy = 16;
+    tex.needsUpdate = true;
+    return tex;
+  }, []);
+
+  // Composite the front/back images into the card's texture atlas
+  const cardMap = useMemo(() => {
+    const baseMap = materials?.base?.map || fallbackBaseMap;
+    if (!baseMap) return null;
+    if (!frontImage && !backImage) return baseMap;
+
+    const baseImg = baseMap.image;
+    const W = baseImg.width;
+    const H = baseImg.height;
+    const canvas = document.createElement('canvas');
+    canvas.width = W;
+    canvas.height = H;
+    const ctx = canvas.getContext('2d');
+    if (!ctx) return baseMap;
+
+    ctx.drawImage(baseImg, 0, 0, W, H);
+
+    const drawFitted = (img, rect) => {
+      if (!img) return;
+      const rx = rect.x * W;
+      const ry = rect.y * H;
+      const rw = rect.w * W;
+      const rh = rect.h * H;
+      const pick = imageFit === 'contain' ? Math.min : Math.max;
+      const scale = pick(rw / img.width, rh / img.height);
+      const dw = img.width * scale;
+      const dh = img.height * scale;
+      const dx = rx + (rw - dw) / 2;
+      const dy = ry + (rh - dh) / 2;
+      ctx.save();
+      ctx.beginPath();
+      ctx.rect(rx, ry, rw, rh);
+      ctx.clip();
+      ctx.drawImage(img, dx, dy, dw, dh);
+      ctx.restore();
+    };
+
+    if (frontImage && frontTex.image) drawFitted(frontTex.image, FRONT_UV_RECT);
+    if (backImage && backTex.image) drawFitted(backTex.image, BACK_UV_RECT);
+
+    const composite = new THREE.CanvasTexture(canvas);
+    composite.colorSpace = THREE.SRGBColorSpace;
+    composite.flipY = baseMap.flipY ?? false;
+    composite.anisotropy = 16;
+    composite.needsUpdate = true;
+    return composite;
+  }, [frontImage, backImage, imageFit, frontTex, backTex, materials?.base?.map, fallbackBaseMap]);
 
   const [curve] = useState(
     () =>
@@ -310,10 +246,14 @@ function Band({
 
   useEffect(() => { curve.curveType = 'chordal'; }, []);
   useEffect(() => {
-    if (lanyardTexture) {
-      lanyardTexture.wrapS = lanyardTexture.wrapT = THREE.RepeatWrapping;
-    }
-  }, [lanyardTexture]);
+    texture.wrapS = texture.wrapT = THREE.RepeatWrapping;
+  }, [texture]);
+
+  // Extract geometry from GLB nodes (with fallback to box geometries)
+  const cardGeo = nodes?.card?.geometry || null;
+  const clipGeo = nodes?.clip?.geometry || null;
+  const clampGeo = nodes?.clamp?.geometry || null;
+  const metalMat = materials?.metal || null;
 
   return (
     <>
@@ -346,28 +286,49 @@ function Band({
               drag(new THREE.Vector3().copy(e.point).sub(vec.copy(card.current.translation())))
             )}
           >
-            {/* Card body */}
-            <mesh>
-              <boxGeometry args={[0.8, 1.125, 0.025]} />
-              <meshPhysicalMaterial
-                map={cardMap}
-                map-anisotropy={16}
-                clearcoat={isMobile ? 0 : 1}
-                clearcoatRoughness={0.15}
-                roughness={0.9}
-                metalness={0.8}
-              />
-            </mesh>
+            {/* Card body — use GLB geometry if available, fallback to boxGeometry */}
+            {cardGeo ? (
+              <mesh geometry={cardGeo}>
+                <meshPhysicalMaterial
+                  map={cardMap}
+                  map-anisotropy={16}
+                  clearcoat={isMobile ? 0 : 1}
+                  clearcoatRoughness={0.15}
+                  roughness={0.9}
+                  metalness={0.8}
+                />
+              </mesh>
+            ) : (
+              <mesh>
+                <boxGeometry args={[0.8, 1.125, 0.025]} />
+                <meshPhysicalMaterial
+                  map={cardMap}
+                  map-anisotropy={16}
+                  clearcoat={isMobile ? 0 : 1}
+                  clearcoatRoughness={0.15}
+                  roughness={0.9}
+                  metalness={0.8}
+                />
+              </mesh>
+            )}
             {/* Clip */}
-            <mesh position={[0, 0.65, 0]}>
-              <boxGeometry args={[0.25, 0.12, 0.025]} />
-              <meshStandardMaterial color="#999999" roughness={0.3} metalness={0.8} />
-            </mesh>
+            {clipGeo ? (
+              <mesh geometry={clipGeo} material={metalMat} material-roughness={0.3} />
+            ) : (
+              <mesh position={[0, 0.65, 0]}>
+                <boxGeometry args={[0.25, 0.12, 0.025]} />
+                <meshStandardMaterial color="#999999" roughness={0.3} metalness={0.8} />
+              </mesh>
+            )}
             {/* Clamp */}
-            <mesh position={[0, 0.75, 0]}>
-              <boxGeometry args={[0.15, 0.08, 0.025]} />
-              <meshStandardMaterial color="#999999" roughness={0.3} metalness={0.8} />
-            </mesh>
+            {clampGeo ? (
+              <mesh geometry={clampGeo} material={metalMat} />
+            ) : (
+              <mesh position={[0, 0.75, 0]}>
+                <boxGeometry args={[0.15, 0.08, 0.025]} />
+                <meshStandardMaterial color="#999999" roughness={0.3} metalness={0.8} />
+              </mesh>
+            )}
           </group>
         </RigidBody>
       </group>
@@ -378,7 +339,7 @@ function Band({
           depthTest={false}
           resolution={isMobile ? [1000, 2000] : [1000, 1000]}
           useMap
-          map={lanyardTexture}
+          map={texture}
           repeat={[-4, 1]}
           lineWidth={lanyardWidth}
         />
