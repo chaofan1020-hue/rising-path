@@ -2,7 +2,7 @@
 
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { Canvas, useThree, useFrame } from '@react-three/fiber';
-import { useGLTF, useTexture, Environment, Lightformer, Line } from '@react-three/drei';
+import { useGLTF, useTexture, Environment, Lightformer } from '@react-three/drei';
 import { BallCollider, CuboidCollider, Physics, RigidBody, useRopeJoint, useSphericalJoint } from '@react-three/rapier';
 import * as THREE from 'three';
 
@@ -38,8 +38,8 @@ function Band({ position = [0, 0, 20] as [number, number, number], gravity = [0,
   const [hovered, hover] = useState(false);
   const [isDragged, setIsDragged] = useState(false);
 
-  // Rope line ref (for dynamic geometry updates via drei Line component)
-  const lineRef = useRef<any>(null);
+  // Rope mesh ref
+  const ropeRef = useRef<THREE.Mesh>(null);
 
   const bandTexture = useMemo(() => {
     const t = rawBandTexture.clone();
@@ -84,24 +84,16 @@ function Band({ position = [0, 0, 20] as [number, number, number], gravity = [0,
         ref.current.lerped.lerp(ref.current.translation(), delta * (10 + clampedDistance * (50 - 10)));
       });
 
-      // Update curve control points
+      // Update curve control points from physics joints
       curve.points[0].copy(j3.current.translation());
       curve.points[1].copy(j2.current.lerped);
       curve.points[2].copy(j1.current.lerped);
       curve.points[3].copy(fixed.current.translation());
 
-      // Update Line2 geometry with interpolated curve points
-      const pts = curve.getPoints(20);
-      const positions: number[] = [];
-      pts.forEach((p: THREE.Vector3) => {
-        positions.push(p.x, p.y, p.z);
-      });
-      if (lineRef.current) {
-        const geom = lineRef.current.geometry;
-        if (geom && typeof geom.setPositions === 'function') {
-          geom.setPositions(positions);
-          lineRef.current.computeLineDistances();
-        }
+      // Update rope mesh geometry with new TubeGeometry from curve
+      if (ropeRef.current) {
+        ropeRef.current.geometry.dispose();
+        ropeRef.current.geometry = new THREE.TubeGeometry(curve, 20, 0.04, 6, false);
       }
 
       a.copy(card.current.angvel());
@@ -170,15 +162,10 @@ function Band({ position = [0, 0, 20] as [number, number, number], gravity = [0,
           </mesh>
         </group>
       </RigidBody>
-      {/* Rope rendered with drei Line component */}
-      <Line
-        ref={lineRef}
-        points={[[0, 0, 0], [0, 0, 0], [0, 0, 0], [0, 0, 0]]}
-        lineWidth={4}
-        color="#E2D0B8"
-        transparent
-        opacity={0.9}
-      />
+      {/* Rope as TubeGeometry mesh */}
+      <mesh ref={ropeRef}>
+        <meshBasicMaterial color="#C46A4A" transparent opacity={0.8} />
+      </mesh>
     </group>
   );
 }
