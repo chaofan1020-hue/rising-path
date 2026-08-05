@@ -197,7 +197,9 @@ function Band({
   const vec = new THREE.Vector3(),
     ang = new THREE.Vector3(),
     rot = new THREE.Vector3(),
-    dir = new THREE.Vector3();
+    dir = new THREE.Vector3(),
+    quat = new THREE.Quaternion(),
+    jointPos = new THREE.Vector3();
   const segmentProps = { type: 'dynamic', canSleep: true, colliders: false, angularDamping: 4, linearDamping: 4 };
   const { nodes, materials } = useGLTF(cardGLB);
   const texture = useTexture(lanyardImage || lanyard);
@@ -283,7 +285,12 @@ function Band({
           delta * (minSpeed + clampedDistance * (maxSpeed - minSpeed))
         );
       });
-      curve.points[0].copy(j3.current.translation());
+      // Compute band end from card transform (exact joint position, immune to physics solver lag)
+      const cp = card.current.translation();
+      const cr = card.current.rotation();
+      quat.set(cr.x, cr.y, cr.z, cr.w);
+      jointPos.set(0, 1.5, 0).applyQuaternion(quat);
+      curve.points[0].set(cp.x + jointPos.x, cp.y + jointPos.y, cp.z + jointPos.z);
       curve.points[1].copy(j2.current.lerped);
       curve.points[2].copy(j1.current.lerped);
       curve.points[3].copy(fixed.current.translation());
