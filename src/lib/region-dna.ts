@@ -140,6 +140,61 @@ export const REGION_DNA: Record<RegionKey, RegionDNA> = {
   },
 };
 
+// ============ 招聘时间线（Hiring Seasons） ============
+// 用于判断当前是否在招聘窗口内，驱动驾驶舱阶段判断
+
+export interface HiringSeason {
+  fallStart: number;   // 秋招开始月份（8-12）
+  fallEnd: number;     // 秋招结束月份
+  springStart: number; // 春招开始月份（1-4）
+  springEnd: number;   // 春招结束月份
+}
+
+export const HIRING_SEASONS: Record<RegionKey, HiringSeason> = {
+  us:     { fallStart: 8,  fallEnd: 11, springStart: 1,  springEnd: 3  },
+  uk:     { fallStart: 9,  fallEnd: 12, springStart: 1,  springEnd: 4  },
+  sg:     { fallStart: 8,  fallEnd: 11, springStart: 1,  springEnd: 3  },
+  cn_t1:  { fallStart: 8,  fallEnd: 11, springStart: 2,  springEnd: 4  },
+  cn_t2:  { fallStart: 8,  fallEnd: 11, springStart: 2,  springEnd: 4  },
+};
+
+/**
+ * 判断当前是否在招聘窗口内（含窗口前 1 个月的准备期）
+ */
+export function isInHiringWindow(region: RegionKey, month: number): boolean {
+  const s = HIRING_SEASONS[region];
+  if (!s) return false;
+  const inFall = month >= s.fallStart && month <= s.fallEnd;
+  const inSpring = month >= s.springStart && month <= s.springEnd;
+  const nearFall = !inFall && !inSpring && month >= s.fallStart - 1 && month < s.fallStart;
+  const nearSpring = !inFall && !inSpring && month >= s.springStart - 1 && month < s.springStart;
+  return inFall || inSpring || nearFall || nearSpring;
+}
+
+/**
+ * 根据毕业年份 + 地区判断用户是否应进入投递期
+ *  gradYear - currentYear ≤ 0 → 今年/已毕业 → 黄金投递期
+ *  gradYear - currentYear = 1 → 明年毕业 → 看是否在招聘窗口
+ *  gradYear - currentYear ≥ 2 → 准备期
+ */
+export function shouldBeApplying(
+  gradYear: number | undefined,
+  region: RegionKey | null,
+  currentYear: number,
+  currentMonth: number,
+): boolean {
+  if (gradYear === undefined) return false;        // 无毕业年份 → 保守进准备期
+  const yearsUntilGrad = gradYear - currentYear;
+  if (yearsUntilGrad <= 0) return true;            // 今年/已毕业 → 投递期
+  if (yearsUntilGrad >= 2) return false;           // 还有 2+ 年 → 准备期
+  // 明年毕业 → 看招聘窗口
+  if (yearsUntilGrad === 1) {
+    if (!region) return false;                     // 无地区 → 保守准备期
+    return isInHiringWindow(region, currentMonth);
+  }
+  return false;
+}
+
 // 地区别名归并：未精调地区映射到最近的精调地区逻辑
 // hk → 国内一线逻辑与英联邦混合，就近归 cn_t1；ca → us；au → uk；eu → uk（英联邦体系）
 const REGION_ALIAS: Record<string, RegionKey> = {

@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { getSupabaseClient } from '@/storage/database/supabase-client';
-import { resolveRegionKey, type RegionKey, REGION_DNA } from '@/lib/region-dna';
+import { resolveRegionKey, type RegionKey, REGION_DNA, shouldBeApplying } from '@/lib/region-dna';
 
 type Timeframe = 'now' | 'week' | 'month';
 type CareerStage = 'junior' | 'senior' | 'experienced' | 'returning_intern';
@@ -65,6 +65,14 @@ function resolveRegion(resume: any): RegionKey | null {
   if (segRegions && segRegions.length > 0) return segRegions[0];
   const intentionRegion = resume?.profile?.targetRegion as RegionKey | undefined;
   if (intentionRegion) return resolveRegionKey(intentionRegion);
+  // 尝试从 intention.locations 中提取
+  const locations = resume?.profile?.intention?.locations as string[] | undefined;
+  if (locations && locations.length > 0) {
+    for (const loc of locations) {
+      const resolved = resolveRegionKey(loc);
+      if (resolved) return resolved;
+    }
+  }
   const inferredRegion = resume?.profile?.inferredRegion as RegionKey | undefined;
   if (inferredRegion) return resolveRegionKey(inferredRegion);
   return null;
@@ -280,6 +288,18 @@ export async function GET(request: NextRequest) {
     labelKey: REGION_LABEL_KEYS[key],
   }));
 
+  // 毕业年份（从简历画像提取）
+  const gradYear = (latestResume?.profile as any)?.education?.[0]?.endYear as number | undefined;
+  const nowDate = new Date();
+  const currentYear = nowDate.getFullYear();
+  const currentMonth = nowDate.getMonth() + 1;
+
+  // 招聘时机驱动：判断是否应进入投递期
+  // 有毕业年份 → 用招聘窗口判断；无毕业年份 → 回退到投递记录判断
+  const isApplyingSeason = gradYear !== undefined
+    ? shouldBeApplying(gradYear, selectedRegion, currentYear, currentMonth)
+    : applicationCount > 0;
+
   // 阶段判断
   let phase: string;
   let phaseTitleKey: string;
@@ -303,14 +323,17 @@ export async function GET(request: NextRequest) {
     phaseTitleKey = 'dashboard.phase.review.title';
     phaseDescriptionKey = 'dashboard.phase.review.description';
     phaseDescriptionParams = { hours: hoursSinceInterview };
-  } else if (applicationCount > 0) {
+  } else if (isApplyingSeason) {
     phase = 'applying';
     phaseTitleKey = 'dashboard.phase.applying.title';
-    phaseDescriptionKey = 'dashboard.phase.applying.description';
+    phaseDescriptionKey = (gradYear !== undefined && gradYear - currentYear <= 0)
+      ? 'dashboard.phase.applying.urgent'
+      : 'dashboard.phase.applying.description';
     phaseDescriptionParams = {
       count: applicationCount,
       weekly: weeklyApplications,
-      goal: resumeCount > 0 ? 10 : 0,
+      goal: 10,
+      region: selectedRegion ? REGION_LABEL_KEYS[selectedRegion] : '',
     };
   } else {
     phase = 'preparation';
