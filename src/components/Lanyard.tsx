@@ -7,7 +7,6 @@ import { BallCollider, CuboidCollider, Physics, RigidBody, useRopeJoint, useSphe
 import * as THREE from 'three';
 
 const MODEL_URL = 'https://assets.vercel.com/image/upload/contentful/image/e5382hct74si/5huRVDzcoDwnbgrKUo1Lzs/53b6dd7d6b4ffcdbd338fa60265949e1/tag.glb';
-const BAND_URL = 'https://assets.vercel.com/image/upload/contentful/image/e5382hct74si/SOT1hmCesOHxEYxL7vkoZ/c57b29c85912047c414311723320c16b/band.jpg';
 
 /** Generate a badge texture with the Rising Path logo on a white background */
 function createBadgeTexture(): THREE.CanvasTexture {
@@ -83,6 +82,7 @@ function Band({
   const rot = useRef(new THREE.Vector3());
   const dir = useRef(new THREE.Vector3());
   const dragOffset = useRef<THREE.Vector3 | null>(null);
+  const settledRef = useRef(false);
 
   // Load GLTF
   let nodes: any = {};
@@ -97,7 +97,7 @@ function Band({
 
   const { width, height } = useThree((state) => state.size);
 
-  // Rope joint chain
+  // Rope joint chain (rest length 1 each, total 3)
   useRopeJoint(fixed, j1, [[0, 0, 0], [0, 0, 0], 1]);
   useRopeJoint(j1, j2, [[0, 0, 0], [0, 0, 0], 1]);
   useRopeJoint(j2, j3, [[0, 0, 0], [0, 0, 0], 1]);
@@ -128,7 +128,7 @@ function Band({
         new THREE.Vector3(1.5, 0, 0),
       ];
       const curve = new THREE.CatmullRomCurve3(pts);
-      const geom = new THREE.TubeGeometry(curve, 20, 0.06, 8, false);
+      const geom = new THREE.TubeGeometry(curve, 20, 0.08, 8, false);
       if (ropeRef.current) {
         ropeRef.current.geometry = geom;
       }
@@ -181,13 +181,44 @@ function Band({
           ];
           const curve = new THREE.CatmullRomCurve3(pts);
           ropeRef.current.geometry.dispose();
-          ropeRef.current.geometry = new THREE.TubeGeometry(curve, 20, 0.06, 8, false);
+          ropeRef.current.geometry = new THREE.TubeGeometry(curve, 20, 0.08, 8, false);
         }
 
         // Apply angular damping to card
         a.copy(card.current.angvel());
         r.copy(card.current.rotation());
         card.current.setAngvel({ x: a.x, y: a.y - r.y * 0.25, z: a.z });
+
+        // Spring force to pull card toward screen center
+        if (card.current && !dragOffset.current) {
+          const pos = card.current.translation();
+          const vel = card.current.linvel();
+
+          // Target: center of screen in world space (y=0 for group at [0,2.5,0])
+          // The card hangs at the bottom of the rope, spring pulls it to center
+          const targetX = 0;
+          const targetY = 0.5; // center of screen
+          const targetZ = 0;
+
+          // Strong spring + damping for fast, smooth settling
+          const k = 15; // spring constant
+          const dmp = 5; // damping
+
+          const fx = k * (targetX - pos.x) - dmp * vel.x;
+          const fy = k * (targetY - pos.y) - dmp * vel.y;
+          const fz = k * (targetZ - pos.z) - dmp * vel.z;
+
+          card.current.addForce({ x: fx, y: fy, z: fz }, true);
+
+          // Check if settled
+          const dist = Math.sqrt(
+            (targetX - pos.x) ** 2 + (targetY - pos.y) ** 2 + (targetZ - pos.z) ** 2
+          );
+          const speed = Math.sqrt(vel.x ** 2 + vel.y ** 2 + vel.z ** 2);
+          if (dist < 0.05 && speed < 0.05) {
+            settledRef.current = true;
+          }
+        }
       }
     } catch (e) {
       onError?.(e as Error);
@@ -272,7 +303,7 @@ function Band({
 export default function Lanyard({
   position = [0, 0, 20],
   gravity = [0, -40, 0],
-  cameraPosition = [0, 0, 13] as [number, number, number],
+  cameraPosition = [0, 0.5, 13] as [number, number, number],
   cameraFov = 25,
   cardStartY = 0,
   onError,

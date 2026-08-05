@@ -5,8 +5,7 @@ import dynamic from 'next/dynamic';
 
 const Lanyard3D = dynamic(() => import('@/components/Lanyard'), { ssr: false });
 
-const MIN_DISPLAY_MS = 4000;
-const AUTO_CLOSE_MS = 8000; // auto-close after badge falls
+const MIN_DISPLAY_MS = 3000;
 
 export default function SubscriptionCelebration({
   open: externalOpen,
@@ -38,16 +37,10 @@ export default function SubscriptionCelebration({
       setVisible(true);
       setCanClose(false);
       setHasError(false);
-      // Enable close button after min display time
+      // Enable close button after min display time — no auto-close
       const enableTimer = setTimeout(() => setCanClose(true), MIN_DISPLAY_MS);
-      // Auto-close after badge finishes falling animation
-      const autoCloseTimer = setTimeout(() => {
-        setCanClose(true);
-        setOpen(false);
-      }, AUTO_CLOSE_MS);
       return () => {
         clearTimeout(enableTimer);
-        clearTimeout(autoCloseTimer);
       };
     } else {
       setVisible(false);
@@ -77,9 +70,9 @@ export default function SubscriptionCelebration({
         {!hasError && (
           <Lanyard3D
             position={[0, 2.5, 0]}
-            gravity={[0, -2, 0]}
-            cameraPosition={[0, 0.5, 10]}
-            cameraFov={35}
+            gravity={[0, -50, 0]}
+            cameraPosition={[0, 0.5, 13]}
+            cameraFov={25}
             cardStartY={0}
             onError={handleLanyardError}
           />
