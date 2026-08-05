@@ -58,6 +58,7 @@ interface DashboardData {
     href: string;
     priority: 'high' | 'medium' | 'low';
   }[];
+  nextAction: { titleKey: string; href: string };
   reminders: {
     type: string;
     titleKey: string;
@@ -238,8 +239,8 @@ export default function DashboardPage() {
                       variant="outline"
                       className="self-start md:self-auto rounded-full border-white/30 bg-white/10 text-white hover:bg-white hover:text-zinc-900 dark:border-zinc-900/30 dark:bg-zinc-900/10 dark:text-zinc-900 dark:hover:bg-zinc-900 dark:hover:text-white"
                     >
-                      <Link href={data.actions[0]?.href || '/resume'}>
-                        {t('dashboard.nextAction')}
+                      <Link href={data.nextAction?.href || data.actions[0]?.href || '/resume'}>
+                        {t(data.nextAction?.titleKey || 'dashboard.nextAction')}
                         <ArrowRight className="ml-2 h-4 w-4" />
                       </Link>
                     </Button>

@@ -350,6 +350,22 @@ export async function GET(request: NextRequest) {
     actions.push({ titleKey: 'dashboard.action.startApplying', href: '/jobs', priority: 'low' });
   }
 
+  // 阶段感知的"下一步"主按钮
+  const nextAction: { titleKey: string; href: string } = {
+    titleKey: 'dashboard.nextAction',
+    href: actions[0]?.href || '/resume',
+  };
+  if (phase === 'review') {
+    nextAction.titleKey = 'dashboard.nextAction.continueApplying';
+    nextAction.href = '/jobs';
+  } else if (phase === 'interview') {
+    nextAction.titleKey = 'dashboard.nextAction.mockInterview';
+    nextAction.href = '/mock-interview';
+  } else if (phase === 'positioning') {
+    nextAction.titleKey = 'dashboard.nextAction.uploadResume';
+    nextAction.href = '/resume';
+  }
+
   // 提醒
   const reminders: {
     type: string;
@@ -424,6 +440,7 @@ export async function GET(request: NextRequest) {
     regionOptions,
     latestResumeId,
     actions,
+    nextAction,
     reminders,
     story,
     plan,
