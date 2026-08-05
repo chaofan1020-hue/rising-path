@@ -232,7 +232,7 @@ export async function GET(request: NextRequest) {
   // 模拟面试
   const { data: interviews } = await supabase
     .from('interview_sessions')
-    .select('id, status, current_round, total_rounds, updated_at, created_at, target_company')
+    .select('id, status, current_round, total_rounds, updated_at, created_at, target_company, interview_type, overall_score, report_grade, report')
     .eq('access_code_id', accessCodeId)
     .order('created_at', { ascending: false })
     .limit(50);
@@ -421,6 +421,20 @@ export async function GET(request: NextRequest) {
     mindsetParams: { count: applicationCount },
   };
 
+  // 面试评估记录（仅 completed 且有分数的）
+  const interviewEvaluations = (interviews ?? [])
+    .filter((iv) => iv.status === 'completed' && (iv.overall_score != null || iv.report_grade != null))
+    .slice(0, 10)
+    .map((iv) => ({
+      id: iv.id,
+      targetCompany: iv.target_company ?? '',
+      interviewType: iv.interview_type ?? '',
+      overallScore: iv.overall_score,
+      reportGrade: iv.report_grade,
+      completedAt: iv.updated_at ?? iv.created_at,
+      report: iv.report,
+    }));
+
   // 求职规划
   const plan: DashboardPlan | null =
     latestResume && selectedRegion ? buildPlan(latestResume, selectedRegion) : null;
@@ -446,6 +460,7 @@ export async function GET(request: NextRequest) {
     reminders,
     story,
     plan,
+    interviewEvaluations,
     counts: {
       resumes: resumeCount,
       matches: aiMatches?.length ?? 0,

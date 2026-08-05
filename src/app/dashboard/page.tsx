@@ -94,6 +94,15 @@ interface DashboardData {
     };
     items: PlanItem[];
   } | null;
+  interviewEvaluations?: Array<{
+    id: number;
+    targetCompany: string;
+    interviewType: string;
+    overallScore: number | null;
+    reportGrade: string | null;
+    completedAt: string;
+    report: unknown;
+  }>;
 }
 
 export default function DashboardPage() {
@@ -451,6 +460,66 @@ export default function DashboardPage() {
                   ))}
                 </div>
               </section>
+
+              {/* 面试评估记录 */}
+              {data.interviewEvaluations && data.interviewEvaluations.length > 0 && (
+                <section>
+                  <h3 className="text-sm font-medium text-zinc-400 dark:text-zinc-500 tracking-widest uppercase mb-4">
+                    {t('dashboard.evaluationsTitle')}
+                  </h3>
+                  <div className="space-y-3">
+                    {data.interviewEvaluations.map((ev) => {
+                      const gradeColor =
+                        !ev.reportGrade || ev.reportGrade === 'D' || ev.reportGrade === 'D+'
+                          ? 'text-zinc-500'
+                          : ev.reportGrade === 'C-' || ev.reportGrade === 'C' || ev.reportGrade === 'C+'
+                          ? 'text-zinc-700 dark:text-zinc-300'
+                          : 'text-zinc-900 dark:text-zinc-100';
+                      return (
+                        <Card
+                          key={ev.id}
+                          className="rounded-2xl border-zinc-200 dark:border-zinc-800"
+                        >
+                          <CardContent className="p-4">
+                            <div className="flex items-center justify-between">
+                              <div className="flex items-center gap-3">
+                                <div className="w-7 h-7 rounded-lg bg-zinc-900 flex items-center justify-center flex-shrink-0">
+                                  <MessageSquare className="h-3.5 w-3.5 text-white" />
+                                </div>
+                                <div>
+                                  <p className="text-sm font-medium text-zinc-900 dark:text-zinc-100">
+                                    {ev.targetCompany || t('dashboard.unknownCompany')}
+                                  </p>
+                                  <p className="text-xs text-zinc-500">
+                                    {new Date(ev.completedAt).toLocaleDateString(
+                                      locale === 'zh-CN' ? 'zh-CN' : locale === 'zh-TW' ? 'zh-TW' : 'en-US',
+                                      { month: 'short', day: 'numeric' }
+                                    )}
+                                    {ev.interviewType ? ` · ${ev.interviewType}` : ''}
+                                  </p>
+                                </div>
+                              </div>
+                              <div className="text-right">
+                                {ev.overallScore != null && (
+                                  <p className="text-lg font-bold text-zinc-900 dark:text-zinc-100">
+                                    {ev.overallScore}
+                                  </p>
+                                )}
+                                {ev.reportGrade && (
+                                  <p className={`text-xs font-medium ${gradeColor}`}>
+                                    {ev.reportGrade}
+                                  </p>
+                                )}
+                              </div>
+                            </div>
+                          </CardContent>
+                        </Card>
+                      );
+                    })}
+                  </div>
+                </section>
+              )}
+
             </div>
 
             {/* 成长故事线 */}
