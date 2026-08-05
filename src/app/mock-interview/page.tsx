@@ -29,7 +29,7 @@ function OptionSelect({
   onChange,
   disabled,
 }: {
-  icon: React.ElementType;
+  icon: React.ComponentType<{ className?: string }>;
   label: string;
   placeholder: string;
   options: { value: string; text: string }[];

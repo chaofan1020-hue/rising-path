@@ -188,7 +188,7 @@ function MultiSelectFilter({
   t,
 }: {
   label: string;
-  icon: React.ElementType;
+  icon: React.ComponentType<{ className?: string }>;
   options: JobConfig[];
   selected: string[];
   onChange: (values: string[]) => void;
@@ -268,7 +268,7 @@ function SingleSelectFilter({
   t,
 }: {
   label: string;
-  icon: React.ElementType;
+  icon: React.ComponentType<{ className?: string }>;
   options: JobConfig[];
   selected: string;
   onChange: (value: string) => void;

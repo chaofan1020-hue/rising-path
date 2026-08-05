@@ -359,7 +359,7 @@ function ResponseStream({
     }
   }
 
-  const Container = as as keyof React.JSX.IntrinsicElements
+  const Container = as as unknown as React.ComponentType<{ className?: string; children: React.ReactNode }>
   return <Container className={className}>{renderContent()}</Container>
 }
 
