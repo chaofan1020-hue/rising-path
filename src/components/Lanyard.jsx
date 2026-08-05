@@ -260,7 +260,7 @@ function Band({
   useRopeJoint(j2, j3, [[0, 0, 0], [0, 0, 0], 1]);
   useSphericalJoint(j3, card, [
     [0, 0, 0],
-    [0, 1.5, 0]
+    [0, 1.3425, 0]
   ]);
   useEffect(() => {
     if (hovered) {
@@ -289,7 +289,7 @@ function Band({
       const cp = card.current.translation();
       const cr = card.current.rotation();
       quat.set(cr.x, cr.y, cr.z, cr.w);
-      jointPos.set(0, 1.5, 0).applyQuaternion(quat);
+      jointPos.set(0, 1.3425, 0).applyQuaternion(quat);
       curve.points[0].set(cp.x + jointPos.x, cp.y + jointPos.y, cp.z + jointPos.z);
       curve.points[1].copy(j2.current.lerped);
       curve.points[2].copy(j1.current.lerped);
@@ -336,14 +336,6 @@ function Band({
                 roughness={0.35}
                 metalness={0.0}
                 envMapIntensity={1.2}
-              />
-            </mesh>
-            <mesh geometry={nodes.clamp.geometry}>
-              <meshStandardMaterial
-                color={0x0a0a0a}
-                metalness={0.7}
-                roughness={0.28}
-                envMapIntensity={0.5}
               />
             </mesh>
           </group>
