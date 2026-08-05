@@ -12,7 +12,7 @@ extend({ MeshLineGeometry, MeshLineMaterial });
 const MODEL_URL = 'https://assets.vercel.com/image/upload/contentful/image/e5382hct74si/5huRVDzcoDwnbgrKUo1Lzs/53b6dd7d6b4ffcdbd338fa60265949e1/tag.glb';
 const BAND_URL = 'https://assets.vercel.com/image/upload/contentful/image/e5382hct74si/SOT1hmCesOHxEYxL7vkoZ/c57b29c85912047c414311723320c16b/band.jpg';
 
-function Band({ position = [0, 0, 20] as [number, number, number], gravity = [0, -40, 0] as [number, number, number] }) {
+function Band({ position = [0, 0, 20] as [number, number, number], gravity = [0, -40, 0] as [number, number, number], cardStartY = 0 }) {
   const band = useRef<any>(null);
   const fixed = useRef<any>(null);
   const j1 = useRef<any>(null);
@@ -127,7 +127,7 @@ function Band({ position = [0, 0, 20] as [number, number, number], gravity = [0,
       <RigidBody
         ref={card}
         {...(segmentProps as any)}
-        position={[2, 0, 0]}
+        position={[2, cardStartY, 0]}
         type={isDragged ? 'kinematicPosition' : 'dynamic'}
       >
         <CuboidCollider args={[0.8, 1.125, 0.01]} />
@@ -180,6 +180,7 @@ export default function Lanyard({
   gravity = [0, -40, 0],
   cameraPosition = [0, 0, 13] as [number, number, number],
   cameraFov = 25,
+  cardStartY = 0,
   frontImage,
   backImage,
   imageFit = 'cover',
@@ -190,6 +191,7 @@ export default function Lanyard({
   gravity?: [number, number, number];
   cameraPosition?: [number, number, number];
   cameraFov?: number;
+  cardStartY?: number;
   frontImage?: string;
   backImage?: string;
   imageFit?: string;
@@ -200,7 +202,7 @@ export default function Lanyard({
     <Canvas camera={{ position: cameraPosition, fov: cameraFov }} style={{ width: '100%', height: '100%' }}>
       <ambientLight intensity={Math.PI} />
       <Physics interpolate gravity={gravity} timeStep={1 / 60}>
-        <Band position={position} gravity={gravity} />
+        <Band position={position} gravity={gravity} cardStartY={cardStartY} />
       </Physics>
       <Environment background blur={0.75}>
         <color attach="background" args={['black']} />

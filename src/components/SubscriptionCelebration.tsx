@@ -46,10 +46,11 @@ export default function SubscriptionCelebration({
       {/* 3D Lanyard - 全屏，工牌从顶部掉落 */}
       <div className="absolute inset-0">
         <Lanyard3D
-          position={[0, 7, 16]}
-          gravity={[0, -40, 0]}
-          cameraPosition={[0, 0, 5]}
-          cameraFov={35}
+          position={[0, 7, 0]}
+          gravity={[0, -10, 0]}
+          cameraPosition={[0, 0, 15]}
+          cameraFov={45}
+          cardStartY={0}
         />
       </div>
 
