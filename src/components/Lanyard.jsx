@@ -72,7 +72,7 @@ export default function Lanyard({
   backImage = null,
   imageFit = 'cover',
   lanyardImage = null,
-  lanyardWidth = 3
+  lanyardWidth = 1
 }) {
   const [isMobile, setIsMobile] = useState(() => typeof window !== 'undefined' && window.innerWidth < 768);
   const [webglOk, setWebglOk] = useState(true);
@@ -197,9 +197,7 @@ function Band({
   const vec = new THREE.Vector3(),
     ang = new THREE.Vector3(),
     rot = new THREE.Vector3(),
-    dir = new THREE.Vector3(),
-    quat = new THREE.Quaternion(),
-    localPt = new THREE.Vector3();
+    dir = new THREE.Vector3();
   const segmentProps = { type: 'dynamic', canSleep: true, colliders: false, angularDamping: 4, linearDamping: 4 };
   const { nodes, materials } = useGLTF(cardGLB);
   const texture = useTexture(lanyardImage || lanyard);
@@ -251,7 +249,7 @@ function Band({
   }, [frontImage, backImage, imageFit, frontTex, backTex, materials.base.map]);
   const [curve] = useState(
     () =>
-      new THREE.CatmullRomCurve3([new THREE.Vector3(), new THREE.Vector3(), new THREE.Vector3(), new THREE.Vector3(), new THREE.Vector3()])
+      new THREE.CatmullRomCurve3([new THREE.Vector3(), new THREE.Vector3(), new THREE.Vector3(), new THREE.Vector3()])
   );
   const [dragged, drag] = useState(false);
   const [hovered, hover] = useState(false);
@@ -285,16 +283,10 @@ function Band({
           delta * (minSpeed + clampedDistance * (maxSpeed - minSpeed))
         );
       });
-      // Curve starts at card top (rotation-aware) so band follows card swing
-      const cardTrans = card.current.translation();
-      const cardRot = card.current.rotation();
-      quat.set(cardRot.x, cardRot.y, cardRot.z, cardRot.w);
-      localPt.set(0, 1.32, 0).applyQuaternion(quat);
-      curve.points[0].set(cardTrans.x + localPt.x, cardTrans.y + localPt.y, cardTrans.z + localPt.z);
-      curve.points[1].copy(j3.current.translation());
-      curve.points[2].copy(j2.current.lerped);
-      curve.points[3].copy(j1.current.lerped);
-      curve.points[4].copy(fixed.current.translation());
+      curve.points[0].copy(j3.current.translation());
+      curve.points[1].copy(j2.current.lerped);
+      curve.points[2].copy(j1.current.lerped);
+      curve.points[3].copy(fixed.current.translation());
       band.current.geometry.setPoints(curve.getPoints(isMobile ? 16 : 32));
       ang.copy(card.current.angvel());
       rot.copy(card.current.rotation());
