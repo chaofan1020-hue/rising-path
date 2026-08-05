@@ -9,6 +9,9 @@ import * as THREE from 'three';
 const MODEL_URL = 'https://assets.vercel.com/image/upload/contentful/image/e5382hct74si/5huRVDzcoDwnbgrKUo1Lzs/53b6dd7d6b4ffcdbd338fa60265949e1/tag.glb';
 const BAND_URL = 'https://assets.vercel.com/image/upload/contentful/image/e5382hct74si/SOT1hmCesOHxEYxL7vkoZ/c57b29c85912047c414311723320c16b/band.jpg';
 
+const RIBBON_SEGMENTS = 20;
+const RIBBON_WIDTH = 0.12;
+
 function Band({ position = [0, 0, 20] as [number, number, number], gravity = [0, -40, 0] as [number, number, number], cardStartY = 0 }) {
   const fixed = useRef<any>(null);
   const j1 = useRef<any>(null);
@@ -40,12 +43,53 @@ function Band({ position = [0, 0, 20] as [number, number, number], gravity = [0,
 
   // Rope mesh ref
   const ropeRef = useRef<THREE.Mesh>(null);
+  // Ribbon geometry ref for reuse
+  const ribbonGeomRef = useRef<THREE.BufferGeometry | null>(null);
 
   const bandTexture = useMemo(() => {
     const t = rawBandTexture.clone();
     t.wrapS = t.wrapT = THREE.RepeatWrapping;
+    t.repeat.set(1, 1);
     return t;
   }, [rawBandTexture]);
+
+  // Initialize ribbon geometry once
+  useEffect(() => {
+    const vertexCount = (RIBBON_SEGMENTS + 1) * 2;
+    const positions = new Float32Array(vertexCount * 3);
+    const uvs = new Float32Array(vertexCount * 2);
+    const indices: number[] = [];
+
+    for (let i = 0; i <= RIBBON_SEGMENTS; i++) {
+      const t = i / RIBBON_SEGMENTS;
+      // Left vertex
+      uvs[i * 4] = 0;
+      uvs[i * 4 + 1] = t;
+      // Right vertex
+      uvs[i * 4 + 2] = 1;
+      uvs[i * 4 + 3] = t;
+
+      if (i < RIBBON_SEGMENTS) {
+        const a = i * 2;
+        const b = i * 2 + 1;
+        const c = (i + 1) * 2;
+        const d = (i + 1) * 2 + 1;
+        indices.push(a, c, b);
+        indices.push(b, c, d);
+      }
+    }
+
+    const geom = new THREE.BufferGeometry();
+    geom.setAttribute('position', new THREE.BufferAttribute(positions, 3));
+    geom.setAttribute('uv', new THREE.BufferAttribute(uvs, 2));
+    geom.setIndex(indices);
+    geom.computeVertexNormals();
+
+    ribbonGeomRef.current = geom;
+    if (ropeRef.current) {
+      ropeRef.current.geometry = geom;
+    }
+  }, []);
 
   useEffect(() => {
     curveRef.current.curveType = 'chordal';
@@ -90,10 +134,37 @@ function Band({ position = [0, 0, 20] as [number, number, number], gravity = [0,
       curve.points[2].copy(j1.current.lerped);
       curve.points[3].copy(fixed.current.translation());
 
-      // Update rope mesh geometry with new TubeGeometry from curve
-      if (ropeRef.current) {
-        ropeRef.current.geometry.dispose();
-        ropeRef.current.geometry = new THREE.TubeGeometry(curve, 20, 0.04, 6, false);
+      // Update ribbon geometry: flat strap (like a real lanyard)
+      const geom = ribbonGeomRef.current;
+      if (geom) {
+        const points = curve.getPoints(RIBBON_SEGMENTS);
+        const posAttr = geom.attributes.position as THREE.BufferAttribute;
+        const posArray = posAttr.array as Float32Array;
+        const tmp = new THREE.Vector3();
+
+        for (let i = 0; i <= RIBBON_SEGMENTS; i++) {
+          const p = points[i];
+          // Compute tangent direction
+          if (i < RIBBON_SEGMENTS) {
+            tmp.copy(points[i + 1]).sub(points[i]).normalize();
+          } else {
+            tmp.copy(points[i]).sub(points[i - 1]).normalize();
+          }
+          // Normal perpendicular to tangent (in XY plane, with slight Z for 3D follow)
+          const n = new THREE.Vector3(-tmp.y, tmp.x, 0).normalize();
+
+          const idx = i * 6;
+          // Left side
+          posArray[idx] = p.x + n.x * RIBBON_WIDTH;
+          posArray[idx + 1] = p.y + n.y * RIBBON_WIDTH;
+          posArray[idx + 2] = p.z + n.z * RIBBON_WIDTH;
+          // Right side
+          posArray[idx + 3] = p.x - n.x * RIBBON_WIDTH;
+          posArray[idx + 4] = p.y - n.y * RIBBON_WIDTH;
+          posArray[idx + 5] = p.z - n.z * RIBBON_WIDTH;
+        }
+        posAttr.needsUpdate = true;
+        geom.computeVertexNormals();
       }
 
       a.copy(card.current.angvel());
@@ -162,9 +233,9 @@ function Band({ position = [0, 0, 20] as [number, number, number], gravity = [0,
           </mesh>
         </group>
       </RigidBody>
-      {/* Rope as TubeGeometry mesh */}
+      {/* Flat ribbon lanyard strap with band texture */}
       <mesh ref={ropeRef}>
-        <meshBasicMaterial color="#C46A4A" transparent opacity={0.8} />
+        <meshBasicMaterial map={bandTexture} transparent side={THREE.DoubleSide} />
       </mesh>
     </group>
   );
