@@ -6,6 +6,7 @@ import { Header1 } from '@/components/header1';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent } from '@/components/ui/card';
 import { Skeleton } from '@/components/ui/skeleton';
+import { Accordion, AccordionItem, AccordionTrigger, AccordionContent } from '@/components/ui/accordion';
 import {
   Select,
   SelectContent,
@@ -101,7 +102,7 @@ interface DashboardData {
     overallScore: number | null;
     reportGrade: string | null;
     completedAt: string;
-    report: unknown;
+    report: { radar?: Array<{ dimension: string; score: number; grade: string; diagnosis: string }> } | null;
   }>;
 }
 
@@ -461,13 +462,13 @@ export default function DashboardPage() {
                 </div>
               </section>
 
-              {/* 面试评估记录 */}
+              {/* 面试评估记录 — 下拉栏 */}
               {data.interviewEvaluations && data.interviewEvaluations.length > 0 && (
                 <section>
                   <h3 className="text-sm font-medium text-zinc-400 dark:text-zinc-500 tracking-widest uppercase mb-4">
                     {t('dashboard.evaluationsTitle')}
                   </h3>
-                  <div className="space-y-3">
+                  <Accordion type="single" collapsible className="rounded-2xl border border-zinc-200 dark:border-zinc-800 overflow-hidden">
                     {data.interviewEvaluations.map((ev) => {
                       const gradeColor =
                         !ev.reportGrade || ev.reportGrade === 'D' || ev.reportGrade === 'D+'
@@ -475,18 +476,16 @@ export default function DashboardPage() {
                           : ev.reportGrade === 'C-' || ev.reportGrade === 'C' || ev.reportGrade === 'C+'
                           ? 'text-zinc-700 dark:text-zinc-300'
                           : 'text-zinc-900 dark:text-zinc-100';
+                      const radar = ev.report?.radar ?? [];
                       return (
-                        <Card
-                          key={ev.id}
-                          className="rounded-2xl border-zinc-200 dark:border-zinc-800"
-                        >
-                          <CardContent className="p-4">
-                            <div className="flex items-center justify-between">
+                        <AccordionItem key={ev.id} value={`ev-${ev.id}`} className="px-4 border-zinc-200 dark:border-zinc-800 last:border-0">
+                          <AccordionTrigger className="hover:no-underline [&[data-state=open]>svg]:text-zinc-900 dark:[&[data-state=open]>svg]:text-zinc-100">
+                            <div className="flex items-center justify-between w-full pr-2">
                               <div className="flex items-center gap-3">
                                 <div className="w-7 h-7 rounded-lg bg-zinc-900 flex items-center justify-center flex-shrink-0">
                                   <MessageSquare className="h-3.5 w-3.5 text-white" />
                                 </div>
-                                <div>
+                                <div className="text-left">
                                   <p className="text-sm font-medium text-zinc-900 dark:text-zinc-100">
                                     {ev.targetCompany || t('dashboard.unknownCompany')}
                                   </p>
@@ -512,11 +511,28 @@ export default function DashboardPage() {
                                 )}
                               </div>
                             </div>
-                          </CardContent>
-                        </Card>
+                          </AccordionTrigger>
+                          <AccordionContent>
+                            <div className="space-y-3 pt-2 pb-1">
+                              {radar.length > 0 ? radar.map((dim, i) => (
+                                <div key={i} className="bg-zinc-50 dark:bg-zinc-900/50 rounded-xl p-3">
+                                  <div className="flex items-center justify-between mb-1">
+                                    <span className="text-xs font-medium text-zinc-700 dark:text-zinc-300">{dim.dimension}</span>
+                                    <span className="text-xs font-semibold text-zinc-900 dark:text-zinc-100">{dim.score}{dim.grade ? ` · ${dim.grade}` : ''}</span>
+                                  </div>
+                                  {dim.diagnosis && (
+                                    <p className="text-xs text-zinc-500 leading-relaxed">{dim.diagnosis}</p>
+                                  )}
+                                </div>
+                              )) : (
+                                <p className="text-xs text-zinc-400 text-center py-2">{t('dashboard.noEvaluationDetail')}</p>
+                              )}
+                            </div>
+                          </AccordionContent>
+                        </AccordionItem>
                       );
                     })}
-                  </div>
+                  </Accordion>
                 </section>
               )}
 
