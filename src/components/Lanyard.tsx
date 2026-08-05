@@ -3,7 +3,7 @@
 import { useState, useRef, useCallback, useMemo, useEffect } from 'react';
 import * as THREE from 'three';
 import { useFrame } from '@react-three/fiber';
-import { useGLTF, useTexture } from '@react-three/drei';
+import { useTexture } from '@react-three/drei';
 import {
   CubeCamera,
   Environment,
@@ -21,20 +21,6 @@ import {
   BallCollider,
   CapsuleCollider,
 } from '@react-three/rapier';
-
-import type { GLTF } from 'three-stdlib';
-
-type GLTFResult = GLTF & {
-  nodes: {
-    card: THREE.Mesh;
-    clip: THREE.Mesh;
-    clamp: THREE.Mesh;
-  };
-  materials: {
-    base: THREE.MeshStandardMaterial;
-    metal: THREE.MeshStandardMaterial;
-  };
-};
 
 const ROPE_SEGMENTS = 3;
 const ROPE_RADIUS = 0.08;
@@ -154,7 +140,6 @@ export default function Lanyard({
   cardStartY?: number;
   onError?: (err: Error) => void;
 }) {
-  const { nodes, materials } = useGLTF('/tag.glb') as unknown as GLTFResult;
   const bandTexture = useTexture('https://assets.vercel.com/image/upload/contentful/image/e5382hct74si/SOT1hmCesOHxEYxL7vkoZ/c57b29c85912047c414311723320c16b/band.jpg');
 
   // Card texture: white with logo
@@ -383,14 +368,21 @@ export default function Lanyard({
           onPointerEnter={handlePointerEnter}
           onPointerLeave={handlePointerLeave}
         >
-          {/* Card body */}
-          <mesh geometry={nodes.card.geometry}>
+          {/* Card body - white ID card */}
+          <mesh>
+            <boxGeometry args={[2.0, 1.4, 0.08]} />
             <meshStandardMaterial map={cardTexture} />
           </mesh>
 
           {/* Metal clip at top */}
-          <mesh geometry={nodes.clip.geometry} material={materials.metal} />
-          <mesh geometry={nodes.clamp.geometry} material={materials.metal} />
+          <mesh position={[0, 0.75, 0]}>
+            <boxGeometry args={[0.5, 0.12, 0.08]} />
+            <meshStandardMaterial color="#999999" metalness={0.8} roughness={0.3} />
+          </mesh>
+          <mesh position={[0, 0.82, 0]}>
+            <boxGeometry args={[0.3, 0.08, 0.08]} />
+            <meshStandardMaterial color="#999999" metalness={0.8} roughness={0.3} />
+          </mesh>
         </group>
       </RigidBody>
     </group>
