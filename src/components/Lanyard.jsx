@@ -40,9 +40,9 @@ function detectWebGL() {
 }
 
 export default function Lanyard({
-  position = [0, 0, 20],
+  position = [0, 2, 20],
   gravity = [0, -40, 0],
-  fov = 22,
+  fov = 24,
   transparent = true,
   frontImage = null,
   backImage = null,
@@ -252,7 +252,7 @@ function Band({
   texture.wrapS = texture.wrapT = THREE.RepeatWrapping;
   return (
     <>
-      <group position={[0, 5, 0]}>
+      <group position={[0, 4.5, 0]}>
         <RigidBody ref={fixed} {...segmentProps} type="fixed" />
         <RigidBody position={[0.5, 0, 0]} ref={j1} {...segmentProps}>
           <BallCollider args={[0.1]} />
