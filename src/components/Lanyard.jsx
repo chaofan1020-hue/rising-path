@@ -1,11 +1,24 @@
 /* eslint-disable react/no-unknown-property, react-hooks/immutability */
 'use client';
-// Suppress known harmless library-internal warnings (@react-three/rapier uses deprecated THREE.Clock)
+// Fix R3F v9.7.0 + React 19: Next.js dev tools inject data-inspector-* attributes
+// which R3F tries to set as nested props (data.inspector-column) on THREE objects.
+// Ensure every THREE object has a `data` object so the assignment succeeds silently.
+import * as THREE from 'three';
 if (typeof window !== 'undefined') {
+  const protos = [THREE.Object3D.prototype, THREE.Material.prototype, THREE.BufferGeometry.prototype];
+  for (const proto of protos) {
+    if (!Object.prototype.hasOwnProperty.call(proto, 'data')) {
+      Object.defineProperty(proto, 'data', {
+        get() { if (!this._data) this._data = {}; return this._data; },
+        configurable: true,
+      });
+    }
+  }
+  // Suppress known harmless library-internal warnings
   const origWarn = console.warn.bind(console);
   console.warn = (...args) => {
     const msg = typeof args[0] === 'string' ? args[0] : '';
-    if (msg.includes('THREE.Clock') || msg.includes('deprecated parameters')) return;
+    if (msg.includes('THREE.Clock') || msg.includes('deprecated parameters') || msg.includes('data-inspector')) return;
     origWarn(...args);
   };
 }
@@ -17,7 +30,6 @@ import { MeshLineGeometry, MeshLineMaterial } from 'meshline';
 // replace with your own imports, see the usage snippet for details
 const cardGLB = '/card.glb';
 const lanyard = '/lanyard.png';
-import * as THREE from 'three';
 import './Lanyard.css';
 extend({ MeshLineGeometry, MeshLineMaterial });
 // 1x1 transparent pixel — lets useTexture be called unconditionally when a
