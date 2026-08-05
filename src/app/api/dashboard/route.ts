@@ -293,15 +293,6 @@ export async function GET(request: NextRequest) {
     phaseDescriptionParams = { count: 3 };
   } else if (
     latestInterview &&
-    ['active', 'ongoing'].includes(latestInterview.status) &&
-    now - new Date(latestInterview.updated_at).getTime() < 7 * 86400000
-  ) {
-    phase = 'interview';
-    phaseTitleKey = 'dashboard.phase.interview.title';
-    phaseDescriptionKey = 'dashboard.phase.interview.description';
-    phaseDescriptionParams = { company: latestInterview.target_company || '目标公司' };
-  } else if (
-    latestInterview &&
     ['completed', 'ended', 'finished'].includes(latestInterview.status) &&
     now - new Date(latestInterview.updated_at).getTime() < 7 * 86400000
   ) {
@@ -312,7 +303,7 @@ export async function GET(request: NextRequest) {
     phaseTitleKey = 'dashboard.phase.review.title';
     phaseDescriptionKey = 'dashboard.phase.review.description';
     phaseDescriptionParams = { hours: hoursSinceInterview };
-  } else if (applicationCount >= 3 && interviewApplications === 0) {
+  } else if (applicationCount > 0) {
     phase = 'applying';
     phaseTitleKey = 'dashboard.phase.applying.title';
     phaseDescriptionKey = 'dashboard.phase.applying.description';
@@ -355,15 +346,18 @@ export async function GET(request: NextRequest) {
     titleKey: 'dashboard.nextAction',
     href: actions[0]?.href || '/resume',
   };
-  if (phase === 'review') {
-    nextAction.titleKey = 'dashboard.nextAction.continueApplying';
-    nextAction.href = '/jobs';
-  } else if (phase === 'interview') {
-    nextAction.titleKey = 'dashboard.nextAction.mockInterview';
-    nextAction.href = '/mock-interview';
-  } else if (phase === 'positioning') {
+  if (phase === 'positioning') {
     nextAction.titleKey = 'dashboard.nextAction.uploadResume';
     nextAction.href = '/resume';
+  } else if (phase === 'preparation') {
+    nextAction.titleKey = 'dashboard.nextAction.startSearch';
+    nextAction.href = '/jobs';
+  } else if (phase === 'applying') {
+    nextAction.titleKey = 'dashboard.nextAction.continueApplying';
+    nextAction.href = '/jobs';
+  } else if (phase === 'review') {
+    nextAction.titleKey = 'dashboard.nextAction.continueApplying';
+    nextAction.href = '/jobs';
   }
 
   // 提醒
