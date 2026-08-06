@@ -124,8 +124,8 @@ export default function Lanyard({
           });
         }}
       >
-        <ambientLight intensity={Math.PI * 0.6} />
-        <directionalLight position={[5, 8, 10]} intensity={1.2} />
+        <ambientLight intensity={Math.PI * 0.4} />
+        <directionalLight position={[5, 8, 10]} intensity={0.8} />
         <Physics gravity={gravity} timeStep={isMobile ? 1 / 30 : 1 / 60}>
           <Band
             isMobile={isMobile}
@@ -355,6 +355,7 @@ function Band({
                 clearcoatRoughness={0.2}
                 roughness={0.9}
                 metalness={0}
+                envMapIntensity={0.2}
                 map-anisotropy={16}
               />
             </mesh>
