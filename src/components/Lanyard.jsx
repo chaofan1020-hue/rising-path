@@ -255,12 +255,25 @@ function Band({
   );
   const [dragged, drag] = useState(false);
   const [hovered, hover] = useState(false);
+  // J-hook geometry: thin tube from inside card through top, curving at bottom
+  const hookGeometry = useMemo(() => {
+    const hookCurve = new THREE.CatmullRomCurve3([
+      new THREE.Vector3(0.014, 1.04, 0.02),   // J-tip (curved to side, inside card)
+      new THREE.Vector3(0.008, 1.07, 0.02),   // curving back
+      new THREE.Vector3(0.002, 1.10, 0.02),   // almost straight
+      new THREE.Vector3(0, 1.13, 0.02),       // card top
+      new THREE.Vector3(0, 1.16, 0.02),       // above card
+      new THREE.Vector3(0, 1.19, 0.02),       // approaching joint
+      new THREE.Vector3(0, 1.22, 0.02),       // top (joint level)
+    ]);
+    return new THREE.TubeGeometry(hookCurve, 20, 0.008, 8, false);
+  }, []);
   useRopeJoint(fixed, j1, [[0, 0, 0], [0, 0, 0], 1]);
   useRopeJoint(j1, j2, [[0, 0, 0], [0, 0, 0], 1]);
   useRopeJoint(j2, j3, [[0, 0, 0], [0, 0, 0], 1]);
   useSphericalJoint(j3, card, [
     [0, 0, 0],
-    [0, 1.3425, 0]
+    [0, 1.5, 0]
   ]);
   useEffect(() => {
     if (hovered) {
@@ -289,7 +302,7 @@ function Band({
       const cp = card.current.translation();
       const cr = card.current.rotation();
       quat.set(cr.x, cr.y, cr.z, cr.w);
-      jointPos.set(0, 1.3425, 0).applyQuaternion(quat);
+      jointPos.set(0, 1.5, 0).applyQuaternion(quat);
       curve.points[0].set(cp.x + jointPos.x, cp.y + jointPos.y, cp.z + jointPos.z);
       curve.points[1].copy(j2.current.lerped);
       curve.points[2].copy(j1.current.lerped);
@@ -336,6 +349,14 @@ function Band({
                 roughness={0.35}
                 metalness={0.0}
                 envMapIntensity={1.2}
+              />
+            </mesh>
+            <mesh geometry={hookGeometry}>
+              <meshStandardMaterial
+                color={0x0a0a0a}
+                metalness={0.75}
+                roughness={0.25}
+                envMapIntensity={0.6}
               />
             </mesh>
           </group>
