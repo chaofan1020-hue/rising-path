@@ -232,11 +232,11 @@ function Band({
     const baseImg = baseMap.image;
     const W = baseImg.width;
     const H = baseImg.height;
-    // Upscale the atlas so close-up renders stay crisp (source art is high-res).
-    const k = Math.max(1, 2048 / Math.max(W, H));
+    // Composite at native atlas resolution — front art is supplied at the exact
+    // UV-region pixel size (836×1259), so it draws 1:1 with zero resampling.
     const canvas = document.createElement('canvas');
-    canvas.width = Math.round(W * k);
-    canvas.height = Math.round(H * k);
+    canvas.width = W;
+    canvas.height = H;
     const CW = canvas.width;
     const CH = canvas.height;
     const ctx = canvas.getContext('2d');
@@ -358,19 +358,11 @@ function Band({
             )}
           >
             <mesh geometry={nodes.card.geometry}>
-              {/* Laminated print look: tight light budget (scene lights kept low so
-                  total irradiance ≈ 1) — colors stay true while tilt/sheen read real. */}
-              <meshPhysicalMaterial
-                map={cardMap}
-                metalness={0}
-                roughness={0.5}
-                clearcoat={isMobile ? 0 : 0.2}
-                clearcoatRoughness={0.25}
-                envMapIntensity={0.12}
-                specularIntensity={0.5}
-                toneMapped={false}
-                map-anisotropy={16}
-              />
+              {/* Unlit print: a flat card face gains nothing from PBR diffuse (uniform
+                  across a plane) while its specular/clearcoat layers read as an uneven
+                  white film under the big bright Lightformers. Exact design colors,
+                  perfectly even — realism comes from clip metal, card edges, motion. */}
+              <meshBasicMaterial map={cardMap} toneMapped={false} />
             </mesh>
             <mesh geometry={nodes.clip.geometry}>
               <meshStandardMaterial color={0x0a0a0a} metalness={0.7} roughness={0.28} envMapIntensity={0.5} />
