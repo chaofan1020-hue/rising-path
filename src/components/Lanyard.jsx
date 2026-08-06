@@ -232,18 +232,22 @@ function Band({
     const baseImg = baseMap.image;
     const W = baseImg.width;
     const H = baseImg.height;
+    // Upscale the atlas so close-up renders stay crisp (source art is high-res).
+    const k = Math.max(1, 2048 / Math.max(W, H));
     const canvas = document.createElement('canvas');
-    canvas.width = W;
-    canvas.height = H;
+    canvas.width = Math.round(W * k);
+    canvas.height = Math.round(H * k);
+    const CW = canvas.width;
+    const CH = canvas.height;
     const ctx = canvas.getContext('2d');
     if (!ctx) return baseMap;
     // Keep the original baked atlas for the card edges and any untouched face.
-    ctx.drawImage(baseImg, 0, 0, W, H);
+    ctx.drawImage(baseImg, 0, 0, CW, CH);
     const drawFitted = (img, rect) => {
-      const rx = rect.x * W;
-      const ry = rect.y * H;
-      const rw = rect.w * W;
-      const rh = rect.h * H;
+      const rx = rect.x * CW;
+      const ry = rect.y * CH;
+      const rw = rect.w * CW;
+      const rh = rect.h * CH;
       const pick = imageFit === 'contain' ? Math.min : Math.max;
       const scale = pick(rw / img.width, rh / img.height);
       const dw = img.width * scale;
@@ -359,11 +363,12 @@ function Band({
               <meshPhysicalMaterial
                 map={cardMap}
                 metalness={0}
-                roughness={0.55}
-                clearcoat={isMobile ? 0 : 0.15}
-                clearcoatRoughness={0.3}
+                roughness={0.5}
+                clearcoat={isMobile ? 0 : 0.2}
+                clearcoatRoughness={0.25}
                 envMapIntensity={0.12}
                 specularIntensity={0.5}
+                toneMapped={false}
                 map-anisotropy={16}
               />
             </mesh>
