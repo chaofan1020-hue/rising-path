@@ -4,6 +4,7 @@ import { useEffect, useState } from 'react';
 import { useRouter } from 'next/navigation';
 import { getSupabaseBrowserClient } from '@/lib/supabase-browser';
 import LoginSignup, { type RegisterData } from '@/components/ui/login-signup';
+import SubscriptionCelebration from '@/components/SubscriptionCelebration';
 
 type AuthMode = 'login' | 'signup' | 'otp' | 'reset' | 'password';
 
@@ -13,6 +14,7 @@ export default function LoginPage() {
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [message, setMessage] = useState<string | null>(null);
+  const [registered, setRegistered] = useState(false);
 
   useEffect(() => {
     let mounted = true;
@@ -65,7 +67,7 @@ export default function LoginPage() {
         },
       });
       if (signUpError) throw signUpError;
-      router.replace('/home');
+      setRegistered(true);
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Sign up failed');
     } finally {
@@ -155,22 +157,31 @@ export default function LoginPage() {
   };
 
   return (
-    <LoginSignup
-      mode={mode}
-      onToggleMode={(next) => {
-        setMode(next as AuthMode);
-        setError(null);
-        setMessage(null);
-      }}
-      onLogin={handleLogin}
-      onRegister={handleRegister}
-      onSendCode={handleSendOtp}
-      onVerifyCode={handleVerifyOtp}
-      onResetPassword={handleResetPassword}
-      onGoogleSignIn={handleGoogleSignIn}
-      loading={loading}
-      error={error}
-      message={message}
-    />
+    <>
+      <LoginSignup
+        mode={mode}
+        onToggleMode={(next) => {
+          setMode(next as AuthMode);
+          setError(null);
+          setMessage(null);
+        }}
+        onLogin={handleLogin}
+        onRegister={handleRegister}
+        onSendCode={handleSendOtp}
+        onVerifyCode={handleVerifyOtp}
+        onResetPassword={handleResetPassword}
+        onGoogleSignIn={handleGoogleSignIn}
+        loading={loading}
+        error={error}
+        message={message}
+      />
+      {registered && (
+        <SubscriptionCelebration
+          open={registered}
+          autoShow={false}
+          onClose={() => router.replace('/home')}
+        />
+      )}
+    </>
   );
 }
