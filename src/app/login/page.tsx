@@ -60,10 +60,7 @@ export default function LoginPage() {
         password: data.password,
         options: {
           data: {
-            first_name: data.firstName,
-            last_name: data.lastName,
             username: data.username,
-            role: data.role,
           },
         },
       });

@@ -10,15 +10,9 @@ import {
 import { Checkbox } from '@/components/ui/checkbox';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
-import {
-  Select,
-  SelectContent,
-  SelectItem,
-  SelectTrigger,
-  SelectValue,
-} from '@/components/ui/select';
+
 import { Separator } from '@/components/ui/separator';
-import { BarChart, Code, Eye, EyeOff, Loader2, User } from 'lucide-react';
+import { Eye, EyeOff, Loader2 } from 'lucide-react';
 import Link from 'next/link';
 import { JSX, SVGProps, useState } from 'react';
 
@@ -47,10 +41,7 @@ const Logo = (props: JSX.IntrinsicAttributes & SVGProps<SVGSVGElement>) => (
 export interface RegisterData {
   email: string;
   password: string;
-  firstName: string;
-  lastName: string;
   username: string;
-  role: string;
 }
 
 type AuthMode = 'login' | 'signup' | 'otp' | 'reset' | 'password';
@@ -110,10 +101,7 @@ export default function LoginSignup({
     password: '',
     confirmPassword: '',
     code: '',
-    firstName: '',
-    lastName: '',
     username: '',
-    role: 'designer',
     terms: false,
   });
 
@@ -131,10 +119,7 @@ export default function LoginSignup({
     onRegister({
       email: form.email,
       password: form.password,
-      firstName: form.firstName,
-      lastName: form.lastName,
       username: form.username,
-      role: form.role,
     });
   };
 
@@ -186,65 +171,6 @@ export default function LoginSignup({
                     {message}
                   </div>
                 )}
-                <div className="space-y-2">
-                  <Label htmlFor="role">Role</Label>
-                  <Select
-                    value={form.role}
-                    onValueChange={(v) => update('role', v)}
-                  >
-                    <SelectTrigger
-                      id="role"
-                      className="[&>span]:flex [&>span]:items-center [&>span]:gap-2 [&>span_svg]:shrink-0"
-                    >
-                      <SelectValue placeholder="Select role" />
-                    </SelectTrigger>
-                    <SelectContent className="[&_*[role=option]]:ps-2 [&_*[role=option]]:pe-8 [&_*[role=option]>span]:start-auto [&_*[role=option]>span]:end-2 [&_*[role=option]>span]:flex [&_*[role=option]>span]:items-center [&_*[role=option]>span]:gap-2 [&_*[role=option]>span>svg]:shrink-0">
-                      <SelectItem
-                        value="designer"
-                        className="focus:!bg-zinc-100 focus:!text-black dark:focus:!bg-zinc-800 dark:focus:!text-white"
-                      >
-                        <User size={16} aria-hidden="true" />
-                        <span className="truncate">Product Designer</span>
-                      </SelectItem>
-                      <SelectItem
-                        value="developer"
-                        className="focus:!bg-zinc-100 focus:!text-black dark:focus:!bg-zinc-800 dark:focus:!text-white"
-                      >
-                        <Code size={16} aria-hidden="true" />
-                        <span className="truncate">Developer</span>
-                      </SelectItem>
-                      <SelectItem
-                        value="manager"
-                        className="focus:!bg-zinc-100 focus:!text-black dark:focus:!bg-zinc-800 dark:focus:!text-white"
-                      >
-                        <BarChart size={16} aria-hidden="true" />
-                        <span className="truncate">Product Manager</span>
-                      </SelectItem>
-                    </SelectContent>
-                  </Select>
-                </div>
-                <div className="grid grid-cols-2 gap-4">
-                  <div className="space-y-2">
-                    <Label htmlFor="firstName">First name</Label>
-                    <Input
-                className="text-black"
-                      id="firstName"
-                      value={form.firstName}
-                      onChange={(e) => update('firstName', e.target.value)}
-                      required
-                    />
-                  </div>
-                  <div className="space-y-2">
-                    <Label htmlFor="lastName">Last name</Label>
-                    <Input
-                className="text-black"
-                      id="lastName"
-                      value={form.lastName}
-                      onChange={(e) => update('lastName', e.target.value)}
-                      required
-                    />
-                  </div>
-                </div>
                 <div className="space-y-2">
                   <Label htmlFor="username">Username</Label>
                   <Input
