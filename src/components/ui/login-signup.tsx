@@ -456,8 +456,8 @@ export default function LoginSignup({
   }
 
   return (
-    <div className="flex items-center justify-center min-h-screen px-4 py-10">
-      <div className="flex flex-1 flex-col justify-center sm:mx-auto sm:w-full sm:max-w-sm">
+    <div className="flex items-center justify-center min-h-screen bg-zinc-50 px-4 py-10">
+      <div className="flex flex-1 flex-col justify-center rounded-xl border border-zinc-200 bg-white p-6 shadow-sm sm:mx-auto sm:w-full sm:max-w-sm">
         <h2 className="text-center text-xl font-semibold text-foreground">
           Log in or create account
         </h2>
@@ -520,12 +520,12 @@ export default function LoginSignup({
             <button
               type="button"
               onClick={() => onToggleMode('reset')}
-              className="text-sm text-primary hover:underline"
+              className="text-sm text-zinc-600 hover:text-zinc-900 hover:underline"
             >
               Forgot password?
             </button>
           </div>
-          <Button type="submit" className="mt-4 w-full" disabled={loading}>
+          <Button type="submit" className="mt-4 w-full bg-zinc-900 text-white hover:bg-zinc-800" disabled={loading}>
             {loading ? (
               <Loader2 className="h-4 w-4 animate-spin" />
             ) : (
