@@ -49,7 +49,7 @@ export default function ShowcasePage() {
   const [isExiting, setIsExiting] = useState(false)
 
   useEffect(() => {
-    router.prefetch('/home')
+    router.prefetch('/dashboard')
   }, [router])
 
   const content = {
@@ -75,7 +75,7 @@ export default function ShowcasePage() {
   const handleCtaClick = () => {
     setIsExiting(true)
     setTimeout(() => {
-      router.push('/home')
+      router.push('/dashboard')
     }, 600)
   }
 
@@ -91,7 +91,7 @@ export default function ShowcasePage() {
             title={title}
             subtitle={subtitle}
             ctaText={cta}
-            ctaHref="/home"
+            ctaHref="/dashboard"
             icons={demoIcons}
             onCtaClick={handleCtaClick}
           />

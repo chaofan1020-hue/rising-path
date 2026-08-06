@@ -46,7 +46,7 @@ export default function RegisterPage() {
       }
     }
 
-    router.replace('/jobs');
+    router.replace('/register/success');
   };
 
   return (
