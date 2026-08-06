@@ -65,7 +65,7 @@ function detectWebGL() {
 
 export default function Lanyard({
   position = [0, 2, 15],
-  gravity = [0, -40, 0],
+  gravity = [0, -55, 0],
   fov = 24,
   transparent = true,
   frontImage = null,
@@ -200,7 +200,7 @@ function Band({
     dir = new THREE.Vector3(),
     quat = new THREE.Quaternion(),
     jointPos = new THREE.Vector3();
-  const segmentProps = { type: 'dynamic', canSleep: true, colliders: false, angularDamping: 4, linearDamping: 4 };
+  const segmentProps = { type: 'dynamic', canSleep: true, colliders: false, angularDamping: 3, linearDamping: 3 };
   const { nodes, materials } = useGLTF(cardGLB);
   const texture = useTexture(lanyardImage || lanyard);
   // useTexture must be called unconditionally; use a blank pixel when an image
