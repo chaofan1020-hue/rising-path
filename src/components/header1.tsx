@@ -15,27 +15,37 @@ import Link from "next/link";
 import { ThemeToggle } from "@/components/theme-toggle";
 import { LanguageSwitcher } from "@/components/language-switcher";
 import { useLanguage } from "@/lib/language-context";
-import { useAccessGuard } from "@/components/access-guard"; 
-import { useSupabase } from "@/components/supabase-config-inject";
 
 function Header1() {
     const { t } = useLanguage();
-    const { accessCode, user, isLoading } = useAccessGuard();
-    const supabase = useSupabase();
     const [isOpen, setOpen] = useState(false);
     const [isLoggedIn, setIsLoggedIn] = useState(false);
-    const [displayName, setDisplayName] = useState("");
+    const [accessCodeName, setAccessCodeName] = useState("");
 
     useEffect(() => {
-        if (!isLoading) {
-            setIsLoggedIn(!!user);
-            setDisplayName(user?.email || accessCode?.name || "");
+        // 检查登录状态
+        const accessCode = localStorage.getItem('access_code');
+        
+        if (accessCode) {
+            try {
+                const data = JSON.parse(accessCode);
+                setIsLoggedIn(true);
+                setAccessCodeName(data.name || data.code || "");
+            } catch {
+                setIsLoggedIn(false);
+            }
+        } else {
+            setIsLoggedIn(false);
         }
-    }, [user, accessCode, isLoading]);
+    }, []);
 
-    const handleLogout = async () => {
-        await supabase?.auth.signOut();
-        window.location.href = '/login';
+    const handleLogout = () => {
+        localStorage.removeItem('access_code');
+        localStorage.removeItem('access_code_id');
+        localStorage.removeItem('access_code_data');
+        setIsLoggedIn(false);
+        setAccessCodeName("");
+        window.location.href = '/';
     };
 
     const navigationItems = [
@@ -154,7 +164,7 @@ function Header1() {
                         <>
                             <div className="hidden md:flex items-center gap-2 text-sm text-black dark:text-white">
                                 <User className="w-4 h-4" />
-                                <span>{displayName}</span>
+                                <span>{accessCodeName}</span>
                             </div>
                             <Button variant="ghost" onClick={handleLogout} className="hidden md:inline-flex text-black dark:text-white hover:bg-zinc-100 dark:hover:bg-zinc-800 hover:text-zinc-900 dark:hover:text-zinc-100">
                                 <LogOut className="w-4 h-4 mr-2" />
@@ -163,7 +173,7 @@ function Header1() {
                         </>
                     ) : (
                         <Button asChild className="bg-zinc-900 text-white hover:bg-zinc-800 dark:bg-white dark:text-zinc-900 dark:hover:bg-zinc-200">
-                            <Link href="/register">{t("nav.getStarted")}</Link>
+                            <Link href="/access-code">{t("nav.getStarted")}</Link>
                         </Button>
                     )}
                 </div>

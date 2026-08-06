@@ -3,7 +3,6 @@ import { Inspector } from 'react-dev-inspector';
 import { ThemeProvider } from '@/lib/theme-context';
 import { LanguageProvider } from '@/lib/language-context';
 import './globals.css';
-import { SupabaseConfigProvider } from '@/components/supabase-config-inject';
 
 export const metadata: Metadata = {
   title: {
@@ -49,10 +48,8 @@ export default function RootLayout({
       <body className={`antialiased bg-background`}>
         <ThemeProvider>
           <LanguageProvider>
-            <SupabaseConfigProvider>
-              {isDev && <Inspector />}
-              {children}
-            </SupabaseConfigProvider>
+            {isDev && <Inspector />}
+            {children}
           </LanguageProvider>
         </ThemeProvider>
       </body>
