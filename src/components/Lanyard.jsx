@@ -349,15 +349,9 @@ function Band({
             )}
           >
             <mesh geometry={nodes.card.geometry}>
-              <meshPhysicalMaterial
-                map={cardMap}
-                clearcoat={isMobile ? 0 : 0.2}
-                clearcoatRoughness={0.2}
-                roughness={0.9}
-                metalness={0}
-                envMapIntensity={0.2}
-                map-anisotropy={16}
-              />
+              {/* Unlit: printed badge faces must render true to the design colors,
+                  PBR lighting always washes printed artwork out at some angle. */}
+              <meshBasicMaterial map={cardMap} toneMapped={false} />
             </mesh>
             <mesh geometry={nodes.clip.geometry}>
               <meshStandardMaterial color={0x0a0a0a} metalness={0.7} roughness={0.28} envMapIntensity={0.5} />
