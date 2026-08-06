@@ -52,8 +52,8 @@ const BLANK_PIXEL =
 // atlas and the back face to the RIGHT half (measured from card.glb). Each
 // custom image is composited into its own half so the two faces render
 // independently, aspect-preserving (no stretching).
-const FRONT_UV_RECT = { x: 0, y: 0, w: 0.5, h: 0.703 };
-const BACK_UV_RECT = { x: 0.5, y: 0, w: 0.5, h: 0.703 };
+const FRONT_UV_RECT = { x: 0, y: 0, w: 0.5, h: 0.755 };
+const BACK_UV_RECT = { x: 0.5, y: 0, w: 0.5, h: 0.757 };
 function detectWebGL() {
   try {
     const canvas = document.createElement('canvas');
@@ -255,19 +255,7 @@ function Band({
   );
   const [dragged, drag] = useState(false);
   const [hovered, hover] = useState(false);
-  // J-hook geometry: thin tube from inside card through top, curving at bottom
-  const hookGeometry = useMemo(() => {
-    const hookCurve = new THREE.CatmullRomCurve3([
-      new THREE.Vector3(0.014, 1.04, 0.02),   // J-tip (curved to side, inside card)
-      new THREE.Vector3(0.008, 1.07, 0.02),   // curving back
-      new THREE.Vector3(0.002, 1.10, 0.02),   // almost straight
-      new THREE.Vector3(0, 1.13, 0.02),       // card top
-      new THREE.Vector3(0, 1.16, 0.02),       // above card
-      new THREE.Vector3(0, 1.19, 0.02),       // approaching joint
-      new THREE.Vector3(0, 1.22, 0.02),       // top (joint level)
-    ]);
-    return new THREE.TubeGeometry(hookCurve, 20, 0.008, 8, false);
-  }, []);
+
   useRopeJoint(fixed, j1, [[0, 0, 0], [0, 0, 0], 1]);
   useRopeJoint(j1, j2, [[0, 0, 0], [0, 0, 0], 1]);
   useRopeJoint(j2, j3, [[0, 0, 0], [0, 0, 0], 1]);
@@ -344,21 +332,15 @@ function Band({
             <mesh geometry={nodes.card.geometry}>
               <meshPhysicalMaterial
                 map={cardMap}
-                clearcoat={isMobile ? 0 : 1.0}
-                clearcoatRoughness={0.08}
-                roughness={0.35}
-                metalness={0.0}
-                envMapIntensity={1.2}
+                clearcoat={isMobile ? 0 : 1}
+                clearcoatRoughness={0.15}
+                roughness={0.9}
+                metalness={0.8}
+                map-anisotropy={16}
               />
             </mesh>
-            <mesh geometry={hookGeometry}>
-              <meshStandardMaterial
-                color={0x0a0a0a}
-                metalness={0.75}
-                roughness={0.25}
-                envMapIntensity={0.6}
-              />
-            </mesh>
+            <mesh geometry={nodes.clip.geometry} material={materials.metal} material-roughness={0.3} />
+            <mesh geometry={nodes.clamp.geometry} material={materials.metal} />
           </group>
         </RigidBody>
       </group>
