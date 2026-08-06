@@ -81,9 +81,9 @@ function detectWebGL() {
  * @param {number} [props.lanyardWidth]
  */
 export default function Lanyard({
-  position = [0, 2, 12],
+  position = [0, 1.6, 16],
   gravity = [0, -55, 0],
-  fov = 24,
+  fov = 18,
   transparent = true,
   frontImage = null,
   backImage = null,
