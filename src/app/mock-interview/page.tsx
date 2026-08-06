@@ -261,7 +261,7 @@ export default function MockInterviewPage() {
   const { t, locale } = useLanguage();
   const { accessCodeId: contextAccessCodeId } = useAccessCode();
   // 兜底：Context 未就绪时从 localStorage 读取（登录时 access-guard 会写入 access_code_id）
-  const [accessCodeId, setAccessCodeId] = useState<number | null>(contextAccessCodeId);
+  const [accessCodeId, setAccessCodeId] = useState<string | null>(contextAccessCodeId);
 
   useEffect(() => {
     if (contextAccessCodeId) {
@@ -270,8 +270,7 @@ export default function MockInterviewPage() {
     }
     const stored = typeof window !== "undefined" ? localStorage.getItem("access_code_id") : null;
     if (stored) {
-      const id = parseInt(stored, 10);
-      if (!isNaN(id)) setAccessCodeId(id);
+      setAccessCodeId(stored);
     }
   }, [contextAccessCodeId]);
   const [stage, setStage] = useState<Stage>("setup");
