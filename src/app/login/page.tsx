@@ -149,8 +149,8 @@ export default function LoginPage() {
       }}
       onLogin={handleLogin}
       onRegister={handleRegister}
-      onSendOtp={handleSendOtp}
-      onVerifyOtp={handleVerifyOtp}
+      onSendCode={handleSendOtp}
+      onVerifyCode={handleVerifyOtp}
       onResetPassword={handleResetPassword}
       loading={loading}
       error={error}

@@ -17,6 +17,7 @@ import {
   SelectTrigger,
   SelectValue,
 } from '@/components/ui/select';
+import { Separator } from '@/components/ui/separator';
 import { BarChart, Code, Eye, EyeOff, Loader2, User } from 'lucide-react';
 import Link from 'next/link';
 import { JSX, SVGProps, useState } from 'react';
@@ -54,12 +55,12 @@ export interface RegisterData {
 
 interface LoginSignupProps {
   mode: 'login' | 'signup' | 'otp' | 'reset';
-  onToggleMode: (mode: 'login' | 'signup') => void;
-  onLogin: (email: string, password: string) => void;
-  onRegister: (data: RegisterData) => void;
-  onSendOtp: (email: string) => void;
-  onVerifyOtp: (email: string, otp: string) => void;
-  onResetPassword: (email: string) => void;
+  onToggleMode: (mode: 'login' | 'signup' | 'otp' | 'reset') => void;
+  onLogin: (email: string, password: string) => void | Promise<void>;
+  onRegister: (data: RegisterData) => void | Promise<void>;
+  onSendCode: (email: string) => void | Promise<void>;
+  onVerifyCode: (email: string, code: string) => void | Promise<void>;
+  onResetPassword: (email: string) => void | Promise<void>;
   loading?: boolean;
   error?: string | null;
   message?: string | null;
@@ -70,100 +71,96 @@ export default function LoginSignup({
   onToggleMode,
   onLogin,
   onRegister,
-  onSendOtp,
-  onVerifyOtp,
+  onSendCode,
+  onVerifyCode,
   onResetPassword,
-  loading = false,
-  error = null,
-  message = null,
+  loading,
+  error,
+  message,
 }: LoginSignupProps) {
   const [showPassword, setShowPassword] = useState(false);
+  const [showConfirmPassword, setShowConfirmPassword] = useState(false);
+  const [form, setForm] = useState({
+    email: '',
+    password: '',
+    confirmPassword: '',
+    code: '',
+    firstName: '',
+    lastName: '',
+    username: '',
+    role: 'designer',
+    terms: false,
+  });
 
-  const [email, setEmail] = useState('');
-  const [password, setPassword] = useState('');
-  const [confirmPassword, setConfirmPassword] = useState('');
-  const [otp, setOtp] = useState('');
-  const [firstName, setFirstName] = useState('');
-  const [lastName, setLastName] = useState('');
-  const [username, setUsername] = useState('');
-  const [role, setRole] = useState('designer');
-  const [agreed, setAgreed] = useState(false);
+  const update = (key: keyof typeof form, value: string | boolean) => {
+    setForm((prev) => ({ ...prev, [key]: value }));
+  };
 
   const handleLoginSubmit = (e: React.FormEvent) => {
     e.preventDefault();
-    onLogin(email, password);
+    onLogin(form.email, form.password);
   };
 
   const handleRegisterSubmit = (e: React.FormEvent) => {
     e.preventDefault();
-    onRegister({ email, password, firstName, lastName, username, role });
+    onRegister({
+      email: form.email,
+      password: form.password,
+      firstName: form.firstName,
+      lastName: form.lastName,
+      username: form.username,
+      role: form.role,
+    });
   };
 
-  const footerText =
-    mode === 'login' ? (
-      <>
-        Don&apos;t have an account?{' '}
-        <button
-          type="button"
-          onClick={() => onToggleMode('signup')}
-          className="text-primary hover:underline"
-        >
-          Sign up
-        </button>
-      </>
-    ) : (
-      <>
-        Already have an account?{' '}
-        <button
-          type="button"
-          onClick={() => onToggleMode('login')}
-          className="text-primary hover:underline"
-        >
-          Sign in
-        </button>
-      </>
-    );
+  const handleSendCode = () => {
+    onSendCode(form.email);
+  };
 
-  return (
-    <div className="flex items-center justify-center min-h-screen">
-      <div className="w-full max-w-md px-4">
-        <Card className="border-none shadow-lg pb-0">
-          <CardHeader className="flex flex-col items-center space-y-1.5 pb-4 pt-6">
-            <Logo className="w-12 h-12" />
-            <div className="space-y-0.5 flex flex-col items-center">
-              <h2 className="text-2xl font-semibold text-foreground">
-                {mode === 'login' && 'Welcome back'}
-                {mode === 'signup' && 'Create an account'}
-                {mode === 'otp' && 'Sign in with code'}
-                {mode === 'reset' && 'Reset password'}
-              </h2>
-              <p className="text-muted-foreground text-center">
-                {mode === 'login' && 'Sign in to continue your journey.'}
-                {mode === 'signup' && 'Create an account to get started.'}
-                {mode === 'otp' && 'We will send a one-time code to your email.'}
-                {mode === 'reset' && 'We will send a reset link to your email.'}
-              </p>
-            </div>
-          </CardHeader>
+  const handleVerifyCode = (e: React.FormEvent) => {
+    e.preventDefault();
+    onVerifyCode(form.email, form.code);
+  };
 
-          <CardContent className="space-y-6 px-8">
-            {(error || message) && (
-              <div
-                className={`rounded-md px-3 py-2 text-sm ${
-                  error
-                    ? 'bg-destructive/10 text-destructive'
-                    : 'bg-green-100 text-green-800'
-                }`}
-              >
-                {error || message}
+  const handleReset = (e: React.FormEvent) => {
+    e.preventDefault();
+    onResetPassword(form.email);
+  };
+
+  if (mode === 'signup') {
+    return (
+      <div className="flex items-center justify-center min-h-screen px-4 py-10">
+        <div className="w-full max-w-md">
+          <Card className="border-none shadow-lg pb-0">
+            <CardHeader className="flex flex-col items-center space-y-1.5 pb-4 pt-6">
+              <Logo className="w-12 h-12" />
+              <div className="space-y-0.5 flex flex-col items-center">
+                <h2 className="text-2xl font-semibold text-foreground">
+                  Create an account
+                </h2>
+                <p className="text-muted-foreground">
+                  Welcome! Create an account to get started.
+                </p>
               </div>
-            )}
-
-            {mode === 'signup' && (
-              <form onSubmit={handleRegisterSubmit} className="space-y-6">
+            </CardHeader>
+            <form onSubmit={handleRegisterSubmit}>
+              <CardContent className="space-y-5 px-8">
+                {error && (
+                  <div className="text-sm text-red-600 bg-red-50 dark:bg-red-950/30 px-3 py-2 rounded-md">
+                    {error}
+                  </div>
+                )}
+                {message && (
+                  <div className="text-sm text-emerald-600 bg-emerald-50 dark:bg-emerald-950/30 px-3 py-2 rounded-md">
+                    {message}
+                  </div>
+                )}
                 <div className="space-y-2">
                   <Label htmlFor="role">Role</Label>
-                  <Select value={role} onValueChange={setRole}>
+                  <Select
+                    value={form.role}
+                    onValueChange={(v) => update('role', v)}
+                  >
                     <SelectTrigger
                       id="role"
                       className="[&>span]:flex [&>span]:items-center [&>span]:gap-2 [&>span_svg]:shrink-0"
@@ -186,14 +183,13 @@ export default function LoginSignup({
                     </SelectContent>
                   </Select>
                 </div>
-
                 <div className="grid grid-cols-2 gap-4">
                   <div className="space-y-2">
                     <Label htmlFor="firstName">First name</Label>
                     <Input
                       id="firstName"
-                      value={firstName}
-                      onChange={(e) => setFirstName(e.target.value)}
+                      value={form.firstName}
+                      onChange={(e) => update('firstName', e.target.value)}
                       required
                     />
                   </div>
@@ -201,34 +197,31 @@ export default function LoginSignup({
                     <Label htmlFor="lastName">Last name</Label>
                     <Input
                       id="lastName"
-                      value={lastName}
-                      onChange={(e) => setLastName(e.target.value)}
+                      value={form.lastName}
+                      onChange={(e) => update('lastName', e.target.value)}
                       required
                     />
                   </div>
                 </div>
-
                 <div className="space-y-2">
                   <Label htmlFor="username">Username</Label>
                   <Input
                     id="username"
-                    value={username}
-                    onChange={(e) => setUsername(e.target.value)}
+                    value={form.username}
+                    onChange={(e) => update('username', e.target.value)}
                     required
                   />
                 </div>
-
                 <div className="space-y-2">
                   <Label htmlFor="email">Email address</Label>
                   <Input
                     id="email"
                     type="email"
-                    value={email}
-                    onChange={(e) => setEmail(e.target.value)}
+                    value={form.email}
+                    onChange={(e) => update('email', e.target.value)}
                     required
                   />
                 </div>
-
                 <div className="space-y-2">
                   <Label htmlFor="password">Password</Label>
                   <div className="relative">
@@ -236,10 +229,10 @@ export default function LoginSignup({
                       id="password"
                       type={showPassword ? 'text' : 'password'}
                       className="pr-10"
-                      value={password}
-                      onChange={(e) => setPassword(e.target.value)}
-                      minLength={6}
+                      value={form.password}
+                      onChange={(e) => update('password', e.target.value)}
                       required
+                      minLength={6}
                     />
                     <Button
                       type="button"
@@ -256,23 +249,41 @@ export default function LoginSignup({
                     </Button>
                   </div>
                 </div>
-
                 <div className="space-y-2">
                   <Label htmlFor="confirmPassword">Confirm password</Label>
-                  <Input
-                    id="confirmPassword"
-                    type="password"
-                    value={confirmPassword}
-                    onChange={(e) => setConfirmPassword(e.target.value)}
-                    required
-                  />
+                  <div className="relative">
+                    <Input
+                      id="confirmPassword"
+                      type={showConfirmPassword ? 'text' : 'password'}
+                      className="pr-10"
+                      value={form.confirmPassword}
+                      onChange={(e) =>
+                        update('confirmPassword', e.target.value)
+                      }
+                      required
+                    />
+                    <Button
+                      type="button"
+                      variant="ghost"
+                      size="icon"
+                      className="absolute right-0 top-0 h-full px-3 text-muted-foreground hover:bg-transparent"
+                      onClick={() =>
+                        setShowConfirmPassword(!showConfirmPassword)
+                      }
+                    >
+                      {showConfirmPassword ? (
+                        <EyeOff className="h-4 w-4" />
+                      ) : (
+                        <Eye className="h-4 w-4" />
+                      )}
+                    </Button>
+                  </div>
                 </div>
-
                 <div className="flex items-center space-x-2">
                   <Checkbox
                     id="terms"
-                    checked={agreed}
-                    onCheckedChange={(checked) => setAgreed(checked === true)}
+                    checked={form.terms}
+                    onCheckedChange={(v) => update('terms', Boolean(v))}
                     required
                   />
                   <label
@@ -289,11 +300,10 @@ export default function LoginSignup({
                     </Link>
                   </label>
                 </div>
-
                 <Button
                   type="submit"
                   className="w-full bg-primary text-primary-foreground"
-                  disabled={loading || !agreed}
+                  disabled={loading || !form.terms}
                 >
                   {loading ? (
                     <Loader2 className="h-4 w-4 animate-spin" />
@@ -301,196 +311,263 @@ export default function LoginSignup({
                     'Create free account'
                   )}
                 </Button>
-              </form>
-            )}
-
-            {mode === 'login' && (
-              <form onSubmit={handleLoginSubmit} className="space-y-6">
-                <div className="space-y-2">
-                  <Label htmlFor="email">Email address</Label>
-                  <Input
-                    id="email"
-                    type="email"
-                    value={email}
-                    onChange={(e) => setEmail(e.target.value)}
-                    required
-                  />
-                </div>
-
-                <div className="space-y-2">
-                  <div className="flex items-center justify-between">
-                    <Label htmlFor="password">Password</Label>
-                    <button
-                      type="button"
-                      onClick={() => onToggleMode('reset' as 'login')}
-                      className="text-xs text-primary hover:underline"
-                    >
-                      Forgot password?
-                    </button>
-                  </div>
-                  <div className="relative">
-                    <Input
-                      id="password"
-                      type={showPassword ? 'text' : 'password'}
-                      className="pr-10"
-                      value={password}
-                      onChange={(e) => setPassword(e.target.value)}
-                      required
-                    />
-                    <Button
-                      type="button"
-                      variant="ghost"
-                      size="icon"
-                      className="absolute right-0 top-0 h-full px-3 text-muted-foreground hover:bg-transparent"
-                      onClick={() => setShowPassword(!showPassword)}
-                    >
-                      {showPassword ? (
-                        <EyeOff className="h-4 w-4" />
-                      ) : (
-                        <Eye className="h-4 w-4" />
-                      )}
-                    </Button>
-                  </div>
-                </div>
-
-                <Button
-                  type="submit"
-                  className="w-full bg-primary text-primary-foreground"
-                  disabled={loading}
-                >
-                  {loading ? (
-                    <Loader2 className="h-4 w-4 animate-spin" />
-                  ) : (
-                    'Sign in'
-                  )}
-                </Button>
-
-                <Button
-                  type="button"
-                  variant="outline"
-                  className="w-full"
-                  onClick={() => onToggleMode('otp' as 'login')}
-                  disabled={loading}
-                >
-                  Sign in with email code
-                </Button>
-              </form>
-            )}
-
-            {mode === 'otp' && (
-              <form
-                onSubmit={(e) => {
-                  e.preventDefault();
-                  onVerifyOtp(email, otp);
-                }}
-                className="space-y-6"
-              >
-                <div className="space-y-2">
-                  <Label htmlFor="email">Email address</Label>
-                  <div className="flex gap-2">
-                    <Input
-                      id="email"
-                      type="email"
-                      value={email}
-                      onChange={(e) => setEmail(e.target.value)}
-                      required
-                    />
-                    <Button
-                      type="button"
-                      variant="outline"
-                      onClick={() => onSendOtp(email)}
-                      disabled={loading || !email}
-                    >
-                      Send code
-                    </Button>
-                  </div>
-                </div>
-
-                <div className="space-y-2">
-                  <Label htmlFor="otp">One-time code</Label>
-                  <Input
-                    id="otp"
-                    value={otp}
-                    onChange={(e) => setOtp(e.target.value)}
-                    placeholder="123456"
-                    required
-                  />
-                </div>
-
-                <Button
-                  type="submit"
-                  className="w-full bg-primary text-primary-foreground"
-                  disabled={loading}
-                >
-                  {loading ? (
-                    <Loader2 className="h-4 w-4 animate-spin" />
-                  ) : (
-                    'Verify and sign in'
-                  )}
-                </Button>
-
-                <Button
-                  type="button"
-                  variant="ghost"
-                  className="w-full"
-                  onClick={() => onToggleMode('login')}
-                >
-                  Back to password sign in
-                </Button>
-              </form>
-            )}
-
-            {mode === 'reset' && (
-              <form
-                onSubmit={(e) => {
-                  e.preventDefault();
-                  onResetPassword(email);
-                }}
-                className="space-y-6"
-              >
-                <div className="space-y-2">
-                  <Label htmlFor="email">Email address</Label>
-                  <Input
-                    id="email"
-                    type="email"
-                    value={email}
-                    onChange={(e) => setEmail(e.target.value)}
-                    required
-                  />
-                </div>
-
-                <Button
-                  type="submit"
-                  className="w-full bg-primary text-primary-foreground"
-                  disabled={loading}
-                >
-                  {loading ? (
-                    <Loader2 className="h-4 w-4 animate-spin" />
-                  ) : (
-                    'Send reset link'
-                  )}
-                </Button>
-
-                <Button
-                  type="button"
-                  variant="ghost"
-                  className="w-full"
-                  onClick={() => onToggleMode('login')}
-                >
-                  Back to sign in
-                </Button>
-              </form>
-            )}
-          </CardContent>
-
-          {mode !== 'otp' && mode !== 'reset' && (
+              </CardContent>
+            </form>
             <CardFooter className="flex justify-center border-t !py-4">
               <p className="text-center text-sm text-muted-foreground">
-                {footerText}
+                Already have an account?{' '}
+                <button
+                  type="button"
+                  onClick={() => onToggleMode('login')}
+                  className="text-primary hover:underline"
+                >
+                  Sign in
+                </button>
               </p>
             </CardFooter>
+          </Card>
+        </div>
+      </div>
+    );
+  }
+
+  if (mode === 'otp') {
+    return (
+      <div className="flex items-center justify-center min-h-screen px-4 py-10">
+        <div className="sm:mx-auto sm:w-full sm:max-w-sm">
+          <h2 className="text-center text-xl font-semibold text-foreground">
+            Sign in with email code
+          </h2>
+          <form onSubmit={handleVerifyCode} className="mt-6 space-y-4">
+            {error && (
+              <div className="text-sm text-red-600 bg-red-50 dark:bg-red-950/30 px-3 py-2 rounded-md">
+                {error}
+              </div>
+            )}
+            <div>
+              <Label htmlFor="otp-email" className="font-medium text-foreground">
+                Email
+              </Label>
+              <Input
+                id="otp-email"
+                type="email"
+                value={form.email}
+                onChange={(e) => update('email', e.target.value)}
+                placeholder="john@company.com"
+                className="mt-2"
+                required
+              />
+            </div>
+            <Button
+              type="button"
+              variant="outline"
+              className="w-full"
+              onClick={handleSendCode}
+              disabled={loading || !form.email}
+            >
+              {loading ? (
+                <Loader2 className="h-4 w-4 animate-spin" />
+              ) : (
+                'Send code'
+              )}
+            </Button>
+            <div>
+              <Label htmlFor="code" className="font-medium text-foreground">
+                Verification code
+              </Label>
+              <Input
+                id="code"
+                value={form.code}
+                onChange={(e) => update('code', e.target.value)}
+                placeholder="123456"
+                className="mt-2"
+                required
+              />
+            </div>
+            <Button type="submit" className="w-full" disabled={loading}>
+              {loading ? (
+                <Loader2 className="h-4 w-4 animate-spin" />
+              ) : (
+                'Verify code'
+              )}
+            </Button>
+            <p className="text-center text-sm text-muted-foreground">
+              <button
+                type="button"
+                onClick={() => onToggleMode('login')}
+                className="text-primary hover:underline"
+              >
+                Back to password sign in
+              </button>
+            </p>
+          </form>
+        </div>
+      </div>
+    );
+  }
+
+  if (mode === 'reset') {
+    return (
+      <div className="flex items-center justify-center min-h-screen px-4 py-10">
+        <div className="sm:mx-auto sm:w-full sm:max-w-sm">
+          <h2 className="text-center text-xl font-semibold text-foreground">
+            Reset your password
+          </h2>
+          <form onSubmit={handleReset} className="mt-6 space-y-4">
+            {error && (
+              <div className="text-sm text-red-600 bg-red-50 dark:bg-red-950/30 px-3 py-2 rounded-md">
+                {error}
+              </div>
+            )}
+            <div>
+              <Label htmlFor="reset-email" className="font-medium text-foreground">
+                Email
+              </Label>
+              <Input
+                id="reset-email"
+                type="email"
+                value={form.email}
+                onChange={(e) => update('email', e.target.value)}
+                placeholder="john@company.com"
+                className="mt-2"
+                required
+              />
+            </div>
+            <Button type="submit" className="w-full" disabled={loading}>
+              {loading ? (
+                <Loader2 className="h-4 w-4 animate-spin" />
+              ) : (
+                'Send reset link'
+              )}
+            </Button>
+            <p className="text-center text-sm text-muted-foreground">
+              <button
+                type="button"
+                onClick={() => onToggleMode('login')}
+                className="text-primary hover:underline"
+              >
+                Back to sign in
+              </button>
+            </p>
+          </form>
+        </div>
+      </div>
+    );
+  }
+
+  return (
+    <div className="flex items-center justify-center min-h-screen px-4 py-10">
+      <div className="flex flex-1 flex-col justify-center sm:mx-auto sm:w-full sm:max-w-sm">
+        <h2 className="text-center text-xl font-semibold text-foreground">
+          Log in or create account
+        </h2>
+        <form onSubmit={handleLoginSubmit} className="mt-6">
+          {error && (
+            <div className="mb-4 text-sm text-red-600 bg-red-50 dark:bg-red-950/30 px-3 py-2 rounded-md">
+              {error}
+            </div>
           )}
-        </Card>
+          {message && (
+            <div className="mb-4 text-sm text-emerald-600 bg-emerald-50 dark:bg-emerald-950/30 px-3 py-2 rounded-md">
+              {message}
+            </div>
+          )}
+          <Label htmlFor="email" className="font-medium text-foreground">
+            Email
+          </Label>
+          <Input
+            type="email"
+            id="email"
+            name="email"
+            autoComplete="email"
+            placeholder="john@company.com"
+            className="mt-2"
+            value={form.email}
+            onChange={(e) => update('email', e.target.value)}
+            required
+          />
+          <div className="mt-4">
+            <Label htmlFor="password" className="font-medium text-foreground">
+              Password
+            </Label>
+            <div className="relative mt-2">
+              <Input
+                id="password"
+                name="password"
+                type={showPassword ? 'text' : 'password'}
+                autoComplete="current-password"
+                value={form.password}
+                onChange={(e) => update('password', e.target.value)}
+                className="pr-10"
+                required
+              />
+              <Button
+                type="button"
+                variant="ghost"
+                size="icon"
+                className="absolute right-0 top-0 h-full px-3 text-muted-foreground hover:bg-transparent"
+                onClick={() => setShowPassword(!showPassword)}
+              >
+                {showPassword ? (
+                  <EyeOff className="h-4 w-4" />
+                ) : (
+                  <Eye className="h-4 w-4" />
+                )}
+              </Button>
+            </div>
+          </div>
+          <div className="mt-2 text-right">
+            <button
+              type="button"
+              onClick={() => onToggleMode('reset')}
+              className="text-sm text-primary hover:underline"
+            >
+              Forgot password?
+            </button>
+          </div>
+          <Button type="submit" className="mt-4 w-full" disabled={loading}>
+            {loading ? (
+              <Loader2 className="h-4 w-4 animate-spin" />
+            ) : (
+              'Sign in'
+            )}
+          </Button>
+        </form>
+        <div className="relative my-6">
+          <div className="absolute inset-0 flex items-center">
+            <Separator className="w-full" />
+          </div>
+          <div className="relative flex justify-center text-xs uppercase">
+            <span className="bg-background px-2 text-muted-foreground">
+              or
+            </span>
+          </div>
+        </div>
+        <Button
+          variant="outline"
+          className="w-full"
+          onClick={() => onToggleMode('otp')}
+        >
+          Sign in with email code
+        </Button>
+        <Button
+          variant="outline"
+          className="w-full mt-3"
+          onClick={() => onToggleMode('signup')}
+        >
+          Create account
+        </Button>
+        <p className="mt-4 text-xs text-center text-muted-foreground">
+          By signing in, you agree to our{' '}
+          <Link href="#" className="underline underline-offset-4">
+            terms of service
+          </Link>{' '}
+          and{' '}
+          <Link href="#" className="underline underline-offset-4">
+            privacy policy
+          </Link>
+          .
+        </p>
       </div>
     </div>
   );
