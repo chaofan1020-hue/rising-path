@@ -68,7 +68,7 @@ export default function SubscriptionCelebration({
       {/* 3D Lanyard */}
       <div className="absolute inset-0">
         {!hasError && (
-          <Lanyard3D />
+          <Lanyard3D frontImage="/badge-front.png" />
         )}
       </div>
 

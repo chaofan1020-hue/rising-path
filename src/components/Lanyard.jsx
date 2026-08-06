@@ -63,6 +63,18 @@ function detectWebGL() {
   }
 }
 
+/**
+ * @param {object} props
+ * @param {[number, number, number]} [props.position]
+ * @param {[number, number, number]} [props.gravity]
+ * @param {number} [props.fov]
+ * @param {boolean} [props.transparent]
+ * @param {string | null} [props.frontImage]
+ * @param {string | null} [props.backImage]
+ * @param {'cover' | 'contain'} [props.imageFit]
+ * @param {string | null} [props.lanyardImage]
+ * @param {number} [props.lanyardWidth]
+ */
 export default function Lanyard({
   position = [0, 2, 12],
   gravity = [0, -55, 0],
