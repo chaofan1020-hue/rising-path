@@ -291,18 +291,18 @@ export default function LoginSignup({
                     className="text-sm text-muted-foreground"
                   >
                     I agree to the{' '}
-                    <Link href="#" className="text-primary hover:underline">
+                    <Link href="#" className="text-zinc-900 hover:text-zinc-700 dark:text-zinc-100 dark:hover:text-zinc-300 underline underline-offset-4">
                       Terms
                     </Link>{' '}
                     and{' '}
-                    <Link href="#" className="text-primary hover:underline">
+                    <Link href="#" className="text-zinc-900 hover:text-zinc-700 dark:text-zinc-100 dark:hover:text-zinc-300 underline underline-offset-4">
                       Conditions
                     </Link>
                   </label>
                 </div>
                 <Button
                   type="submit"
-                  className="w-full bg-primary text-primary-foreground"
+                  className="w-full bg-zinc-900 text-white hover:bg-zinc-800 dark:bg-white dark:text-zinc-950 dark:hover:bg-zinc-200"
                   disabled={loading || !form.terms}
                 >
                   {loading ? (
@@ -319,7 +319,7 @@ export default function LoginSignup({
                 <button
                   type="button"
                   onClick={() => onToggleMode('login')}
-                  className="text-primary hover:underline"
+                  className="text-zinc-900 hover:text-zinc-700 dark:text-zinc-100 dark:hover:text-zinc-300 underline underline-offset-4"
                 >
                   Sign in
                 </button>
@@ -395,7 +395,7 @@ export default function LoginSignup({
               <button
                 type="button"
                 onClick={() => onToggleMode('login')}
-                className="text-primary hover:underline"
+                className="text-zinc-900 hover:text-zinc-700 dark:text-zinc-100 dark:hover:text-zinc-300 underline underline-offset-4"
               >
                 Back to password sign in
               </button>
@@ -444,7 +444,7 @@ export default function LoginSignup({
               <button
                 type="button"
                 onClick={() => onToggleMode('login')}
-                className="text-primary hover:underline"
+                className="text-zinc-900 hover:text-zinc-700 dark:text-zinc-100 dark:hover:text-zinc-300 underline underline-offset-4"
               >
                 Back to sign in
               </button>
