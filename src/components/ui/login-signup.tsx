@@ -168,15 +168,24 @@ export default function LoginSignup({
                       <SelectValue placeholder="Select role" />
                     </SelectTrigger>
                     <SelectContent className="[&_*[role=option]]:ps-2 [&_*[role=option]]:pe-8 [&_*[role=option]>span]:start-auto [&_*[role=option]>span]:end-2 [&_*[role=option]>span]:flex [&_*[role=option]>span]:items-center [&_*[role=option]>span]:gap-2 [&_*[role=option]>span>svg]:shrink-0">
-                      <SelectItem value="designer">
+                      <SelectItem
+                        value="designer"
+                        className="focus:!bg-zinc-100 focus:!text-zinc-900 dark:focus:!bg-zinc-800 dark:focus:!text-white"
+                      >
                         <User size={16} aria-hidden="true" />
                         <span className="truncate">Product Designer</span>
                       </SelectItem>
-                      <SelectItem value="developer">
+                      <SelectItem
+                        value="developer"
+                        className="focus:!bg-zinc-100 focus:!text-zinc-900 dark:focus:!bg-zinc-800 dark:focus:!text-white"
+                      >
                         <Code size={16} aria-hidden="true" />
                         <span className="truncate">Developer</span>
                       </SelectItem>
-                      <SelectItem value="manager">
+                      <SelectItem
+                        value="manager"
+                        className="focus:!bg-zinc-100 focus:!text-zinc-900 dark:focus:!bg-zinc-800 dark:focus:!text-white"
+                      >
                         <BarChart size={16} aria-hidden="true" />
                         <span className="truncate">Product Manager</span>
                       </SelectItem>
@@ -361,7 +370,7 @@ export default function LoginSignup({
             <Button
               type="button"
               variant="outline"
-              className="w-full"
+              className="w-full hover:!bg-zinc-100 hover:!text-zinc-900 hover:!border-zinc-300 dark:hover:!bg-zinc-800 dark:hover:!text-white"
               onClick={handleSendCode}
               disabled={loading || !form.email}
             >
@@ -545,14 +554,14 @@ export default function LoginSignup({
         </div>
         <Button
           variant="outline"
-          className="w-full"
+          className="w-full hover:!bg-zinc-100 hover:!text-zinc-900 hover:!border-zinc-300 dark:hover:!bg-zinc-800 dark:hover:!text-white"
           onClick={() => onToggleMode('otp')}
         >
           Sign in with email code
         </Button>
         <Button
           variant="outline"
-          className="w-full mt-3"
+          className="w-full mt-3 hover:!bg-zinc-100 hover:!text-zinc-900 hover:!border-zinc-300 dark:hover:!bg-zinc-800 dark:hover:!text-white"
           onClick={() => onToggleMode('signup')}
         >
           Create account
