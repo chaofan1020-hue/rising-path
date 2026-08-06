@@ -345,7 +345,7 @@ function Band({
           <BallCollider args={[0.1]} />
         </RigidBody>
         <RigidBody position={[2, 0.5, 0]} ref={card} {...segmentProps} type={dragged ? 'kinematicPosition' : 'dynamic'}>
-          <CuboidCollider args={[0.8, 1.125, 0.01]} />
+          <CuboidCollider args={[0.8, 1.125, 0.015]} />
           <group
             scale={[2.25 * CARD_X_SQUASH, 2.25, 2.25]}
             position={[0, -1.2, -0.05]}
@@ -357,7 +357,7 @@ function Band({
               drag(new THREE.Vector3().copy(e.point).sub(vec.copy(card.current.translation())))
             )}
           >
-            <mesh geometry={nodes.card.geometry}>
+            <mesh geometry={nodes.card.geometry} scale={[1, 1, 2.5]}>
               {/* Unlit print: a flat card face gains nothing from PBR diffuse (uniform
                   across a plane) while its specular/clearcoat layers read as an uneven
                   white film under the big bright Lightformers. Exact design colors,
