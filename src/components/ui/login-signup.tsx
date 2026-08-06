@@ -135,10 +135,10 @@ export default function LoginSignup({
             <CardHeader className="flex flex-col items-center space-y-1.5 pb-4 pt-6">
               <Logo className="w-12 h-12" />
               <div className="space-y-0.5 flex flex-col items-center">
-                <h2 className="text-2xl font-semibold text-foreground">
+                <h2 className="text-2xl font-semibold text-black">
                   Create an account
                 </h2>
-                <p className="text-muted-foreground">
+                <p className="text-black">
                   Welcome! Create an account to get started.
                 </p>
               </div>
@@ -170,21 +170,21 @@ export default function LoginSignup({
                     <SelectContent className="[&_*[role=option]]:ps-2 [&_*[role=option]]:pe-8 [&_*[role=option]>span]:start-auto [&_*[role=option]>span]:end-2 [&_*[role=option]>span]:flex [&_*[role=option]>span]:items-center [&_*[role=option]>span]:gap-2 [&_*[role=option]>span>svg]:shrink-0">
                       <SelectItem
                         value="designer"
-                        className="focus:!bg-zinc-100 focus:!text-zinc-900 dark:focus:!bg-zinc-800 dark:focus:!text-white"
+                        className="focus:!bg-zinc-100 focus:!text-black dark:focus:!bg-zinc-800 dark:focus:!text-white"
                       >
                         <User size={16} aria-hidden="true" />
                         <span className="truncate">Product Designer</span>
                       </SelectItem>
                       <SelectItem
                         value="developer"
-                        className="focus:!bg-zinc-100 focus:!text-zinc-900 dark:focus:!bg-zinc-800 dark:focus:!text-white"
+                        className="focus:!bg-zinc-100 focus:!text-black dark:focus:!bg-zinc-800 dark:focus:!text-white"
                       >
                         <Code size={16} aria-hidden="true" />
                         <span className="truncate">Developer</span>
                       </SelectItem>
                       <SelectItem
                         value="manager"
-                        className="focus:!bg-zinc-100 focus:!text-zinc-900 dark:focus:!bg-zinc-800 dark:focus:!text-white"
+                        className="focus:!bg-zinc-100 focus:!text-black dark:focus:!bg-zinc-800 dark:focus:!text-white"
                       >
                         <BarChart size={16} aria-hidden="true" />
                         <span className="truncate">Product Manager</span>
@@ -196,6 +196,7 @@ export default function LoginSignup({
                   <div className="space-y-2">
                     <Label htmlFor="firstName">First name</Label>
                     <Input
+                className="text-black"
                       id="firstName"
                       value={form.firstName}
                       onChange={(e) => update('firstName', e.target.value)}
@@ -205,6 +206,7 @@ export default function LoginSignup({
                   <div className="space-y-2">
                     <Label htmlFor="lastName">Last name</Label>
                     <Input
+                className="text-black"
                       id="lastName"
                       value={form.lastName}
                       onChange={(e) => update('lastName', e.target.value)}
@@ -215,6 +217,7 @@ export default function LoginSignup({
                 <div className="space-y-2">
                   <Label htmlFor="username">Username</Label>
                   <Input
+                className="text-black"
                     id="username"
                     value={form.username}
                     onChange={(e) => update('username', e.target.value)}
@@ -224,6 +227,7 @@ export default function LoginSignup({
                 <div className="space-y-2">
                   <Label htmlFor="email">Email address</Label>
                   <Input
+                className="text-black"
                     id="email"
                     type="email"
                     value={form.email}
@@ -237,7 +241,7 @@ export default function LoginSignup({
                     <Input
                       id="password"
                       type={showPassword ? 'text' : 'password'}
-                      className="pr-10"
+                      className="pr-10 text-black"
                       value={form.password}
                       onChange={(e) => update('password', e.target.value)}
                       required
@@ -247,7 +251,7 @@ export default function LoginSignup({
                       type="button"
                       variant="ghost"
                       size="icon"
-                      className="absolute right-0 top-0 h-full px-3 text-muted-foreground hover:bg-transparent"
+                      className="absolute right-0 top-0 h-full px-3 text-black hover:bg-transparent"
                       onClick={() => setShowPassword(!showPassword)}
                     >
                       {showPassword ? (
@@ -264,7 +268,7 @@ export default function LoginSignup({
                     <Input
                       id="confirmPassword"
                       type={showConfirmPassword ? 'text' : 'password'}
-                      className="pr-10"
+                      className="pr-10 text-black"
                       value={form.confirmPassword}
                       onChange={(e) =>
                         update('confirmPassword', e.target.value)
@@ -275,7 +279,7 @@ export default function LoginSignup({
                       type="button"
                       variant="ghost"
                       size="icon"
-                      className="absolute right-0 top-0 h-full px-3 text-muted-foreground hover:bg-transparent"
+                      className="absolute right-0 top-0 h-full px-3 text-black hover:bg-transparent"
                       onClick={() =>
                         setShowConfirmPassword(!showConfirmPassword)
                       }
@@ -297,14 +301,14 @@ export default function LoginSignup({
                   />
                   <label
                     htmlFor="terms"
-                    className="text-sm text-muted-foreground"
+                    className="text-sm text-black"
                   >
                     I agree to the{' '}
-                    <Link href="#" className="text-zinc-900 hover:text-zinc-700 dark:text-zinc-100 dark:hover:text-zinc-300 underline underline-offset-4">
+                    <Link href="#" className="text-black hover:text-zinc-600 dark:text-white dark:hover:text-zinc-300 underline underline-offset-4">
                       Terms
                     </Link>{' '}
                     and{' '}
-                    <Link href="#" className="text-zinc-900 hover:text-zinc-700 dark:text-zinc-100 dark:hover:text-zinc-300 underline underline-offset-4">
+                    <Link href="#" className="text-black hover:text-zinc-600 dark:text-white dark:hover:text-zinc-300 underline underline-offset-4">
                       Conditions
                     </Link>
                   </label>
@@ -323,12 +327,12 @@ export default function LoginSignup({
               </CardContent>
             </form>
             <CardFooter className="flex justify-center border-t !py-4">
-              <p className="text-center text-sm text-muted-foreground">
+              <p className="text-center text-sm text-black">
                 Already have an account?{' '}
                 <button
                   type="button"
                   onClick={() => onToggleMode('login')}
-                  className="text-zinc-900 hover:text-zinc-700 dark:text-zinc-100 dark:hover:text-zinc-300 underline underline-offset-4"
+                  className="text-black hover:text-zinc-600 dark:text-white dark:hover:text-zinc-300 underline underline-offset-4"
                 >
                   Sign in
                 </button>
@@ -344,7 +348,7 @@ export default function LoginSignup({
     return (
       <div className="flex items-center justify-center min-h-screen px-4 py-10">
         <div className="sm:mx-auto sm:w-full sm:max-w-sm">
-          <h2 className="text-center text-xl font-semibold text-foreground">
+          <h2 className="text-center text-xl font-semibold text-black">
             Sign in with email code
           </h2>
           <form onSubmit={handleVerifyCode} className="mt-6 space-y-4">
@@ -354,7 +358,7 @@ export default function LoginSignup({
               </div>
             )}
             <div>
-              <Label htmlFor="otp-email" className="font-medium text-foreground">
+              <Label htmlFor="otp-email" className="font-medium text-black">
                 Email
               </Label>
               <Input
@@ -363,14 +367,13 @@ export default function LoginSignup({
                 value={form.email}
                 onChange={(e) => update('email', e.target.value)}
                 placeholder="john@company.com"
-                className="mt-2"
+                className="mt-2 text-black"
                 required
               />
             </div>
             <Button
               type="button"
-              variant="outline"
-              className="w-full hover:!bg-zinc-100 hover:!text-zinc-900 hover:!border-zinc-300 dark:hover:!bg-zinc-800 dark:hover:!text-white"
+              variant="outline" className="text-black dark:text-white w-full hover:!bg-zinc-100 hover:!text-black hover:!border-zinc-300 dark:hover:!bg-zinc-800 dark:hover:!text-white"
               onClick={handleSendCode}
               disabled={loading || !form.email}
             >
@@ -381,7 +384,7 @@ export default function LoginSignup({
               )}
             </Button>
             <div>
-              <Label htmlFor="code" className="font-medium text-foreground">
+              <Label htmlFor="code" className="font-medium text-black">
                 Verification code
               </Label>
               <Input
@@ -389,7 +392,7 @@ export default function LoginSignup({
                 value={form.code}
                 onChange={(e) => update('code', e.target.value)}
                 placeholder="123456"
-                className="mt-2"
+                className="mt-2 text-black"
                 required
               />
             </div>
@@ -400,11 +403,11 @@ export default function LoginSignup({
                 'Verify code'
               )}
             </Button>
-            <p className="text-center text-sm text-muted-foreground">
+            <p className="text-center text-sm text-black">
               <button
                 type="button"
                 onClick={() => onToggleMode('login')}
-                className="text-zinc-900 hover:text-zinc-700 dark:text-zinc-100 dark:hover:text-zinc-300 underline underline-offset-4"
+                className="text-black hover:text-zinc-600 dark:text-white dark:hover:text-zinc-300 underline underline-offset-4"
               >
                 Back to password sign in
               </button>
@@ -419,7 +422,7 @@ export default function LoginSignup({
     return (
       <div className="flex items-center justify-center min-h-screen px-4 py-10">
         <div className="sm:mx-auto sm:w-full sm:max-w-sm">
-          <h2 className="text-center text-xl font-semibold text-foreground">
+          <h2 className="text-center text-xl font-semibold text-black">
             Reset your password
           </h2>
           <form onSubmit={handleReset} className="mt-6 space-y-4">
@@ -429,7 +432,7 @@ export default function LoginSignup({
               </div>
             )}
             <div>
-              <Label htmlFor="reset-email" className="font-medium text-foreground">
+              <Label htmlFor="reset-email" className="font-medium text-black">
                 Email
               </Label>
               <Input
@@ -438,7 +441,7 @@ export default function LoginSignup({
                 value={form.email}
                 onChange={(e) => update('email', e.target.value)}
                 placeholder="john@company.com"
-                className="mt-2"
+                className="mt-2 text-black"
                 required
               />
             </div>
@@ -449,11 +452,11 @@ export default function LoginSignup({
                 'Send reset link'
               )}
             </Button>
-            <p className="text-center text-sm text-muted-foreground">
+            <p className="text-center text-sm text-black">
               <button
                 type="button"
                 onClick={() => onToggleMode('login')}
-                className="text-zinc-900 hover:text-zinc-700 dark:text-zinc-100 dark:hover:text-zinc-300 underline underline-offset-4"
+                className="text-black hover:text-zinc-600 dark:text-white dark:hover:text-zinc-300 underline underline-offset-4"
               >
                 Back to sign in
               </button>
@@ -467,7 +470,7 @@ export default function LoginSignup({
   return (
     <div className="flex items-center justify-center min-h-screen bg-zinc-50 px-4 py-10">
       <div className="flex flex-1 flex-col justify-center rounded-xl border border-zinc-200 bg-white p-6 shadow-sm sm:mx-auto sm:w-full sm:max-w-sm">
-        <h2 className="text-center text-xl font-semibold text-foreground">
+        <h2 className="text-center text-xl font-semibold text-black">
           Log in or create account
         </h2>
         <form onSubmit={handleLoginSubmit} className="mt-6">
@@ -481,7 +484,7 @@ export default function LoginSignup({
               {message}
             </div>
           )}
-          <Label htmlFor="email" className="font-medium text-foreground">
+          <Label htmlFor="email" className="font-medium text-black">
             Email
           </Label>
           <Input
@@ -490,13 +493,13 @@ export default function LoginSignup({
             name="email"
             autoComplete="email"
             placeholder="john@company.com"
-            className="mt-2"
+            className="mt-2 text-black"
             value={form.email}
             onChange={(e) => update('email', e.target.value)}
             required
           />
           <div className="mt-4">
-            <Label htmlFor="password" className="font-medium text-foreground">
+            <Label htmlFor="password" className="font-medium text-black">
               Password
             </Label>
             <div className="relative mt-2">
@@ -507,14 +510,14 @@ export default function LoginSignup({
                 autoComplete="current-password"
                 value={form.password}
                 onChange={(e) => update('password', e.target.value)}
-                className="pr-10"
+                className="pr-10 text-black"
                 required
               />
               <Button
                 type="button"
                 variant="ghost"
                 size="icon"
-                className="absolute right-0 top-0 h-full px-3 text-muted-foreground hover:bg-transparent"
+                className="absolute right-0 top-0 h-full px-3 text-black hover:bg-transparent"
                 onClick={() => setShowPassword(!showPassword)}
               >
                 {showPassword ? (
@@ -529,7 +532,7 @@ export default function LoginSignup({
             <button
               type="button"
               onClick={() => onToggleMode('reset')}
-              className="text-sm text-zinc-600 hover:text-zinc-900 hover:underline"
+              className="text-sm text-black hover:text-zinc-900 hover:underline"
             >
               Forgot password?
             </button>
@@ -547,26 +550,24 @@ export default function LoginSignup({
             <Separator className="w-full" />
           </div>
           <div className="relative flex justify-center text-xs uppercase">
-            <span className="bg-background px-2 text-muted-foreground">
+            <span className="bg-background px-2 text-black">
               or
             </span>
           </div>
         </div>
         <Button
-          variant="outline"
-          className="w-full hover:!bg-zinc-100 hover:!text-zinc-900 hover:!border-zinc-300 dark:hover:!bg-zinc-800 dark:hover:!text-white"
+          variant="outline" className="text-black dark:text-white w-full hover:!bg-zinc-100 hover:!text-black hover:!border-zinc-300 dark:hover:!bg-zinc-800 dark:hover:!text-white"
           onClick={() => onToggleMode('otp')}
         >
           Sign in with email code
         </Button>
         <Button
-          variant="outline"
-          className="w-full mt-3 hover:!bg-zinc-100 hover:!text-zinc-900 hover:!border-zinc-300 dark:hover:!bg-zinc-800 dark:hover:!text-white"
+          variant="outline" className="text-black dark:text-white w-full mt-3 hover:!bg-zinc-100 hover:!text-black hover:!border-zinc-300 dark:hover:!bg-zinc-800 dark:hover:!text-white"
           onClick={() => onToggleMode('signup')}
         >
           Create account
         </Button>
-        <p className="mt-4 text-xs text-center text-muted-foreground">
+        <p className="mt-4 text-xs text-center text-black">
           By signing in, you agree to our{' '}
           <Link href="#" className="underline underline-offset-4">
             terms of service
