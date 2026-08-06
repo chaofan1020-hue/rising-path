@@ -66,7 +66,7 @@ function Header1() {
                     if (mounted) {
                         setIsLoggedIn(!!session);
                         setUser(session?.user ?? null);
-                        setAccessCodeName(session?.user?.email || "");
+                        setAccessCodeName(getDisplayName(session?.user ?? null));
                     }
                 }
             );
