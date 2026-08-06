@@ -52,8 +52,13 @@ const BLANK_PIXEL =
 // atlas and the back face to the RIGHT half (measured from card.glb). Each
 // custom image is composited into its own half so the two faces render
 // independently, aspect-preserving (no stretching).
-const FRONT_UV_RECT = { x: 0, y: 0, w: 0.5, h: 0.755 };
-const BACK_UV_RECT = { x: 0.5, y: 0, w: 0.5, h: 0.757 };
+// Measured from the actual card.glb UV islands (front face): u 0.0008..0.4989, v 0.0042..0.7548
+const FRONT_UV_RECT = { x: 0.0008, y: 0.0042, w: 0.4981, h: 0.7506 };
+const BACK_UV_RECT = { x: 0.5, y: 0.0042, w: 0.4981, h: 0.7506 };
+// The model's UV region aspect (0.664) is narrower than its physical face aspect
+// (0.716) — textures are horizontally stretched ~8% by design. Counteract by
+// squashing the visual group X so printed artwork keeps its native proportion.
+const CARD_X_SQUASH = 0.9263;
 function detectWebGL() {
   try {
     const canvas = document.createElement('canvas');
@@ -338,7 +343,7 @@ function Band({
         <RigidBody position={[2, 0.5, 0]} ref={card} {...segmentProps} type={dragged ? 'kinematicPosition' : 'dynamic'}>
           <CuboidCollider args={[0.8, 1.125, 0.01]} />
           <group
-            scale={2.25}
+            scale={[2.25 * CARD_X_SQUASH, 2.25, 2.25]}
             position={[0, -1.2, -0.05]}
             onPointerOver={() => hover(true)}
             onPointerOut={() => hover(false)}
