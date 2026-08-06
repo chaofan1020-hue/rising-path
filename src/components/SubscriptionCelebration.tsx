@@ -91,11 +91,6 @@ export default function SubscriptionCelebration({
       {/* Text overlay */}
       <div className="absolute bottom-[18%] left-0 right-0 z-10 text-center px-6 pointer-events-none">
         <div className={`transition-all duration-700 delay-1000 ${visible ? 'opacity-100 translate-y-0' : 'opacity-0 translate-y-4'}`}>
-          <div className="inline-block rounded-full bg-white/10 backdrop-blur-md px-5 py-1.5 mb-4">
-            <span className="text-xs font-medium text-white/80 uppercase tracking-widest">
-              Pro
-            </span>
-          </div>
           <h2 className="text-4xl font-bold text-white mb-3 tracking-tight">
             订阅成功！
           </h2>
