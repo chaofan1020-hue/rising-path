@@ -5,7 +5,7 @@ import { useRouter } from 'next/navigation';
 import { getSupabaseBrowserClient } from '@/lib/supabase-browser';
 import LoginSignup, { type RegisterData } from '@/components/ui/login-signup';
 
-type AuthMode = 'login' | 'signup' | 'otp' | 'reset';
+type AuthMode = 'login' | 'signup' | 'otp' | 'reset' | 'password';
 
 export default function LoginPage() {
   const router = useRouter();
@@ -139,6 +139,24 @@ export default function LoginPage() {
     }
   };
 
+  const handleGoogleSignIn = async () => {
+    setLoading(true);
+    setError(null);
+    try {
+      const supabase = await getSupabaseBrowserClient();
+      const { error: oauthError } = await supabase.auth.signInWithOAuth({
+        provider: 'google',
+        options: {
+          redirectTo: `${window.location.origin}/home`,
+        },
+      });
+      if (oauthError) throw oauthError;
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'Google sign in failed');
+      setLoading(false);
+    }
+  };
+
   return (
     <LoginSignup
       mode={mode}
@@ -152,6 +170,7 @@ export default function LoginPage() {
       onSendCode={handleSendOtp}
       onVerifyCode={handleVerifyOtp}
       onResetPassword={handleResetPassword}
+      onGoogleSignIn={handleGoogleSignIn}
       loading={loading}
       error={error}
       message={message}
