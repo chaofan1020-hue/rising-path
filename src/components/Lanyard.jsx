@@ -351,10 +351,10 @@ function Band({
             <mesh geometry={nodes.card.geometry}>
               <meshPhysicalMaterial
                 map={cardMap}
-                clearcoat={isMobile ? 0 : 0.4}
+                clearcoat={isMobile ? 0 : 0.2}
                 clearcoatRoughness={0.2}
-                roughness={0.55}
-                metalness={0.15}
+                roughness={0.9}
+                metalness={0}
                 map-anisotropy={16}
               />
             </mesh>
