@@ -273,8 +273,8 @@ function Band({
   useEffect(() => {
     const c = card.current;
     if (!c) return;
-    c.setLinvel({ x: 0, y: -4, z: 0 }, true);
-    c.setAngvel({ x: 0, y: 0, z: -1.5 }, true);
+    c.setLinvel({ x: 0, y: -2, z: 0 }, true);
+    c.setAngvel({ x: 0, y: 0, z: -0.6 }, true);
   }, []);
   useFrame((state, delta) => {
     if (dragged) {
@@ -323,7 +323,7 @@ function Band({
         <RigidBody position={[1.5, 0, 0]} ref={j3} {...segmentProps}>
           <BallCollider args={[0.1]} />
         </RigidBody>
-        <RigidBody position={[2, 1.2, 0]} ref={card} {...segmentProps} type={dragged ? 'kinematicPosition' : 'dynamic'}>
+        <RigidBody position={[2, 0.5, 0]} ref={card} {...segmentProps} type={dragged ? 'kinematicPosition' : 'dynamic'}>
           <CuboidCollider args={[0.8, 1.125, 0.01]} />
           <group
             scale={2.25}
