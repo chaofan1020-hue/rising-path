@@ -534,7 +534,7 @@ export default function LoginSignup({
             </div>
             <Button
               type="submit"
-              className="w-full bg-zinc-900 text-white hover:bg-zinc-800"
+              className="w-full bg-black text-white hover:bg-zinc-900"
               disabled={loading || !form.email}
             >
               {loading ? (
@@ -666,7 +666,7 @@ export default function LoginSignup({
               Forgot password?
             </button>
           </div>
-          <Button type="submit" className="mt-4 w-full bg-zinc-900 text-white hover:bg-zinc-800" disabled={loading}>
+          <Button type="submit" className="mt-4 w-full bg-black text-white hover:bg-zinc-900" disabled={loading}>
             {loading ? (
               <Loader2 className="h-4 w-4 animate-spin" />
             ) : (
