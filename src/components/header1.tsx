@@ -9,41 +9,72 @@ import {
     NavigationMenuList,
     NavigationMenuTrigger,
 } from "@/components/ui/navigation-menu";
-import { Menu, MoveRight, X, LogOut, User } from "lucide-react";
+import { Menu, MoveRight, X, LogOut, User as UserIcon } from "lucide-react";
 import { useState, useEffect } from "react";
 import Link from "next/link";
 import { ThemeToggle } from "@/components/theme-toggle";
 import { LanguageSwitcher } from "@/components/language-switcher";
 import { useLanguage } from "@/lib/language-context";
+import { getSupabaseBrowserClient } from "@/lib/supabase-browser";
+import type { User as SupabaseUser, AuthChangeEvent, Session } from "@supabase/supabase-js";
 
 function Header1() {
     const { t } = useLanguage();
     const [isOpen, setOpen] = useState(false);
     const [isLoggedIn, setIsLoggedIn] = useState(false);
     const [accessCodeName, setAccessCodeName] = useState("");
+    const [user, setUser] = useState<SupabaseUser | null>(null);
 
     useEffect(() => {
-        // 检查登录状态
+        let mounted = true;
+        // 检查登录状态（先兼容旧访问码，再检测 Supabase Auth session）
         const accessCode = localStorage.getItem('access_code');
-        
         if (accessCode) {
             try {
                 const data = JSON.parse(accessCode);
-                setIsLoggedIn(true);
-                setAccessCodeName(data.name || data.code || "");
+                if (mounted) {
+                    setIsLoggedIn(true);
+                    setAccessCodeName(data.name || data.code || "");
+                }
             } catch {
-                setIsLoggedIn(false);
+                if (mounted) setIsLoggedIn(false);
             }
-        } else {
-            setIsLoggedIn(false);
+            return;
         }
+
+        getSupabaseBrowserClient().then(supabase => {
+            supabase.auth.getSession().then(({ data: { session } }: { data: { session: Session | null } }) => {
+                if (mounted) {
+                    setIsLoggedIn(!!session);
+                    setUser(session?.user ?? null);
+                    setAccessCodeName(session?.user?.email || "");
+                }
+            });
+            const { data: { subscription } } = supabase.auth.onAuthStateChange(
+                (_event: AuthChangeEvent, session: Session | null) => {
+                    if (mounted) {
+                        setIsLoggedIn(!!session);
+                        setUser(session?.user ?? null);
+                        setAccessCodeName(session?.user?.email || "");
+                    }
+                }
+            );
+            return () => subscription.unsubscribe();
+        });
+
+        return () => {
+            mounted = false;
+        };
     }, []);
 
-    const handleLogout = () => {
+    const handleLogout = async () => {
         localStorage.removeItem('access_code');
         localStorage.removeItem('access_code_id');
         localStorage.removeItem('access_code_data');
+        const supabase = await getSupabaseBrowserClient();
+        await supabase.auth.signOut();
         setIsLoggedIn(false);
+        setUser(null);
         setAccessCodeName("");
         window.location.href = '/';
     };
@@ -163,7 +194,7 @@ function Header1() {
                     {isLoggedIn ? (
                         <>
                             <div className="hidden md:flex items-center gap-2 text-sm text-black dark:text-white">
-                                <User className="w-4 h-4" />
+                                <UserIcon className="w-4 h-4" />
                                 <span>{accessCodeName}</span>
                             </div>
                             <Button variant="ghost" onClick={handleLogout} className="hidden md:inline-flex text-black dark:text-white hover:bg-zinc-100 dark:hover:bg-zinc-800 hover:text-zinc-900 dark:hover:text-zinc-100">
@@ -173,7 +204,7 @@ function Header1() {
                         </>
                     ) : (
                         <Button asChild className="bg-zinc-900 text-white hover:bg-zinc-800 dark:bg-white dark:text-zinc-900 dark:hover:bg-zinc-200">
-                            <Link href="/access-code">{t("nav.getStarted")}</Link>
+                            <Link href="/login">{t("nav.getStarted")}</Link>
                         </Button>
                     )}
                 </div>

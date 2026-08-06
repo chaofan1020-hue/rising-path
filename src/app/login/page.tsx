@@ -26,7 +26,7 @@ export default function LoginPage() {
       .then((client) => client.auth.getSession())
       .then(({ data: { session } }) => {
         if (session) {
-          router.replace('/');
+          router.replace('/home');
         }
       })
       .catch(() => {});
@@ -43,7 +43,7 @@ export default function LoginPage() {
         password,
       });
       if (signInError) throw signInError;
-      router.replace('/');
+      router.replace('/home');
     } catch (err) {
       setError(err instanceof Error ? err.message : '登录失败');
     } finally {
@@ -61,7 +61,7 @@ export default function LoginPage() {
         password,
       });
       if (signUpError) throw signUpError;
-      router.replace('/');
+      router.replace('/home');
     } catch (err) {
       setError(err instanceof Error ? err.message : '注册失败');
     } finally {
@@ -102,7 +102,7 @@ export default function LoginPage() {
         type: 'email',
       });
       if (verifyError) throw verifyError;
-      router.replace('/');
+      router.replace('/home');
     } catch (err) {
       setError(err instanceof Error ? err.message : '验证码校验失败');
     } finally {
