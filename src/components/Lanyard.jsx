@@ -339,8 +339,12 @@ function Band({
                 map-anisotropy={16}
               />
             </mesh>
-            <mesh geometry={nodes.clip.geometry} material={materials.metal} material-roughness={0.3} />
-            <mesh geometry={nodes.clamp.geometry} material={materials.metal} />
+            <mesh geometry={nodes.clip.geometry}>
+              <meshStandardMaterial color={0x0a0a0a} metalness={0.7} roughness={0.28} envMapIntensity={0.5} />
+            </mesh>
+            <mesh geometry={nodes.clamp.geometry}>
+              <meshStandardMaterial color={0x0a0a0a} metalness={0.7} roughness={0.28} envMapIntensity={0.5} />
+            </mesh>
           </group>
         </RigidBody>
       </group>
