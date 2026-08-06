@@ -129,8 +129,8 @@ export default function Lanyard({
           });
         }}
       >
-        <ambientLight intensity={Math.PI * 0.4} />
-        <directionalLight position={[5, 8, 10]} intensity={0.8} />
+        <ambientLight intensity={Math.PI * 0.22} />
+        <directionalLight position={[5, 8, 10]} intensity={0.45} />
         <Physics gravity={gravity} timeStep={isMobile ? 1 / 30 : 1 / 60}>
           <Band
             isMobile={isMobile}
@@ -354,9 +354,18 @@ function Band({
             )}
           >
             <mesh geometry={nodes.card.geometry}>
-              {/* Unlit: printed badge faces must render true to the design colors,
-                  PBR lighting always washes printed artwork out at some angle. */}
-              <meshBasicMaterial map={cardMap} toneMapped={false} />
+              {/* Laminated print look: tight light budget (scene lights kept low so
+                  total irradiance ≈ 1) — colors stay true while tilt/sheen read real. */}
+              <meshPhysicalMaterial
+                map={cardMap}
+                metalness={0}
+                roughness={0.55}
+                clearcoat={isMobile ? 0 : 0.15}
+                clearcoatRoughness={0.3}
+                envMapIntensity={0.12}
+                specularIntensity={0.5}
+                map-anisotropy={16}
+              />
             </mesh>
             <mesh geometry={nodes.clip.geometry}>
               <meshStandardMaterial color={0x0a0a0a} metalness={0.7} roughness={0.28} envMapIntensity={0.5} />
