@@ -64,7 +64,7 @@ function detectWebGL() {
 }
 
 export default function Lanyard({
-  position = [0, 2, 15],
+  position = [0, 2, 12],
   gravity = [0, -55, 0],
   fov = 24,
   transparent = true,
