@@ -82,7 +82,7 @@ export default function SubscriptionCelebration({
                 <path d="M40 20H11a4 4 0 0 1 0-8h29v8z" />
               </svg>
             </div>
-            <h2 className="text-3xl font-bold text-white mb-3">订阅成功！</h2>
+            <h2 className="text-3xl font-bold text-white mb-3">注册成功！</h2>
             <p className="text-white/50 text-sm">欢迎加入 Rising Path</p>
           </div>
         </div>
@@ -92,10 +92,10 @@ export default function SubscriptionCelebration({
       <div className="absolute bottom-[18%] left-0 right-0 z-10 text-center px-6 pointer-events-none">
         <div className={`transition-all duration-700 delay-1000 ${visible ? 'opacity-100 translate-y-0' : 'opacity-0 translate-y-4'}`}>
           <h2 className="text-4xl font-bold text-white mb-3 tracking-tight">
-            订阅成功！
+            注册成功！
           </h2>
           <p className="text-white/50 text-sm max-w-xs mx-auto">
-            你的专属工牌已生成，开启你的求职之旅
+            欢迎加入 Rising Path，你的专属工牌已生成
           </p>
         </div>
       </div>
