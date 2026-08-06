@@ -18,6 +18,17 @@ import { useLanguage } from "@/lib/language-context";
 import { getSupabaseBrowserClient } from "@/lib/supabase-browser";
 import type { User as SupabaseUser, AuthChangeEvent, Session } from "@supabase/supabase-js";
 
+function getDisplayName(user: SupabaseUser | null): string {
+    if (!user) return "";
+    const meta = user.user_metadata || {};
+    if (meta.username) return meta.username;
+    if (meta.full_name) return meta.full_name;
+    if (meta.first_name || meta.last_name) {
+        return `${meta.first_name || ""} ${meta.last_name || ""}`.trim();
+    }
+    return user.email || "";
+}
+
 function Header1() {
     const { t } = useLanguage();
     const [isOpen, setOpen] = useState(false);
@@ -47,7 +58,7 @@ function Header1() {
                 if (mounted) {
                     setIsLoggedIn(!!session);
                     setUser(session?.user ?? null);
-                    setAccessCodeName(session?.user?.email || "");
+                    setAccessCodeName(getDisplayName(session?.user ?? null));
                 }
             });
             const { data: { subscription } } = supabase.auth.onAuthStateChange(
