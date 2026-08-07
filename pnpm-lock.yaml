@@ -137,15 +137,6 @@ importers:
       dotenv:
         specifier: ^17.2.3
         version: 17.2.3
-      drizzle-kit:
-        specifier: ^0.31.8
-        version: 0.31.8
-      drizzle-orm:
-        specifier: ^0.45.1
-        version: 0.45.1(@types/pg@8.16.0)(pg@8.17.2)
-      drizzle-zod:
-        specifier: ^0.8.3
-        version: 0.8.3(drizzle-orm@0.45.1(@types/pg@8.16.0)(pg@8.17.2))(zod@4.3.6)
       embla-carousel-react:
         specifier: ^8.6.0
         version: 8.6.0(react@19.2.3)
@@ -182,9 +173,6 @@ importers:
       pdf2json:
         specifier: ^4.0.2
         version: 4.0.2
-      pg:
-        specifier: ^8.16.3
-        version: 8.17.2
       react:
         specifier: 19.2.3
         version: 19.2.3
@@ -243,9 +231,6 @@ importers:
       '@types/node':
         specifier: ^20
         version: 20.19.30
-      '@types/pg':
-        specifier: ^8.16.0
-        version: 8.16.0
       '@types/react':
         specifier: ^19
         version: 19.2.10

@@ -3,6 +3,8 @@
 import { useCallback, useEffect, useMemo, useState } from 'react';
 import Link from 'next/link';
 import { Header1 } from '@/components/header1';
+import { AuthGuard } from '@/components/auth-guard';
+import { apiFetch } from '@/lib/api-client';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent } from '@/components/ui/card';
 import { Skeleton } from '@/components/ui/skeleton';
@@ -115,23 +117,14 @@ export default function DashboardPage() {
   const [showCelebration, setShowCelebration] = useState(false);
   const [savingRegion, setSavingRegion] = useState(false);
 
-  const accessCodeId = useMemo(() => {
-    if (typeof window === 'undefined') return '';
-    return (
-      localStorage.getItem('access_code_id') ||
-      localStorage.getItem('access_code') ||
-      ''
-    );
-  }, []);
-
   const fetchDashboard = useCallback(() => {
-    if (!accessCodeId) {
-      setLoading(false);
-      return;
-    }
     setLoading(true);
-    fetch(`/api/dashboard?access_code_id=${accessCodeId}&lang=${locale}`)
-      .then((res) => res.json())
+    apiFetch(`/api/dashboard?lang=${locale}`)
+      .then(async (res) => {
+        const json = await res.json();
+        if (!res.ok) throw new Error(json.error || t('dashboard.loadError') || '加载失败');
+        return json;
+      })
       .then((json) => {
         if (json.error) {
           setError(json.error);
@@ -141,7 +134,7 @@ export default function DashboardPage() {
       })
       .catch((err) => setError(err?.message || t('dashboard.loadError') || '加载失败'))
       .finally(() => setLoading(false));
-  }, [accessCodeId, locale, t]);
+  }, [locale, t]);
 
   useEffect(() => {
     fetchDashboard();
@@ -152,13 +145,10 @@ export default function DashboardPage() {
       if (!data?.latestResumeId) return;
       setSavingRegion(true);
       try {
-        const res = await fetch(`/api/resume/${data.latestResumeId}`, {
+        const res = await apiFetch(`/api/resume/${data.latestResumeId}`, {
           method: 'PATCH',
           headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({
-            accessCodeId: Number(accessCodeId),
-            overrides: { regions: [value] },
-          }),
+          body: JSON.stringify({ overrides: { regions: [value] } }),
         });
         const json = await res.json().catch(() => ({}));
         if (!res.ok) {
@@ -201,9 +191,10 @@ export default function DashboardPage() {
   }, [data]);
 
   return (
-    <div className="min-h-screen bg-white dark:bg-zinc-950">
-      <Header1 />
-      <main className="container mx-auto px-4 pt-16 md:pt-20 pb-16">
+    <AuthGuard showAccountBar={false}>
+      <div className="min-h-screen bg-white dark:bg-zinc-950">
+        <Header1 />
+        <main className="container mx-auto px-4 pt-16 md:pt-20 pb-16">
         {/* Hero */}
         <div className="mb-8 md:mb-10">
           <p className="text-sm font-medium text-zinc-400 dark:text-zinc-500 mb-3">
@@ -556,13 +547,14 @@ export default function DashboardPage() {
             </div>
           </div>
         )}
-      </main>
+        </main>
 
-      <SubscriptionCelebration
-        open={showCelebration}
-        onClose={() => setShowCelebration(false)}
-      />
-    </div>
+        <SubscriptionCelebration
+          open={showCelebration}
+          onClose={() => setShowCelebration(false)}
+        />
+      </div>
+    </AuthGuard>
   );
 }
 

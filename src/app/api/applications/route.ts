@@ -1,12 +1,14 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { getSupabaseClient } from '@/storage/database/supabase-client';
+import { hasValidAdminSession } from '@/lib/admin-auth';
+import { getAuthContext, unauthorizedResponse } from '@/lib/auth-server';
 
 export async function GET(request: NextRequest) {
   try {
-    const client = getSupabaseClient();
-    const { searchParams } = new URL(request.url);
-    const accessCodeId = searchParams.get('access_code_id');
-    const isAdmin = request.headers.get('x-admin-request') === 'true';
+    const isAdmin = hasValidAdminSession(request);
+    const auth = isAdmin ? null : await getAuthContext(request);
+    if (!isAdmin && !auth) return unauthorizedResponse();
+    const client = isAdmin ? getSupabaseClient() : auth!.client;
     
     let query = client.from('applications').select(`
       *,
@@ -14,14 +16,7 @@ export async function GET(request: NextRequest) {
       resumes (file_name)
     `);
     
-    // 管理员可以查看所有网申记录，普通用户需要 access_code_id
-    if (!accessCodeId && !isAdmin) {
-      return NextResponse.json({ applications: [] });
-    }
-    
-    if (accessCodeId) {
-      query = query.eq('access_code_id', parseInt(accessCodeId));
-    }
+    if (auth) query = query.eq('user_id', auth.user.id);
     
     const { data, error } = await query.order('created_at', { ascending: false });
 
@@ -41,22 +36,22 @@ export async function GET(request: NextRequest) {
 
 export async function POST(request: NextRequest) {
   try {
-    const client = getSupabaseClient();
+    const auth = await getAuthContext(request);
+    if (!auth) return unauthorizedResponse();
+    const client = auth.client;
     const body = await request.json();
-    
-    // 从请求体中提取 access_code_id
-    const { access_code_id, ...applicationData } = body;
-
-    // 必须提供 access_code_id
-    if (!access_code_id) {
-      return NextResponse.json({ error: '未授权的访问' }, { status: 401 });
-    }
+    const writableFields = ['job_id', 'resume_id', 'status', 'notes', 'submitted_at'] as const;
+    const applicationData = Object.fromEntries(
+      writableFields
+        .filter((field) => body[field] !== undefined)
+        .map((field) => [field, body[field]])
+    );
 
     const { data, error } = await client
       .from('applications')
       .insert({
         ...applicationData,
-        access_code_id: access_code_id,
+        user_id: auth.user.id,
       })
       .select()
       .single();

@@ -1,21 +1,29 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { getSupabaseClient } from '@/storage/database/supabase-client';
+import { hasValidAdminSession } from '@/lib/admin-auth';
+
+const RESERVED_CONFIG_TYPE = 'admin_password_hash';
+const PUBLIC_CONFIG_TYPES = ['region', 'direction', 'audience', 'job_type'] as const;
 
 // 获取所有配置
 export async function GET(request: NextRequest) {
   try {
+    const isAdmin = hasValidAdminSession(request);
     const client = getSupabaseClient();
     const searchParams = request.nextUrl.searchParams;
     const configType = searchParams.get('type');
 
     let query = client
       .from('job_configs')
-      .select('*')
+      .select('id, config_type, config_value, sort_order, is_active')
       .eq('is_active', true)
+      .neq('config_type', RESERVED_CONFIG_TYPE)
       .order('sort_order', { ascending: true });
 
     if (configType) {
       query = query.eq('config_type', configType);
+    } else if (!isAdmin) {
+      query = query.in('config_type', [...PUBLIC_CONFIG_TYPES]);
     }
 
     const { data, error } = await query;
@@ -46,6 +54,10 @@ export async function GET(request: NextRequest) {
 // 添加配置
 export async function POST(request: NextRequest) {
   try {
+    if (!hasValidAdminSession(request)) {
+      return NextResponse.json({ error: '需要管理员权限' }, { status: 401 });
+    }
+
     const client = getSupabaseClient();
     const body = await request.json();
     const { config_type, config_value, sort_order } = body;
@@ -55,6 +67,9 @@ export async function POST(request: NextRequest) {
         { error: '缺少必要参数' },
         { status: 400 }
       );
+    }
+    if (config_type === RESERVED_CONFIG_TYPE) {
+      return NextResponse.json({ error: '该配置类型由专用接口管理' }, { status: 400 });
     }
 
     // 获取当前最大排序值
@@ -95,6 +110,10 @@ export async function POST(request: NextRequest) {
 // 更新配置
 export async function PUT(request: NextRequest) {
   try {
+    if (!hasValidAdminSession(request)) {
+      return NextResponse.json({ error: '需要管理员权限' }, { status: 401 });
+    }
+
     const client = getSupabaseClient();
     const body = await request.json();
     const { id, config_value, sort_order, is_active } = body;
@@ -104,6 +123,18 @@ export async function PUT(request: NextRequest) {
         { error: '缺少配置ID' },
         { status: 400 }
       );
+    }
+
+    const { data: existingConfig, error: existingError } = await client
+      .from('job_configs')
+      .select('config_type')
+      .eq('id', id)
+      .single();
+    if (existingError) {
+      return NextResponse.json({ error: '配置不存在' }, { status: 404 });
+    }
+    if (existingConfig.config_type === RESERVED_CONFIG_TYPE) {
+      return NextResponse.json({ error: '该配置类型由专用接口管理' }, { status: 400 });
     }
 
     const updateData: Record<string, unknown> = {};
@@ -135,6 +166,10 @@ export async function PUT(request: NextRequest) {
 // 删除配置
 export async function DELETE(request: NextRequest) {
   try {
+    if (!hasValidAdminSession(request)) {
+      return NextResponse.json({ error: '需要管理员权限' }, { status: 401 });
+    }
+
     const client = getSupabaseClient();
     const searchParams = request.nextUrl.searchParams;
     const id = searchParams.get('id');
@@ -144,6 +179,18 @@ export async function DELETE(request: NextRequest) {
         { error: '缺少配置ID' },
         { status: 400 }
       );
+    }
+
+    const { data: existingConfig, error: existingError } = await client
+      .from('job_configs')
+      .select('config_type')
+      .eq('id', id)
+      .single();
+    if (existingError) {
+      return NextResponse.json({ error: '配置不存在' }, { status: 404 });
+    }
+    if (existingConfig.config_type === RESERVED_CONFIG_TYPE) {
+      return NextResponse.json({ error: '该配置类型由专用接口管理' }, { status: 400 });
     }
 
     const { error } = await client

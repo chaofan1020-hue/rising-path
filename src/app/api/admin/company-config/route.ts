@@ -1,8 +1,13 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { getSupabaseClient } from '@/storage/database/supabase-client';
+import { hasValidAdminSession } from '@/lib/admin-auth';
 
 // 获取所有公司配置
-export async function GET() {
+export async function GET(request: NextRequest) {
+  if (!hasValidAdminSession(request)) {
+    return NextResponse.json({ error: '需要管理员权限' }, { status: 401 });
+  }
+
   try {
     const supabase = getSupabaseClient();
     
@@ -26,6 +31,10 @@ export async function GET() {
 
 // 添加或更新公司配置
 export async function POST(request: NextRequest) {
+  if (!hasValidAdminSession(request)) {
+    return NextResponse.json({ error: '需要管理员权限' }, { status: 401 });
+  }
+
   try {
     const supabase = getSupabaseClient();
     const body = await request.json();
@@ -105,6 +114,10 @@ export async function POST(request: NextRequest) {
 
 // 删除公司配置
 export async function DELETE(request: NextRequest) {
+  if (!hasValidAdminSession(request)) {
+    return NextResponse.json({ error: '需要管理员权限' }, { status: 401 });
+  }
+
   try {
     const supabase = getSupabaseClient();
     const { searchParams } = new URL(request.url);

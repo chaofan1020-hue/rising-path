@@ -28,9 +28,11 @@ import {
   ChevronDown,
   Globe,
   AlertTriangle,
+  type LucideIcon,
 } from 'lucide-react';
 import Link from 'next/link';
-import { AccessGuard, useAccessCode } from '@/components/access-guard';
+import { AuthGuard } from '@/components/auth-guard';
+import { apiFetch } from '@/lib/api-client';
 
 interface Job {
   id: number;
@@ -114,7 +116,7 @@ function CompanyLogo({ company, logoUrl, size = 'md' }: { company: string; logoU
 }
 
 // Badge variants（极简黑白灰：所有信息徽章统一中性灰底）
-function InfoBadge({ icon: Icon, children, variant = 'default' }: { icon: any; children: React.ReactNode; variant?: 'default' | 'success' | 'warning' | 'info' }) {
+function InfoBadge({ icon: Icon, children, variant = 'default' }: { icon: LucideIcon; children: React.ReactNode; variant?: 'default' | 'success' | 'warning' | 'info' }) {
   const variants = {
     default: 'bg-zinc-100 text-zinc-600 border-zinc-200 dark:bg-zinc-800 dark:text-zinc-300 dark:border-zinc-700',
     success: 'bg-zinc-100 text-zinc-600 border-zinc-200 dark:bg-zinc-800 dark:text-zinc-300 dark:border-zinc-700',
@@ -143,12 +145,10 @@ function JobDetailContent() {
   const [showAllResponsibilities, setShowAllResponsibilities] = useState(false);
   const [showAllRequirements, setShowAllRequirements] = useState(false);
   
-  const { accessCodeId } = useAccessCode();
-
   useEffect(() => {
     const fetchJob = async () => {
       try {
-        const response = await fetch(`/api/jobs/${params.id}`);
+        const response = await apiFetch(`/api/jobs/${params.id}`);
         if (!response.ok) {
           throw new Error('岗位不存在');
         }
@@ -157,7 +157,7 @@ function JobDetailContent() {
         
         // 获取同公司其他岗位
         if (data.job.company) {
-          const relatedRes = await fetch(`/api/jobs?company=${encodeURIComponent(data.job.company)}&limit=5`);
+          const relatedRes = await apiFetch(`/api/jobs?company=${encodeURIComponent(data.job.company)}&limit=5`);
           const relatedData = await relatedRes.json();
           const others = (relatedData.jobs || []).filter((j: Job) => j.id !== data.job.id);
           setRelatedJobs(others.slice(0, 4));
@@ -176,9 +176,9 @@ function JobDetailContent() {
   }, [params.id]);
 
   const checkIfApplied = async () => {
-    if (!accessCodeId || !params.id) return;
+    if (!params.id) return;
     try {
-      const response = await fetch(`/api/applications?access_code_id=${accessCodeId}`);
+      const response = await apiFetch('/api/applications');
       const data = await response.json();
       const hasApplied = (data.applications || []).some((app: { job_id: number }) => app.job_id === Number(params.id));
       setApplied(hasApplied);
@@ -188,11 +188,6 @@ function JobDetailContent() {
   };
 
   const handleApply = async () => {
-    if (!accessCodeId) {
-      alert('请先登录');
-      return;
-    }
-
     if (applied) {
       router.push('/applications');
       return;
@@ -200,12 +195,11 @@ function JobDetailContent() {
 
     setApplying(true);
     try {
-      const response = await fetch('/api/applications', {
+      const response = await apiFetch('/api/applications', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
           job_id: Number(params.id),
-          access_code_id: accessCodeId,
           status: 'pending',
           notes: '',
         }),
@@ -669,8 +663,8 @@ function JobDetailContent() {
 
 export default function JobDetailPage() {
   return (
-    <AccessGuard>
+    <AuthGuard>
       <JobDetailContent />
-    </AccessGuard>
+    </AuthGuard>
   );
 }

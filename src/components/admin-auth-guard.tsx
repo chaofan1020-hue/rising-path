@@ -18,13 +18,26 @@ export function AdminAuthGuard({ children }: AdminAuthGuardProps) {
   const [loading, setLoading] = useState(false);
   const [mounted, setMounted] = useState(false);
 
-  // 检查本地存储的登录状态
+  // 以服务端 HttpOnly 会话为准，不能信任 localStorage 中的标记。
   useEffect(() => {
-    const auth = localStorage.getItem('admin_auth');
-    if (auth === 'authenticated') {
-      setIsAuthenticated(true);
-    }
-    setMounted(true);
+    let cancelled = false;
+
+    const checkSession = async () => {
+      try {
+        const response = await fetch('/api/admin/password', { cache: 'no-store' });
+        const data = await response.json();
+        if (!cancelled) setIsAuthenticated(data.authenticated === true);
+      } catch {
+        if (!cancelled) setIsAuthenticated(false);
+      } finally {
+        if (!cancelled) setMounted(true);
+      }
+    };
+
+    void checkSession();
+    return () => {
+      cancelled = true;
+    };
   }, []);
 
   const handleLogin = async (e: React.FormEvent) => {
@@ -43,7 +56,6 @@ export function AdminAuthGuard({ children }: AdminAuthGuardProps) {
       const data = await response.json();
 
       if (data.valid) {
-        localStorage.setItem('admin_auth', 'authenticated');
         setIsAuthenticated(true);
       } else {
         setError('密码错误，请重试');

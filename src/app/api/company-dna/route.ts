@@ -4,8 +4,13 @@
 import { NextRequest } from 'next/server';
 import { getCompanyDNA, saveManualDNA } from '@/lib/company-dna-service';
 import { CompanyDNA } from '@/lib/company-dna';
+import { hasValidAdminSession } from '@/lib/admin-auth';
+import { getAuthContext, unauthorizedResponse } from '@/lib/auth-server';
 
 export async function GET(request: NextRequest) {
+  const auth = await getAuthContext(request);
+  if (!auth) return unauthorizedResponse();
+
   const name = request.nextUrl.searchParams.get('name')?.trim();
   if (!name) {
     return new Response(JSON.stringify({ error: '缺少公司名称' }), { status: 400 });
@@ -35,6 +40,10 @@ export async function GET(request: NextRequest) {
 // PATCH：人工更新基因（来自审查页）。body: { company, dna, reviewNotes? }
 export async function PATCH(request: NextRequest) {
   try {
+    if (!hasValidAdminSession(request)) {
+      return new Response(JSON.stringify({ error: '需要管理员权限' }), { status: 401 });
+    }
+
     const body = await request.json();
     const { company, dna, reviewNotes } = body;
     if (!company || typeof company !== 'string') {

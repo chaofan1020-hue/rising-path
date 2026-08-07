@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from 'next/server';
 import { FetchClient, SearchClient, Config, HeaderUtils } from 'coze-coding-dev-sdk';
 import { getSupabaseClient } from '@/storage/database/supabase-client';
 import { detectSponsorship } from '@/lib/utils';
+import { hasValidAdminSession } from '@/lib/admin-auth';
 
 // 岗位方向分类
 function classifyDirection(title: string): string {
@@ -117,7 +118,7 @@ async function fetchGreenhouseJobs(companyId: string): Promise<Array<{title: str
 // 结构化 HTML 描述
 function parseStructuredDescription(html: string): { overview: string; responsibilities: string; requirements: string; nice_to_have: string } {
   // 先把转义的 HTML 还原
-  let text = html
+  const text = html
     .replace(/&lt;/g, '<')
     .replace(/&gt;/g, '>')
     .replace(/&amp;/g, '&')
@@ -330,16 +331,8 @@ async function fetchFromCareersPage(url: string, company: string): Promise<Array
 
 export async function POST(request: NextRequest) {
   try {
-    // 验证管理员密码
-    const authHeader = request.headers.get('x-admin-password');
-    if (!authHeader) {
-      return NextResponse.json({ error: '需要管理员密码' }, { status: 401 });
-    }
-    
-    const { verifyAdminPassword } = await import('@/lib/admin-auth');
-    const isValid = await verifyAdminPassword(authHeader);
-    if (!isValid) {
-      return NextResponse.json({ error: '管理员密码错误' }, { status: 401 });
+    if (!hasValidAdminSession(request)) {
+      return NextResponse.json({ error: '需要管理员权限' }, { status: 401 });
     }
 
     const supabase = getSupabaseClient();

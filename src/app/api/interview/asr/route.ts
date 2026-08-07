@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { ASRClient, Config, HeaderUtils } from 'coze-coding-dev-sdk';
-import { getSupabaseClient } from '@/storage/database/supabase-client';
+import { getAuthContext, unauthorizedResponse } from '@/lib/auth-server';
 
 export const runtime = 'nodejs';
 export const dynamic = 'force-dynamic';
@@ -8,21 +8,12 @@ export const dynamic = 'force-dynamic';
 export async function POST(request: NextRequest) {
   try {
     const body = await request.json();
-    const { accessCodeId, audioBase64 } = body;
+    const { audioBase64 } = body;
 
-    if (!accessCodeId || !audioBase64) {
+    const auth = await getAuthContext(request);
+    if (!auth) return unauthorizedResponse();
+    if (!audioBase64 || typeof audioBase64 !== 'string' || audioBase64.length > 8_000_000) {
       return NextResponse.json({ error: '缺少必要参数' }, { status: 400 });
-    }
-
-    const client = getSupabaseClient();
-    const { data: accessCode, error: codeError } = await client
-      .from('access_codes')
-      .select('id, is_active')
-      .eq('id', accessCodeId)
-      .single();
-
-    if (codeError || !accessCode || !accessCode.is_active) {
-      return NextResponse.json({ error: '未授权的访问' }, { status: 401 });
     }
 
     const customHeaders = HeaderUtils.extractForwardHeaders(request.headers);
@@ -30,7 +21,7 @@ export async function POST(request: NextRequest) {
     const asrClient = new ASRClient(config, customHeaders);
 
     const result = await asrClient.recognize({
-      uid: `interview_${accessCodeId}`,
+      uid: `interview_${auth.user.id}`,
       base64Data: audioBase64,
     });
 

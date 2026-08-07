@@ -1,22 +1,19 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { getSupabaseClient } from '@/storage/database/supabase-client';
+import { getAuthContext, unauthorizedResponse } from '@/lib/auth-server';
 
 // 获取字段映射列表
 export async function GET(request: NextRequest) {
   try {
-    const client = getSupabaseClient();
+    const auth = await getAuthContext(request);
+    if (!auth) return unauthorizedResponse();
+    const client = auth.client;
     const { searchParams } = new URL(request.url);
-    const accessCodeId = searchParams.get('access_code_id');
     const company = searchParams.get('company');
-
-    if (!accessCodeId) {
-      return NextResponse.json({ mappings: [] });
-    }
 
     let query = client
       .from('field_mappings')
       .select('*')
-      .eq('access_code_id', parseInt(accessCodeId))
+      .eq('user_id', auth.user.id)
       .eq('is_active', true)
       .order('created_at', { ascending: false });
 
@@ -44,13 +41,11 @@ export async function GET(request: NextRequest) {
 // 创建字段映射
 export async function POST(request: NextRequest) {
   try {
-    const client = getSupabaseClient();
+    const auth = await getAuthContext(request);
+    if (!auth) return unauthorizedResponse();
+    const client = auth.client;
     const body = await request.json();
-    const { access_code_id, mappings } = body;
-
-    if (!access_code_id) {
-      return NextResponse.json({ error: '未授权' }, { status: 401 });
-    }
+    const { mappings } = body;
 
     if (!mappings || !Array.isArray(mappings)) {
       return NextResponse.json({ error: '无效的映射数据' }, { status: 400 });
@@ -58,7 +53,7 @@ export async function POST(request: NextRequest) {
 
     // 准备插入的数据
     const insertData = mappings.map((m: { company_pattern: string; field_name: string; target_field: string }) => ({
-      access_code_id: access_code_id,
+      user_id: auth.user.id,
       company_pattern: m.company_pattern,
       field_name: m.field_name,
       target_field: m.target_field,
@@ -87,24 +82,22 @@ export async function POST(request: NextRequest) {
 // 批量更新或删除字段映射
 export async function PUT(request: NextRequest) {
   try {
-    const client = getSupabaseClient();
+    const auth = await getAuthContext(request);
+    if (!auth) return unauthorizedResponse();
+    const client = auth.client;
     const body = await request.json();
-    const { access_code_id, mappings } = body;
-
-    if (!access_code_id) {
-      return NextResponse.json({ error: '未授权' }, { status: 401 });
-    }
+    const { mappings } = body;
 
     // 先删除旧的映射
     await client
       .from('field_mappings')
       .delete()
-      .eq('access_code_id', access_code_id);
+      .eq('user_id', auth.user.id);
 
     // 批量插入新映射
     if (mappings && mappings.length > 0) {
       const insertData = mappings.map((m: { company_pattern: string; field_name: string; target_field: string }) => ({
-        access_code_id: access_code_id,
+        user_id: auth.user.id,
         company_pattern: m.company_pattern,
         field_name: m.field_name,
         target_field: m.target_field,

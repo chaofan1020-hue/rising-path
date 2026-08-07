@@ -1,8 +1,8 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { getSupabaseClient } from '@/storage/database/supabase-client';
 import { LLMClient, Config, HeaderUtils } from 'coze-coding-dev-sdk';
 import { buildRegionBlock, resolveRegionKey } from '@/lib/region-dna';
 import type { UserSegmentation } from '@/lib/user-segmentation';
+import { getAuthContext, unauthorizedResponse } from '@/lib/auth-server';
 
 // 地区名称映射
 const REGION_NAMES: Record<string, string> = {
@@ -19,20 +19,17 @@ const REGION_NAMES: Record<string, string> = {
 
 export async function POST(request: NextRequest) {
   try {
-    const client = getSupabaseClient();
-    const { resumeId, targetCompany, targetPosition, targetRegion, suggestions, accessCodeId, jdContent } = await request.json();
-
-    // 必须提供 access_code_id
-    if (!accessCodeId) {
-      return NextResponse.json({ error: '未授权的访问' }, { status: 401 });
-    }
+    const auth = await getAuthContext(request);
+    if (!auth) return unauthorizedResponse();
+    const client = auth.client;
+    const { resumeId, targetCompany, targetPosition, targetRegion, suggestions, jdContent } = await request.json();
 
     // Get resume and verify ownership
     const { data: resume, error } = await client
       .from('resumes')
       .select('*')
       .eq('id', resumeId)
-      .eq('access_code_id', accessCodeId)
+      .eq('user_id', auth.user.id)
       .single();
 
     if (error || !resume) {

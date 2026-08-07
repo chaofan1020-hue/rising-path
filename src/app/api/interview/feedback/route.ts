@@ -2,15 +2,17 @@
 // 闭环：评分 <6 → pending_review（低真实度案例，进入人工审查队列）
 //       评分 >=6 → high_quality（高质量案例，提问记录保留为训练数据）
 import { NextRequest } from 'next/server';
-import { getSupabaseClient } from '@/storage/database/supabase-client';
 import { getCompanyDNA } from '@/lib/company-dna-service';
+import { getAuthContext, unauthorizedResponse } from '@/lib/auth-server';
 
 export async function POST(request: NextRequest) {
   try {
-    const client = getSupabaseClient();
-    const { accessCodeId, sessionId, realismScore, feedbackText } = await request.json();
+    const auth = await getAuthContext(request);
+    if (!auth) return unauthorizedResponse();
+    const client = auth.client;
+    const { sessionId, realismScore, feedbackText } = await request.json();
 
-    if (!accessCodeId || !sessionId) {
+    if (!sessionId) {
       return new Response(JSON.stringify({ error: '缺少必要参数' }), { status: 400 });
     }
     const score = Number(realismScore);
@@ -23,7 +25,7 @@ export async function POST(request: NextRequest) {
       .from('interview_sessions')
       .select('id, target_company')
       .eq('id', sessionId)
-      .eq('access_code_id', accessCodeId)
+      .eq('user_id', auth.user.id)
       .single();
     if (!session) {
       return new Response(JSON.stringify({ error: '会话不存在' }), { status: 404 });
@@ -50,7 +52,7 @@ export async function POST(request: NextRequest) {
     const { error } = await client.from('interview_feedback').upsert(
       {
         session_id: sessionId,
-        access_code_id: accessCodeId,
+        user_id: auth.user.id,
         company,
         realism_score: score,
         feedback_text: feedbackText ? String(feedbackText).slice(0, 2000) : null,

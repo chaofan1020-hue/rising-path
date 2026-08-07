@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { LLMClient, Config } from "coze-coding-dev-sdk";
 import { getSupabaseClient } from "@/storage/database/supabase-client";
+import { hasValidAdminSession } from "@/lib/admin-auth";
 
 const config = new Config();
 const client = new LLMClient(config);
@@ -47,6 +48,9 @@ async function updateJobDescription(job: Job): Promise<string | null> {
 
 export async function POST(request: NextRequest) {
   try {
+    if (!hasValidAdminSession(request)) {
+      return NextResponse.json({ error: "需要管理员权限" }, { status: 401 });
+    }
     const supabase = getSupabaseClient();
     
     // 获取所有岗位
@@ -103,8 +107,11 @@ export async function POST(request: NextRequest) {
   }
 }
 
-export async function GET() {
+export async function GET(request: NextRequest) {
   try {
+    if (!hasValidAdminSession(request)) {
+      return NextResponse.json({ error: "需要管理员权限" }, { status: 401 });
+    }
     const supabase = getSupabaseClient();
     
     const { data: jobs, error } = await supabase

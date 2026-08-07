@@ -334,7 +334,7 @@ export const useStore = create<Store>((set) => ({
 
 ### 集成数据库
 
-推荐使用 Prisma 或 Drizzle ORM，在 `src/lib/db.ts` 中配置。
+项目统一使用 Supabase Client 访问 PostgreSQL。数据库结构和本地初始化 SQL 位于 `supabase/migrations/`，不要重新引入 Drizzle 或 Prisma 数据层。
 
 ## 技术栈
 

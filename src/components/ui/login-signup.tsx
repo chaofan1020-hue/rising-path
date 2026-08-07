@@ -12,6 +12,7 @@ import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 
 import { Separator } from '@/components/ui/separator';
+import { Turnstile } from '@/components/turnstile';
 import { Eye, EyeOff, Loader2 } from 'lucide-react';
 import Link from 'next/link';
 import { JSX, SVGProps, useState } from 'react';
@@ -42,6 +43,9 @@ export interface RegisterData {
   email: string;
   password: string;
   username: string;
+  confirmPassword: string;
+  terms: boolean;
+  captchaToken: string | null;
 }
 
 type AuthMode = 'login' | 'signup' | 'otp' | 'reset' | 'password';
@@ -103,9 +107,10 @@ export default function LoginSignup({
     code: '',
     username: '',
     terms: false,
+    captchaToken: null as string | null,
   });
 
-  const update = (key: keyof typeof form, value: string | boolean) => {
+  const update = (key: keyof typeof form, value: string | boolean | null) => {
     setForm((prev) => ({ ...prev, [key]: value }));
   };
 
@@ -120,6 +125,9 @@ export default function LoginSignup({
       email: form.email,
       password: form.password,
       username: form.username,
+      confirmPassword: form.confirmPassword,
+      terms: form.terms,
+      captchaToken: form.captchaToken,
     });
   };
 
@@ -270,6 +278,7 @@ export default function LoginSignup({
                     </Link>
                   </label>
                 </div>
+                <Turnstile onToken={(token) => update('captchaToken', token)} />
                 <Button
                   type="submit"
                   className="w-full bg-zinc-900 text-white hover:bg-zinc-800 dark:bg-white dark:text-zinc-950 dark:hover:bg-zinc-200"

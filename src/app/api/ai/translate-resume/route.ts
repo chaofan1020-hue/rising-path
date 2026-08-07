@@ -1,8 +1,11 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { LLMClient, Config, HeaderUtils } from 'coze-coding-dev-sdk';
+import { getAuthContext, unauthorizedResponse } from '@/lib/auth-server';
 
 export async function POST(request: NextRequest) {
   try {
+    const auth = await getAuthContext(request);
+    if (!auth) return unauthorizedResponse();
     const { resumeData, targetLanguage } = await request.json();
 
     if (!resumeData) {

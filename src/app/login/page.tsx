@@ -5,6 +5,7 @@ import { useRouter } from 'next/navigation';
 import { getSupabaseBrowserClient } from '@/lib/supabase-browser';
 import LoginSignup, { type RegisterData } from '@/components/ui/login-signup';
 import SubscriptionCelebration from '@/components/SubscriptionCelebration';
+import { validatePassword } from '@/lib/auth-shared';
 
 type AuthMode = 'login' | 'signup' | 'otp' | 'reset' | 'password';
 
@@ -33,12 +34,21 @@ export default function LoginPage() {
     setLoading(true);
     setError(null);
     try {
-      const supabase = await getSupabaseBrowserClient();
-      const { error: signInError } = await supabase.auth.signInWithPassword({
-        email,
-        password,
+      const response = await fetch('/api/auth/login', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ email, password }),
       });
-      if (signInError) throw signInError;
+      const result = (await response.json()) as {
+        error?: string;
+        session?: { access_token: string; refresh_token: string };
+      };
+      if (!response.ok || !result.session) {
+        throw new Error(result.error || 'Sign in failed');
+      }
+      const supabase = await getSupabaseBrowserClient();
+      const { error: sessionError } = await supabase.auth.setSession(result.session);
+      if (sessionError) throw sessionError;
       router.replace('/home');
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Sign in failed');
@@ -48,26 +58,37 @@ export default function LoginPage() {
   };
 
   const handleRegister = async (data: RegisterData) => {
-    if (data.password.length < 6) {
-      setError('Password must be at least 6 characters');
+    const passwordError = validatePassword(data.password);
+    if (passwordError) {
+      setError(passwordError);
+      return;
+    }
+    if (data.confirmPassword !== data.password) {
+      setError('Passwords do not match');
+      return;
+    }
+    if (!data.terms) {
+      setError('Please accept the terms and conditions');
       return;
     }
 
     setLoading(true);
     setError(null);
     try {
-      const supabase = await getSupabaseBrowserClient();
-      const { error: signUpError } = await supabase.auth.signUp({
-        email: data.email,
-        password: data.password,
-        options: {
-          data: {
-            username: data.username,
-          },
-        },
+      const response = await fetch('/api/auth/register', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          email: data.email,
+          password: data.password,
+          username: data.username,
+          captchaToken: data.captchaToken,
+        }),
       });
-      if (signUpError) throw signUpError;
+      const result = (await response.json()) as { error?: string };
+      if (!response.ok) throw new Error(result.error || 'Sign up failed');
       setRegistered(true);
+      setMessage('Please check your email to verify your account before signing in.');
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Sign up failed');
     } finally {
@@ -80,14 +101,13 @@ export default function LoginPage() {
     setError(null);
     setMessage(null);
     try {
-      const supabase = await getSupabaseBrowserClient();
-      const { error: otpError } = await supabase.auth.signInWithOtp({
-        email,
-        options: {
-          shouldCreateUser: false,
-        },
+      const response = await fetch('/api/auth/otp', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ email }),
       });
-      if (otpError) throw otpError;
+      const result = (await response.json()) as { error?: string };
+      if (!response.ok) throw new Error(result.error || 'Failed to send code');
       setMessage('Code sent. Check your email.');
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Failed to send code');
@@ -100,13 +120,18 @@ export default function LoginPage() {
     setLoading(true);
     setError(null);
     try {
-      const supabase = await getSupabaseBrowserClient();
-      const { error: verifyError } = await supabase.auth.verifyOtp({
-        email,
-        token: otp,
-        type: 'email',
+      const response = await fetch('/api/auth/otp/verify', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ email, token: otp }),
       });
-      if (verifyError) throw verifyError;
+      const result = (await response.json()) as {
+        error?: string;
+        session?: { access_token: string; refresh_token: string };
+      };
+      if (!response.ok || !result.session) throw new Error(result.error || 'Invalid code');
+      const supabase = await getSupabaseBrowserClient();
+      await supabase.auth.setSession(result.session);
       router.replace('/home');
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Invalid code');
@@ -120,19 +145,16 @@ export default function LoginPage() {
     setError(null);
     setMessage(null);
     try {
-      const supabase = await getSupabaseBrowserClient();
-      const { error: resetError } = await supabase.auth.resetPasswordForEmail(
-        email,
-        {
-          redirectTo: `${window.location.origin}/login`,
-        }
-      );
-      if (resetError) throw resetError;
+      const response = await fetch('/api/auth/reset', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ email }),
+      });
+      const result = (await response.json()) as { error?: string };
+      if (!response.ok) throw new Error(result.error || 'Failed to send reset link');
       setMessage('Password reset link sent. Check your email.');
     } catch (err) {
-      setError(
-        err instanceof Error ? err.message : 'Failed to send reset link'
-      );
+      setError(err instanceof Error ? err.message : 'Failed to send reset link');
     } finally {
       setLoading(false);
     }
@@ -146,7 +168,7 @@ export default function LoginPage() {
       const { error: oauthError } = await supabase.auth.signInWithOAuth({
         provider: 'google',
         options: {
-          redirectTo: `${window.location.origin}/home`,
+          redirectTo: `${window.location.origin}/auth/callback?next=/home`,
         },
       });
       if (oauthError) throw oauthError;
@@ -179,7 +201,10 @@ export default function LoginPage() {
         <SubscriptionCelebration
           open={registered}
           autoShow={false}
-          onClose={() => router.replace('/home')}
+          onClose={() => {
+            setRegistered(false);
+            setMode('login');
+          }}
         />
       )}
     </>

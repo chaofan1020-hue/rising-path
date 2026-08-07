@@ -1,12 +1,14 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { getSupabaseClient } from '@/storage/database/supabase-client';
+import { getAuthContext, unauthorizedResponse } from '@/lib/auth-server';
 
 export async function PUT(
   request: NextRequest,
   { params }: { params: Promise<{ id: string }> }
 ) {
   try {
-    const client = getSupabaseClient();
+    const auth = await getAuthContext(request);
+    if (!auth) return unauthorizedResponse();
+    const client = auth.client;
     const { id } = await params;
     const body = await request.json();
 
@@ -29,6 +31,7 @@ export async function PUT(
       .from('applications')
       .update(updateData)
       .eq('id', id)
+      .eq('user_id', auth.user.id)
       .select(`
         *,
         jobs (title, company),
@@ -55,13 +58,16 @@ export async function DELETE(
   { params }: { params: Promise<{ id: string }> }
 ) {
   try {
-    const client = getSupabaseClient();
+    const auth = await getAuthContext(request);
+    if (!auth) return unauthorizedResponse();
+    const client = auth.client;
     const { id } = await params;
 
     const { error } = await client
       .from('applications')
       .delete()
-      .eq('id', id);
+      .eq('id', id)
+      .eq('user_id', auth.user.id);
 
     if (error) {
       throw new Error(`删除网申记录失败: ${error.message}`);

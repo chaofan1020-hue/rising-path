@@ -1,8 +1,13 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { getSupabaseClient } from '@/storage/database/supabase-client';
 import { loadStorageSkill } from '@/lib/storage-utils';
+import { hasValidAdminSession } from '@/lib/admin-auth';
 
 export async function GET(request: NextRequest) {
+  if (!hasValidAdminSession(request)) {
+    return NextResponse.json({ error: '需要管理员权限' }, { status: 401 });
+  }
+
   try {
     const supabase = getSupabaseClient();
     
@@ -23,6 +28,10 @@ export async function GET(request: NextRequest) {
 }
 
 export async function POST(request: NextRequest) {
+  if (!hasValidAdminSession(request)) {
+    return NextResponse.json({ error: '需要管理员权限' }, { status: 401 });
+  }
+
   try {
     const supabase = getSupabaseClient();
     const formData = await request.formData();
@@ -84,6 +93,10 @@ export async function POST(request: NextRequest) {
 }
 
 export async function DELETE(request: NextRequest) {
+  if (!hasValidAdminSession(request)) {
+    return NextResponse.json({ error: '需要管理员权限' }, { status: 401 });
+  }
+
   try {
     const supabase = getSupabaseClient();
     const searchParams = request.nextUrl.searchParams;

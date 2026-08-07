@@ -1,10 +1,15 @@
 // GET /api/admin/dna-feedback/[id] —— 案例详情（含面试对话记录与当前基因快照）
 // PATCH /api/admin/dna-feedback/[id] —— 标记已处理（reviewed + review_notes）
-import { NextRequest } from 'next/server';
+import { NextRequest, NextResponse } from 'next/server';
 import { getSupabaseClient } from '@/storage/database/supabase-client';
 import { getCompanyDNA } from '@/lib/company-dna-service';
+import { hasValidAdminSession } from '@/lib/admin-auth';
 
 export async function GET(request: NextRequest, { params }: { params: Promise<{ id: string }> }) {
+  if (!hasValidAdminSession(request)) {
+    return NextResponse.json({ error: '需要管理员权限' }, { status: 401 });
+  }
+
   const { id } = await params;
   const client = getSupabaseClient();
 
@@ -38,6 +43,10 @@ export async function GET(request: NextRequest, { params }: { params: Promise<{ 
 }
 
 export async function PATCH(request: NextRequest, { params }: { params: Promise<{ id: string }> }) {
+  if (!hasValidAdminSession(request)) {
+    return NextResponse.json({ error: '需要管理员权限' }, { status: 401 });
+  }
+
   const { id } = await params;
   const client = getSupabaseClient();
   const body = await request.json();

@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { getSupabaseClient } from '@/storage/database/supabase-client';
 import { detectSponsorship } from '@/lib/utils';
+import { hasValidAdminSession } from '@/lib/admin-auth';
 
 // 公司域名映射
 const companyDomains: Record<string, string> = {
@@ -284,6 +285,9 @@ export async function GET(request: NextRequest) {
 
 export async function POST(request: NextRequest) {
   try {
+    if (!hasValidAdminSession(request)) {
+      return NextResponse.json({ error: '需要管理员权限' }, { status: 401 });
+    }
     const client = getSupabaseClient();
     const body = await request.json();
 

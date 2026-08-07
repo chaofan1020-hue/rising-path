@@ -36,7 +36,8 @@ import {
 } from 'lucide-react';
 import Link from 'next/link';
 import Image from 'next/image';
-import { AccessGuard, useAccessCode } from '@/components/access-guard';
+import { AuthGuard } from '@/components/auth-guard';
+import { apiFetch } from '@/lib/api-client';
 import { Header1 } from '@/components/header1';
 
 interface Application {
@@ -74,21 +75,14 @@ function ApplicationsContent() {
   const [applications, setApplications] = useState<Application[]>([]);
   const [loading, setLoading] = useState(true);
   const [statusFilter, setStatusFilter] = useState('all');
-  const { accessCodeId } = useAccessCode();
-
   useEffect(() => {
-    if (accessCodeId) {
-      fetchApplications();
-    }
-  }, [accessCodeId]);
+    fetchApplications();
+  }, []);
 
   const fetchApplications = async () => {
-    if (!accessCodeId) return;
     setLoading(true);
     try {
-      const params = new URLSearchParams();
-      params.append('access_code_id', accessCodeId.toString());
-      const response = await fetch(`/api/applications?${params.toString()}`);
+      const response = await apiFetch('/api/applications');
       const data = await response.json();
       setApplications(data.applications || []);
     } catch (error) {
@@ -102,7 +96,7 @@ function ApplicationsContent() {
     if (!confirm('确定要删除这条网申记录吗？')) return;
     
     try {
-      const response = await fetch(`/api/applications/${id}`, {
+      const response = await apiFetch(`/api/applications/${id}`, {
         method: 'DELETE',
       });
       
@@ -119,7 +113,7 @@ function ApplicationsContent() {
 
   const handleUpdateStatus = async (id: number, newStatus: string) => {
     try {
-      const response = await fetch(`/api/applications/${id}`, {
+      const response = await apiFetch(`/api/applications/${id}`, {
         method: 'PUT',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ status: newStatus }),
@@ -518,8 +512,8 @@ function ApplicationsContent() {
 // 主组件
 export default function ApplicationsPage() {
   return (
-    <AccessGuard>
+    <AuthGuard>
       <ApplicationsContent />
-    </AccessGuard>
+    </AuthGuard>
   );
 }

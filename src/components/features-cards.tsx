@@ -1,15 +1,14 @@
 "use client"
 
 import type React from "react"
-import Link from "next/link"
 import { Warp } from "@paper-design/shaders-react"
+import { getSupabaseBrowserClient } from "@/lib/supabase-browser"
 import { useLanguage } from "@/lib/language-context"
 
 interface Feature {
   titleKey: string
   descKey: string
   icon: React.ReactNode
-  href: string
 }
 
 const features: Feature[] = [
@@ -21,7 +20,6 @@ const features: Feature[] = [
         <path d="M12 2l3.09 6.26L22 9.27l-5 4.87 1.18 6.88L12 17.77l-6.18 3.25L7 14.14 2 9.27l6.91-1.01L12 2z" />
       </svg>
     ),
-    href: "/access-code",
   },
   {
     titleKey: "feature2.title",
@@ -31,7 +29,6 @@ const features: Feature[] = [
         <path d="M7 2v11h3v9l7-12h-4l4-8z" />
       </svg>
     ),
-    href: "/access-code",
   },
   {
     titleKey: "feature3.title",
@@ -41,7 +38,6 @@ const features: Feature[] = [
         <path d="M22.7 19l-9.1-9.1c.9-2.3.4-5-1.5-6.9-2-2-5-2.4-7.4-1.3L9 6 6 9 1.6 4.7C.4 7.1.9 10.1 2.9 12.1c1.9 1.9 4.6 2.4 6.9 1.5l9.1 9.1c.4.4 1 .4 1.4 0l2.3-2.3c.5-.4.5-1.1.1-1.4z" />
       </svg>
     ),
-    href: "/access-code",
   },
   {
     titleKey: "feature4.title",
@@ -51,7 +47,6 @@ const features: Feature[] = [
         <path d="M20 6h-4V4c0-1.11-.89-2-2-2h-4c-1.11 0-2 .89-2 2v2H4c-1.11 0-1.99.89-1.99 2L2 19c0 1.11.89 2 2 2h16c1.11 0 2-.89 2-2V8c0-1.11-.89-2-2-2zm-6 0h-4V4h4v2z" />
       </svg>
     ),
-    href: "/access-code",
   },
   {
     titleKey: "feature5.title",
@@ -61,7 +56,6 @@ const features: Feature[] = [
         <path d="M17 1H7c-1.1 0-2 .9-2 2v18c0 1.1.9 2 2 2h10c1.1 0 2-.9 2-2V3c0-1.1-.9-2-2-2zM7 4V3h10v1H7zM7 18V6h10v12H7z" />
       </svg>
     ),
-    href: "/access-code",
   },
   {
     titleKey: "feature6.title",
@@ -71,7 +65,6 @@ const features: Feature[] = [
         <path d="M12 2a2 2 0 0 1 2 2c0 .74-.4 1.39-1 1.73V7h1a7 7 0 0 1 7 7h1a1 1 0 0 1 1 1v3a1 1 0 0 1-1 1h-1v1a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-1H2a1 1 0 0 1-1-1v-3a1 1 0 0 1 1-1h1a7 7 0 0 1 7-7h1V5.73c-.6-.34-1-.99-1-1.73a2 2 0 0 1 2-2M7.5 13A2.5 2.5 0 0 0 5 15.5A2.5 2.5 0 0 0 7.5 18a2.5 2.5 0 0 0 2.5-2.5A2.5 2.5 0 0 0 7.5 13m9 0a2.5 2.5 0 0 0-2.5 2.5a2.5 2.5 0 0 0 2.5 2.5a2.5 2.5 0 0 0 2.5-2.5a2.5 2.5 0 0 0-2.5-2.5Z"/>
       </svg>
     ),
-    href: "/access-code",
   },
 ]
 
@@ -160,18 +153,16 @@ export default function FeaturesCards() {
               <div
                 key={index}
                 onClick={() => {
-                  // 保存目标路径到 localStorage，访问码验证后跳转到对应页面
                   const targetPaths = ["/ai-match", "/optimize", "/field-mappings", "/jobs", "/applications", "/mock-interview"];
                   const targetPath = targetPaths[index] || "/";
-                  localStorage.setItem("target_path", targetPath);
-                  
-                  // 检查是否已登录，已登录直接跳转到功能页面
-                  const accessCode = localStorage.getItem("access_code");
-                  if (accessCode) {
-                    window.location.href = targetPath;
-                  } else {
-                    window.location.href = "/access-code";
-                  }
+                  void getSupabaseBrowserClient()
+                    .then((client) => client.auth.getSession())
+                    .then(({ data: { session } }) => {
+                      window.location.href = session ? targetPath : "/login";
+                    })
+                    .catch(() => {
+                      window.location.href = "/login";
+                    });
                 }}
                 className="block group cursor-pointer"
               >

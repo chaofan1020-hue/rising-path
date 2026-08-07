@@ -1,17 +1,10 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { getSupabaseClient } from '@/storage/database/supabase-client';
-
-// 验证管理员
-async function verifyAdmin(authHeader: string | null): Promise<boolean> {
-  if (!authHeader) return false;
-  const { verifyAdminPassword } = await import('@/lib/admin-auth');
-  return await verifyAdminPassword(authHeader);
-}
+import { hasValidAdminSession } from '@/lib/admin-auth';
 
 export async function PATCH(request: NextRequest) {
   try {
-    const authHeader = request.headers.get('x-admin-password');
-    if (!await verifyAdmin(authHeader)) {
+    if (!hasValidAdminSession(request)) {
       return NextResponse.json({ error: '需要管理员权限' }, { status: 401 });
     }
 
@@ -74,8 +67,7 @@ export async function PATCH(request: NextRequest) {
 
 export async function DELETE(request: NextRequest) {
   try {
-    const authHeader = request.headers.get('x-admin-password');
-    if (!await verifyAdmin(authHeader)) {
+    if (!hasValidAdminSession(request)) {
       return NextResponse.json({ error: '需要管理员权限' }, { status: 401 });
     }
 
