@@ -21,7 +21,12 @@ const SCRIPT_ID = 'cloudflare-turnstile-script';
 export function Turnstile({ onToken }: TurnstileProps) {
   const containerRef = useRef<HTMLDivElement>(null);
   const widgetIdRef = useRef<string | null>(null);
+  const onTokenRef = useRef(onToken);
   const siteKey = process.env.NEXT_PUBLIC_TURNSTILE_SITE_KEY;
+
+  useEffect(() => {
+    onTokenRef.current = onToken;
+  }, [onToken]);
 
   useEffect(() => {
     if (!siteKey || !containerRef.current) return;
@@ -31,9 +36,9 @@ export function Turnstile({ onToken }: TurnstileProps) {
       widgetIdRef.current = window.turnstile.render(containerRef.current, {
         sitekey: siteKey,
         theme: 'auto',
-        callback: (token: string) => onToken(token),
-        'expired-callback': () => onToken(null),
-        'error-callback': () => onToken(null),
+        callback: (token: string) => onTokenRef.current(token),
+        'expired-callback': () => onTokenRef.current(null),
+        'error-callback': () => onTokenRef.current(null),
       });
     };
 
@@ -55,9 +60,9 @@ export function Turnstile({ onToken }: TurnstileProps) {
         window.turnstile.remove(widgetIdRef.current);
         widgetIdRef.current = null;
       }
-      onToken(null);
+      onTokenRef.current(null);
     };
-  }, [onToken, siteKey]);
+  }, [siteKey]);
 
   if (!siteKey) return null;
   return <div ref={containerRef} className="min-h-[65px]" aria-label="安全验证" />;

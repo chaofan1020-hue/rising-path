@@ -23,7 +23,7 @@ export async function POST(request: NextRequest) {
     const supabase = getSupabaseAnonClient();
     const redirectOrigin = getAuthRedirectOrigin(request);
     const { error } = await supabase.auth.resetPasswordForEmail(email, {
-      redirectTo: `${redirectOrigin}/auth/callback?next=${encodeURIComponent('/login?mode=password')}`,
+      redirectTo: `${redirectOrigin}/auth/callback?next=${encodeURIComponent('/login?mode=update-password')}`,
     });
     if (error) console.error('[Auth] Password reset failed:', error.message);
 

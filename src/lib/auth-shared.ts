@@ -1,8 +1,7 @@
 import type { User } from '@supabase/supabase-js';
 
 export function isEmailVerified(user: User): boolean {
-  const provider = user.app_metadata?.provider;
-  return provider !== 'email' || Boolean(user.email_confirmed_at);
+  return !user.email || Boolean(user.email_confirmed_at);
 }
 
 export function validatePassword(password: string): string | null {

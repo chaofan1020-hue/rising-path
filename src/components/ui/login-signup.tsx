@@ -39,31 +39,6 @@ const Logo = (props: JSX.IntrinsicAttributes & SVGProps<SVGSVGElement>) => (
   </svg>
 );
 
-export interface RegisterData {
-  email: string;
-  password: string;
-  username: string;
-  confirmPassword: string;
-  terms: boolean;
-  captchaToken: string | null;
-}
-
-type AuthMode = 'login' | 'signup' | 'otp' | 'reset' | 'password';
-
-interface LoginSignupProps {
-  mode: AuthMode;
-  onToggleMode: (mode: AuthMode) => void;
-  onLogin: (email: string, password: string) => void | Promise<void>;
-  onRegister: (data: RegisterData) => void | Promise<void>;
-  onSendCode: (email: string) => void | Promise<void>;
-  onVerifyCode: (email: string, code: string) => void | Promise<void>;
-  onResetPassword: (email: string) => void | Promise<void>;
-  onGoogleSignIn?: () => void | Promise<void>;
-  loading?: boolean;
-  error?: string | null;
-  message?: string | null;
-}
-
 const GoogleIcon = (props: JSX.IntrinsicAttributes & SVGProps<SVGSVGElement>) => (
   <svg viewBox="0 0 24 24" width="16" height="16" {...props}>
     <path
@@ -85,6 +60,32 @@ const GoogleIcon = (props: JSX.IntrinsicAttributes & SVGProps<SVGSVGElement>) =>
   </svg>
 );
 
+export interface RegisterData {
+  email: string;
+  password: string;
+  username: string;
+  confirmPassword: string;
+  terms: boolean;
+  captchaToken: string | null;
+}
+
+type AuthMode = 'login' | 'signup' | 'otp' | 'reset' | 'password' | 'update-password';
+
+interface LoginSignupProps {
+  mode: AuthMode;
+  onToggleMode: (mode: AuthMode) => void;
+  onLogin: (email: string, password: string) => void | Promise<void>;
+  onRegister: (data: RegisterData) => void | Promise<void>;
+  onSendCode: (email: string) => void | Promise<boolean>;
+  onVerifyCode: (email: string, code: string) => void | Promise<void>;
+  onResetPassword: (email: string) => void | Promise<void>;
+  onGoogleSignIn: () => void | Promise<void>;
+  onUpdatePassword: (password: string, confirmPassword: string) => void | Promise<void>;
+  loading?: boolean;
+  error?: string | null;
+  message?: string | null;
+}
+
 export default function LoginSignup({
   mode,
   onToggleMode,
@@ -94,6 +95,7 @@ export default function LoginSignup({
   onVerifyCode,
   onResetPassword,
   onGoogleSignIn,
+  onUpdatePassword,
   loading,
   error,
   message,
@@ -137,7 +139,8 @@ export default function LoginSignup({
 
   const handleEmailSignIn = async (e: React.FormEvent) => {
     e.preventDefault();
-    await onSendCode(form.email);
+    const sent = await onSendCode(form.email);
+    if (sent !== true) return;
     onToggleMode('otp');
   };
 
@@ -149,6 +152,11 @@ export default function LoginSignup({
   const handleReset = (e: React.FormEvent) => {
     e.preventDefault();
     onResetPassword(form.email);
+  };
+
+  const handleUpdatePassword = (e: React.FormEvent) => {
+    e.preventDefault();
+    onUpdatePassword(form.password, form.confirmPassword);
   };
 
   if (mode === 'signup') {
@@ -427,6 +435,76 @@ export default function LoginSignup({
                 Back to sign in
               </button>
             </p>
+          </form>
+        </div>
+      </div>
+    );
+  }
+
+  if (mode === 'update-password') {
+    return (
+      <div className="flex items-center justify-center min-h-screen px-4 py-10">
+        <div className="flex flex-1 flex-col justify-center rounded-xl border border-zinc-200 bg-white p-6 shadow-sm sm:mx-auto sm:w-full sm:max-w-sm">
+          <h2 className="text-center text-xl font-semibold text-black">
+            Set a new password
+          </h2>
+          <form onSubmit={handleUpdatePassword} className="mt-6">
+            {error && (
+              <div className="mb-4 text-sm text-red-600 bg-red-50 dark:bg-red-950/30 px-3 py-2 rounded-md">
+                {error}
+              </div>
+            )}
+            <Label htmlFor="new-password" className="font-medium text-black">
+              New password
+            </Label>
+            <div className="relative mt-2">
+              <Input
+                id="new-password"
+                name="new-password"
+                type={showPassword ? 'text' : 'password'}
+                autoComplete="new-password"
+                value={form.password}
+                onChange={(e) => update('password', e.target.value)}
+                className="pr-10 text-black"
+                required
+              />
+              <Button
+                type="button"
+                variant="ghost"
+                size="icon"
+                className="absolute right-0 top-0 h-full px-3 text-black hover:bg-transparent"
+                onClick={() => setShowPassword(!showPassword)}
+              >
+                {showPassword ? <EyeOff className="h-4 w-4" /> : <Eye className="h-4 w-4" />}
+              </Button>
+            </div>
+            <Label htmlFor="confirm-new-password" className="mt-4 block font-medium text-black">
+              Confirm password
+            </Label>
+            <div className="relative mt-2">
+              <Input
+                id="confirm-new-password"
+                name="confirm-new-password"
+                type={showConfirmPassword ? 'text' : 'password'}
+                autoComplete="new-password"
+                value={form.confirmPassword}
+                onChange={(e) => update('confirmPassword', e.target.value)}
+                className="pr-10 text-black"
+                required
+              />
+              <Button
+                type="button"
+                variant="ghost"
+                size="icon"
+                className="absolute right-0 top-0 h-full px-3 text-black hover:bg-transparent"
+                onClick={() => setShowConfirmPassword(!showConfirmPassword)}
+              >
+                {showConfirmPassword ? <EyeOff className="h-4 w-4" /> : <Eye className="h-4 w-4" />}
+              </Button>
+            </div>
+            <Button type="submit" className="mt-4 w-full bg-black text-white hover:bg-zinc-900" disabled={loading}>
+              {loading ? <Loader2 className="h-4 w-4 animate-spin" /> : 'Update password'}
+            </Button>
           </form>
         </div>
       </div>

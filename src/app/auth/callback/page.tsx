@@ -15,13 +15,16 @@ export default function AuthCallbackPage() {
       try {
         const supabase = await getSupabaseBrowserClient();
         const searchParams = new URLSearchParams(window.location.search);
+        const callbackError = searchParams.get('error_description') || searchParams.get('error');
+        if (callbackError) throw new Error(callbackError);
         const code = searchParams.get('code');
         if (code) {
           const { error: exchangeError } = await supabase.auth.exchangeCodeForSession(code);
           if (exchangeError) throw exchangeError;
         } else {
-          const { error: sessionError } = await supabase.auth.getSession();
+          const { data, error: sessionError } = await supabase.auth.getSession();
           if (sessionError) throw sessionError;
+          if (!data.session) throw new Error('验证链接无效或已过期');
         }
         const next = searchParams.get('next');
         const safeNext = next && next.startsWith('/') && !next.startsWith('//') ? next : '/home';
