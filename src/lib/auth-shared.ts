@@ -1,7 +1,13 @@
 import type { User } from '@supabase/supabase-js';
 
+const EMAIL_PATTERN = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+
 export function isEmailVerified(user: User): boolean {
   return !user.email || Boolean(user.email_confirmed_at);
+}
+
+export function isValidEmail(email: string): boolean {
+  return email.length <= 254 && EMAIL_PATTERN.test(email);
 }
 
 export function validatePassword(password: string): string | null {

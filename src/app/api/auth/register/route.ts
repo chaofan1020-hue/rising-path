@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { getSupabaseAnonClient } from '@/storage/database/supabase-client';
 import { getAuthRedirectOrigin, getClientIp } from '@/lib/auth-server';
+import { isValidEmail } from '@/lib/auth-shared';
 import {
   authErrorMessage,
   consumeAuthRateLimit,
@@ -8,8 +9,6 @@ import {
   validatePassword,
   verifyTurnstileToken,
 } from '@/lib/auth-security';
-
-const EMAIL_PATTERN = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
 
 export async function POST(request: NextRequest) {
   const ip = getClientIp(request);
@@ -19,7 +18,7 @@ export async function POST(request: NextRequest) {
     const password = typeof body.password === 'string' ? body.password : '';
     const username = typeof body.username === 'string' ? body.username.trim() : '';
 
-    if (!EMAIL_PATTERN.test(email)) {
+    if (!isValidEmail(email)) {
       return NextResponse.json({ error: '请输入有效的邮箱地址' }, { status: 400 });
     }
     const passwordError = validatePassword(password);
@@ -64,6 +63,7 @@ export async function POST(request: NextRequest) {
     return NextResponse.json({
       success: true,
       requiresEmailConfirmation: !data.session,
+      session: data.session,
     });
   } catch (error) {
     console.error('[Auth] Sign-up request failed:', error);

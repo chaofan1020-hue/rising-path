@@ -15,7 +15,7 @@ import { Separator } from '@/components/ui/separator';
 import { Turnstile } from '@/components/turnstile';
 import { Eye, EyeOff, Loader2 } from 'lucide-react';
 import Link from 'next/link';
-import { JSX, SVGProps, useState } from 'react';
+import { JSX, SVGProps, useEffect, useState } from 'react';
 
 const Logo = (props: JSX.IntrinsicAttributes & SVGProps<SVGSVGElement>) => (
   <svg
@@ -69,7 +69,7 @@ export interface RegisterData {
   captchaToken: string | null;
 }
 
-type AuthMode = 'login' | 'signup' | 'otp' | 'reset' | 'password' | 'update-password';
+type AuthMode = 'login' | 'signup' | 'otp' | 'reset' | 'password' | 'verify' | 'update-password';
 
 interface LoginSignupProps {
   mode: AuthMode;
@@ -78,9 +78,12 @@ interface LoginSignupProps {
   onRegister: (data: RegisterData) => void | Promise<void>;
   onSendCode: (email: string) => void | Promise<boolean>;
   onVerifyCode: (email: string, code: string) => void | Promise<void>;
+  onResendVerification: (email: string, captchaToken: string | null) => void | Promise<boolean>;
   onResetPassword: (email: string) => void | Promise<void>;
   onGoogleSignIn: () => void | Promise<void>;
+  onSignOut: () => void | Promise<void>;
   onUpdatePassword: (password: string, confirmPassword: string) => void | Promise<void>;
+  verificationEmail?: string;
   loading?: boolean;
   error?: string | null;
   message?: string | null;
@@ -93,9 +96,12 @@ export default function LoginSignup({
   onRegister,
   onSendCode,
   onVerifyCode,
+  onResendVerification,
   onResetPassword,
   onGoogleSignIn,
+  onSignOut,
   onUpdatePassword,
+  verificationEmail,
   loading,
   error,
   message,
@@ -111,6 +117,14 @@ export default function LoginSignup({
     terms: false,
     captchaToken: null as string | null,
   });
+
+  useEffect(() => {
+    setForm((prev) => (
+      prev.email === (verificationEmail ?? '')
+        ? prev
+        : { ...prev, email: verificationEmail ?? '' }
+    ));
+  }, [verificationEmail]);
 
   const update = (key: keyof typeof form, value: string | boolean | null) => {
     setForm((prev) => ({ ...prev, [key]: value }));
@@ -147,6 +161,11 @@ export default function LoginSignup({
   const handleVerifyCode = (e: React.FormEvent) => {
     e.preventDefault();
     onVerifyCode(form.email, form.code);
+  };
+
+  const handleResendVerification = (e: React.FormEvent) => {
+    e.preventDefault();
+    onResendVerification(form.email, form.captchaToken);
   };
 
   const handleReset = (e: React.FormEvent) => {
@@ -192,6 +211,7 @@ export default function LoginSignup({
                   <Input
                 className="text-black"
                     id="username"
+                    autoComplete="username"
                     value={form.username}
                     onChange={(e) => update('username', e.target.value)}
                     required
@@ -203,6 +223,7 @@ export default function LoginSignup({
                 className="text-black"
                     id="email"
                     type="email"
+                    autoComplete="email"
                     value={form.email}
                     onChange={(e) => update('email', e.target.value)}
                     required
@@ -214,11 +235,13 @@ export default function LoginSignup({
                     <Input
                       id="password"
                       type={showPassword ? 'text' : 'password'}
+                      autoComplete="new-password"
                       className="pr-10 text-black"
                       value={form.password}
                       onChange={(e) => update('password', e.target.value)}
                       required
-                      minLength={6}
+                      minLength={12}
+                      maxLength={128}
                     />
                     <Button
                       type="button"
@@ -241,12 +264,15 @@ export default function LoginSignup({
                     <Input
                       id="confirmPassword"
                       type={showConfirmPassword ? 'text' : 'password'}
+                      autoComplete="new-password"
                       className="pr-10 text-black"
                       value={form.confirmPassword}
                       onChange={(e) =>
                         update('confirmPassword', e.target.value)
                       }
                       required
+                      minLength={12}
+                      maxLength={128}
                     />
                     <Button
                       type="button"
@@ -331,6 +357,11 @@ export default function LoginSignup({
                 {error}
               </div>
             )}
+            {message && (
+              <div className="text-sm text-emerald-600 bg-emerald-50 dark:bg-emerald-950/30 px-3 py-2 rounded-md">
+                {message}
+              </div>
+            )}
             <div>
               <Label htmlFor="otp-email" className="font-medium text-black">
                 Email
@@ -338,6 +369,7 @@ export default function LoginSignup({
               <Input
                 id="otp-email"
                 type="email"
+                autoComplete="email"
                 value={form.email}
                 onChange={(e) => update('email', e.target.value)}
                 placeholder="john@company.com"
@@ -363,6 +395,8 @@ export default function LoginSignup({
               </Label>
               <Input
                 id="code"
+                autoComplete="one-time-code"
+                inputMode="numeric"
                 value={form.code}
                 onChange={(e) => update('code', e.target.value)}
                 placeholder="123456"
@@ -405,6 +439,11 @@ export default function LoginSignup({
                 {error}
               </div>
             )}
+            {message && (
+              <div className="text-sm text-emerald-600 bg-emerald-50 dark:bg-emerald-950/30 px-3 py-2 rounded-md">
+                {message}
+              </div>
+            )}
             <div>
               <Label htmlFor="reset-email" className="font-medium text-black">
                 Email
@@ -412,6 +451,7 @@ export default function LoginSignup({
               <Input
                 id="reset-email"
                 type="email"
+                autoComplete="email"
                 value={form.email}
                 onChange={(e) => update('email', e.target.value)}
                 placeholder="john@company.com"
@@ -433,6 +473,65 @@ export default function LoginSignup({
                 className="text-black hover:text-zinc-600 dark:text-white dark:hover:text-zinc-300 underline underline-offset-4"
               >
                 Back to sign in
+              </button>
+            </p>
+          </form>
+        </div>
+      </div>
+    );
+  }
+
+  if (mode === 'verify') {
+    return (
+      <div className="flex items-center justify-center min-h-screen px-4 py-10">
+        <div className="sm:mx-auto sm:w-full sm:max-w-sm">
+          <h2 className="text-center text-xl font-semibold text-black">
+            Verify your email
+          </h2>
+          <form onSubmit={handleResendVerification} className="mt-6 space-y-4">
+            {error && (
+              <div className="text-sm text-red-600 bg-red-50 dark:bg-red-950/30 px-3 py-2 rounded-md">
+                {error}
+              </div>
+            )}
+            {message && (
+              <div className="text-sm text-emerald-600 bg-emerald-50 dark:bg-emerald-950/30 px-3 py-2 rounded-md">
+                {message}
+              </div>
+            )}
+            <p className="text-sm text-center text-black">
+              Check your email to verify your account before signing in.
+            </p>
+            <div>
+              <Label htmlFor="verification-email" className="font-medium text-black">
+                Email
+              </Label>
+              <Input
+                id="verification-email"
+                type="email"
+                autoComplete="email"
+                value={form.email}
+                onChange={(e) => update('email', e.target.value)}
+                placeholder="john@company.com"
+                className="mt-2 text-black"
+                required
+              />
+            </div>
+            <Turnstile onToken={(token) => update('captchaToken', token)} />
+            <Button type="submit" className="w-full" disabled={loading}>
+              {loading ? (
+                <Loader2 className="h-4 w-4 animate-spin" />
+              ) : (
+                'Resend verification email'
+              )}
+            </Button>
+            <p className="text-center text-sm text-black">
+              <button
+                type="button"
+                onClick={onSignOut}
+                className="text-black hover:text-zinc-600 dark:text-white dark:hover:text-zinc-300 underline underline-offset-4"
+              >
+                Use another email
               </button>
             </p>
           </form>
@@ -467,6 +566,8 @@ export default function LoginSignup({
                 onChange={(e) => update('password', e.target.value)}
                 className="pr-10 text-black"
                 required
+                minLength={12}
+                maxLength={128}
               />
               <Button
                 type="button"
@@ -491,6 +592,8 @@ export default function LoginSignup({
                 onChange={(e) => update('confirmPassword', e.target.value)}
                 className="pr-10 text-black"
                 required
+                minLength={12}
+                maxLength={128}
               />
               <Button
                 type="button"

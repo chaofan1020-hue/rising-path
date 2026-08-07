@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { getSupabaseAnonClient } from '@/storage/database/supabase-client';
 import { getClientIp } from '@/lib/auth-server';
+import { isValidEmail } from '@/lib/auth-shared';
 import { consumeAuthRateLimit, normalizeEmail } from '@/lib/auth-security';
 
 export async function POST(request: NextRequest) {
@@ -8,7 +9,9 @@ export async function POST(request: NextRequest) {
   try {
     const body = (await request.json()) as Record<string, unknown>;
     const email = normalizeEmail(body.email);
-    if (!email) return NextResponse.json({ error: '请输入邮箱地址' }, { status: 400 });
+    if (!isValidEmail(email)) {
+      return NextResponse.json({ error: '请输入有效的邮箱地址' }, { status: 400 });
+    }
 
     const ipLimit = await consumeAuthRateLimit(`otp:ip:${ip}`, 5, 900, 1800);
     const emailLimit = await consumeAuthRateLimit(`otp:email:${email}`, 3, 900, 1800);

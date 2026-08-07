@@ -5,9 +5,9 @@ import { useRouter } from 'next/navigation';
 import { getSupabaseBrowserClient } from '@/lib/supabase-browser';
 import LoginSignup, { type RegisterData } from '@/components/ui/login-signup';
 import SubscriptionCelebration from '@/components/SubscriptionCelebration';
-import { validatePassword } from '@/lib/auth-shared';
+import { isEmailVerified, validatePassword } from '@/lib/auth-shared';
 
-type AuthMode = 'login' | 'signup' | 'otp' | 'reset' | 'password' | 'update-password';
+type AuthMode = 'login' | 'signup' | 'otp' | 'reset' | 'password' | 'verify' | 'update-password';
 
 export default function LoginPage() {
   const router = useRouter();
@@ -16,10 +16,13 @@ export default function LoginPage() {
   const [error, setError] = useState<string | null>(null);
   const [message, setMessage] = useState<string | null>(null);
   const [registered, setRegistered] = useState(false);
+  const [verificationEmail, setVerificationEmail] = useState('');
 
   useEffect(() => {
     let mounted = true;
-    const requestedMode = new URLSearchParams(window.location.search).get('mode');
+    const searchParams = new URLSearchParams(window.location.search);
+    const requestedMode = searchParams.get('mode');
+    const verificationRequested = searchParams.get('verify') === '1';
     if (requestedMode === 'update-password') {
       setMode('update-password');
       return () => {
@@ -27,10 +30,19 @@ export default function LoginPage() {
       };
     }
 
+    if (verificationRequested) setMode('verify');
+
     getSupabaseBrowserClient().then(async (supabase) => {
       const { data } = await supabase.auth.getSession();
-      if (mounted && data.session) {
+      if (!mounted) return;
+
+      if (data.session?.user && !isEmailVerified(data.session.user)) {
+        setVerificationEmail(data.session.user.email ?? '');
+        setMode('verify');
+      } else if (data.session) {
         router.replace('/home');
+      } else if (verificationRequested) {
+        setMode('verify');
       }
     });
     return () => {
@@ -52,6 +64,12 @@ export default function LoginPage() {
         session?: { access_token: string; refresh_token: string };
       };
       if (!response.ok || !result.session) {
+        if (result.error === '请先完成邮箱验证') {
+          setVerificationEmail(email);
+          setMode('verify');
+          setMessage('请先完成邮箱验证，然后再登录。');
+          return;
+        }
         throw new Error(result.error || 'Sign in failed');
       }
       const supabase = await getSupabaseBrowserClient();
@@ -93,12 +111,50 @@ export default function LoginPage() {
           captchaToken: data.captchaToken,
         }),
       });
-      const result = (await response.json()) as { error?: string };
+      const result = (await response.json()) as {
+        error?: string;
+        session?: { access_token: string; refresh_token: string };
+      };
       if (!response.ok) throw new Error(result.error || 'Sign up failed');
+      if (result.session) {
+        const supabase = await getSupabaseBrowserClient();
+        const { error: sessionError } = await supabase.auth.setSession(result.session);
+        if (sessionError) throw sessionError;
+        router.replace('/home');
+        return;
+      }
+      setVerificationEmail(data.email);
       setRegistered(true);
       setMessage('Please check your email to verify your account before signing in.');
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Sign up failed');
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const handleResendVerification = async (
+    email: string,
+    captchaToken: string | null,
+  ): Promise<boolean> => {
+    setLoading(true);
+    setError(null);
+    setMessage(null);
+    try {
+      const response = await fetch('/api/auth/resend', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ email, captchaToken }),
+      });
+      const result = (await response.json()) as { error?: string };
+      if (!response.ok) {
+        throw new Error(result.error || 'Failed to resend verification email');
+      }
+      setMessage('Verification email sent. Check your inbox.');
+      return true;
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'Failed to resend verification email');
+      return false;
     } finally {
       setLoading(false);
     }
@@ -129,6 +185,7 @@ export default function LoginPage() {
   const handleVerifyOtp = async (email: string, otp: string) => {
     setLoading(true);
     setError(null);
+    setMessage(null);
     try {
       const response = await fetch('/api/auth/otp/verify', {
         method: 'POST',
@@ -217,6 +274,22 @@ export default function LoginPage() {
     }
   };
 
+  const handleSignOut = async () => {
+    setLoading(true);
+    try {
+      const supabase = await getSupabaseBrowserClient();
+      await supabase.auth.signOut();
+      setVerificationEmail('');
+      setMode('login');
+      setError(null);
+      setMessage(null);
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'Sign out failed');
+    } finally {
+      setLoading(false);
+    }
+  };
+
   return (
     <>
       <LoginSignup
@@ -224,15 +297,18 @@ export default function LoginPage() {
         onToggleMode={(next) => {
           setMode(next as AuthMode);
           setError(null);
-          setMessage(null);
+          if (next !== 'otp') setMessage(null);
         }}
         onLogin={handleLogin}
         onRegister={handleRegister}
         onSendCode={handleSendOtp}
         onVerifyCode={handleVerifyOtp}
+        onResendVerification={handleResendVerification}
         onResetPassword={handleResetPassword}
         onGoogleSignIn={handleGoogleSignIn}
+        onSignOut={handleSignOut}
         onUpdatePassword={handleUpdatePassword}
+        verificationEmail={verificationEmail}
         loading={loading}
         error={error}
         message={message}
@@ -243,7 +319,7 @@ export default function LoginPage() {
           autoShow={false}
           onClose={() => {
             setRegistered(false);
-            setMode('login');
+            setMode('verify');
           }}
         />
       )}

@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { getSupabaseAnonClient } from '@/storage/database/supabase-client';
 import { getClientIp } from '@/lib/auth-server';
+import { isValidEmail } from '@/lib/auth-shared';
 import { authErrorMessage, consumeAuthRateLimit, normalizeEmail } from '@/lib/auth-security';
 
 export async function POST(request: NextRequest) {
@@ -9,7 +10,7 @@ export async function POST(request: NextRequest) {
     const body = (await request.json()) as Record<string, unknown>;
     const email = normalizeEmail(body.email);
     const token = typeof body.token === 'string' ? body.token.trim() : '';
-    if (!email || !/^\d{6}$/.test(token)) {
+    if (!isValidEmail(email) || !/^\d{6}$/.test(token)) {
       return NextResponse.json({ error: '验证码格式不正确' }, { status: 400 });
     }
 
