@@ -2,7 +2,8 @@
 
 import { useState, useRef, useEffect, useCallback } from "react";
 import { Header1 } from "@/components/header1";
-import { AccessGuard, useAccessCode } from "@/components/access-guard";
+import { AuthGuard } from "@/components/auth-guard";
+import { apiFetch } from "@/lib/api-client";
 import { Button } from "@/components/ui/button";
 import { Textarea } from "@/components/ui/textarea";
 import { Input } from "@/components/ui/input";
@@ -257,22 +258,8 @@ const TYPE_ICONS: Record<InterviewType, React.ReactNode> = {
   mixed: <Layers className="h-6 w-6" />,
 };
 
-export default function MockInterviewPage() {
+function MockInterviewContent() {
   const { t, locale } = useLanguage();
-  const { accessCodeId: contextAccessCodeId } = useAccessCode();
-  // 兜底：Context 未就绪时从 localStorage 读取（登录时 access-guard 会写入 access_code_id）
-  const [accessCodeId, setAccessCodeId] = useState<string | null>(contextAccessCodeId);
-
-  useEffect(() => {
-    if (contextAccessCodeId) {
-      setAccessCodeId(contextAccessCodeId);
-      return;
-    }
-    const stored = typeof window !== "undefined" ? localStorage.getItem("access_code_id") : null;
-    if (stored) {
-      setAccessCodeId(stored);
-    }
-  }, [contextAccessCodeId]);
   const [stage, setStage] = useState<Stage>("setup");
   const [interviewType, setInterviewType] = useState<InterviewType>("mixed");
 
@@ -430,25 +417,23 @@ export default function MockInterviewPage() {
   const interviewTypes: InterviewType[] = ["technical", "behavioral", "case", "mixed"];
   const language = locale === "en" ? "en" : "zh";
 
-  // 加载公司列表（无需 accessCodeId，独立加载）
+  // 加载公司列表
   useEffect(() => {
-    fetch("/api/interview/jobs")
+    apiFetch("/api/interview/jobs")
       .then((r) => (r.ok ? r.json() : null))
       .then((d) => d && setCompanies(d.companies || []))
       .catch(() => {});
   }, []);
 
-  // 加载简历列表（依赖 accessCodeId）
+  // 加载简历列表
   useEffect(() => {
-    if (!accessCodeId) return;
-    fetch(`/api/resume?access_code_id=${accessCodeId}`)
+    apiFetch("/api/resume")
       .then((r) => (r.ok ? r.json() : null))
       .then((d) => {
-        console.log("[mock-interview] accessCodeId:", accessCodeId, "resumes:", d?.resumes?.length);
         if (d) setResumes(d.resumes || []);
       })
       .catch((e) => console.error("[mock-interview] fetch resumes error:", e));
-  }, [accessCodeId]);
+  }, []);
 
   // 公司变化时加载岗位
   useEffect(() => {
@@ -457,7 +442,7 @@ export default function MockInterviewPage() {
       setSelectedJobId(null);
       return;
     }
-    fetch(`/api/interview/jobs?company=${encodeURIComponent(selectedCompany)}`)
+    apiFetch(`/api/interview/jobs?company=${encodeURIComponent(selectedCompany)}`)
       .then((r) => (r.ok ? r.json() : null))
       .then((d) => d && setJobs(d.jobs || []))
       .catch(() => {});
@@ -491,7 +476,7 @@ export default function MockInterviewPage() {
     setDnaLoading(true);
     const timer = setTimeout(async () => {
       try {
-        const res = await fetch(`/api/company-dna?name=${encodeURIComponent(company)}`);
+      const res = await apiFetch(`/api/company-dna?name=${encodeURIComponent(company)}`);
         if (res.ok) {
           setDnaPreview(await res.json());
         } else {
@@ -643,13 +628,13 @@ export default function MockInterviewPage() {
   // 返回的 Promise 在播放结束（或失败兜底）时 resolve——淘汰流程需要等结束语播完再进评估
   const playInterviewerAudio = useCallback(
     async (text: string, speaker?: string, speechRate?: number): Promise<void> => {
-      if (!accessCodeId || !text.trim()) return;
+      if (!text.trim()) return;
       try {
         setSpeaking(true);
-        const res = await fetch("/api/interview/tts", {
+        const res = await apiFetch("/api/interview/tts", {
           method: "POST",
           headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ accessCodeId, text, language, speaker, speechRate }),
+          body: JSON.stringify({ text, language, speaker, speechRate }),
         });
         if (!res.ok) throw new Error("TTS failed");
         // 后端已代理为同源音频流：转 blob URL 播放（同源，频谱分析不会被浏览器静音）
@@ -685,16 +670,16 @@ export default function MockInterviewPage() {
         setSpeaking(false);
       }
     },
-    [accessCodeId, language]
+    [language]
   );
 
   // 流式请求面试官（复用逻辑：开始面试 / 提交回答）
   const streamInterviewer = useCallback(
     async (payload: Record<string, unknown>) => {
-      const res = await fetch("/api/interview/chat", {
+      const res = await apiFetch("/api/interview/chat", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ accessCodeId, language, ...payload }),
+        body: JSON.stringify({ language, ...payload }),
       });
       if (!res.ok) {
         const err = await res.json().catch(() => ({}));
@@ -800,12 +785,11 @@ export default function MockInterviewPage() {
       setStreaming(false);
       return { fullContent, newSessionId, activeInterviewer, eliminatedInfo, roundEnded, wrappedUp };
     },
-    [accessCodeId, language, startRoundTimer, finishRoundWait]
+    [language, startRoundTimer, finishRoundWait]
   );
 
   // 开始面试
   const handleStart = async () => {
-    if (!accessCodeId) return;
     // 目标公司：选岗位时用岗位所属公司，手动 JD 时用用户输入——本场所有面试官均来自该公司
     const targetCompany = (selectedJobId ? selectedCompany : targetCompanyInput).trim();
     if (!targetCompany) {
@@ -876,10 +860,10 @@ export default function MockInterviewPage() {
       const base64 = btoa(
         new Uint8Array(arrayBuffer).reduce((data, byte) => data + String.fromCharCode(byte), "")
       );
-      const res = await fetch("/api/interview/asr", {
+      const res = await apiFetch("/api/interview/asr", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ accessCodeId, audioBase64: base64 }),
+        body: JSON.stringify({ audioBase64: base64 }),
       });
       if (!res.ok) throw new Error("ASR failed");
       const data = await res.json();
@@ -1072,10 +1056,10 @@ export default function MockInterviewPage() {
     setEnding(true);
     setReportError(false);
     try {
-      const res = await fetch("/api/interview/summary", {
+      const res = await apiFetch("/api/interview/summary", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ accessCodeId, sessionId, language, eliminatedRound: eliminatedAtRound ?? eliminatedRound ?? undefined }),
+        body: JSON.stringify({ sessionId, language, eliminatedRound: eliminatedAtRound ?? eliminatedRound ?? undefined }),
       });
       if (!res.ok) throw new Error("failed");
       const reader = res.body?.getReader();
@@ -1140,10 +1124,10 @@ export default function MockInterviewPage() {
     const hasAnswer = messages.some((m) => m.role === "candidate" && m.content.trim());
     if (!hasAnswer) {
       try {
-        const res = await fetch("/api/interview/summary", {
+        const res = await apiFetch("/api/interview/summary", {
           method: "POST",
           headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ accessCodeId, sessionId, language }),
+          body: JSON.stringify({ sessionId, language }),
         });
         await res.text(); // 排空响应流（后端秒回 skipped）
       } catch {
@@ -1160,14 +1144,13 @@ export default function MockInterviewPage() {
 
   // 提交真实度问卷：评分分流（<6 低真实度进人工审查队列 / >=6 高质量案例沉淀为训练数据）
   const submitFeedback = async () => {
-    if (!sessionId || !accessCodeId || realismScore === null) return;
+    if (!sessionId || realismScore === null) return;
     setFeedbackSubmitting(true);
     try {
-      await fetch("/api/interview/feedback", {
+      await apiFetch("/api/interview/feedback", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
-          accessCodeId,
           sessionId,
           realismScore,
           feedbackText: realismScore < 6 ? feedbackText.trim() || undefined : undefined,
@@ -1218,7 +1201,6 @@ export default function MockInterviewPage() {
   // ========== 面试设置阶段 ==========
   if (stage === "setup") {
     return (
-      <AccessGuard>
         <div className="min-h-screen bg-white dark:bg-black">
           <Header1 />
           <main className="py-8 md:py-12">
@@ -1475,9 +1457,8 @@ export default function MockInterviewPage() {
             </ModalContent>
           </Modal>
         </div>
-      </AccessGuard>
-    );
-  }
+  );
+}
 
   // ========== 面试进行阶段（视频面试间） ==========
   if (stage === "interview") {
@@ -1489,8 +1470,7 @@ export default function MockInterviewPage() {
           ? t("mockInterview.recognizing")
           : t("mockInterview.listening");
     return (
-      <AccessGuard>
-        <div className="min-h-screen bg-zinc-950 flex flex-col">
+      <div className="min-h-screen bg-zinc-950 flex flex-col">
           {/* TTS 播放元素（固定元素，供音波频谱分析） */}
           <audio ref={audioRef} className="hidden" />
           {/* 轮末淘汰覆盖层：面试官提前结束面试，自动进入评估 */}
@@ -1794,7 +1774,6 @@ export default function MockInterviewPage() {
             </div>
           </div>
         </div>
-      </AccessGuard>
     );
   }
 
@@ -1809,8 +1788,7 @@ export default function MockInterviewPage() {
   const fmtDuration = (sec: number) => `${Math.floor(sec / 60)}:${String(sec % 60).padStart(2, "0")}`;
 
   return (
-    <AccessGuard>
-      <div className="min-h-screen bg-white dark:bg-black">
+    <div className="min-h-screen bg-white dark:bg-black">
         <Header1 />
         <main className="py-8 md:py-12">
           <div className="container mx-auto px-4 max-w-4xl">
@@ -2168,6 +2146,13 @@ export default function MockInterviewPage() {
           </ModalContent>
         </Modal>
       </div>
-    </AccessGuard>
+  );
+}
+
+export default function MockInterviewPage() {
+  return (
+    <AuthGuard>
+      <MockInterviewContent />
+    </AuthGuard>
   );
 }

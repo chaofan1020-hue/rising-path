@@ -1,23 +1,20 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { getSupabaseClient } from '@/storage/database/supabase-client';
 import { LLMClient, Config, HeaderUtils } from 'coze-coding-dev-sdk';
+import { getAuthContext, unauthorizedResponse } from '@/lib/auth-server';
 
 export async function POST(request: NextRequest) {
   try {
-    const client = getSupabaseClient();
-    const { resumeId, accessCodeId, regions, directions } = await request.json();
-
-    // 必须提供 access_code_id
-    if (!accessCodeId) {
-      return NextResponse.json({ error: '未授权的访问' }, { status: 401 });
-    }
+    const auth = await getAuthContext(request);
+    if (!auth) return unauthorizedResponse();
+    const client = auth.client;
+    const { resumeId, regions, directions } = await request.json();
 
     // Get resume info and verify ownership
     const { data: resume, error: resumeError } = await client
       .from('resumes')
       .select('*')
       .eq('id', resumeId)
-      .eq('access_code_id', accessCodeId)
+      .eq('user_id', auth.user.id)
       .single();
 
     if (resumeError || !resume) {
@@ -129,7 +126,7 @@ ${JSON.stringify(jobsList, null, 2)}
         match_score: match.match_score,
         match_reason: match.match_reason,
         suggestions: match.suggestions,
-        access_code_id: accessCodeId,
+        user_id: auth.user.id,
       });
     }
 

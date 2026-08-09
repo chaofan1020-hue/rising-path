@@ -33,7 +33,8 @@ import {
   Map,
 } from 'lucide-react';
 import Link from 'next/link';
-import { AccessGuard, useAccessCode } from '@/components/access-guard';
+import { AuthGuard } from '@/components/auth-guard';
+import { apiFetch } from '@/lib/api-client';
 import { Header1 } from '@/components/header1';
 
 interface FieldMapping {
@@ -90,19 +91,14 @@ function FieldMappingsContent() {
   const [editingMapping, setEditingMapping] = useState<FieldMapping | null>(null);
   const [isDialogOpen, setIsDialogOpen] = useState(false);
   
-  const { accessCodeId } = useAccessCode();
-
   useEffect(() => {
-    if (accessCodeId) {
-      fetchMappings();
-    }
-  }, [accessCodeId]);
+    fetchMappings();
+  }, []);
 
   const fetchMappings = async () => {
-    if (!accessCodeId) return;
     setLoading(true);
     try {
-      const response = await fetch(`/api/field-mappings?access_code_id=${accessCodeId}`);
+      const response = await apiFetch('/api/field-mappings');
       const data = await response.json();
       setMappings(data.mappings || []);
     } catch (error) {
@@ -113,14 +109,12 @@ function FieldMappingsContent() {
   };
 
   const handleSave = async () => {
-    if (!accessCodeId) return;
     setSaving(true);
     try {
-      const response = await fetch('/api/field-mappings', {
+      const response = await apiFetch('/api/field-mappings', {
         method: 'PUT',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
-          access_code_id: accessCodeId,
           mappings: mappings,
         }),
       });
@@ -441,8 +435,8 @@ function FieldMappingsContent() {
 // 主组件
 export default function FieldMappingsPage() {
   return (
-    <AccessGuard>
+    <AuthGuard>
       <FieldMappingsContent />
-    </AccessGuard>
+    </AuthGuard>
   );
 }

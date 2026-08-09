@@ -1,9 +1,14 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { getSupabaseClient } from '@/storage/database/supabase-client';
+import { hasValidAdminSession } from '@/lib/admin-auth';
 
 // GET /api/analytics - 获取分析数据
 export async function GET(request: NextRequest) {
   try {
+    if (!hasValidAdminSession(request)) {
+      return NextResponse.json({ error: '需要管理员权限' }, { status: 401 });
+    }
+
     const client = getSupabaseClient();
     const { searchParams } = new URL(request.url);
     const range = searchParams.get('range') || '7d'; // 7d, 30d, 90d, all
@@ -26,19 +31,16 @@ export async function GET(request: NextRequest) {
         break;
     }
 
-    // 1. 访问码统计
-    const { data: accessCodes } = await client
-      .from('access_codes')
-      .select('*');
-
-    const totalAccessCodes = accessCodes?.length || 0;
-    const activeAccessCodes = accessCodes?.filter(c => c.is_active && (!c.expires_at || new Date(c.expires_at) > now)).length || 0;
-    const expiredAccessCodes = accessCodes?.filter(c => c.expires_at && new Date(c.expires_at) <= now).length || 0;
+    // 1. 用户统计
+    const { data: profiles } = await client
+      .from('profiles')
+      .select('id, display_name');
+    const totalUsers = profiles?.length || 0;
 
     // 2. 简历统计（包含用户画像数据）
     const { data: resumes } = await client
       .from('resumes')
-      .select('created_at, access_code_id, user_info');
+      .select('created_at, user_id, user_info');
 
     const totalResumes = resumes?.length || 0;
     const recentResumes = resumes?.filter(r => new Date(r.created_at) >= startDate).length || 0;
@@ -107,7 +109,7 @@ export async function GET(request: NextRequest) {
     // 4. 网申统计
     const { data: applications } = await client
       .from('applications')
-      .select('created_at, status');
+      .select('created_at, status, user_id');
 
     const totalApplications = applications?.length || 0;
     const recentApplications = applications?.filter(a => new Date(a.created_at) >= startDate).length || 0;
@@ -121,7 +123,7 @@ export async function GET(request: NextRequest) {
     // 5. AI 匹配统计
     const { data: aiMatches } = await client
       .from('ai_matches')
-      .select('created_at');
+      .select('created_at, user_id');
 
     const totalAiMatches = aiMatches?.length || 0;
     const recentAiMatches = aiMatches?.filter(a => new Date(a.created_at) >= startDate).length || 0;
@@ -140,29 +142,31 @@ export async function GET(request: NextRequest) {
       dailyStats.push({ date: dateStr, resumes: dayResumes, applications: dayApps, aiMatches: dayMatches });
     }
 
-    // 7. 用户活跃度（按 access_code_id 分组）
-    const userActivity: Record<number, { resumes: number; applications: number; aiMatches: number }> = {};
+    // 7. 用户活跃度（按 Auth user_id 分组）
+    const userActivity: Record<string, { resumes: number; applications: number; aiMatches: number }> = {};
+    const ensureActivity = (userId: string | null | undefined) => {
+      if (!userId) return null;
+      if (!userActivity[userId]) userActivity[userId] = { resumes: 0, applications: 0, aiMatches: 0 };
+      return userActivity[userId];
+    };
     
     resumes?.forEach(r => {
-      if (r.access_code_id) {
-        if (!userActivity[r.access_code_id]) {
-          userActivity[r.access_code_id] = { resumes: 0, applications: 0, aiMatches: 0 };
-        }
-        userActivity[r.access_code_id].resumes++;
-      }
+      const activity = ensureActivity(r.user_id);
+      if (activity) activity.resumes++;
     });
-
-    // 获取关联的 access code 信息
-    const accessCodeMap: Record<number, string> = {};
-    accessCodes?.forEach(c => {
-      accessCodeMap[c.id] = c.name || c.code;
+    applications?.forEach(a => {
+      const activity = ensureActivity(a.user_id);
+      if (activity) activity.applications++;
     });
+    aiMatches?.forEach(m => {
+      const activity = ensureActivity(m.user_id);
+      if (activity) activity.aiMatches++;
+    });
+    const profileMap = new Map((profiles || []).map((profile) => [profile.id, profile.display_name || '未命名用户']));
 
     return NextResponse.json({
       overview: {
-        totalAccessCodes,
-        activeAccessCodes,
-        expiredAccessCodes,
+        totalUsers,
         totalResumes,
         recentResumes,
         totalJobs,
@@ -183,8 +187,8 @@ export async function GET(request: NextRequest) {
         resumesByDegree,
       },
       userActivity: Object.entries(userActivity).map(([id, stats]) => ({
-        accessCodeId: parseInt(id),
-        accessCodeName: accessCodeMap[parseInt(id)] || `用户${id}`,
+        userId: id,
+        userName: profileMap.get(id) || '未命名用户',
         ...stats,
       })).sort((a, b) => (b.resumes + b.applications + b.aiMatches) - (a.resumes + a.applications + a.aiMatches)),
     });

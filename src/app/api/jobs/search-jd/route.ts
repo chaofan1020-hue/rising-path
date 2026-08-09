@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { SearchClient, Config, HeaderUtils } from 'coze-coding-dev-sdk';
+import { getAuthContext, unauthorizedResponse } from '@/lib/auth-server';
 
 // 常见招聘平台
 const JOB_SITES = [
@@ -74,6 +75,8 @@ const COMPANY_CAREERS: Record<string, string[]> = {
 
 export async function POST(request: NextRequest) {
   try {
+    const auth = await getAuthContext(request);
+    if (!auth) return unauthorizedResponse();
     const { company, position, region } = await request.json();
 
     if (!company || !position) {

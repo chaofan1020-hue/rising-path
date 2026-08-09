@@ -34,7 +34,8 @@ import {
   Wand2,
 } from 'lucide-react';
 import Link from 'next/link';
-import { AccessGuard, useAccessCode } from '@/components/access-guard';
+import { AuthGuard } from '@/components/auth-guard';
+import { apiFetch } from '@/lib/api-client';
 import { Header1 } from '@/components/header1';
 import { useLanguage } from '@/lib/language-context';
 
@@ -149,7 +150,6 @@ function AIMatchContent() {
   const [matching, setMatching] = useState(false);
   const [matchProgress, setMatchProgress] = useState(0);
   const [matchResults, setMatchResults] = useState<MatchResult[]>([]);
-  const { accessCodeId } = useAccessCode();
   
   // 筛选相关状态
   const [regions, setRegions] = useState<JobConfig[]>([]);
@@ -158,18 +158,13 @@ function AIMatchContent() {
   const [selectedDirections, setSelectedDirections] = useState<string[]>([]);
 
   useEffect(() => {
-    if (accessCodeId) {
-      fetchResumes();
-      fetchJobConfigs();
-    }
-  }, [accessCodeId]);
+    fetchResumes();
+    fetchJobConfigs();
+  }, []);
 
   const fetchResumes = async () => {
-    if (!accessCodeId) return;
     try {
-      const params = new URLSearchParams();
-      params.append('access_code_id', accessCodeId.toString());
-      const response = await fetch(`/api/resume?${params.toString()}`);
+      const response = await apiFetch('/api/resume');
       const data = await response.json();
       setResumes(data.resumes || []);
     } catch (error) {
@@ -179,7 +174,7 @@ function AIMatchContent() {
 
   const fetchJobConfigs = async () => {
     try {
-      const response = await fetch('/api/configs');
+      const response = await apiFetch('/api/configs');
       const data = await response.json();
       if (data.configs) {
         setRegions(data.configs.region || []);
@@ -191,7 +186,7 @@ function AIMatchContent() {
   };
 
   const handleMatch = async () => {
-    if (!selectedResumeId || !accessCodeId) return;
+    if (!selectedResumeId) return;
 
     setMatching(true);
     setMatchProgress(0);
@@ -203,12 +198,11 @@ function AIMatchContent() {
         setMatchProgress((prev) => Math.min(prev + 5, 90));
       }, 100);
 
-      const response = await fetch('/api/ai/match', {
+      const response = await apiFetch('/api/ai/match', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ 
           resumeId: selectedResumeId,
-          accessCodeId: accessCodeId,
           regions: selectedRegions,
           directions: selectedDirections,
         }),
@@ -478,8 +472,8 @@ function AIMatchContent() {
 // 主组件
 export default function AIMatchPage() {
   return (
-    <AccessGuard>
+    <AuthGuard>
       <AIMatchContent />
-    </AccessGuard>
+    </AuthGuard>
   );
 }

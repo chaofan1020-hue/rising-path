@@ -13,7 +13,8 @@ import {
 } from '@/components/ui/popover';
 import { Search, MapPin, Briefcase, Users, ExternalLink, ChevronDown, X, Plus, Check, Loader2 } from 'lucide-react';
 import Link from 'next/link';
-import { AccessGuard, useAccessCode } from '@/components/access-guard';
+import { AuthGuard } from '@/components/auth-guard';
+import { apiFetch } from '@/lib/api-client';
 import { Header1 } from '@/components/header1';
 import { useLanguage } from '@/lib/language-context';
 
@@ -322,7 +323,7 @@ function SingleSelectFilter({
   );
 }
 
-// 内部组件 - 在 AccessGuard 内部使用 useAccessCode
+// 内部组件
 function JobsContent() {
   const [jobs, setJobs] = useState<Job[]>([]);
   const [loading, setLoading] = useState(true);
@@ -340,7 +341,6 @@ function JobsContent() {
     audience: JobConfig[];
   }>({ region: [], direction: [], audience: [] });
 
-  const { accessCodeId } = useAccessCode();
   const { t } = useLanguage();
 
   // 初始化受众为"全部"
@@ -362,7 +362,7 @@ function JobsContent() {
       }
       if (selectedAudience !== t('page.all')) params.append('audience', selectedAudience);
 
-      const response = await fetch(`/api/jobs?${params.toString()}`);
+      const response = await apiFetch(`/api/jobs?${params.toString()}`);
       const data = await response.json();
       setJobs(data.jobs || []);
     } catch (error) {
@@ -374,20 +374,19 @@ function JobsContent() {
 
   // 获取已投递的岗位ID列表
   const fetchAppliedJobIds = useCallback(async () => {
-    if (!accessCodeId) return;
     try {
-      const response = await fetch(`/api/applications?access_code_id=${accessCodeId}`);
+      const response = await apiFetch('/api/applications');
       const data = await response.json();
       const ids = new Set<number>((data.applications || []).map((app: { job_id: number }) => app.job_id));
       setAppliedJobIds(ids);
     } catch (error) {
       console.error('Failed to fetch applied job ids:', error);
     }
-  }, [accessCodeId]);
+  }, []);
 
   useEffect(() => {
     // 获取配置
-    fetch('/api/configs')
+    apiFetch('/api/configs')
       .then(res => res.json())
       .then(data => {
         // 合并大地区选项和具体地区选项
@@ -413,23 +412,17 @@ function JobsContent() {
 
   // 添加到网申管理
   const handleAdd = async (jobId: number) => {
-    if (!accessCodeId) {
-      alert(t('jobs.loginFirst'));
-      return;
-    }
-    
     if (appliedJobIds.has(jobId)) {
       return;
     }
 
     setApplyingJobId(jobId);
     try {
-      const response = await fetch('/api/applications', {
+      const response = await apiFetch('/api/applications', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
           job_id: jobId,
-          access_code_id: accessCodeId,
           status: 'pending',
           notes: '',
         }),
@@ -682,8 +675,8 @@ function JobsContent() {
 // 导出默认函数
 export default function JobsPage() {
   return (
-    <AccessGuard>
+    <AuthGuard>
       <JobsContent />
-    </AccessGuard>
+    </AuthGuard>
   );
 }

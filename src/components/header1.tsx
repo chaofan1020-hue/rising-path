@@ -33,32 +33,17 @@ function Header1() {
     const { t } = useLanguage();
     const [isOpen, setOpen] = useState(false);
     const [isLoggedIn, setIsLoggedIn] = useState(false);
-    const [accessCodeName, setAccessCodeName] = useState("");
+    const [displayName, setDisplayName] = useState("");
     const [user, setUser] = useState<SupabaseUser | null>(null);
 
     useEffect(() => {
         let mounted = true;
-        // 检查登录状态（先兼容旧访问码，再检测 Supabase Auth session）
-        const accessCode = localStorage.getItem('access_code');
-        if (accessCode) {
-            try {
-                const data = JSON.parse(accessCode);
-                if (mounted) {
-                    setIsLoggedIn(true);
-                    setAccessCodeName(data.name || data.code || "");
-                }
-            } catch {
-                if (mounted) setIsLoggedIn(false);
-            }
-            return;
-        }
-
         getSupabaseBrowserClient().then(supabase => {
             supabase.auth.getSession().then(({ data: { session } }: { data: { session: Session | null } }) => {
                 if (mounted) {
                     setIsLoggedIn(!!session);
                     setUser(session?.user ?? null);
-                    setAccessCodeName(getDisplayName(session?.user ?? null));
+                    setDisplayName(getDisplayName(session?.user ?? null));
                 }
             });
             const { data: { subscription } } = supabase.auth.onAuthStateChange(
@@ -66,7 +51,7 @@ function Header1() {
                     if (mounted) {
                         setIsLoggedIn(!!session);
                         setUser(session?.user ?? null);
-                        setAccessCodeName(getDisplayName(session?.user ?? null));
+                        setDisplayName(getDisplayName(session?.user ?? null));
                     }
                 }
             );
@@ -79,14 +64,11 @@ function Header1() {
     }, []);
 
     const handleLogout = async () => {
-        localStorage.removeItem('access_code');
-        localStorage.removeItem('access_code_id');
-        localStorage.removeItem('access_code_data');
         const supabase = await getSupabaseBrowserClient();
         await supabase.auth.signOut();
         setIsLoggedIn(false);
         setUser(null);
-        setAccessCodeName("");
+        setDisplayName("");
         window.location.href = '/';
     };
 
@@ -206,7 +188,7 @@ function Header1() {
                         <>
                             <div className="hidden md:flex items-center gap-2 text-sm text-black dark:text-white">
                                 <UserIcon className="w-4 h-4" />
-                                <span>{accessCodeName}</span>
+                                <span>{displayName}</span>
                             </div>
                             <Button variant="ghost" onClick={handleLogout} className="hidden md:inline-flex text-black dark:text-white hover:bg-zinc-100 dark:hover:bg-zinc-800 hover:text-zinc-900 dark:hover:text-zinc-100">
                                 <LogOut className="w-4 h-4 mr-2" />

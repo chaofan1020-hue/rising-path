@@ -122,9 +122,7 @@ interface JobConfig {
 // Analytics types
 interface AnalyticsData {
   overview: {
-    totalAccessCodes: number;
-    activeAccessCodes: number;
-    expiredAccessCodes: number;
+    totalUsers: number;
     totalResumes: number;
     recentResumes: number;
     totalJobs: number;
@@ -144,7 +142,7 @@ interface AnalyticsData {
     resumesBySchool: Record<string, number>;
     resumesByDegree: Record<string, number>;
   };
-  userActivity: { accessCodeId: number; accessCodeName: string; resumes: number; applications: number; aiMatches: number }[];
+  userActivity: { userId: string; userName: string; resumes: number; applications: number; aiMatches: number }[];
 }
 
 const statusOptions = ['pending', 'submitted', 'interview', 'rejected', 'offer'];
@@ -201,19 +199,6 @@ export default function AdminPage() {
     logo_url: '',
   });
   const [editingCompany, setEditingCompany] = useState<CompanyConfig | null>(null);
-
-  // Access codes state
-  interface AccessCode {
-    id: number;
-    code: string;
-    name: string;
-    duration_days: number;
-    expires_at: string;
-    is_active: boolean;
-    created_at: string;
-    last_used_at: string | null;
-  }
-  const [accessCodes, setAccessCodes] = useState<AccessCode[]>([]);
 
   // Company logos state
   const [companyLogos, setCompanyLogos] = useState<{ id: number; company_name: string; logo_url: string }[]>([]);
@@ -405,25 +390,22 @@ export default function AdminPage() {
   const fetchData = async () => {
     setLoading(true);
     try {
-      const [jobsRes, resumesRes, appsRes, configsRes, accessCodesRes, companiesRes] = await Promise.all([
+      const [jobsRes, resumesRes, appsRes, configsRes, companiesRes] = await Promise.all([
         fetch('/api/jobs'),
-        fetch('/api/resume', { headers: { 'x-admin-request': 'true' } }),
-        fetch('/api/applications', { headers: { 'x-admin-request': 'true' } }),
+        fetch('/api/resume'),
+        fetch('/api/applications'),
         fetch('/api/configs'),
-        fetch('/api/access-codes'),
         fetch('/api/admin/company-config'),
       ]);
       const jobsData = await jobsRes.json();
       const resumesData = await resumesRes.json();
       const appsData = await appsRes.json();
       const configsData = await configsRes.json();
-      const accessCodesData = await accessCodesRes.json();
       const companiesData = await companiesRes.json();
       setJobs(jobsData.jobs || []);
       setResumes(resumesData.resumes || []);
       setApplications(appsData.applications || []);
       setConfigs(configsData.configs || {});
-      setAccessCodes(accessCodesData.codes || []);
       setCompanies(companiesData.companies || []);
       
       // Set default form values from configs
@@ -565,65 +547,6 @@ export default function AdminPage() {
       setCompanies(prev => prev.filter(c => c.id !== id));
     } catch (error) {
       console.error('Failed to delete company:', error);
-    }
-  };
-
-  // Access Code CRUD
-  const handleCreateAccessCode = async () => {
-    const name = prompt('请输入访问码名称（可选）', '');
-    if (name === null) return; // 用户取消
-    
-    const durationInput = prompt('请输入有效天数（默认30天）', '30');
-    if (durationInput === null) return; // 用户取消
-    
-    const duration_days = parseInt(durationInput) || 30;
-    
-    try {
-      const response = await fetch('/api/access-codes', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ name: name || undefined, duration_days }),
-      });
-      const data = await response.json();
-      if (data.code) {
-        setAccessCodes([data.code, ...accessCodes]);
-        alert(`访问码创建成功：${data.code.code}\n有效期：${duration_days}天`);
-      }
-    } catch (error) {
-      console.error('Failed to create access code:', error);
-      alert('创建访问码失败');
-    }
-  };
-
-  const handleToggleAccessCode = async (id: number, currentActive: boolean) => {
-    try {
-      const response = await fetch(`/api/access-codes/${id}`, {
-        method: 'PATCH',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ is_active: !currentActive }),
-      });
-      const data = await response.json();
-      if (data.success) {
-        setAccessCodes(accessCodes.map(c => 
-          c.id === id ? { ...c, is_active: !currentActive } : c
-        ));
-      }
-    } catch (error) {
-      console.error('Failed to toggle access code:', error);
-    }
-  };
-
-  const handleDeleteAccessCode = async (id: number) => {
-    if (!confirm('确定要删除此访问码吗？')) return;
-    
-    try {
-      const response = await fetch(`/api/access-codes?id=${id}`, { method: 'DELETE' });
-      const data = await response.json();
-      if (data.success) {
-        setAccessCodes(accessCodes.filter(c => c.id !== id));
-      }
-    } catch (error) {
-      console.error('Failed to delete access code:', error);
     }
   };
 
@@ -1127,8 +1050,8 @@ export default function AdminPage() {
                 variant="ghost" 
                 size="sm"
                 className="h-8 w-8 md:w-auto md:px-3"
-                onClick={() => {
-                  localStorage.removeItem('admin_auth');
+                onClick={async () => {
+                  await fetch('/api/admin/password', { method: 'DELETE' });
                   window.location.reload();
                 }}
               >
@@ -1148,7 +1071,7 @@ export default function AdminPage() {
         ) : (
           <Tabs defaultValue="overview" className="space-y-4 md:space-y-6">
             <div className="overflow-x-auto -mx-4 px-4 md:mx-0 md:px-0">
-              <TabsList className="grid w-max md:w-full grid-cols-8 gap-1 md:gap-0 md:inline-flex">
+              <TabsList className="grid w-max md:w-full grid-cols-7 gap-1 md:gap-0 md:inline-flex">
                 <TabsTrigger value="overview" className="px-3 md:px-4">
                   <LayoutDashboard className="h-4 w-4 md:mr-2" />
                   <span className="hidden md:inline">概览</span>
@@ -1172,10 +1095,6 @@ export default function AdminPage() {
                 <TabsTrigger value="applications" className="px-3 md:px-4">
                   <Send className="h-4 w-4 md:mr-2" />
                   <span className="hidden md:inline">网申管理</span>
-                </TabsTrigger>
-                <TabsTrigger value="access-codes" className="px-3 md:px-4">
-                  <Users className="h-4 w-4 md:mr-2" />
-                  <span className="hidden md:inline">访问码</span>
                 </TabsTrigger>
                 <TabsTrigger value="configs" className="px-3 md:px-4">
                   <Settings className="h-4 w-4 md:mr-2" />
@@ -1349,11 +1268,10 @@ export default function AdminPage() {
                           <div className="flex items-center gap-1 md:gap-2">
                             <Users className="h-4 w-4 md:h-5 md:w-5 text-blue-600" />
                             <div>
-                              <span className="text-lg md:text-2xl font-bold">{analytics.overview.activeAccessCodes}</span>
-                              <span className="text-xs md:text-sm text-muted-foreground">/{analytics.overview.totalAccessCodes}</span>
+                              <span className="text-lg md:text-2xl font-bold">{analytics.overview.totalUsers}</span>
                             </div>
                           </div>
-                          <p className="text-xs md:text-sm text-muted-foreground mt-1">活跃/总访问码</p>
+                          <p className="text-xs md:text-sm text-muted-foreground mt-1">注册用户</p>
                         </CardContent>
                       </Card>
                       <Card className="flex-shrink-0 w-32 md:w-auto">
@@ -1738,7 +1656,7 @@ export default function AdminPage() {
                             </thead>
                             <tbody>
                               {analytics.userActivity.slice(0, 10).map((user, index) => (
-                                <tr key={user.accessCodeId} className="border-b last:border-0">
+                                <tr key={user.userId} className="border-b last:border-0">
                                   <td className="py-3 px-2">
                                     <div className="flex items-center gap-2">
                                       {index < 3 && (
@@ -1748,7 +1666,7 @@ export default function AdminPage() {
                                           {index + 1}
                                         </span>
                                       )}
-                                      <span>{user.accessCodeName}</span>
+                                      <span>{user.userName}</span>
                                     </div>
                                   </td>
                                   <td className="text-center py-3 px-2">{user.resumes}</td>
@@ -2636,101 +2554,6 @@ export default function AdminPage() {
               </Card>
             </TabsContent>
 
-            {/* Access Codes Tab */}
-            <TabsContent value="access-codes">
-              <Card>
-                <CardHeader className="pb-3 md:pb-6">
-                  <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
-                    <div>
-                      <CardTitle className="text-base md:text-lg">访问码管理</CardTitle>
-                      <CardDescription className="text-xs md:text-sm">生成和管理用户访问码</CardDescription>
-                    </div>
-                    <Button size="sm" className="h-8 text-xs md:text-sm" onClick={handleCreateAccessCode}>
-                      <Plus className="h-4 w-4 md:mr-2" />
-                      <span className="hidden md:inline">生成访问码</span>
-                      <span className="md:hidden">生成</span>
-                    </Button>
-                  </div>
-                </CardHeader>
-                <CardContent>
-                  <div className="border rounded-lg overflow-hidden">
-                    <div className="overflow-x-auto">
-                      <table className="w-full min-w-[600px]">
-                        <thead className="bg-muted/50">
-                          <tr>
-                            <th className="px-3 md:px-4 py-2 md:py-3 text-left text-xs md:text-sm font-medium">访问码</th>
-                            <th className="px-3 md:px-4 py-2 md:py-3 text-left text-xs md:text-sm font-medium hidden sm:table-cell">名称</th>
-                            <th className="px-3 md:px-4 py-2 md:py-3 text-left text-xs md:text-sm font-medium hidden md:table-cell">有效期</th>
-                            <th className="px-3 md:px-4 py-2 md:py-3 text-left text-xs md:text-sm font-medium">过期时间</th>
-                            <th className="px-3 md:px-4 py-2 md:py-3 text-left text-xs md:text-sm font-medium">状态</th>
-                            <th className="px-3 md:px-4 py-2 md:py-3 text-left text-xs md:text-sm font-medium hidden lg:table-cell">最后使用</th>
-                            <th className="px-3 md:px-4 py-2 md:py-3 text-right text-xs md:text-sm font-medium">操作</th>
-                          </tr>
-                        </thead>
-                        <tbody className="divide-y">
-                          {accessCodes.map((code) => {
-                            const isExpired = new Date(code.expires_at) < new Date();
-                            return (
-                              <tr key={code.id} className="hover:bg-muted/30">
-                                <td className="px-3 md:px-4 py-2 md:py-3">
-                                  <code className="bg-muted px-2 py-1 rounded text-xs md:text-sm font-mono">
-                                    {code.code}
-                                  </code>
-                                </td>
-                                <td className="px-3 md:px-4 py-2 md:py-3 text-xs md:text-sm hidden sm:table-cell">{code.name}</td>
-                                <td className="px-3 md:px-4 py-2 md:py-3 text-xs md:text-sm hidden md:table-cell">{code.duration_days} 天</td>
-                                <td className="px-3 md:px-4 py-2 md:py-3 text-xs md:text-sm">
-                                  {new Date(code.expires_at).toLocaleDateString('zh-CN')}
-                                </td>
-                                <td className="px-3 md:px-4 py-2 md:py-3">
-                                  {isExpired ? (
-                                    <Badge variant="secondary" className="bg-red-100 text-red-700 text-xs">已过期</Badge>
-                                  ) : code.is_active ? (
-                                    <Badge variant="default" className="bg-green-600 text-xs">有效</Badge>
-                                  ) : (
-                                    <Badge variant="secondary" className="bg-gray-100 text-gray-600 text-xs">已禁用</Badge>
-                                  )}
-                                </td>
-                                <td className="px-3 md:px-4 py-2 md:py-3 text-xs md:text-sm text-muted-foreground hidden lg:table-cell">
-                                  {code.last_used_at 
-                                    ? new Date(code.last_used_at).toLocaleDateString('zh-CN')
-                                    : '未使用'}
-                                </td>
-                                <td className="px-3 md:px-4 py-2 md:py-3 text-right">
-                                  <div className="flex justify-end gap-1 md:gap-2">
-                                    <Button
-                                      size="sm"
-                                      variant="ghost"
-                                      className="h-7 text-xs hidden sm:flex"
-                                      onClick={() => handleToggleAccessCode(code.id, code.is_active)}
-                                    >
-                                      {code.is_active ? '禁用' : '启用'}
-                                    </Button>
-                                    <Button
-                                      size="sm"
-                                      variant="ghost"
-                                      className="text-destructive h-7 w-7 p-0"
-                                      onClick={() => handleDeleteAccessCode(code.id)}
-                                    >
-                                      <Trash2 className="h-4 w-4" />
-                                    </Button>
-                                  </div>
-                                </td>
-                              </tr>
-                            );
-                          })}
-                        </tbody>
-                      </table>
-                    </div>
-                    {accessCodes.length === 0 && (
-                      <div className="text-center py-8 text-muted-foreground">
-                        暂无访问码，点击上方按钮生成
-                      </div>
-                    )}
-                  </div>
-                </CardContent>
-              </Card>
-            </TabsContent>
           </Tabs>
         )}
       </main>

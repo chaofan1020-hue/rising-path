@@ -1,27 +1,25 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { getSupabaseClient } from '@/storage/database/supabase-client';
+import { getAuthContext, unauthorizedResponse } from '@/lib/auth-server';
 import { SegmentationOverrides, deriveMajorMatch } from '@/lib/user-segmentation';
 import { resolveRegionKey } from '@/lib/region-dna';
 
 // PATCH /api/resume/[id] —— 用户手动修正分层（分层透明可纠偏）
-// body: { accessCodeId, overrides: { careerStage?, schoolTier?, majorMatch?, regions? }, targetRole? }
+// body: { overrides: { careerStage?, schoolTier?, majorMatch?, regions? }, targetRole? }
 export async function PATCH(
   request: NextRequest,
   { params }: { params: Promise<{ id: string }> }
 ) {
   try {
-    const client = getSupabaseClient();
+    const auth = await getAuthContext(request);
+    if (!auth) return unauthorizedResponse();
+    const client = auth.client;
     const { id } = await params;
     const body = await request.json();
-    const { accessCodeId, overrides, targetRole } = body as {
-      accessCodeId?: number;
+    const { overrides, targetRole } = body as {
       overrides?: SegmentationOverrides;
       targetRole?: string;
     };
 
-    if (!accessCodeId) {
-      return NextResponse.json({ error: '未授权的访问' }, { status: 401 });
-    }
     if (!overrides || typeof overrides !== 'object') {
       return NextResponse.json({ error: '缺少修正内容' }, { status: 400 });
     }
@@ -52,7 +50,7 @@ export async function PATCH(
       .from('resumes')
       .select('id, segmentation, profile')
       .eq('id', id)
-      .eq('access_code_id', accessCodeId)
+      .eq('user_id', auth.user.id)
       .single();
 
     if (fetchError || !resume) {
@@ -98,7 +96,8 @@ export async function PATCH(
     const { error: updateError } = await client
       .from('resumes')
       .update(updatePayload)
-      .eq('id', id);
+      .eq('id', id)
+      .eq('user_id', auth.user.id);
 
     if (updateError) {
       throw new Error(`更新分层失败: ${updateError.message}`);
@@ -116,14 +115,17 @@ export async function DELETE(
   { params }: { params: Promise<{ id: string }> }
 ) {
   try {
-    const client = getSupabaseClient();
+    const auth = await getAuthContext(request);
+    if (!auth) return unauthorizedResponse();
+    const client = auth.client;
     const { id } = await params;
 
     // 先删除关联的 ai_matches 记录
     const { error: matchError } = await client
       .from('ai_matches')
       .delete()
-      .eq('resume_id', id);
+      .eq('resume_id', id)
+      .eq('user_id', auth.user.id);
 
     if (matchError) {
       console.error('Error deleting ai_matches:', matchError);
@@ -133,7 +135,8 @@ export async function DELETE(
     const { error: appError } = await client
       .from('applications')
       .delete()
-      .eq('resume_id', id);
+      .eq('resume_id', id)
+      .eq('user_id', auth.user.id);
 
     if (appError) {
       console.error('Error deleting applications:', appError);
@@ -143,7 +146,8 @@ export async function DELETE(
     const { error } = await client
       .from('resumes')
       .delete()
-      .eq('id', id);
+      .eq('id', id)
+      .eq('user_id', auth.user.id);
 
     if (error) {
       throw new Error(`删除简历失败: ${error.message}`);

@@ -1,5 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { getSupabaseClient } from '@/storage/database/supabase-client';
+import { getAuthContext, unauthorizedResponse } from '@/lib/auth-server';
+import { hasValidAdminSession } from '@/lib/admin-auth';
 
 // 验证 URL
 function isValidUrl(url: string): boolean {
@@ -20,6 +22,7 @@ function isValidTitle(title: string): boolean {
 
 export async function GET(request: NextRequest) {
   try {
+    if (!hasValidAdminSession(request)) return unauthorizedResponse('需要管理员权限');
     const supabase = getSupabaseClient();
     const { searchParams } = new URL(request.url);
     const status = searchParams.get('status') || 'pending';
@@ -42,7 +45,9 @@ export async function GET(request: NextRequest) {
 
 export async function POST(request: NextRequest) {
   try {
-    const supabase = getSupabaseClient();
+    const auth = await getAuthContext(request);
+    if (!auth) return unauthorizedResponse();
+    const supabase = auth.client;
     const body = await request.json();
 
     const { title, company, region, direction, job_url, description, job_type, salary_range, contact_info } = body;
@@ -102,9 +107,9 @@ export async function POST(request: NextRequest) {
         salary_range: salary_range || null,
         contact_info: contact_info || null,
         submitter_info: {
-          ip: request.headers.get('x-forwarded-for') || 'unknown',
           user_agent: request.headers.get('user-agent') || 'unknown',
         },
+        user_id: auth.user.id,
         status: 'pending',
       });
 

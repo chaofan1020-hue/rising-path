@@ -1,22 +1,26 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { getSupabaseClient } from '@/storage/database/supabase-client';
-import crypto from 'crypto';
+import {
+  getAdminSessionCookie,
+  getClearedAdminSessionCookie,
+  hasValidAdminSession,
+} from '@/lib/admin-auth';
+import { getClientIp } from '@/lib/auth-server';
+import { consumeAuthRateLimit } from '@/lib/auth-security';
+import crypto from 'node:crypto';
 
-// 默认密码
 const DEFAULT_PASSWORD = 'risingpath2024';
 
-// 简单的密码加密
 function hashPassword(password: string): string {
   return crypto.createHash('sha256').update(password + 'risingpath_salt').digest('hex');
 }
 
-// 验证密码
 function verifyPassword(inputPassword: string, hashedPassword: string): boolean {
   return hashPassword(inputPassword) === hashedPassword;
 }
 
 // 获取当前密码
-export async function GET() {
+export async function GET(request: NextRequest) {
   try {
     const client = getSupabaseClient();
     
@@ -36,6 +40,7 @@ export async function GET() {
     
     return NextResponse.json({ 
       hasCustomPassword,
+      authenticated: hasValidAdminSession(request),
       message: hasCustomPassword ? '已设置自定义密码' : '使用默认密码'
     });
   } catch (error) {
@@ -50,6 +55,14 @@ export async function GET() {
 // 验证密码
 export async function POST(request: NextRequest) {
   try {
+    const rateLimit = await consumeAuthRateLimit(`admin-login:ip:${getClientIp(request)}`, 5, 900, 1800);
+    if (!rateLimit.allowed) {
+      return NextResponse.json(
+        { error: '尝试过于频繁，请稍后再试' },
+        { status: 429, headers: { 'Retry-After': String(Math.max(rateLimit.retryAfterSeconds, 60)) } }
+      );
+    }
+
     const client = getSupabaseClient();
     const body = await request.json();
     const { password } = body;
@@ -83,10 +96,12 @@ export async function POST(request: NextRequest) {
       isValid = password === DEFAULT_PASSWORD;
     }
 
-    return NextResponse.json({ 
+    const response = NextResponse.json({
       valid: isValid,
       message: isValid ? '验证成功' : '密码错误'
     });
+    if (isValid) response.cookies.set(getAdminSessionCookie());
+    return response;
   } catch (error) {
     console.error('Error verifying password:', error);
     return NextResponse.json(
@@ -99,6 +114,10 @@ export async function POST(request: NextRequest) {
 // 修改密码
 export async function PUT(request: NextRequest) {
   try {
+    if (!hasValidAdminSession(request)) {
+      return NextResponse.json({ error: '需要管理员权限' }, { status: 401 });
+    }
+
     const client = getSupabaseClient();
     const body = await request.json();
     const { oldPassword, newPassword } = body;
@@ -184,4 +203,10 @@ export async function PUT(request: NextRequest) {
       { status: 500 }
     );
   }
+}
+
+export async function DELETE() {
+  const response = NextResponse.json({ success: true });
+  response.cookies.set(getClearedAdminSessionCookie());
+  return response;
 }

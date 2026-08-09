@@ -1,10 +1,12 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { getSupabaseClient } from '@/storage/database/supabase-client';
 import { LLMClient, Config, HeaderUtils } from 'coze-coding-dev-sdk';
+import { getAuthContext, unauthorizedResponse } from '@/lib/auth-server';
 
 export async function POST(request: NextRequest) {
   try {
-    const client = getSupabaseClient();
+    const auth = await getAuthContext(request);
+    if (!auth) return unauthorizedResponse();
+    const client = auth.client;
     const { resumeId, content, userInfo } = await request.json();
 
     if (!resumeId || !content) {
@@ -85,7 +87,8 @@ ${JSON.stringify(userInfo, null, 2)}
         parsed_content: translatedContent,
         user_info: translatedUserInfo,
       })
-      .eq('id', resumeId);
+      .eq('id', resumeId)
+      .eq('user_id', auth.user.id);
 
     if (error) {
       console.error('Failed to update resume:', error);

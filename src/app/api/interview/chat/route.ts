@@ -1,6 +1,6 @@
 import { NextRequest } from 'next/server';
-import { getSupabaseClient } from '@/storage/database/supabase-client';
 import { LLMClient, Config, HeaderUtils } from 'coze-coding-dev-sdk';
+import { getAuthContext, unauthorizedResponse } from '@/lib/auth-server';
 import { buildDNABlock } from '@/lib/company-dna';
 import { getCompanyDNA } from '@/lib/company-dna-service';
 import { buildSegmentBlock, type UserSegmentation } from '@/lib/user-segmentation';
@@ -204,10 +204,11 @@ function interviewerPayload(interviewer: Interviewer, round: number, totalRounds
 
 export async function POST(request: NextRequest) {
   try {
-    const client = getSupabaseClient();
+    const auth = await getAuthContext(request);
+    if (!auth) return unauthorizedResponse();
+    const client = auth.client;
     const body = await request.json();
     const {
-      accessCodeId,
       sessionId,
       interviewType,
       jobDescription,
@@ -219,10 +220,6 @@ export async function POST(request: NextRequest) {
       totalRounds = 1,
       targetCompany,
     } = body;
-
-    if (!accessCodeId) {
-      return new Response(JSON.stringify({ error: '未授权的访问' }), { status: 401 });
-    }
 
     const isGauntlet = mode === 'gauntlet' && totalRounds > 1;
 
@@ -264,7 +261,7 @@ export async function POST(request: NextRequest) {
           .from('resumes')
           .select('parsed_content, file_name, segmentation')
           .eq('id', resumeId)
-          .eq('access_code_id', accessCodeId)
+          .eq('user_id', auth.user.id)
           .single();
         if (resume?.parsed_content) {
           resumeContext = language === 'en'
@@ -300,7 +297,7 @@ export async function POST(request: NextRequest) {
       const { data: session, error: insertError } = await client
         .from('interview_sessions')
         .insert({
-          access_code_id: accessCodeId,
+          user_id: auth.user.id,
           interview_type: interviewType,
           job_description: jdText,
           job_id: selectedJobId,
@@ -385,7 +382,7 @@ export async function POST(request: NextRequest) {
       .from('interview_sessions')
       .select('*')
       .eq('id', sessionId)
-      .eq('access_code_id', accessCodeId)
+      .eq('user_id', auth.user.id)
       .single();
 
     if (sessionError || !session) {

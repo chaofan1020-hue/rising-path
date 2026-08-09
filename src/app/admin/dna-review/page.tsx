@@ -4,7 +4,7 @@
 // 低分案例（<6）→ 对照对话记录审查差异点 → 编辑基因（版本+1，后续面试即启用新版）→ 标记已处理
 // 高分案例（>=6）→ 沉淀为训练数据（提问记录只读查看）
 import { useCallback, useEffect, useState } from 'react';
-import { AccessGuard } from '@/components/access-guard';
+import { AdminAuthGuard } from '@/components/admin-auth-guard';
 import { Button } from '@/components/ui/button';
 import { Textarea } from '@/components/ui/textarea';
 import {
@@ -347,8 +347,8 @@ function DNAReviewContent() {
 
 export default function DNAReviewPage() {
   return (
-    <AccessGuard>
+    <AdminAuthGuard>
       <DNAReviewContent />
-    </AccessGuard>
+    </AdminAuthGuard>
   );
 }

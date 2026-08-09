@@ -1,5 +1,6 @@
 // 企业面试基因获取服务：精调库 → DB 缓存 → LLM 动态生成（写回缓存）
 import { getSupabaseClient } from '@/storage/database/supabase-client';
+import type { SupabaseClient } from '@supabase/supabase-js';
 import { LLMClient, Config, HeaderUtils } from 'coze-coding-dev-sdk';
 import { CompanyDNA, findCuratedDNA, normalizeCompanyName } from './company-dna';
 
@@ -12,20 +13,29 @@ export interface DNAResult {
 }
 
 // LLM 生成基因的 JSON 结构校验（宽松：关键字段存在即可，缺省补默认值）
-// eslint-disable-next-line @typescript-eslint/no-explicit-any
-function sanitizeGeneratedDNA(raw: any, company: string): CompanyDNA | null {
-  if (!raw || typeof raw !== 'object') return null;
-  const arr = (v: unknown): string[] => (Array.isArray(v) ? v.filter((s) => typeof s === 'string' && s.trim()) : []);
+function isRecord(value: unknown): value is Record<string, unknown> {
+  return typeof value === 'object' && value !== null && !Array.isArray(value);
+}
+
+function sanitizeGeneratedDNA(raw: unknown, company: string): CompanyDNA | null {
+  if (!isRecord(raw)) return null;
+  const arr = (value: unknown): string[] => (
+    Array.isArray(value)
+      ? value.filter((item): item is string => typeof item === 'string' && item.trim().length > 0)
+      : []
+  );
   const focusAreas = Array.isArray(raw.focusAreas)
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    ? raw.focusAreas.filter((f: any) => f && f.dimension).map((f: any) => ({
-        dimension: String(f.dimension),
-        weight: f.weight === 'core' ? 'core' : 'important',
-        probes: arr(f.probes),
-      }))
+    ? raw.focusAreas.flatMap((item) => {
+        if (!isRecord(item) || typeof item.dimension !== 'string' || !item.dimension.trim()) return [];
+        return [{
+          dimension: item.dimension,
+          weight: item.weight === 'core' ? 'core' as const : 'important' as const,
+          probes: arr(item.probes),
+        }];
+      })
     : [];
   if (focusAreas.length === 0) return null;
-  const style = raw.style || {};
+  const style = isRecord(raw.style) ? raw.style : {};
   return {
     company,
     aliases: arr(raw.aliases),
@@ -38,11 +48,10 @@ function sanitizeGeneratedDNA(raw: any, company: string): CompanyDNA | null {
       taboos: arr(style.taboos),
     },
     drilldownRules: Array.isArray(raw.drilldownRules)
-      // eslint-disable-next-line @typescript-eslint/no-explicit-any
-      ? raw.drilldownRules.filter((r: any) => r && r.trigger).map((r: any) => ({
-          trigger: String(r.trigger),
-          followups: arr(r.followups),
-        }))
+      ? raw.drilldownRules.flatMap((item) => {
+          if (!isRecord(item) || typeof item.trigger !== 'string' || !item.trigger.trim()) return [];
+          return [{ trigger: item.trigger, followups: arr(item.followups) }];
+        })
       : [],
     vocabulary: arr(raw.vocabulary),
     cultureKeywords: arr(raw.cultureKeywords),
@@ -95,7 +104,7 @@ async function generateDNAWithLLM(company: string, headers: Headers): Promise<Co
       return null;
     }
     try {
-      const parsed = JSON.parse(jsonStr.slice(start));
+      const parsed: unknown = JSON.parse(jsonStr.slice(start));
       const dna = sanitizeGeneratedDNA(parsed, company);
       if (!dna) console.error('[company-dna] 基因结构校验失败:', content.slice(0, 200));
       return dna;
@@ -166,9 +175,8 @@ export async function getCompanyDNA(company: string, headers: Headers): Promise<
   return { dna: generated, source: 'generated', version };
 }
 
-// eslint-disable-next-line @typescript-eslint/no-explicit-any
-function bumpHitCount(client: any, id: number, current: number) {
-  client
+function bumpHitCount(client: SupabaseClient, id: number, current: number): void {
+  void client
     .from('company_dna')
     .update({ hit_count: (current || 0) + 1, updated_at: new Date().toISOString() })
     .eq('id', id)

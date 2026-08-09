@@ -1,12 +1,14 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { getSupabaseClient } from '@/storage/database/supabase-client';
+import { getAuthContext, unauthorizedResponse } from '@/lib/auth-server';
 import { LLMClient, Config } from 'coze-coding-dev-sdk';
 
 export async function POST(request: NextRequest) {
   try {
-    const client = getSupabaseClient();
+    const auth = await getAuthContext(request);
+    if (!auth) return unauthorizedResponse();
+    const client = auth.client;
     const body = await request.json();
-    const { resume_id, access_code_id } = body;
+    const { resume_id } = body;
 
     if (!resume_id) {
       return NextResponse.json({ error: '缺少简历ID' }, { status: 400 });
@@ -17,6 +19,7 @@ export async function POST(request: NextRequest) {
       .from('resumes')
       .select('parsed_content')
       .eq('id', resume_id)
+      .eq('user_id', auth.user.id)
       .single();
 
     if (resumeError || !resume) {
@@ -97,7 +100,8 @@ ${resume.parsed_content.slice(0, 8000)}
     const { error: updateError } = await client
       .from('resumes')
       .update({ parsed_fields: parsedFields })
-      .eq('id', resume_id);
+      .eq('id', resume_id)
+      .eq('user_id', auth.user.id);
 
     if (updateError) {
       console.error('Failed to update parsed_fields:', updateError);

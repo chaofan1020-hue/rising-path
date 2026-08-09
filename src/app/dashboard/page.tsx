@@ -3,10 +3,11 @@
 import { useCallback, useEffect, useMemo, useState } from 'react';
 import Link from 'next/link';
 import { Header1 } from '@/components/header1';
+import { AuthGuard } from '@/components/auth-guard';
+import { apiFetch } from '@/lib/api-client';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent } from '@/components/ui/card';
 import { Skeleton } from '@/components/ui/skeleton';
-import SubscriptionCelebration from '@/components/SubscriptionCelebration';
 
 import {
   Select,
@@ -112,26 +113,16 @@ export default function DashboardPage() {
   const [data, setData] = useState<DashboardData | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
-  const [showCelebration, setShowCelebration] = useState(false);
   const [savingRegion, setSavingRegion] = useState(false);
 
-  const accessCodeId = useMemo(() => {
-    if (typeof window === 'undefined') return '';
-    return (
-      localStorage.getItem('access_code_id') ||
-      localStorage.getItem('access_code') ||
-      ''
-    );
-  }, []);
-
   const fetchDashboard = useCallback(() => {
-    if (!accessCodeId) {
-      setLoading(false);
-      return;
-    }
     setLoading(true);
-    fetch(`/api/dashboard?access_code_id=${accessCodeId}&lang=${locale}`)
-      .then((res) => res.json())
+    apiFetch(`/api/dashboard?lang=${locale}`)
+      .then(async (res) => {
+        const json = await res.json();
+        if (!res.ok) throw new Error(json.error || t('dashboard.loadError') || '加载失败');
+        return json;
+      })
       .then((json) => {
         if (json.error) {
           setError(json.error);
@@ -141,7 +132,7 @@ export default function DashboardPage() {
       })
       .catch((err) => setError(err?.message || t('dashboard.loadError') || '加载失败'))
       .finally(() => setLoading(false));
-  }, [accessCodeId, locale, t]);
+  }, [locale, t]);
 
   useEffect(() => {
     fetchDashboard();
@@ -152,13 +143,10 @@ export default function DashboardPage() {
       if (!data?.latestResumeId) return;
       setSavingRegion(true);
       try {
-        const res = await fetch(`/api/resume/${data.latestResumeId}`, {
+        const res = await apiFetch(`/api/resume/${data.latestResumeId}`, {
           method: 'PATCH',
           headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({
-            accessCodeId: Number(accessCodeId),
-            overrides: { regions: [value] },
-          }),
+          body: JSON.stringify({ overrides: { regions: [value] } }),
         });
         const json = await res.json().catch(() => ({}));
         if (!res.ok) {
@@ -201,9 +189,10 @@ export default function DashboardPage() {
   }, [data]);
 
   return (
-    <div className="min-h-screen bg-white dark:bg-zinc-950">
-      <Header1 />
-      <main className="container mx-auto px-4 pt-16 md:pt-20 pb-16">
+    <AuthGuard showAccountBar={false}>
+      <div className="min-h-screen bg-white dark:bg-zinc-950">
+        <Header1 />
+        <main className="container mx-auto px-4 pt-16 md:pt-20 pb-16">
         {/* Hero */}
         <div className="mb-8 md:mb-10">
           <p className="text-sm font-medium text-zinc-400 dark:text-zinc-500 mb-3">
@@ -544,25 +533,11 @@ export default function DashboardPage() {
               </div>
             </section>
 
-            {/* 订阅庆祝演示按钮 */}
-            <div className="flex justify-center mt-8">
-              <button
-                onClick={() => setShowCelebration(true)}
-                className="inline-flex items-center gap-2 px-6 py-3 rounded-xl bg-zinc-900 text-white text-sm font-medium hover:bg-zinc-800 transition-colors dark:bg-white dark:text-zinc-900 dark:hover:bg-zinc-200"
-              >
-                <span>🎉</span>
-                <span>订阅成功演示</span>
-              </button>
-            </div>
           </div>
         )}
-      </main>
-
-      <SubscriptionCelebration
-        open={showCelebration}
-        onClose={() => setShowCelebration(false)}
-      />
-    </div>
+        </main>
+      </div>
+    </AuthGuard>
   );
 }
 

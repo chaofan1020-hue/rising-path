@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { getSupabaseClient } from '@/storage/database/supabase-client';
+import { hasValidAdminSession } from '@/lib/admin-auth';
 
 interface JobInput {
   title: string;
@@ -24,6 +25,9 @@ interface BatchDeleteInput {
 
 export async function POST(request: NextRequest) {
   try {
+    if (!hasValidAdminSession(request)) {
+      return NextResponse.json({ error: '需要管理员权限' }, { status: 401 });
+    }
     const client = getSupabaseClient();
     const body: BatchJobInput = await request.json();
 
@@ -138,6 +142,9 @@ export async function PUT(request: NextRequest) {
 
 async function handleBatchDelete(request: NextRequest) {
   try {
+    if (!hasValidAdminSession(request)) {
+      return NextResponse.json({ error: '需要管理员权限' }, { status: 401 });
+    }
     const client = getSupabaseClient();
     
     // 安全解析请求体

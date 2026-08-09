@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { getSupabaseClient } from '@/storage/database/supabase-client';
+import { hasValidAdminSession } from '@/lib/admin-auth';
 
 // 本地 logo 缓存
 let localLogosCache: Record<string, string> = {};
@@ -116,6 +117,7 @@ export async function GET(
       .from('jobs')
       .select('*, company_info:company_config(id, company_name, careers_page, logo_url, short_desc, full_desc, headquarters, industry)')
       .eq('id', id)
+      .eq('is_active', true)
       .single();
 
     if (error) {
@@ -153,6 +155,9 @@ export async function PUT(
   { params }: { params: Promise<{ id: string }> }
 ) {
   try {
+    if (!hasValidAdminSession(request)) {
+      return NextResponse.json({ error: '需要管理员权限' }, { status: 401 });
+    }
     const client = getSupabaseClient();
     const { id } = await params;
     const body = await request.json();
@@ -186,6 +191,9 @@ export async function DELETE(
   { params }: { params: Promise<{ id: string }> }
 ) {
   try {
+    if (!hasValidAdminSession(request)) {
+      return NextResponse.json({ error: '需要管理员权限' }, { status: 401 });
+    }
     const client = getSupabaseClient();
     const { id } = await params;
 

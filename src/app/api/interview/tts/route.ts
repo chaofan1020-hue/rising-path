@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { TTSClient, Config, HeaderUtils } from 'coze-coding-dev-sdk';
-import { getSupabaseClient } from '@/storage/database/supabase-client';
+import { getAuthContext, unauthorizedResponse } from '@/lib/auth-server';
 
 export const runtime = 'nodejs';
 export const dynamic = 'force-dynamic';
@@ -12,21 +12,12 @@ const SPEAKER_EN = 'zh_female_vv_uranus_bigtts';
 export async function POST(request: NextRequest) {
   try {
     const body = await request.json();
-    const { accessCodeId, text, language, speaker, speechRate } = body;
+    const { text, language, speaker, speechRate } = body;
 
-    if (!accessCodeId || !text) {
+    const auth = await getAuthContext(request);
+    if (!auth) return unauthorizedResponse();
+    if (!text || typeof text !== 'string') {
       return NextResponse.json({ error: '缺少必要参数' }, { status: 400 });
-    }
-
-    const client = getSupabaseClient();
-    const { data: accessCode, error: codeError } = await client
-      .from('access_codes')
-      .select('id, is_active')
-      .eq('id', accessCodeId)
-      .single();
-
-    if (codeError || !accessCode || !accessCode.is_active) {
-      return NextResponse.json({ error: '未授权的访问' }, { status: 401 });
     }
 
     const customHeaders = HeaderUtils.extractForwardHeaders(request.headers);
@@ -37,7 +28,7 @@ export async function POST(request: NextRequest) {
     const rate = typeof speechRate === 'number' && speechRate >= -50 && speechRate <= 100 ? Math.round(speechRate) : 0;
 
     const response = await ttsClient.synthesize({
-      uid: `interview_${accessCodeId}`,
+      uid: `interview_${auth.user.id}`,
       text: text.slice(0, 1000),
       speaker: speaker || (language === 'en' ? SPEAKER_EN : SPEAKER_ZH),
       audioFormat: 'mp3',

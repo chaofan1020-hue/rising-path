@@ -3,6 +3,7 @@
 // 分层确认卡片：简历解析后展示求职画像与分层结果，支持手动修正
 // 分层三维度：求职阶段 × 院校背景 × 专业匹配度；地区为第一权重
 import { useState } from 'react';
+import { apiFetch } from '@/lib/api-client';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import {
@@ -91,23 +92,10 @@ export function SegmentationCard({
   const save = async () => {
     setSaving(true);
     try {
-      // 从 localStorage 读取 accessCodeId（与 access-guard 一致的存储 key）
-      let accessCodeId: number | null = null;
-      if (typeof window !== 'undefined') {
-        const idRaw = localStorage.getItem('access_code_id');
-        if (idRaw) accessCodeId = Number(idRaw);
-        if (!accessCodeId) {
-          const codeRaw = localStorage.getItem('access_code');
-          if (codeRaw) {
-            try { accessCodeId = JSON.parse(codeRaw).id ?? null; } catch { /* ignore */ }
-          }
-        }
-      }
-      const res = await fetch(`/api/resume/${resumeId}`, {
+      const res = await apiFetch(`/api/resume/${resumeId}`, {
         method: 'PATCH',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
-          accessCodeId,
           overrides: {
             careerStage: draft.careerStage,
             schoolTier: Number(draft.schoolTier) as 1 | 2 | 3,

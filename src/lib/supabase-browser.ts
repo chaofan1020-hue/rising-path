@@ -24,16 +24,21 @@ export function getSupabaseBrowserClient(): Promise<SupabaseClient> {
     return clientPromise;
   }
 
-  clientPromise = fetchConfig().then(({ url, anonKey }) =>
-    createClient(url, anonKey, {
-      auth: {
-        autoRefreshToken: true,
-        persistSession: true,
-        detectSessionInUrl: true,
-        storage: typeof window !== 'undefined' ? localStorage : undefined,
-      },
-    })
-  );
+  clientPromise = fetchConfig()
+    .then(({ url, anonKey }) =>
+      createClient(url, anonKey, {
+        auth: {
+          autoRefreshToken: true,
+          persistSession: true,
+          detectSessionInUrl: true,
+          storage: typeof window !== 'undefined' ? localStorage : undefined,
+        },
+      })
+    )
+    .catch((error) => {
+      clientPromise = null;
+      throw error;
+    });
 
   return clientPromise;
 }

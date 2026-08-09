@@ -1,5 +1,6 @@
 import { createClient, SupabaseClient } from '@supabase/supabase-js';
 import { execSync } from 'child_process';
+import { config as loadDotenv } from 'dotenv';
 
 let envLoaded = false;
 
@@ -25,11 +26,7 @@ function loadEnv(): void {
   }
 
   // 2. 尝试 dotenv（仅开发环境）
-  try {
-    require('dotenv').config();
-  } catch {
-    // dotenv not available
-  }
+  loadDotenv();
 
   // 3. 检查是否有 .env 文件中的 COZE_SUPABASE_* 变量，映射到标准名称
   if (process.env.COZE_SUPABASE_URL && !process.env.SUPABASE_URL) {
@@ -157,4 +154,28 @@ function getSupabaseClient(token?: string): SupabaseClient {
   });
 }
 
-export { loadEnv, getSupabaseCredentials, getSupabaseServiceRoleKey, getSupabaseClient };
+/**
+ * Public-key client for unauthenticated Auth operations.
+ * Never use the default getSupabaseClient() here: it may use the service role
+ * key on the server and would bypass RLS.
+ */
+function getSupabaseAnonClient(): SupabaseClient {
+  const { url, anonKey } = getSupabaseCredentials();
+  return createClient(url, anonKey, {
+    db: {
+      timeout: 60000,
+    },
+    auth: {
+      autoRefreshToken: false,
+      persistSession: false,
+    },
+  });
+}
+
+export {
+  loadEnv,
+  getSupabaseCredentials,
+  getSupabaseServiceRoleKey,
+  getSupabaseClient,
+  getSupabaseAnonClient,
+};

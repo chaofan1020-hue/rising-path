@@ -103,3 +103,7 @@ Desktop.ini
 .preview
 .cozeproj/reduction
 .codegraph
+
+# Local browser QA artifacts
+.playwright-cli/
+output/playwright/

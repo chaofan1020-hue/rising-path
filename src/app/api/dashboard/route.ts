@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { getSupabaseClient } from '@/storage/database/supabase-client';
 import { resolveRegionKey, type RegionKey, REGION_DNA, shouldBeApplying } from '@/lib/region-dna';
+import { getAuthContext, unauthorizedResponse } from '@/lib/auth-server';
 
 type Timeframe = 'now' | 'week' | 'month';
 type CareerStage = 'junior' | 'senior' | 'experienced' | 'returning_intern';
@@ -23,6 +23,32 @@ interface PlanContext {
 interface DashboardPlan {
   context: PlanContext;
   items: PlanItem[];
+}
+
+interface DashboardResume {
+  id?: number;
+  profile?: {
+    targetRegion?: string | null;
+    inferredRegion?: string | null;
+    targetRole?: string | null;
+    intention?: {
+      locations?: string[] | null;
+    } | null;
+    education?: Array<{ endYear?: number | null }> | null;
+  } | null;
+  segmentation?: {
+    regions?: RegionKey[] | null;
+    careerStage?: CareerStage;
+    majorMatch?: MajorMatch;
+    targetRole?: string | null;
+  } | null;
+  segmentation_overrides?: {
+    regions?: RegionKey[] | null;
+  } | null;
+}
+
+interface FavoriteRow {
+  jobs?: Array<{ updated_at?: string | null }> | { updated_at?: string | null } | null;
 }
 
 const REGION_LABEL_KEYS: Record<RegionKey, string> = {
@@ -58,27 +84,27 @@ function getRoleCategory(targetRole?: string): string {
   return 'dashboard.role.other';
 }
 
-function resolveRegion(resume: any): RegionKey | null {
-  const manualRegions = resume?.segmentation_overrides?.regions as RegionKey[] | undefined;
+function resolveRegion(resume: DashboardResume | null | undefined): RegionKey | null {
+  const manualRegions = resume?.segmentation_overrides?.regions;
   if (manualRegions && manualRegions.length > 0) return manualRegions[0];
-  const segRegions = resume?.segmentation?.regions as RegionKey[] | undefined;
+  const segRegions = resume?.segmentation?.regions;
   if (segRegions && segRegions.length > 0) return segRegions[0];
-  const intentionRegion = resume?.profile?.targetRegion as RegionKey | undefined;
+  const intentionRegion = resume?.profile?.targetRegion;
   if (intentionRegion) return resolveRegionKey(intentionRegion);
   // 尝试从 intention.locations 中提取
-  const locations = resume?.profile?.intention?.locations as string[] | undefined;
+  const locations = resume?.profile?.intention?.locations;
   if (locations && locations.length > 0) {
     for (const loc of locations) {
       const resolved = resolveRegionKey(loc);
       if (resolved) return resolved;
     }
   }
-  const inferredRegion = resume?.profile?.inferredRegion as RegionKey | undefined;
+  const inferredRegion = resume?.profile?.inferredRegion;
   if (inferredRegion) return resolveRegionKey(inferredRegion);
   return null;
 }
 
-function buildPlan(resume: any | null, regionKey: RegionKey): DashboardPlan {
+function buildPlan(resume: DashboardResume | null, regionKey: RegionKey): DashboardPlan {
   const stage: CareerStage = resume?.segmentation?.careerStage ?? 'senior';
   const targetRole: string = resume?.profile?.targetRole ?? resume?.segmentation?.targetRole ?? '';
   const roleKey = getRoleCategory(targetRole);
@@ -197,23 +223,19 @@ function getWeekStart(date: Date): Date {
 }
 
 export async function GET(request: NextRequest) {
-  const { searchParams } = new URL(request.url);
-  const accessCodeId = searchParams.get('access_code_id');
-  if (!accessCodeId) {
-    return NextResponse.json({ error: '缺少访问码' }, { status: 400 });
-  }
-
-  const supabase = getSupabaseClient();
+  const auth = await getAuthContext(request);
+  if (!auth) return unauthorizedResponse();
+  const supabase = auth.client;
 
   // 最新简历（含画像与分层）
   const { data: resumes } = await supabase
     .from('resumes')
     .select('id, created_at, updated_at, file_name, profile, segmentation, segmentation_overrides')
-    .eq('access_code_id', accessCodeId)
+    .eq('user_id', auth.user.id)
     .order('created_at', { ascending: false })
     .limit(1);
 
-  const latestResume = resumes?.[0] ?? null;
+  const latestResume = (resumes?.[0] as DashboardResume | undefined) ?? null;
   const latestResumeId = latestResume?.id ?? null;
   const resumeCount = resumes?.length ?? 0;
 
@@ -221,7 +243,7 @@ export async function GET(request: NextRequest) {
   const { data: aiMatches } = await supabase
     .from('ai_matches')
     .select('match_score, job_id')
-    .eq('access_code_id', accessCodeId)
+    .eq('user_id', auth.user.id)
     .order('created_at', { ascending: false })
     .limit(50);
 
@@ -233,7 +255,7 @@ export async function GET(request: NextRequest) {
   const { data: interviews } = await supabase
     .from('interview_sessions')
     .select('id, status, current_round, total_rounds, updated_at, created_at, target_company, interview_type, overall_score, report_grade, report')
-    .eq('access_code_id', accessCodeId)
+    .eq('user_id', auth.user.id)
     .order('created_at', { ascending: false })
     .limit(50);
 
@@ -244,13 +266,10 @@ export async function GET(request: NextRequest) {
   const { data: applications } = await supabase
     .from('applications')
     .select('id, status, created_at, updated_at')
-    .eq('access_code_id', accessCodeId)
+    .eq('user_id', auth.user.id)
     .limit(200);
 
   const applicationCount = applications?.length ?? 0;
-  const interviewApplications =
-    applications?.filter((a) => /面试|终面|一面|二面|三面|HR面/i.test(a.status || '')).length ?? 0;
-
   // 本周投递数
   const weekStart = getWeekStart(new Date());
   const weeklyApplications =
@@ -260,25 +279,20 @@ export async function GET(request: NextRequest) {
   const { data: favorites } = await supabase
     .from('favorites')
     .select('id, job_id, created_at, jobs!inner(id, updated_at)')
-    .eq('access_code_id', accessCodeId);
+    .eq('user_id', auth.user.id);
 
   const favoriteCount = favorites?.length ?? 0;
+  const favoriteRows = (favorites ?? []) as FavoriteRow[];
   const recentlyUpdatedFavorites =
-    favorites?.filter((f: any) => {
-      const jobUpdated = new Date(f.jobs?.updated_at || 0);
+    favoriteRows.filter((f) => {
+      const job = Array.isArray(f.jobs) ? f.jobs[0] : f.jobs;
+      const jobUpdated = new Date(job?.updated_at || 0);
       return Date.now() - jobUpdated.getTime() < 7 * 24 * 60 * 60 * 1000;
     }).length ?? 0;
 
-  // 访问码活跃度
-  const { data: accessCode } = await supabase
-    .from('access_codes')
-    .select('last_used_at, created_at')
-    .eq('id', accessCodeId)
-    .single();
-
   const now = Date.now();
-  const daysSinceLogin = accessCode?.last_used_at
-    ? Math.floor((now - new Date(accessCode.last_used_at).getTime()) / 86400000)
+  const daysSinceLogin = auth.user.last_sign_in_at
+    ? Math.floor((now - new Date(auth.user.last_sign_in_at).getTime()) / 86400000)
     : 0;
 
   // 地区：用户手动选择优先
@@ -289,7 +303,7 @@ export async function GET(request: NextRequest) {
   }));
 
   // 毕业年份（从简历画像提取）
-  const gradYear = (latestResume?.profile as any)?.education?.[0]?.endYear as number | undefined;
+  const gradYear = latestResume?.profile?.education?.[0]?.endYear ?? undefined;
   const nowDate = new Date();
   const currentYear = nowDate.getFullYear();
   const currentMonth = nowDate.getMonth() + 1;

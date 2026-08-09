@@ -1,206 +1,119 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { getSupabaseClient } from '@/storage/database/supabase-client';
-import { LLMClient, Config } from 'coze-coding-dev-sdk';
-import PDFParser from 'pdf2json';
-import mammoth from 'mammoth';
+import { getAuthContext, unauthorizedResponse } from '@/lib/auth-server';
+import {
+  getStoredResumeFile,
+  isSupportedResumeFile,
+  mergeResumeUserInfo,
+  parseResumeFile,
+  sanitizeResumeRecord,
+  UnsupportedResumeFileError,
+  type ResumeFileOptions,
+} from '@/lib/resume-parser';
 
-// 从PDF提取文本（带错误处理）
-async function extractTextFromPDF(buffer: Buffer): Promise<string> {
-  return new Promise((resolve, reject) => {
-    const pdfParser = new (PDFParser as any)(null, 1);
-    
-    pdfParser.on('pdfParser_dataError', (errData: any) => {
-      console.error('PDF extraction error:', errData.parserError);
-      reject(new Error('PDF解析失败'));
-    });
-    
-    pdfParser.on('pdfParser_dataReady', (pdfData: any) => {
-      const text: string[] = [];
-      for (const page of pdfData.Pages || []) {
-        for (const textItem of page.Texts || []) {
-          try {
-            const rawText = textItem.R?.[0]?.T || '';
-            if (rawText) {
-              let decodedText: string;
-              try {
-                decodedText = decodeURIComponent(rawText);
-              } catch {
-                decodedText = rawText;
-              }
-              text.push(decodedText);
-            }
-          } catch (e) {
-            console.error('Failed to decode text item:', e);
-          }
-        }
-        text.push('\n');
-      }
-      resolve(text.join(' '));
-    });
-    
-    pdfParser.parseBuffer(buffer);
-  });
-}
-
-async function extractTextFromWord(buffer: Buffer): Promise<string> {
-  try {
-    const result = await mammoth.extractRawText({ buffer });
-    return result.value;
-  } catch (error) {
-    console.error('Word extraction error:', error);
-    throw new Error('Word文档解析失败');
-  }
-}
-
-async function parseResumeContent(content: string) {
-  try {
-    const llmClient = new LLMClient(new Config());
-    
-    const prompt = `请分析以下简历内容，提取关键信息并以JSON格式返回。
-
-简历内容：
-${content}
-
-请提取以下信息并返回JSON格式：
-{
-  "name": "姓名",
-  "email": "邮箱地址",
-  "phone": "电话号码",
-  "education": ["教育经历1", "教育经历2"],
-  "experience": ["工作经历1", "工作经历2"],
-  "skills": ["技能1", "技能2", "技能3"]
-}
-
-只返回JSON，不要其他说明文字。如果某项信息不存在，返回null或空数组。`;
-
-    const response = await llmClient.invoke([
-      { role: 'system', content: '你是一个专业的简历解析助手，擅长从简历中提取结构化信息。' },
-      { role: 'user', content: prompt },
-    ], { temperature: 0.3 });
-
-    let userInfo = {
-      name: undefined as string | undefined,
-      email: undefined as string | undefined,
-      phone: undefined as string | undefined,
-      education: [] as string[],
-      experience: [] as string[],
-      skills: [] as string[],
-    };
-
-    try {
-      const jsonMatch = response.content.match(/\{[\s\S]*\}/);
-      if (jsonMatch) {
-        const parsed = JSON.parse(jsonMatch[0]);
-        userInfo = {
-          name: parsed.name || undefined,
-          email: parsed.email || undefined,
-          phone: parsed.phone || undefined,
-          education: parsed.education || [],
-          experience: parsed.experience || [],
-          skills: parsed.skills || [],
-        };
-      }
-    } catch (e) {
-      console.error('Failed to parse LLM response:', e);
-    }
-
-    return {
-      parsed_content: content,
-      user_info: userInfo,
-    };
-  } catch (error) {
-    console.error('LLM parsing error:', error);
-    return {
-      parsed_content: content,
-      user_info: {},
-    };
-  }
+function parsePositiveInteger(value: unknown): number | null {
+  const parsed = typeof value === 'number' ? value : Number(value);
+  return Number.isInteger(parsed) && parsed > 0 ? parsed : null;
 }
 
 // POST /api/resume/reparse - 重新解析简历
 export async function POST(request: NextRequest) {
-  try {
-    const client = getSupabaseClient();
-    const { resumeId, accessCodeId } = await request.json();
+  let resumeId: number | null = null;
 
-    if (!accessCodeId) {
-      return NextResponse.json({ error: '未授权的访问' }, { status: 401 });
+  try {
+    const auth = await getAuthContext(request);
+    if (!auth) return unauthorizedResponse();
+    const client = auth.client;
+    const body = await request.json() as { resumeId?: unknown };
+    resumeId = parsePositiveInteger(body.resumeId);
+
+    if (!resumeId) {
+      return NextResponse.json({ error: '无效的简历 ID' }, { status: 400 });
     }
 
-    // 获取简历信息
     const { data: resume, error: fetchError } = await client
       .from('resumes')
       .select('*')
       .eq('id', resumeId)
-      .eq('access_code_id', accessCodeId)
+      .eq('user_id', auth.user.id)
       .single();
 
     if (fetchError || !resume) {
       return NextResponse.json({ error: '简历不存在或无权访问' }, { status: 404 });
     }
 
-    // 从数据库的 user_info.file_base64 获取文件内容
-    const fileBase64 = resume.user_info?.file_base64;
-    const fileType = resume.user_info?.file_type || 'application/pdf';
-    
-    if (!fileBase64) {
+    const storedFile = getStoredResumeFile(resume.user_info);
+    if (!storedFile) {
       return NextResponse.json({ error: '简历文件内容不存在' }, { status: 404 });
     }
-    
-    const fileBuffer = Buffer.from(fileBase64, 'base64');
 
-    // 更新状态为解析中
-    await client
-      .from('resumes')
-      .update({ parsed_content: '正在解析简历内容...' })
-      .eq('id', resumeId);
-
-    // 提取文本
-    let textContent = '';
-    const fileName = resume.file_name;
-
-    if (fileType === 'application/pdf' || fileName.endsWith('.pdf')) {
-      console.log('Parsing PDF file:', fileName);
-      textContent = await extractTextFromPDF(fileBuffer);
-    } else if (fileType.includes('word') || fileName.endsWith('.docx') || fileName.endsWith('.doc')) {
-      console.log('Parsing Word file:', fileName);
-      textContent = await extractTextFromWord(fileBuffer);
-    } else {
-      textContent = fileBuffer.toString('utf-8');
+    const fileOptions: ResumeFileOptions = {
+      fileName: resume.file_name,
+      contentType: storedFile.fileType,
+    };
+    if (!isSupportedResumeFile(fileOptions)) {
+      return NextResponse.json(
+        { error: '不支持的文件格式，目前仅支持 PDF、DOCX 和 TXT' },
+        { status: 400 },
+      );
     }
 
-    console.log('Extracted text length:', textContent.length);
+    const fileBuffer = Buffer.from(storedFile.fileBase64, 'base64');
+    const { error: statusError } = await client
+      .from('resumes')
+      .update({ parsed_content: '正在解析简历内容...' })
+      .eq('id', resumeId)
+      .eq('user_id', auth.user.id);
 
-    // 解析简历
-    const parsed = await parseResumeContent(textContent);
+    if (statusError) throw new Error(`更新解析状态失败: ${statusError.message}`);
 
-    // 保留 file_base64，更新其他字段
-    const updatedUserInfo = {
-      ...resume.user_info,
-      ...parsed.user_info,
-    };
+    let parsed;
+    try {
+      parsed = await parseResumeFile(fileBuffer, fileOptions);
+    } catch (error) {
+      await client
+        .from('resumes')
+        .update({
+          parsed_content: '简历解析失败，请检查文件格式是否正确',
+          updated_at: new Date().toISOString(),
+        })
+        .eq('id', resumeId)
+        .eq('user_id', auth.user.id);
+      throw error;
+    }
 
-    // 更新数据库
+    const updatedUserInfo = mergeResumeUserInfo(resume.user_info, parsed.user_info);
+    const updatedProfile = parsed.profile ?? resume.profile ?? null;
+    const updatedSegmentation = parsed.segmentation ?? resume.segmentation ?? null;
     const { error: updateError } = await client
       .from('resumes')
       .update({
         parsed_content: parsed.parsed_content,
         user_info: updatedUserInfo,
+        profile: updatedProfile,
+        segmentation: updatedSegmentation,
         updated_at: new Date().toISOString(),
       })
-      .eq('id', resumeId);
+      .eq('id', resumeId)
+      .eq('user_id', auth.user.id);
 
-    if (updateError) {
-      throw new Error(`更新简历失败: ${updateError.message}`);
-    }
+    if (updateError) throw new Error(`更新简历失败: ${updateError.message}`);
+
+    const updatedResume = {
+      ...resume,
+      parsed_content: parsed.parsed_content,
+      user_info: updatedUserInfo,
+      profile: updatedProfile,
+      segmentation: updatedSegmentation,
+      updated_at: new Date().toISOString(),
+    };
 
     console.log('Resume re-parsed successfully:', resumeId);
-    return NextResponse.json({ success: true, resume: { ...resume, ...parsed } });
+    return NextResponse.json({ success: true, resume: sanitizeResumeRecord(updatedResume) });
   } catch (error) {
     console.error('Re-parse error:', error);
-    return NextResponse.json(
-      { error: '重新解析失败' },
-      { status: 500 }
-    );
+    if (error instanceof UnsupportedResumeFileError) {
+      return NextResponse.json({ error: error.message }, { status: 400 });
+    }
+    return NextResponse.json({ error: '重新解析失败' }, { status: 500 });
   }
 }

@@ -1,5 +1,5 @@
 import { NextRequest } from 'next/server';
-import { getSupabaseClient } from '@/storage/database/supabase-client';
+import { getAuthContext, unauthorizedResponse } from '@/lib/auth-server';
 import { LLMClient, Config, HeaderUtils } from 'coze-coding-dev-sdk';
 import { INTERVIEWERS, getPersona, ARCHETYPE_PARAMS, ROUND_ROLE_INFO, GAUNTLET_SCRIPTS } from '@/lib/interviewers';
 
@@ -157,10 +157,12 @@ function salvageJson(raw: string): unknown | null {
 
 export async function POST(request: NextRequest) {
   try {
-    const client = getSupabaseClient();
-    const { accessCodeId, sessionId, language = 'zh', eliminatedRound } = await request.json();
+    const auth = await getAuthContext(request);
+    if (!auth) return unauthorizedResponse();
+    const client = auth.client;
+    const { sessionId, language = 'zh', eliminatedRound } = await request.json();
 
-    if (!accessCodeId || !sessionId) {
+    if (!sessionId) {
       return new Response(JSON.stringify({ error: '缺少必要参数' }), { status: 400 });
     }
 
@@ -168,7 +170,7 @@ export async function POST(request: NextRequest) {
       .from('interview_sessions')
       .select('*')
       .eq('id', sessionId)
-      .eq('access_code_id', accessCodeId)
+      .eq('user_id', auth.user.id)
       .single();
 
     if (sessionError || !session) {
@@ -209,7 +211,7 @@ export async function POST(request: NextRequest) {
     const { data: historyRows } = await client
       .from('interview_sessions')
       .select('id, overall_score, report_grade, created_at')
-      .eq('access_code_id', accessCodeId)
+      .eq('user_id', auth.user.id)
       .eq('status', 'completed')
       .not('overall_score', 'is', null)
       .neq('id', sessionId)

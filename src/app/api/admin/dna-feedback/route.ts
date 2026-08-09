@@ -1,9 +1,14 @@
 // GET /api/admin/dna-feedback?status=pending_review|high_quality|reviewed|all
 // 真实度反馈案例列表（审查队列）
-import { NextRequest } from 'next/server';
+import { NextRequest, NextResponse } from 'next/server';
 import { getSupabaseClient } from '@/storage/database/supabase-client';
+import { hasValidAdminSession } from '@/lib/admin-auth';
 
 export async function GET(request: NextRequest) {
+  if (!hasValidAdminSession(request)) {
+    return NextResponse.json({ error: '需要管理员权限' }, { status: 401 });
+  }
+
   const client = getSupabaseClient();
   const status = request.nextUrl.searchParams.get('status') || 'pending_review';
 

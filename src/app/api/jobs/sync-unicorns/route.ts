@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { SearchClient, FetchClient, Config, HeaderUtils } from 'coze-coding-dev-sdk';
 import { getSupabaseClient } from '@/storage/database/supabase-client';
+import { hasValidAdminSession } from '@/lib/admin-auth';
 
 // 美国科技独角兽企业
 const UNICORN_COMPANIES = [
@@ -17,6 +18,20 @@ const US_REGIONS = [
   'Austin, TX', 'Boston, MA', 'Chicago, IL', 'Denver, CO', 'Atlanta, GA',
   'Remote - United States', 'United States'
 ];
+
+interface JobToInsert {
+  title: string;
+  company: string;
+  region: string;
+  direction: string;
+  audience: string;
+  description: string;
+  requirements: string;
+  salary_range: string;
+  job_url: string;
+  created_at: string;
+  updated_at: string;
+}
 
 // 验证岗位标题
 function isValidTitle(title: string): boolean {
@@ -176,17 +191,8 @@ async function fetchJobDescription(url: string): Promise<string> {
 
 export async function POST(request: NextRequest) {
   try {
-    // 验证管理员密码
-    const authHeader = request.headers.get('x-admin-password');
-    if (!authHeader) {
-      return NextResponse.json({ error: '需要管理员密码' }, { status: 401 });
-    }
-    
-    // 导入密码验证逻辑
-    const { verifyAdminPassword } = await import('@/lib/admin-auth');
-    const isValid = await verifyAdminPassword(authHeader);
-    if (!isValid) {
-      return NextResponse.json({ error: '管理员密码错误' }, { status: 401 });
+    if (!hasValidAdminSession(request)) {
+      return NextResponse.json({ error: '需要管理员权限' }, { status: 401 });
     }
 
     const config = new Config();
@@ -203,7 +209,7 @@ export async function POST(request: NextRequest) {
       descriptions: 0
     };
     
-    const newJobs: any[] = [];
+    const newJobs: JobToInsert[] = [];
     const seenUrls = new Set<string>();
     
     // 搜索每个独角兽企业的岗位
@@ -240,7 +246,7 @@ export async function POST(request: NextRequest) {
                 }
                 
                 // 提取标题
-                let title = item.title || '';
+                const title = item.title || '';
                 
                 // 验证标题
                 if (!isValidTitle(title) || !title) {

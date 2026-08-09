@@ -46,7 +46,8 @@ import {
 import Link from 'next/link';
 import { Document, Packer, Paragraph, TextRun, HeadingLevel, AlignmentType } from 'docx';
 import { saveAs } from 'file-saver';
-import { AccessGuard, useAccessCode } from '@/components/access-guard';
+import { AuthGuard } from '@/components/auth-guard';
+import { apiFetch } from '@/lib/api-client';
 import { Header1 } from '@/components/header1';
 import { useLanguage } from '@/lib/language-context';
 
@@ -345,7 +346,6 @@ function OptimizeContent() {
   const [isEditing, setIsEditing] = useState(false);
   const [editedContent, setEditedContent] = useState('');
   const [showSavedToast, setShowSavedToast] = useState(false);
-  const { accessCodeId } = useAccessCode();
   const { t } = useLanguage();
 
   // 地区列表
@@ -361,10 +361,10 @@ function OptimizeContent() {
     { value: 'jp', label: t('optimize.regionJp') },
   ];
 
-  // 获取当前访问码的存储key
-  const getStorageKey = () => `optimized_records_${accessCodeId || 'default'}`;
+  // 本地历史记录仅属于当前浏览器
+  const getStorageKey = () => 'optimized_records';
 
-  // 加载历史记录（按访问码隔离）
+  // 加载历史记录
   useEffect(() => {
     const saved = localStorage.getItem(getStorageKey());
     if (saved) {
@@ -374,7 +374,7 @@ function OptimizeContent() {
         console.error('Failed to parse saved records:', e);
       }
     }
-  }, [accessCodeId]);
+  }, []);
 
   // 保存到本地存储
   const handleSave = () => {
@@ -413,7 +413,7 @@ function OptimizeContent() {
     setSearchingJD(true);
     try {
       const regionName = regionList.find(r => r.value === targetRegion)?.label || t('optimize.regionUs');
-      const response = await fetch('/api/jobs/search-jd', {
+      const response = await apiFetch('/api/jobs/search-jd', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
@@ -458,10 +458,8 @@ function OptimizeContent() {
   };
 
   useEffect(() => {
-    if (accessCodeId) {
-      fetchResumes();
-    }
-  }, [accessCodeId]);
+    fetchResumes();
+  }, []);
 
   // 从URL参数读取预填充数据
   useEffect(() => {
@@ -477,12 +475,10 @@ function OptimizeContent() {
   }, [searchParams]);
 
   const fetchResumes = async () => {
-    if (!accessCodeId) return;
     try {
-      const params = new URLSearchParams();
-      params.append('access_code_id', accessCodeId.toString());
-      const response = await fetch(`/api/resume?${params.toString()}`);
+      const response = await apiFetch('/api/resume');
       const data = await response.json();
+      if (!response.ok) throw new Error(data.error || '获取简历失败');
       setResumes(data.resumes || []);
     } catch (error) {
       console.error('Failed to fetch resumes:', error);
@@ -490,7 +486,7 @@ function OptimizeContent() {
   };
 
   const handleOptimize = async () => {
-    if (!selectedResumeId || !targetPosition || !accessCodeId) return;
+    if (!selectedResumeId || !targetPosition) return;
 
     setOptimizing(true);
     setOptimizeProgress(0);
@@ -501,7 +497,7 @@ function OptimizeContent() {
         setOptimizeProgress((prev) => Math.min(prev + 3, 90));
       }, 100);
 
-      const response = await fetch('/api/ai/optimize', {
+      const response = await apiFetch('/api/ai/optimize', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
@@ -510,7 +506,6 @@ function OptimizeContent() {
           targetPosition,
           targetRegion,
           suggestions,
-          accessCodeId,
           jdContent, // 传入获取到的岗位描述
         }),
       });
@@ -849,7 +844,7 @@ function OptimizeContent() {
     
     setTranslating(true);
     try {
-      const response = await fetch('/api/ai/translate-resume', {
+  const response = await apiFetch('/api/ai/translate-resume', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
@@ -1344,8 +1339,8 @@ function OptimizeContent() {
 // 主组件
 export default function OptimizePage() {
   return (
-    <AccessGuard>
+    <AuthGuard>
       <OptimizeContent />
-    </AccessGuard>
+    </AuthGuard>
   );
 }

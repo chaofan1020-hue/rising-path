@@ -12,9 +12,10 @@ import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 
 import { Separator } from '@/components/ui/separator';
+import { Turnstile } from '@/components/turnstile';
 import { Eye, EyeOff, Loader2 } from 'lucide-react';
 import Link from 'next/link';
-import { JSX, SVGProps, useState } from 'react';
+import { JSX, SVGProps, useEffect, useState } from 'react';
 
 const Logo = (props: JSX.IntrinsicAttributes & SVGProps<SVGSVGElement>) => (
   <svg
@@ -38,28 +39,6 @@ const Logo = (props: JSX.IntrinsicAttributes & SVGProps<SVGSVGElement>) => (
   </svg>
 );
 
-export interface RegisterData {
-  email: string;
-  password: string;
-  username: string;
-}
-
-type AuthMode = 'login' | 'signup' | 'otp' | 'reset' | 'password';
-
-interface LoginSignupProps {
-  mode: AuthMode;
-  onToggleMode: (mode: AuthMode) => void;
-  onLogin: (email: string, password: string) => void | Promise<void>;
-  onRegister: (data: RegisterData) => void | Promise<void>;
-  onSendCode: (email: string) => void | Promise<void>;
-  onVerifyCode: (email: string, code: string) => void | Promise<void>;
-  onResetPassword: (email: string) => void | Promise<void>;
-  onGoogleSignIn?: () => void | Promise<void>;
-  loading?: boolean;
-  error?: string | null;
-  message?: string | null;
-}
-
 const GoogleIcon = (props: JSX.IntrinsicAttributes & SVGProps<SVGSVGElement>) => (
   <svg viewBox="0 0 24 24" width="16" height="16" {...props}>
     <path
@@ -81,6 +60,36 @@ const GoogleIcon = (props: JSX.IntrinsicAttributes & SVGProps<SVGSVGElement>) =>
   </svg>
 );
 
+export interface RegisterData {
+  email: string;
+  password: string;
+  username: string;
+  confirmPassword: string;
+  terms: boolean;
+  captchaToken: string | null;
+}
+
+type AuthMode = 'login' | 'signup' | 'otp' | 'reset' | 'password' | 'verify' | 'update-password';
+
+interface LoginSignupProps {
+  mode: AuthMode;
+  onToggleMode: (mode: AuthMode) => void;
+  onLogin: (email: string, password: string) => void | Promise<void>;
+  onRegister: (data: RegisterData) => void | Promise<void>;
+  onSendCode: (email: string) => void | Promise<boolean>;
+  onVerifyCode: (email: string, code: string) => void | Promise<void>;
+  onVerifySignupCode: (email: string, code: string) => void | Promise<void>;
+  onResendVerification: (email: string, captchaToken: string | null) => void | Promise<boolean>;
+  onResetPassword: (email: string) => void | Promise<void>;
+  onGoogleSignIn: () => void | Promise<void>;
+  onSignOut: () => void | Promise<void>;
+  onUpdatePassword: (password: string, confirmPassword: string) => void | Promise<void>;
+  verificationEmail?: string;
+  loading?: boolean;
+  error?: string | null;
+  message?: string | null;
+}
+
 export default function LoginSignup({
   mode,
   onToggleMode,
@@ -88,8 +97,13 @@ export default function LoginSignup({
   onRegister,
   onSendCode,
   onVerifyCode,
+  onVerifySignupCode,
+  onResendVerification,
   onResetPassword,
   onGoogleSignIn,
+  onSignOut,
+  onUpdatePassword,
+  verificationEmail,
   loading,
   error,
   message,
@@ -103,9 +117,18 @@ export default function LoginSignup({
     code: '',
     username: '',
     terms: false,
+    captchaToken: null as string | null,
   });
 
-  const update = (key: keyof typeof form, value: string | boolean) => {
+  useEffect(() => {
+    setForm((prev) => (
+      prev.email === (verificationEmail ?? '')
+        ? prev
+        : { ...prev, email: verificationEmail ?? '', code: '' }
+    ));
+  }, [verificationEmail]);
+
+  const update = (key: keyof typeof form, value: string | boolean | null) => {
     setForm((prev) => ({ ...prev, [key]: value }));
   };
 
@@ -120,6 +143,9 @@ export default function LoginSignup({
       email: form.email,
       password: form.password,
       username: form.username,
+      confirmPassword: form.confirmPassword,
+      terms: form.terms,
+      captchaToken: form.captchaToken,
     });
   };
 
@@ -129,7 +155,8 @@ export default function LoginSignup({
 
   const handleEmailSignIn = async (e: React.FormEvent) => {
     e.preventDefault();
-    await onSendCode(form.email);
+    const sent = await onSendCode(form.email);
+    if (sent !== true) return;
     onToggleMode('otp');
   };
 
@@ -138,9 +165,23 @@ export default function LoginSignup({
     onVerifyCode(form.email, form.code);
   };
 
+  const handleVerifySignupCode = () => {
+    onVerifySignupCode(form.email, form.code);
+  };
+
+  const handleResendVerification = (e: React.FormEvent) => {
+    e.preventDefault();
+    onResendVerification(form.email, form.captchaToken);
+  };
+
   const handleReset = (e: React.FormEvent) => {
     e.preventDefault();
     onResetPassword(form.email);
+  };
+
+  const handleUpdatePassword = (e: React.FormEvent) => {
+    e.preventDefault();
+    onUpdatePassword(form.password, form.confirmPassword);
   };
 
   if (mode === 'signup') {
@@ -176,6 +217,7 @@ export default function LoginSignup({
                   <Input
                 className="text-black"
                     id="username"
+                    autoComplete="username"
                     value={form.username}
                     onChange={(e) => update('username', e.target.value)}
                     required
@@ -187,6 +229,7 @@ export default function LoginSignup({
                 className="text-black"
                     id="email"
                     type="email"
+                    autoComplete="email"
                     value={form.email}
                     onChange={(e) => update('email', e.target.value)}
                     required
@@ -198,11 +241,13 @@ export default function LoginSignup({
                     <Input
                       id="password"
                       type={showPassword ? 'text' : 'password'}
+                      autoComplete="new-password"
                       className="pr-10 text-black"
                       value={form.password}
                       onChange={(e) => update('password', e.target.value)}
                       required
-                      minLength={6}
+                      minLength={12}
+                      maxLength={128}
                     />
                     <Button
                       type="button"
@@ -225,12 +270,15 @@ export default function LoginSignup({
                     <Input
                       id="confirmPassword"
                       type={showConfirmPassword ? 'text' : 'password'}
+                      autoComplete="new-password"
                       className="pr-10 text-black"
                       value={form.confirmPassword}
                       onChange={(e) =>
                         update('confirmPassword', e.target.value)
                       }
                       required
+                      minLength={12}
+                      maxLength={128}
                     />
                     <Button
                       type="button"
@@ -270,6 +318,7 @@ export default function LoginSignup({
                     </Link>
                   </label>
                 </div>
+                <Turnstile onToken={(token) => update('captchaToken', token)} />
                 <Button
                   type="submit"
                   className="w-full bg-zinc-900 text-white hover:bg-zinc-800 dark:bg-white dark:text-zinc-950 dark:hover:bg-zinc-200"
@@ -314,6 +363,11 @@ export default function LoginSignup({
                 {error}
               </div>
             )}
+            {message && (
+              <div className="text-sm text-emerald-600 bg-emerald-50 dark:bg-emerald-950/30 px-3 py-2 rounded-md">
+                {message}
+              </div>
+            )}
             <div>
               <Label htmlFor="otp-email" className="font-medium text-black">
                 Email
@@ -321,6 +375,7 @@ export default function LoginSignup({
               <Input
                 id="otp-email"
                 type="email"
+                autoComplete="email"
                 value={form.email}
                 onChange={(e) => update('email', e.target.value)}
                 placeholder="john@company.com"
@@ -346,6 +401,8 @@ export default function LoginSignup({
               </Label>
               <Input
                 id="code"
+                autoComplete="one-time-code"
+                inputMode="numeric"
                 value={form.code}
                 onChange={(e) => update('code', e.target.value)}
                 placeholder="123456"
@@ -388,6 +445,11 @@ export default function LoginSignup({
                 {error}
               </div>
             )}
+            {message && (
+              <div className="text-sm text-emerald-600 bg-emerald-50 dark:bg-emerald-950/30 px-3 py-2 rounded-md">
+                {message}
+              </div>
+            )}
             <div>
               <Label htmlFor="reset-email" className="font-medium text-black">
                 Email
@@ -395,6 +457,7 @@ export default function LoginSignup({
               <Input
                 id="reset-email"
                 type="email"
+                autoComplete="email"
                 value={form.email}
                 onChange={(e) => update('email', e.target.value)}
                 placeholder="john@company.com"
@@ -418,6 +481,165 @@ export default function LoginSignup({
                 Back to sign in
               </button>
             </p>
+          </form>
+        </div>
+      </div>
+    );
+  }
+
+  if (mode === 'verify') {
+    return (
+      <div className="flex items-center justify-center min-h-screen px-4 py-10">
+        <div className="sm:mx-auto sm:w-full sm:max-w-sm">
+          <h2 className="text-center text-xl font-semibold text-black">
+            Verify your email
+          </h2>
+          <form onSubmit={handleResendVerification} className="mt-6 space-y-4">
+            {error && (
+              <div className="text-sm text-red-600 bg-red-50 dark:bg-red-950/30 px-3 py-2 rounded-md">
+                {error}
+              </div>
+            )}
+            {message && (
+              <div className="text-sm text-emerald-600 bg-emerald-50 dark:bg-emerald-950/30 px-3 py-2 rounded-md">
+                {message}
+              </div>
+            )}
+            <p className="text-sm text-center text-black">
+              Enter the verification code from the confirmation email to activate your account.
+            </p>
+            <div>
+              <Label htmlFor="verification-email" className="font-medium text-black">
+                Email
+              </Label>
+              <Input
+                id="verification-email"
+                type="email"
+                autoComplete="email"
+                value={form.email}
+                onChange={(e) => update('email', e.target.value)}
+                placeholder="john@company.com"
+                className="mt-2 text-black"
+                required
+              />
+            </div>
+            <div>
+              <Label htmlFor="signup-verification-code" className="font-medium text-black">
+                Confirmation code
+              </Label>
+              <Input
+                id="signup-verification-code"
+                autoComplete="one-time-code"
+                inputMode="numeric"
+                value={form.code}
+                onChange={(e) => update('code', e.target.value)}
+                placeholder="123456"
+                className="mt-2 text-black"
+              />
+            </div>
+            <Button
+              type="button"
+              className="w-full"
+              disabled={loading || !form.email || !form.code}
+              onClick={handleVerifySignupCode}
+            >
+              {loading ? (
+                <Loader2 className="h-4 w-4 animate-spin" />
+              ) : (
+                'Verify email'
+              )}
+            </Button>
+            <Turnstile onToken={(token) => update('captchaToken', token)} />
+            <Button type="submit" variant="outline" className="w-full" disabled={loading}>
+              {loading ? (
+                <Loader2 className="h-4 w-4 animate-spin" />
+              ) : (
+                'Resend confirmation code'
+              )}
+            </Button>
+            <p className="text-center text-sm text-black">
+              <button
+                type="button"
+                onClick={onSignOut}
+                className="text-black hover:text-zinc-600 dark:text-white dark:hover:text-zinc-300 underline underline-offset-4"
+              >
+                Use another email
+              </button>
+            </p>
+          </form>
+        </div>
+      </div>
+    );
+  }
+
+  if (mode === 'update-password') {
+    return (
+      <div className="flex items-center justify-center min-h-screen px-4 py-10">
+        <div className="flex flex-1 flex-col justify-center rounded-xl border border-zinc-200 bg-white p-6 shadow-sm sm:mx-auto sm:w-full sm:max-w-sm">
+          <h2 className="text-center text-xl font-semibold text-black">
+            Set a new password
+          </h2>
+          <form onSubmit={handleUpdatePassword} className="mt-6">
+            {error && (
+              <div className="mb-4 text-sm text-red-600 bg-red-50 dark:bg-red-950/30 px-3 py-2 rounded-md">
+                {error}
+              </div>
+            )}
+            <Label htmlFor="new-password" className="font-medium text-black">
+              New password
+            </Label>
+            <div className="relative mt-2">
+              <Input
+                id="new-password"
+                name="new-password"
+                type={showPassword ? 'text' : 'password'}
+                autoComplete="new-password"
+                value={form.password}
+                onChange={(e) => update('password', e.target.value)}
+                className="pr-10 text-black"
+                required
+                minLength={12}
+                maxLength={128}
+              />
+              <Button
+                type="button"
+                variant="ghost"
+                size="icon"
+                className="absolute right-0 top-0 h-full px-3 text-black hover:bg-transparent"
+                onClick={() => setShowPassword(!showPassword)}
+              >
+                {showPassword ? <EyeOff className="h-4 w-4" /> : <Eye className="h-4 w-4" />}
+              </Button>
+            </div>
+            <Label htmlFor="confirm-new-password" className="mt-4 block font-medium text-black">
+              Confirm password
+            </Label>
+            <div className="relative mt-2">
+              <Input
+                id="confirm-new-password"
+                name="confirm-new-password"
+                type={showConfirmPassword ? 'text' : 'password'}
+                autoComplete="new-password"
+                value={form.confirmPassword}
+                onChange={(e) => update('confirmPassword', e.target.value)}
+                className="pr-10 text-black"
+                required
+                minLength={12}
+                maxLength={128}
+              />
+              <Button
+                type="button"
+                variant="ghost"
+                size="icon"
+                className="absolute right-0 top-0 h-full px-3 text-black hover:bg-transparent"
+                onClick={() => setShowConfirmPassword(!showConfirmPassword)}
+              >
+                {showConfirmPassword ? <EyeOff className="h-4 w-4" /> : <Eye className="h-4 w-4" />}
+              </Button>
+            </div>
+            <Button type="submit" className="mt-4 w-full bg-black text-white hover:bg-zinc-900" disabled={loading}>
+              {loading ? <Loader2 className="h-4 w-4 animate-spin" /> : 'Update password'}
+            </Button>
           </form>
         </div>
       </div>

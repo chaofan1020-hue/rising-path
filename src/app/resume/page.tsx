@@ -26,7 +26,8 @@ import {
   Map,
 } from 'lucide-react';
 import Link from 'next/link';
-import { AccessGuard, useAccessCode } from '@/components/access-guard';
+import { AuthGuard } from '@/components/auth-guard';
+import { apiFetch } from '@/lib/api-client';
 import { Header1 } from '@/components/header1';
 import { SegmentationCard, type Segmentation } from '@/components/segmentation-card';
 import { Target, Wand2, Send, CheckCircle2 } from 'lucide-react';
@@ -81,7 +82,7 @@ interface Resume {
   created_at: string;
 }
 
-// 内部组件 - 在 AccessGuard 内部使用 useAccessCode
+// 内部组件
 function ResumeContent() {
   const [resumes, setResumes] = useState<Resume[]>([]);
   const [loading, setLoading] = useState(false);
@@ -91,19 +92,17 @@ function ResumeContent() {
   const [selectedResume, setSelectedResume] = useState<Resume | null>(null);
   const [translatingId, setTranslatingId] = useState<number | null>(null);
   const [extractingId, setExtractingId] = useState<number | null>(null);
-  const { accessCodeId } = useAccessCode();
   const { t } = useLanguage();
 
   // 提取结构化字段
   const extractFields = async (resume: Resume) => {
     setExtractingId(resume.id);
     try {
-      const response = await fetch('/api/resume/extract-fields', {
+      const response = await apiFetch('/api/resume/extract-fields', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
           resume_id: resume.id,
-          access_code_id: accessCodeId,
         }),
       });
 
@@ -135,25 +134,19 @@ function ResumeContent() {
   const handleUpload = async () => {
     if (!selectedFile) return;
 
-    if (!accessCodeId) {
-      alert(t('resume.loginFirst'));
-      return;
-    }
-
     setUploading(true);
     setUploadProgress(0);
 
     try {
       const formData = new FormData();
       formData.append('file', selectedFile);
-      formData.append('access_code_id', accessCodeId.toString());
 
       // Simulate progress
       const progressInterval = setInterval(() => {
         setUploadProgress((prev) => Math.min(prev + 10, 90));
       }, 200);
 
-      const response = await fetch('/api/resume', {
+      const response = await apiFetch('/api/resume', {
         method: 'POST',
         body: formData,
       });
@@ -184,13 +177,7 @@ function ResumeContent() {
   const fetchResumes = async () => {
     setLoading(true);
     try {
-      if (!accessCodeId) {
-        setResumes([]);
-        return;
-      }
-      const params = new URLSearchParams();
-      params.append('access_code_id', accessCodeId.toString());
-      const response = await fetch(`/api/resume?${params.toString()}`);
+      const response = await apiFetch('/api/resume');
       const data = await response.json();
       setResumes(data.resumes || []);
     } catch (error) {
@@ -206,7 +193,7 @@ function ResumeContent() {
     }
     
     try {
-      const response = await fetch(`/api/resume/${id}`, { method: 'DELETE' });
+      const response = await apiFetch(`/api/resume/${id}`, { method: 'DELETE' });
       const data = await response.json();
       
       if (response.ok && data.success) {
@@ -223,7 +210,7 @@ function ResumeContent() {
   const translateResume = async (resume: Resume) => {
     setTranslatingId(resume.id);
     try {
-      const response = await fetch('/api/ai/translate-resume-content', {
+      const response = await apiFetch('/api/ai/translate-resume-content', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
@@ -246,12 +233,9 @@ function ResumeContent() {
     }
   };
 
-  // Fetch resumes when accessCodeId changes
   useEffect(() => {
-    if (accessCodeId) {
-      fetchResumes();
-    }
-  }, [accessCodeId]);
+    fetchResumes();
+  }, []);
 
   return (
     <div className="min-h-screen bg-white dark:bg-zinc-950">
@@ -666,11 +650,11 @@ function ResumeContent() {
   );
 }
 
-// 主组件 - 使用 AccessGuard 包裹内部组件
+// 主组件
 export default function ResumePage() {
   return (
-    <AccessGuard>
+    <AuthGuard>
       <ResumeContent />
-    </AccessGuard>
+    </AuthGuard>
   );
 }
