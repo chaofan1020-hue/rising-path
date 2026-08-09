@@ -1,10 +1,11 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { getSupabaseAnonClient } from '@/storage/database/supabase-client';
-import { getAuthRedirectOrigin, getClientIp } from '@/lib/auth-server';
+import { getClientIp } from '@/lib/auth-server';
 import { isValidEmail } from '@/lib/auth-shared';
 import {
   authErrorMessage,
   consumeAuthRateLimit,
+  isAuthRateLimitError,
   normalizeEmail,
   validatePassword,
   verifyTurnstileToken,
@@ -44,26 +45,36 @@ export async function POST(request: NextRequest) {
     }
 
     const supabase = getSupabaseAnonClient();
-    const redirectOrigin = getAuthRedirectOrigin(request);
     const { data, error } = await supabase.auth.signUp({
       email,
       password,
       options: {
         data: { username },
-        emailRedirectTo: `${redirectOrigin}/auth/callback?next=%2Fhome`,
         captchaToken: typeof body.captchaToken === 'string' ? body.captchaToken : undefined,
       },
     });
 
     if (error) {
       console.error('[Auth] Sign-up failed:', error.message);
-      return NextResponse.json({ error: authErrorMessage(error) }, { status: 400 });
+      const status = isAuthRateLimitError(error) ? 429 : 400;
+      return NextResponse.json(
+        { error: authErrorMessage(error) },
+        status === 429 ? { status, headers: { 'Retry-After': '60' } } : { status }
+      );
+    }
+
+    if (data.session) {
+      console.error('[Auth] Sign-up returned a session before email verification. Confirm email must remain enabled.');
+      return NextResponse.json(
+        { error: '邮箱验证码验证未启用，请联系管理员检查 Supabase 的 Confirm email 设置' },
+        { status: 503 }
+      );
     }
 
     return NextResponse.json({
       success: true,
-      requiresEmailConfirmation: !data.session,
-      session: data.session,
+      requiresEmailConfirmation: true,
+      verificationMethod: 'code',
     });
   } catch (error) {
     console.error('[Auth] Sign-up request failed:', error);

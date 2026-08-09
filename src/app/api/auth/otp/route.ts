@@ -2,7 +2,12 @@ import { NextRequest, NextResponse } from 'next/server';
 import { getSupabaseAnonClient } from '@/storage/database/supabase-client';
 import { getClientIp } from '@/lib/auth-server';
 import { isValidEmail } from '@/lib/auth-shared';
-import { consumeAuthRateLimit, normalizeEmail } from '@/lib/auth-security';
+import {
+  authErrorMessage,
+  consumeAuthRateLimit,
+  isAuthRateLimitError,
+  normalizeEmail,
+} from '@/lib/auth-security';
 
 export async function POST(request: NextRequest) {
   const ip = getClientIp(request);
@@ -16,17 +21,29 @@ export async function POST(request: NextRequest) {
     const ipLimit = await consumeAuthRateLimit(`otp:ip:${ip}`, 5, 900, 1800);
     const emailLimit = await consumeAuthRateLimit(`otp:email:${email}`, 3, 900, 1800);
     if (!ipLimit.allowed || !emailLimit.allowed) {
-      return NextResponse.json({ error: '发送过于频繁，请稍后再试' }, { status: 429 });
+      const retryAfter = Math.max(ipLimit.retryAfterSeconds, emailLimit.retryAfterSeconds, 60);
+      return NextResponse.json(
+        { error: '发送过于频繁，请稍后再试' },
+        { status: 429, headers: { 'Retry-After': String(retryAfter) } }
+      );
     }
 
     const supabase = getSupabaseAnonClient();
     const { error } = await supabase.auth.signInWithOtp({
       email,
-      options: { shouldCreateUser: false },
+      options: {
+        shouldCreateUser: false,
+      },
     });
     if (error) {
       console.error('[Auth] OTP send failed:', error.message);
-      return NextResponse.json({ error: '验证码发送失败，请稍后重试' }, { status: 400 });
+      return NextResponse.json(
+        { error: authErrorMessage(error) },
+        {
+          status: isAuthRateLimitError(error) ? 429 : 400,
+          ...(isAuthRateLimitError(error) ? { headers: { 'Retry-After': '60' } } : {}),
+        }
+      );
     }
     return NextResponse.json({ success: true });
   } catch (error) {

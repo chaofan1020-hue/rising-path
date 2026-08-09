@@ -18,8 +18,31 @@ interface RateLimitResult {
 const localBuckets = new Map<string, LocalBucket>();
 const MAX_LOCAL_BUCKETS = 10_000;
 
+function isProductionEnvironment(): boolean {
+  return process.env.NODE_ENV === 'production' || process.env.COZE_PROJECT_ENV === 'PROD';
+}
+
+function shouldUseDevelopmentRateLimits(): boolean {
+  return process.env.AUTH_DEV_RATE_LIMITS === 'true';
+}
+
 export function normalizeEmail(value: unknown): string {
   return typeof value === 'string' ? value.trim().toLowerCase() : '';
+}
+
+/**
+ * Normalize codes copied from email clients without weakening validation.
+ * NFKC converts full-width digits to ASCII; whitespace and visual separators
+ * are removed before the route enforces the final six-digit format.
+ */
+export function normalizeOtpToken(value: unknown): string {
+  if (typeof value !== 'string') return '';
+  return value.normalize('NFKC').replace(/[\s-]/g, '');
+}
+
+/** Supabase can be configured with a six-to-twelve digit email OTP. */
+export function isValidOtpToken(token: string): boolean {
+  return /^\d{6,12}$/.test(token);
 }
 
 export function hashRateLimitKey(value: string): string {
@@ -74,6 +97,25 @@ export async function consumeAuthRateLimit(
 ): Promise<RateLimitResult> {
   const keyHash = hashRateLimitKey(key);
 
+  // Development requests are unlimited by default so repeated local testing
+  // cannot lock a developer out for an hour. Set AUTH_DEV_RATE_LIMITS=true
+  // when you need to exercise the throttling behavior locally.
+  if (!isProductionEnvironment() && !shouldUseDevelopmentRateLimits()) {
+    return { allowed: true, retryAfterSeconds: 0 };
+  }
+
+  // Keep the opt-in development limiter in this process. A shared test
+  // database must not make one teammate's local requests block everyone else.
+  if (!isProductionEnvironment()) {
+    if (key.endsWith(':unknown')) {
+      return { allowed: true, retryAfterSeconds: 0 };
+    }
+    if (localBuckets.size > MAX_LOCAL_BUCKETS) {
+      localBuckets.clear();
+    }
+    return consumeLocalRateLimit(keyHash, limit, windowSeconds, blockSeconds);
+  }
+
   try {
     const serviceClient = getSupabaseClient();
     const { data, error } = await serviceClient.rpc('consume_auth_rate_limit', {
@@ -93,14 +135,11 @@ export async function consumeAuthRateLimit(
     console.error('[Auth] Persistent rate limiter unavailable:', error);
   }
 
-  if (process.env.NODE_ENV === 'production') {
+  if (isProductionEnvironment()) {
     return { allowed: false, retryAfterSeconds: 300 };
   }
 
-  if (localBuckets.size > MAX_LOCAL_BUCKETS) {
-    localBuckets.clear();
-  }
-  return consumeLocalRateLimit(keyHash, limit, windowSeconds, blockSeconds);
+  return { allowed: false, retryAfterSeconds: 300 };
 }
 
 export async function verifyTurnstileToken(
@@ -108,7 +147,7 @@ export async function verifyTurnstileToken(
   ip: string
 ): Promise<boolean> {
   const secret = process.env.TURNSTILE_SECRET_KEY?.trim();
-  if (!secret) return process.env.NODE_ENV !== 'production';
+  if (!secret) return !isProductionEnvironment();
   if (typeof token !== 'string' || token.length < 10) return false;
 
   try {
@@ -132,7 +171,41 @@ export function authErrorMessage(error: unknown): string {
   const message = error.message.toLowerCase();
   if (message.includes('invalid login credentials')) return '邮箱或密码不正确';
   if (message.includes('email not confirmed')) return '请先完成邮箱验证';
+  if (message.includes('signups not allowed for otp')) {
+    return '该邮箱尚未注册，请先使用“创建账户”完成注册';
+  }
+  if (message.includes('user already registered')) return '该邮箱已注册，请直接登录';
+  if (
+    message.includes('error sending confirmation email') ||
+    message.includes('error sending email') ||
+    message.includes('smtp')
+  ) {
+    return '验证邮件发送失败，请稍后重试；若持续失败请检查 Supabase SMTP 配置';
+  }
   if (message.includes('password')) return '密码不符合安全要求';
-  if (message.includes('rate limit')) return '请求过于频繁，请稍后再试';
+  if (
+    message.includes('rate limit') ||
+    message.includes('too many requests') ||
+    message.includes('too many request')
+  ) {
+    return '请求过于频繁，请稍后再试';
+  }
+  if (
+    message.includes('invalid') ||
+    message.includes('expired') ||
+    message.includes('otp') ||
+    message.includes('token')
+  ) {
+    return '验证码无效或已过期，请重新发送';
+  }
   return '请求失败，请稍后重试';
+}
+
+export function isAuthRateLimitError(error: unknown): boolean {
+  if (typeof error !== 'object' || error === null) return false;
+  const status = 'status' in error ? Number(error.status) : 0;
+  const message = 'message' in error && typeof error.message === 'string'
+    ? error.message.toLowerCase()
+    : '';
+  return status === 429 || message.includes('rate limit') || message.includes('too many request');
 }

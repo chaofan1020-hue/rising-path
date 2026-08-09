@@ -17,7 +17,7 @@ export async function POST(request: NextRequest) {
     const email = normalizeEmail(body.email);
     const token = normalizeOtpToken(body.token);
     if (!isValidEmail(email) || !isValidOtpToken(token)) {
-      console.warn('[Auth] Email OTP format rejected:', {
+      console.warn('[Auth] Signup OTP format rejected:', {
         email,
         tokenLength: token.length,
         isAsciiDigits: /^\d+$/.test(token),
@@ -25,16 +25,20 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ error: '验证码格式不正确' }, { status: 400 });
     }
 
-    const ipLimit = await consumeAuthRateLimit(`otp-verify:ip:${ip}`, 10, 900, 1800);
-    const emailLimit = await consumeAuthRateLimit(`otp-verify:email:${email}`, 6, 900, 1800);
+    const ipLimit = await consumeAuthRateLimit(`signup-verify:ip:${ip}`, 10, 900, 1800);
+    const emailLimit = await consumeAuthRateLimit(`signup-verify:email:${email}`, 6, 900, 1800);
     if (!ipLimit.allowed || !emailLimit.allowed) {
       return NextResponse.json({ error: '验证尝试过于频繁，请稍后再试' }, { status: 429 });
     }
 
     const supabase = getSupabaseAnonClient();
-    const { data, error } = await supabase.auth.verifyOtp({ email, token, type: 'email' });
+    const { data, error } = await supabase.auth.verifyOtp({
+      email,
+      token,
+      type: 'signup',
+    });
     if (error || !data.session) {
-      console.warn('[Auth] Email OTP rejected:', {
+      console.warn('[Auth] Signup OTP rejected:', {
         email,
         status: error?.status,
         code: error?.code,
@@ -42,9 +46,10 @@ export async function POST(request: NextRequest) {
       });
       return NextResponse.json({ error: authErrorMessage(error) }, { status: 401 });
     }
+
     return NextResponse.json({ session: data.session, user: data.user });
   } catch (error) {
-    console.error('[Auth] OTP verification failed:', error);
-    return NextResponse.json({ error: '验证码验证失败，请稍后重试' }, { status: 500 });
+    console.error('[Auth] Sign-up verification failed:', error);
+    return NextResponse.json({ error: '邮箱验证失败，请稍后重试' }, { status: 500 });
   }
 }

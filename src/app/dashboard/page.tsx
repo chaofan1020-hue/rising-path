@@ -8,7 +8,6 @@ import { apiFetch } from '@/lib/api-client';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent } from '@/components/ui/card';
 import { Skeleton } from '@/components/ui/skeleton';
-import SubscriptionCelebration from '@/components/SubscriptionCelebration';
 
 import {
   Select,
@@ -114,7 +113,6 @@ export default function DashboardPage() {
   const [data, setData] = useState<DashboardData | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
-  const [showCelebration, setShowCelebration] = useState(false);
   const [savingRegion, setSavingRegion] = useState(false);
 
   const fetchDashboard = useCallback(() => {
@@ -535,24 +533,9 @@ export default function DashboardPage() {
               </div>
             </section>
 
-            {/* 订阅庆祝演示按钮 */}
-            <div className="flex justify-center mt-8">
-              <button
-                onClick={() => setShowCelebration(true)}
-                className="inline-flex items-center gap-2 px-6 py-3 rounded-xl bg-zinc-900 text-white text-sm font-medium hover:bg-zinc-800 transition-colors dark:bg-white dark:text-zinc-900 dark:hover:bg-zinc-200"
-              >
-                <span>🎉</span>
-                <span>订阅成功演示</span>
-              </button>
-            </div>
           </div>
         )}
         </main>
-
-        <SubscriptionCelebration
-          open={showCelebration}
-          onClose={() => setShowCelebration(false)}
-        />
       </div>
     </AuthGuard>
   );

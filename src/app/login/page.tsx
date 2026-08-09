@@ -4,7 +4,7 @@ import { useEffect, useState } from 'react';
 import { useRouter } from 'next/navigation';
 import { getSupabaseBrowserClient } from '@/lib/supabase-browser';
 import LoginSignup, { type RegisterData } from '@/components/ui/login-signup';
-import SubscriptionCelebration from '@/components/SubscriptionCelebration';
+import RegistrationSuccess from '@/components/RegistrationSuccess';
 import { isEmailVerified, validatePassword } from '@/lib/auth-shared';
 
 type AuthMode = 'login' | 'signup' | 'otp' | 'reset' | 'password' | 'verify' | 'update-password';
@@ -15,7 +15,7 @@ export default function LoginPage() {
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [message, setMessage] = useState<string | null>(null);
-  const [registered, setRegistered] = useState(false);
+  const [showRegistrationSuccess, setShowRegistrationSuccess] = useState(false);
   const [verificationEmail, setVerificationEmail] = useState('');
 
   useEffect(() => {
@@ -113,19 +113,15 @@ export default function LoginPage() {
       });
       const result = (await response.json()) as {
         error?: string;
-        session?: { access_token: string; refresh_token: string };
+        requiresEmailConfirmation?: boolean;
       };
       if (!response.ok) throw new Error(result.error || 'Sign up failed');
-      if (result.session) {
-        const supabase = await getSupabaseBrowserClient();
-        const { error: sessionError } = await supabase.auth.setSession(result.session);
-        if (sessionError) throw sessionError;
-        router.replace('/home');
-        return;
+      if (!result.requiresEmailConfirmation) {
+        throw new Error('请先完成邮箱验证码验证');
       }
       setVerificationEmail(data.email);
-      setRegistered(true);
-      setMessage('Please check your email to verify your account before signing in.');
+      setMode('verify');
+      setMessage('A confirmation code was sent to your email.');
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Sign up failed');
     } finally {
@@ -203,6 +199,34 @@ export default function LoginPage() {
       router.replace('/home');
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Invalid code');
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const handleVerifySignupCode = async (email: string, code: string) => {
+    setLoading(true);
+    setError(null);
+    setMessage(null);
+    try {
+      const response = await fetch('/api/auth/signup/verify', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ email, token: code }),
+      });
+      const result = (await response.json()) as {
+        error?: string;
+        session?: { access_token: string; refresh_token: string };
+      };
+      if (!response.ok || !result.session) {
+        throw new Error(result.error || 'Invalid verification code');
+      }
+      const supabase = await getSupabaseBrowserClient();
+      const { error: sessionError } = await supabase.auth.setSession(result.session);
+      if (sessionError) throw sessionError;
+      setShowRegistrationSuccess(true);
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'Invalid verification code');
     } finally {
       setLoading(false);
     }
@@ -303,6 +327,7 @@ export default function LoginPage() {
         onRegister={handleRegister}
         onSendCode={handleSendOtp}
         onVerifyCode={handleVerifyOtp}
+        onVerifySignupCode={handleVerifySignupCode}
         onResendVerification={handleResendVerification}
         onResetPassword={handleResetPassword}
         onGoogleSignIn={handleGoogleSignIn}
@@ -313,13 +338,20 @@ export default function LoginPage() {
         error={error}
         message={message}
       />
-      {registered && (
-        <SubscriptionCelebration
-          open={registered}
-          autoShow={false}
-          onClose={() => {
-            setRegistered(false);
-            setMode('verify');
+      {process.env.NODE_ENV === 'development' && (
+        <button
+          type="button"
+          onClick={() => setShowRegistrationSuccess(true)}
+          className="fixed bottom-4 left-4 z-[10000] rounded-md border border-zinc-300 bg-white px-3 py-2 text-xs text-zinc-700 shadow-sm transition-colors hover:bg-zinc-50"
+        >
+          测试卡片展示
+        </button>
+      )}
+      {showRegistrationSuccess && (
+        <RegistrationSuccess
+          onContinue={() => {
+            setShowRegistrationSuccess(false);
+            router.replace('/home');
           }}
         />
       )}

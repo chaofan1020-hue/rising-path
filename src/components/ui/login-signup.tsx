@@ -78,6 +78,7 @@ interface LoginSignupProps {
   onRegister: (data: RegisterData) => void | Promise<void>;
   onSendCode: (email: string) => void | Promise<boolean>;
   onVerifyCode: (email: string, code: string) => void | Promise<void>;
+  onVerifySignupCode: (email: string, code: string) => void | Promise<void>;
   onResendVerification: (email: string, captchaToken: string | null) => void | Promise<boolean>;
   onResetPassword: (email: string) => void | Promise<void>;
   onGoogleSignIn: () => void | Promise<void>;
@@ -96,6 +97,7 @@ export default function LoginSignup({
   onRegister,
   onSendCode,
   onVerifyCode,
+  onVerifySignupCode,
   onResendVerification,
   onResetPassword,
   onGoogleSignIn,
@@ -122,7 +124,7 @@ export default function LoginSignup({
     setForm((prev) => (
       prev.email === (verificationEmail ?? '')
         ? prev
-        : { ...prev, email: verificationEmail ?? '' }
+        : { ...prev, email: verificationEmail ?? '', code: '' }
     ));
   }, [verificationEmail]);
 
@@ -161,6 +163,10 @@ export default function LoginSignup({
   const handleVerifyCode = (e: React.FormEvent) => {
     e.preventDefault();
     onVerifyCode(form.email, form.code);
+  };
+
+  const handleVerifySignupCode = () => {
+    onVerifySignupCode(form.email, form.code);
   };
 
   const handleResendVerification = (e: React.FormEvent) => {
@@ -500,7 +506,7 @@ export default function LoginSignup({
               </div>
             )}
             <p className="text-sm text-center text-black">
-              Check your email to verify your account before signing in.
+              Enter the verification code from the confirmation email to activate your account.
             </p>
             <div>
               <Label htmlFor="verification-email" className="font-medium text-black">
@@ -517,12 +523,38 @@ export default function LoginSignup({
                 required
               />
             </div>
-            <Turnstile onToken={(token) => update('captchaToken', token)} />
-            <Button type="submit" className="w-full" disabled={loading}>
+            <div>
+              <Label htmlFor="signup-verification-code" className="font-medium text-black">
+                Confirmation code
+              </Label>
+              <Input
+                id="signup-verification-code"
+                autoComplete="one-time-code"
+                inputMode="numeric"
+                value={form.code}
+                onChange={(e) => update('code', e.target.value)}
+                placeholder="123456"
+                className="mt-2 text-black"
+              />
+            </div>
+            <Button
+              type="button"
+              className="w-full"
+              disabled={loading || !form.email || !form.code}
+              onClick={handleVerifySignupCode}
+            >
               {loading ? (
                 <Loader2 className="h-4 w-4 animate-spin" />
               ) : (
-                'Resend verification email'
+                'Verify email'
+              )}
+            </Button>
+            <Turnstile onToken={(token) => update('captchaToken', token)} />
+            <Button type="submit" variant="outline" className="w-full" disabled={loading}>
+              {loading ? (
+                <Loader2 className="h-4 w-4 animate-spin" />
+              ) : (
+                'Resend confirmation code'
               )}
             </Button>
             <p className="text-center text-sm text-black">

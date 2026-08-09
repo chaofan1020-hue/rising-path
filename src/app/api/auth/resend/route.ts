@@ -1,8 +1,14 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { getSupabaseAnonClient } from '@/storage/database/supabase-client';
-import { getAuthRedirectOrigin, getClientIp } from '@/lib/auth-server';
+import { getClientIp } from '@/lib/auth-server';
 import { isValidEmail } from '@/lib/auth-shared';
-import { consumeAuthRateLimit, normalizeEmail, verifyTurnstileToken } from '@/lib/auth-security';
+import {
+  authErrorMessage,
+  consumeAuthRateLimit,
+  isAuthRateLimitError,
+  normalizeEmail,
+  verifyTurnstileToken,
+} from '@/lib/auth-security';
 
 export async function POST(request: NextRequest) {
   const ip = getClientIp(request);
@@ -23,16 +29,21 @@ export async function POST(request: NextRequest) {
     }
 
     const supabase = getSupabaseAnonClient();
-    const redirectOrigin = getAuthRedirectOrigin(request);
     const { error } = await supabase.auth.resend({
       type: 'signup',
       email,
       options: {
-        emailRedirectTo: `${redirectOrigin}/auth/callback?next=%2Fhome`,
         captchaToken: typeof body.captchaToken === 'string' ? body.captchaToken : undefined,
       },
     });
-    if (error) console.error('[Auth] Resend verification failed:', error.message);
+    if (error) {
+      console.error('[Auth] Resend verification failed:', error.message);
+      const status = isAuthRateLimitError(error) ? 429 : 400;
+      return NextResponse.json(
+        { error: authErrorMessage(error) },
+        status === 429 ? { status, headers: { 'Retry-After': '60' } } : { status }
+      );
+    }
     return NextResponse.json({ success: true });
   } catch (error) {
     console.error('[Auth] Resend request failed:', error);

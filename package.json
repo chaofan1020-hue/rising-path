@@ -4,13 +4,13 @@
   "private": true,
   "scripts": {
     "build": "pnpm next build && pnpm tsup src/server.ts --format cjs --platform node --target node20 --outDir dist --no-splitting --no-minify",
-    "dev": "next dev -p 5000",
+    "dev": "next dev -H 0.0.0.0 -p 5000",
     "preinstall": "npx only-allow pnpm",
     "lint": "eslint",
     "start": "node dist/server.js",
     "ts-check": "tsc -p tsconfig.json",
     "lint:build": "eslint . --quiet",
-    "validate": "pnpm run --parallel '/^(ts-check|lint:build)$/'"
+    "validate": "pnpm run ts-check && pnpm run lint:build"
   },
   "dependencies": {
     "@aws-sdk/client-s3": "^3.958.0",

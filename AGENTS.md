@@ -133,6 +133,10 @@
 - `src/lib/company-dna-service.ts` - 基因四级获取（manual > curated > cached > generated）
 - `src/components/segmentation-card.tsx` - 简历页分层确认卡片（透明展示+可修正）
 
+## 排障知识库
+
+- 登录页注册成功动画或 `Lanyard` 的卡顿、闪现、空白、WebGL 上下文丢失、Three/Rapier/Drei 模块加载失败：先阅读 `docs/3d-lanyard-troubleshooting.md`，按文档的分类和验证标准排查。
+
 ## API 接口清单
 
 | 路径 | 方法 | 功能 |
