@@ -525,35 +525,46 @@ export const ROUND_ROLE_INFO: Record<RoundRole, {
   labelEn: string;
   missionZh: string;
   missionEn: string;
+  speechZh: string;
+  speechEn: string;
 }> = {
   screener: {
     labelZh: 'HR 初筛',
     labelEn: 'HR Screen',
     missionZh: '本轮是 HR 初筛。任务：先暖场闲聊让候选人放松，然后突然问及简历空白期、跳槽原因或职业规划等敏感问题，观察第一反应与沟通表达。不深入业务细节。',
     missionEn: 'This round is an HR screen. Task: warm up with small talk, then suddenly ask about resume gaps, job-hopping reasons, or career plans. Observe first reactions and communication. No deep dives.',
+    speechZh: '语气亲切但句短，先聊一两句日常再突然切到敏感问题；追问聚焦离职原因、空白期和求职动机。',
+    speechEn: 'Sound warm but keep sentences short. Start with light small talk, then pivot suddenly to sensitive topics; probe reasons for leaving, resume gaps, and motivation.',
   },
   griller: {
     labelZh: '业务深挖面',
     labelEn: 'Deep Dive',
     missionZh: '本轮是业务深挖面。任务：围绕候选人简历中的项目与成果连续追问细节，故意质疑数据真实性与个人贡献度（"这个数据怎么来的？""你具体负责哪部分？"），测试专业深度与抗压能力。',
     missionEn: 'This round is a deep dive. Task: relentlessly probe the projects and results on the candidate\'s resume, deliberately challenging data authenticity and personal contribution ("Where did that number come from?" "What EXACTLY did you own?"). Test depth and composure.',
+    speechZh: '语速快、句子短，抓住回答里的数字和含糊词立刻追问，可以打断式提问。',
+    speechEn: 'Speak fast with short sentences. Pounce on numbers and vague words immediately, and cut in with interrupt-style follow-ups.',
   },
   cross: {
     labelZh: '跨部门交叉面',
     labelEn: 'Cross-functional',
     missionZh: '本轮是跨部门交叉面。任务：站在协作方视角，问看似与岗位无关的创意或情景问题，测试协作思维、共情能力与跨界沟通——看候选人能否把复杂的事情讲给外行人听懂。',
     missionEn: 'This round is a cross-functional interview. Task: from a collaborator\'s perspective, ask creative or situational questions seemingly unrelated to the role, testing collaboration, empathy and cross-domain communication — can they explain complex things to a layman?',
+    speechZh: '语气轻松但话题跳跃，多用类比和场景描述，把问题包装成真实协作场景。',
+    speechEn: 'Sound relaxed and playful. Use analogies and concrete scenarios, and frame questions as real cross-team situations.',
   },
   executive: {
     labelZh: '高管终面',
     labelEn: 'Executive Final',
     missionZh: '本轮是高管终面。任务：不再纠结细节，用少量但尖锐的宏大问题直击动机与格局（"你为什么觉得自己配得上这里？""五年后你想成为谁？"），用沉默制造压力，做出最终判断。',
     missionEn: 'This is the executive final round. Task: no more details — use few but sharp big-picture questions on motivation and vision ("Why do you deserve to be here?" "Who do you want to become in five years?"). Apply pressure through silence and make the final call.',
+    speechZh: '话少、节奏慢，允许明显停顿，问题少而大，直接指向动机和格局。',
+    speechEn: 'Speak sparingly and slowly. Allow noticeable silences, ask fewer and bigger questions, and aim directly at motivation and vision.',
   },
 };
 
 // 闯关剧本：不同轮数对应的角色序列
 export const GAUNTLET_SCRIPTS: Record<number, RoundRole[]> = {
+  4: ['screener', 'griller', 'cross', 'executive'],
   3: ['screener', 'griller', 'executive'],
   5: ['screener', 'griller', 'cross', 'griller', 'executive'],
   7: ['screener', 'griller', 'cross', 'griller', 'cross', 'griller', 'executive'],
@@ -563,16 +574,16 @@ export const GAUNTLET_SCRIPTS: Record<number, RoundRole[]> = {
 // 交叉面中等、高管终面少而尖锐——真实终面往往聊不满就结束了）
 export const ROUND_QUESTION_QUOTA: Record<RoundRole, number> = {
   screener: 2,
-  griller: 3,
+  griller: 4,
   cross: 2,
-  executive: 1,
+  executive: 2,
 };
 
 // 各角色轮次倒计时（分钟）：深挖面给足时间，初筛/终面短促
 export const ROUND_TIME_LIMIT: Record<RoundRole, number> = {
   screener: 6,
   griller: 10,
-  cross: 7,
+  cross: 6,
   executive: 5,
 };
 

@@ -103,7 +103,7 @@ export default function SubmitJobPage() {
             </div>
             <h2 className="text-2xl font-bold mb-2">提交成功</h2>
             <p className="text-muted-foreground mb-6">
-              感谢你为 Rising Path 社区贡献岗位信息！<br />
+              感谢你为 Liorvix 社区贡献岗位信息！<br />
               我们会在 24 小时内审核，审核结果会通过邮件通知你。
             </p>
             <div className="flex gap-4 justify-center">
@@ -138,7 +138,7 @@ export default function SubmitJobPage() {
         <CardHeader>
           <CardTitle>贡献岗位信息</CardTitle>
           <CardDescription>
-            你看到的心仪岗位还没在 Rising Path 上？快告诉我们，让更多留学生看到！
+            你看到的心仪岗位还没在 Liorvix 上？快告诉我们，让更多留学生看到！
           </CardDescription>
         </CardHeader>
         <CardContent>

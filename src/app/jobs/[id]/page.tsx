@@ -17,7 +17,6 @@ import {
   DollarSign,
   FileText,
   Loader2,
-  Send,
   Target,
   CheckCircle,
   Star,
@@ -28,6 +27,7 @@ import {
   ChevronDown,
   Globe,
   AlertTriangle,
+  Zap,
   type LucideIcon,
 } from 'lucide-react';
 import Link from 'next/link';
@@ -187,9 +187,22 @@ function JobDetailContent() {
     }
   };
 
-  const handleApply = async () => {
+  const handleAutoApply = async () => {
     if (applied) {
-      router.push('/applications');
+      if (job?.job_url) {
+        const applyContext = {
+          jobId: Number(params.id),
+          company: job.company,
+          title: job.title,
+          jobUrl: job.job_url,
+        };
+        window.postMessage({ type: "liorvix-apply-context", context: applyContext }, window.location.origin);
+        window.open(job.job_url, '_blank', 'noopener,noreferrer');
+      }
+      return;
+    }
+    if (!job?.job_url) {
+      alert('该岗位暂无可打开官网链接');
       return;
     }
 
@@ -209,7 +222,14 @@ function JobDetailContent() {
       
       if (data.application) {
         setApplied(true);
-        router.push('/applications');
+        const applyContext = {
+          jobId: Number(params.id),
+          company: job.company,
+          title: job.title,
+          jobUrl: job.job_url,
+        };
+        window.postMessage({ type: "liorvix-apply-context", context: applyContext }, window.location.origin);
+        window.open(job.job_url, '_blank', 'noopener,noreferrer');
       } else if (data.error) {
         alert('投递失败: ' + data.error);
       }
@@ -320,23 +340,23 @@ function JobDetailContent() {
             <div className="flex flex-col sm:flex-row gap-3">
               <Button
                 className="bg-zinc-900 text-white hover:bg-zinc-800 dark:bg-white dark:text-zinc-900 dark:hover:bg-zinc-200 flex-1"
-                onClick={handleApply}
+                onClick={handleAutoApply}
                 disabled={applying}
               >
                 {applying ? (
                   <>
                     <Loader2 className="h-4 w-4 mr-2 animate-spin" />
-                    投递中...
+                    正在打开官网...
                   </>
                 ) : applied ? (
                   <>
-                    <CheckCircle className="h-4 w-4 mr-2" />
-                    已投递 (查看进度)
+                    <Zap className="h-4 w-4 mr-2" />
+                    再次自动填写
                   </>
                 ) : (
                   <>
-                    <Send className="h-4 w-4 mr-2" />
-                    去官网申请
+                    <Zap className="h-4 w-4 mr-2" />
+                    自动网申
                   </>
                 )}
               </Button>

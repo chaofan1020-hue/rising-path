@@ -1,0 +1,22 @@
+{
+  "manifest_version": 3,
+  "name": "Liorvix Auto Apply",
+  "version": "0.1.0",
+  "description": "识别网申表单并只填不提交，所有字段在提交前由用户确认。",
+  "permissions": ["storage", "activeTab", "scripting", "tabs"],
+  "host_permissions": ["http://*/*", "https://*/*"],
+  "background": {
+    "service_worker": "background.js"
+  },
+  "content_scripts": [
+    {
+      "matches": ["http://*/*", "https://*/*"],
+      "js": ["content.js"],
+      "run_at": "document_idle"
+    }
+  ],
+  "action": {
+    "default_popup": "popup.html",
+    "default_title": "Liorvix 自动网申"
+  }
+}

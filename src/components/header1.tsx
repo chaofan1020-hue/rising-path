@@ -178,7 +178,7 @@ function Header1() {
                             <path d="M0 0h29a4 4 0 0 1 0 8H0V0z" />
                             <path d="M40 20H11a4 4 0 0 1 0-8h29v8z" />
                         </svg>
-                        Rising Path
+                        Liorvix
                     </Link>
                 </div>
                 <div className="flex justify-end w-full gap-3 items-center">

@@ -1,442 +1,331 @@
 'use client';
 
-import { useState, useEffect } from 'react';
+import { useCallback, useEffect, useState } from 'react';
 import { Button } from '@/components/ui/button';
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Input } from '@/components/ui/input';
+import { Textarea } from '@/components/ui/textarea';
 import { Badge } from '@/components/ui/badge';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import {
-  Dialog,
-  DialogContent,
-  DialogDescription,
-  DialogFooter,
-  DialogHeader,
-  DialogTitle,
-} from '@/components/ui/dialog';
-import {
-  Table,
-  TableBody,
-  TableCell,
-  TableHead,
-  TableHeader,
-  TableRow,
-} from '@/components/ui/table';
-import { 
-  Settings, 
-  Plus, 
-  Trash2, 
-  Loader2,
-  FileText,
-  Save,
-  RefreshCw,
-  Map,
-} from 'lucide-react';
-import Link from 'next/link';
+  Card,
+  CardContent,
+  CardDescription,
+  CardHeader,
+  CardTitle,
+} from '@/components/ui/card';
+import { Loader2, Save, Download, ClipboardList, MapPin } from 'lucide-react';
 import { AuthGuard } from '@/components/auth-guard';
 import { apiFetch } from '@/lib/api-client';
 import { Header1 } from '@/components/header1';
+import ApplicationList from '@/components/application-list';
 
-interface FieldMapping {
-  id?: number;
-  company_pattern: string;
-  field_name: string;
-  target_field: string;
+interface ProfileSource {
+  source: 'resume' | 'ai' | 'manual' | 'empty';
+  confidence: number;
 }
 
-// 常用简历字段
-const COMMON_RESUME_FIELDS = [
-  { name: 'name', label: '姓名' },
-  { name: 'email', label: '邮箱' },
-  { name: 'phone', label: '电话' },
-  { name: 'location', label: '地址' },
-  { name: 'education', label: '教育背景' },
-  { name: 'experience', label: '工作经验' },
-  { name: 'skills', label: '技能' },
-  { name: 'summary', label: '自我介绍' },
+interface ApplicationProfile {
+  personal: Record<string, string>;
+  links: Record<string, string>;
+  education: Array<Record<string, string>>;
+  experience: Array<Record<string, string>>;
+  skills: string[];
+  languages: string[];
+  workAuthorization: string;
+  visaStatus: string;
+  summary: string;
+}
+
+const PERSONAL_FIELDS = [
+  { key: 'firstName', label: '名', placeholder: 'First name' },
+  { key: 'lastName', label: '姓', placeholder: 'Last name' },
+  { key: 'email', label: '邮箱', placeholder: 'you@example.com' },
+  { key: 'phone', label: '电话', placeholder: '+1 234 567 8900' },
+  { key: 'address', label: '地址', placeholder: 'Street address' },
+  { key: 'city', label: '城市', placeholder: 'City' },
+  { key: 'state', label: '州/省', placeholder: 'State / Province' },
+  { key: 'zipCode', label: '邮编', placeholder: 'ZIP / Postal code' },
+  { key: 'country', label: '国家', placeholder: 'Country' },
 ];
 
-// 常用网申表单字段
-const COMMON_TARGET_FIELDS = [
-  { name: 'first_name', label: '名' },
-  { name: 'last_name', label: '姓' },
-  { name: 'full_name', label: '全名' },
-  { name: 'email', label: '邮箱' },
-  { name: 'phone', label: '电话' },
-  { name: 'address', label: '地址' },
-  { name: 'city', label: '城市' },
-  { name: 'state', label: '州/省' },
-  { name: 'zip_code', label: '邮编' },
-  { name: 'country', label: '国家' },
-  { name: 'school', label: '学校' },
-  { name: 'degree', label: '学位' },
-  { name: 'major', label: '专业' },
-  { name: 'graduation_date', label: '毕业日期' },
-  { name: 'gpa', label: 'GPA' },
-  { name: 'company', label: '公司' },
-  { name: 'job_title', label: '职位' },
-  { name: 'work_experience', label: '工作经验' },
-  { name: 'skills', label: '技能' },
-  { name: 'linkedin', label: 'LinkedIn' },
-  { name: 'github', label: 'GitHub' },
-  { name: 'portfolio', label: '作品集' },
-  { name: 'cover_letter', label: '求职信' },
+const LINK_FIELDS = [
+  { key: 'linkedin', label: 'LinkedIn', placeholder: 'https://linkedin.com/in/...' },
+  { key: 'github', label: 'GitHub', placeholder: 'https://github.com/...' },
+  { key: 'portfolio', label: '作品集', placeholder: 'https://...' },
 ];
 
-// 内部组件
-function FieldMappingsContent() {
-  const [mappings, setMappings] = useState<FieldMapping[]>([]);
+const sourceLabel: Record<string, string> = {
+  resume: '简历',
+  ai: 'AI 推测',
+  manual: '手动',
+  empty: '未填写',
+};
+
+function FieldSource({ source }: { source?: ProfileSource }) {
+  if (!source) return <Badge variant="outline">未填写</Badge>;
+  const color =
+    source.source === 'resume'
+      ? 'default'
+      : source.source === 'ai'
+        ? 'secondary'
+        : source.source === 'manual'
+          ? 'default'
+          : 'outline';
+  return (
+    <Badge variant={color as 'default' | 'secondary' | 'outline'}>
+      {sourceLabel[source.source]} · {Math.round(source.confidence * 100)}%
+    </Badge>
+  );
+}
+
+function AutoApplicationContent() {
+  const [profile, setProfile] = useState<ApplicationProfile | null>(null);
+  const [source, setSource] = useState<Record<string, ProfileSource>>({});
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
-  const [editingMapping, setEditingMapping] = useState<FieldMapping | null>(null);
-  const [isDialogOpen, setIsDialogOpen] = useState(false);
-  
+  const [saveDone, setSaveDone] = useState(false);
+  const [activeTab, setActiveTab] = useState('profile');
+
   useEffect(() => {
-    fetchMappings();
+    const tab = new URLSearchParams(window.location.search).get('tab');
+    if (tab === 'applications' || tab === 'extension') setActiveTab(tab);
   }, []);
 
-  const fetchMappings = async () => {
+  const loadProfile = useCallback(async () => {
     setLoading(true);
     try {
-      const response = await apiFetch('/api/field-mappings');
-      const data = await response.json();
-      setMappings(data.mappings || []);
+      const res = await apiFetch('/api/application-profile');
+      const data = await res.json();
+      setProfile(data.profile);
+      setSource(data.source || {});
     } catch (error) {
-      console.error('Failed to fetch mappings:', error);
+      console.error('Failed to load application profile:', error);
     } finally {
       setLoading(false);
     }
+  }, []);
+
+  useEffect(() => {
+    void loadProfile();
+  }, [loadProfile]);
+
+  const updatePersonal = (key: string, value: string) => {
+    if (!profile) return;
+    setProfile({ ...profile, personal: { ...profile.personal, [key]: value } });
+    setSaveDone(false);
+  };
+
+  const updateLink = (key: string, value: string) => {
+    if (!profile) return;
+    setProfile({ ...profile, links: { ...profile.links, [key]: value } });
+    setSaveDone(false);
   };
 
   const handleSave = async () => {
+    if (!profile) return;
     setSaving(true);
     try {
-      const response = await apiFetch('/api/field-mappings', {
+      const res = await apiFetch('/api/application-profile', {
         method: 'PUT',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          mappings: mappings,
-        }),
+        body: JSON.stringify({ profile }),
       });
-      
-      if (response.ok) {
-        setEditingMapping(null);
-        setIsDialogOpen(false);
+      const data = await res.json();
+      if (data.profile) {
+        setProfile(data.profile);
+        setSource(data.source || {});
+        setSaveDone(true);
       } else {
-        alert('保存失败');
+        alert(data.error || '保存失败');
       }
-    } catch (error) {
-      console.error('Failed to save mappings:', error);
+    } catch {
       alert('保存失败');
     } finally {
       setSaving(false);
     }
   };
 
-  const handleAddMapping = () => {
-    setEditingMapping({
-      company_pattern: '',
-      field_name: 'name',
-      target_field: 'full_name',
-    });
-    setIsDialogOpen(true);
-  };
-
-  const handleEditMapping = (mapping: FieldMapping) => {
-    setEditingMapping({ ...mapping });
-    setIsDialogOpen(true);
-  };
-
-  const handleDeleteMapping = (index: number) => {
-    setMappings(mappings.filter((_, i) => i !== index));
-  };
-
-  const handleSaveMapping = () => {
-    if (!editingMapping) return;
-    
-    if (editingMapping.id) {
-      // 更新
-      setMappings(mappings.map(m => m.id === editingMapping.id ? editingMapping : m));
-    } else {
-      // 新增
-      setMappings([...mappings, { ...editingMapping, id: Date.now() }]);
-    }
-    setEditingMapping(null);
-    setIsDialogOpen(false);
-  };
-
-  // 按公司分组显示映射
-  const groupedMappings = mappings.reduce((acc, mapping) => {
-    const key = mapping.company_pattern || '默认';
-    if (!acc[key]) acc[key] = [];
-    acc[key].push(mapping);
-    return acc;
-  }, {} as Record<string, FieldMapping[]>);
-
   return (
     <div className="min-h-screen bg-background">
       <Header1 />
-      <main className="container mx-auto px-4 py-8 pt-20">
-        {/* Page Title */}
+      <main className="container mx-auto px-4 py-8 pt-20 max-w-5xl">
         <div className="mb-8">
           <h1 className="text-3xl font-bold mb-2 flex items-center gap-3">
-            <Map className="h-8 w-8 text-primary" />
-            字段映射管理
+            <ClipboardList className="h-8 w-8 text-primary" />
+            自动网申
           </h1>
           <p className="text-muted-foreground">
-            配置简历字段与网申表单字段的映射关系，用于自动填写
+            统一求职档案，配合浏览器扩展自动填写外部申请表单；扩展只填不提交。
           </p>
         </div>
 
-        <Tabs defaultValue="mappings" className="space-y-6">
+        <Tabs value={activeTab} onValueChange={setActiveTab} className="space-y-6">
           <TabsList>
-            <TabsTrigger value="mappings">映射列表</TabsTrigger>
-            <TabsTrigger value="guide">使用指南</TabsTrigger>
+            <TabsTrigger value="profile">求职档案</TabsTrigger>
+            <TabsTrigger value="extension">扩展安装</TabsTrigger>
+            <TabsTrigger value="applications">申请记录</TabsTrigger>
           </TabsList>
 
-          <TabsContent value="mappings">
+          <TabsContent value="profile">
             <Card>
               <CardHeader>
                 <div className="flex items-center justify-between">
                   <div>
-                    <CardTitle>字段映射</CardTitle>
+                    <CardTitle>求职档案</CardTitle>
                     <CardDescription>
-                      配置简历中的字段如何映射到网申表单的字段
+                      来源标记会同步到扩展的确认列表；手动修改后来源变为“手动”。
                     </CardDescription>
                   </div>
-                  <div className="flex gap-2">
-                    <Button variant="outline" onClick={fetchMappings} disabled={loading}>
-                      <RefreshCw className={`h-4 w-4 mr-2 ${loading ? 'animate-spin' : ''}`} />
-                      刷新
-                    </Button>
-                    <Button onClick={handleAddMapping}>
-                      <Plus className="h-4 w-4 mr-2" />
-                      添加映射
-                    </Button>
-                  </div>
+                  <Button onClick={handleSave} disabled={saving || !profile}>
+                    {saving ? (
+                      <><Loader2 className="h-4 w-4 mr-2 animate-spin" />保存中...</>
+                    ) : (
+                      <><Save className="h-4 w-4 mr-2" />{saveDone ? '已保存' : '保存档案'}</>
+                    )}
+                  </Button>
                 </div>
               </CardHeader>
               <CardContent>
-                {loading ? (
+                {loading || !profile ? (
                   <div className="text-center py-12">
                     <Loader2 className="h-8 w-8 animate-spin mx-auto mb-2" />
                     <p className="text-muted-foreground">加载中...</p>
                   </div>
-                ) : mappings.length === 0 ? (
-                  <div className="text-center py-12">
-                    <Map className="h-12 w-12 mx-auto mb-4 text-muted-foreground opacity-50" />
-                    <p className="text-muted-foreground mb-4">暂无字段映射配置</p>
-                    <Button onClick={handleAddMapping}>
-                      <Plus className="h-4 w-4 mr-2" />
-                      添加第一个映射
-                    </Button>
-                  </div>
                 ) : (
-                  <div className="space-y-6">
-                    {Object.entries(groupedMappings).map(([company, companyMappings]) => (
-                      <div key={company}>
-                        <h3 className="font-medium mb-3 flex items-center gap-2">
-                          <Badge variant="outline">{companyMappings.length} 个映射</Badge>
-                          <span className="text-sm text-muted-foreground">公司: {company}</span>
-                        </h3>
-                        <Table>
-                          <TableHeader>
-                            <TableRow>
-                              <TableHead>简历字段</TableHead>
-                              <TableHead>映射</TableHead>
-                              <TableHead>目标表单字段</TableHead>
-                              <TableHead className="w-20">操作</TableHead>
-                            </TableRow>
-                          </TableHeader>
-                          <TableBody>
-                            {companyMappings.map((mapping, index) => (
-                              <TableRow key={index}>
-                                <TableCell>
-                                  <Badge variant="secondary">
-                                    {mapping.field_name}
-                                  </Badge>
-                                </TableCell>
-                                <TableCell>→</TableCell>
-                                <TableCell>
-                                  <Badge variant="default">
-                                    {mapping.target_field}
-                                  </Badge>
-                                </TableCell>
-                                <TableCell>
-                                  <div className="flex gap-1">
-                                    <Button 
-                                      variant="ghost" 
-                                      size="sm"
-                                      onClick={() => handleEditMapping(mapping)}
-                                    >
-                                      编辑
-                                    </Button>
-                                    <Button 
-                                      variant="ghost" 
-                                      size="sm"
-                                      onClick={() => handleDeleteMapping(mappings.indexOf(mapping))}
-                                    >
-                                      <Trash2 className="h-4 w-4 text-destructive" />
-                                    </Button>
-                                  </div>
-                                </TableCell>
-                              </TableRow>
-                            ))}
-                          </TableBody>
-                        </Table>
+                  <div className="space-y-8">
+                    <section>
+                      <h3 className="text-sm font-medium mb-3">个人信息</h3>
+                      <div className="grid md:grid-cols-2 gap-4">
+                        {PERSONAL_FIELDS.map((field) => (
+                          <div key={field.key} className="space-y-1.5">
+                            <div className="flex items-center justify-between">
+                              <label className="text-sm font-medium">{field.label}</label>
+                              <FieldSource source={source[`personal.${field.key}`]} />
+                            </div>
+                            <Input
+                              value={profile.personal[field.key] || ''}
+                              placeholder={field.placeholder}
+                              onChange={(e) => updatePersonal(field.key, e.target.value)}
+                            />
+                          </div>
+                        ))}
                       </div>
-                    ))}
-                    
-                    {mappings.length > 0 && (
-                      <div className="flex justify-end pt-4 border-t">
-                        <Button onClick={handleSave} disabled={saving}>
-                          {saving ? (
-                            <>
-                              <Loader2 className="h-4 w-4 mr-2 animate-spin" />
-                              保存中...
-                            </>
-                          ) : (
-                            <>
-                              <Save className="h-4 w-4 mr-2" />
-                              保存所有更改
-                            </>
-                          )}
-                        </Button>
+                    </section>
+
+                    <section>
+                      <h3 className="text-sm font-medium mb-3">个人链接</h3>
+                      <div className="grid md:grid-cols-3 gap-4">
+                        {LINK_FIELDS.map((field) => (
+                          <div key={field.key} className="space-y-1.5">
+                            <label className="text-sm font-medium">{field.label}</label>
+                            <Input
+                              value={profile.links[field.key] || ''}
+                              placeholder={field.placeholder}
+                              onChange={(e) => updateLink(field.key, e.target.value)}
+                            />
+                          </div>
+                        ))}
                       </div>
-                    )}
+                    </section>
+
+                    <section>
+                      <h3 className="text-sm font-medium mb-3">技能与开放信息</h3>
+                      <div className="space-y-4">
+                        <div className="space-y-1.5">
+                          <div className="flex items-center justify-between">
+                            <label className="text-sm font-medium">技能</label>
+                            <FieldSource source={source.skills} />
+                          </div>
+                          <Input
+                            value={(profile.skills || []).join(', ')}
+                            placeholder="Python, SQL, Communication..."
+                            onChange={(e) =>
+                              setProfile({
+                                ...profile,
+                                skills: e.target.value.split(',').map((s) => s.trim()).filter(Boolean),
+                              })
+                            }
+                          />
+                        </div>
+                        <div className="grid md:grid-cols-2 gap-4">
+                          <div className="space-y-1.5">
+                            <label className="text-sm font-medium">工作授权</label>
+                            <Input
+                              value={profile.workAuthorization || ''}
+                              placeholder="US Citizen / OPT / H1B..."
+                              onChange={(e) => setProfile({ ...profile, workAuthorization: e.target.value })}
+                            />
+                          </div>
+                          <div className="space-y-1.5">
+                            <label className="text-sm font-medium">签证状态</label>
+                            <Input
+                              value={profile.visaStatus || ''}
+                              placeholder="F-1 / OPT / Other..."
+                              onChange={(e) => setProfile({ ...profile, visaStatus: e.target.value })}
+                            />
+                          </div>
+                        </div>
+                        <div className="space-y-1.5">
+                          <label className="text-sm font-medium">自我介绍 / 开放题草稿</label>
+                          <Textarea
+                            rows={4}
+                            value={profile.summary || ''}
+                            placeholder="用于 Cover Letter 和开放题预填"
+                            onChange={(e) => setProfile({ ...profile, summary: e.target.value })}
+                          />
+                        </div>
+                      </div>
+                    </section>
                   </div>
                 )}
               </CardContent>
             </Card>
           </TabsContent>
 
-          <TabsContent value="guide">
+          <TabsContent value="extension">
             <Card>
               <CardHeader>
-                <CardTitle>自动网申使用指南</CardTitle>
+                <CardTitle>浏览器扩展</CardTitle>
+                <CardDescription>
+                  第一版以本地加载方式使用，扩展只负责识别和填写，绝不自动提交。
+                </CardDescription>
               </CardHeader>
               <CardContent className="space-y-4">
-                <div className="space-y-2">
-                  <h4 className="font-medium">第一步：上传并解析简历</h4>
-                  <p className="text-sm text-muted-foreground">
-                    在简历管理页面上传您的简历，系统会自动解析简历内容。
-                  </p>
-                  <Link href="/resume">
-                    <Button variant="outline" size="sm">
-                      <FileText className="h-4 w-4 mr-2" />
-                      去上传简历
-                    </Button>
-                  </Link>
+                <div className="flex items-start gap-3 rounded-lg border p-4">
+                  <Download className="h-5 w-5 text-primary mt-0.5" />
+                  <div className="space-y-1">
+                    <p className="text-sm font-medium">安装扩展</p>
+                    <p className="text-sm text-muted-foreground">
+                      打开 Chrome 的扩展管理页，启用“开发者模式”，选择“加载已解压的扩展程序”，目录为项目下的 extension。
+                    </p>
+                  </div>
                 </div>
-
-                <div className="space-y-2">
-                  <h4 className="font-medium">第二步：提取结构化字段</h4>
-                  <p className="text-sm text-muted-foreground">
-                    使用 AI 从简历文本中提取姓名、邮箱、电话、教育背景等结构化信息。
-                  </p>
-                </div>
-
-                <div className="space-y-2">
-                  <h4 className="font-medium">第三步：配置字段映射</h4>
-                  <p className="text-sm text-muted-foreground">
-                    配置您的简历字段如何映射到目标公司的网申表单字段。例如：
-                  </p>
-                  <ul className="list-disc list-inside text-sm text-muted-foreground ml-4">
-                    <li>姓名 → full_name 或 first_name + last_name</li>
-                    <li>邮箱 → email 或 email_address</li>
-                    <li>电话 → phone 或 phone_number</li>
-                  </ul>
-                </div>
-
-                <div className="space-y-2">
-                  <h4 className="font-medium">第四步：浏览器扩展自动填写</h4>
-                  <p className="text-sm text-muted-foreground">
-                    安装浏览器扩展后，访问目标公司网申页面，扩展会自动检测表单字段并使用配置的映射进行填充。
-                  </p>
-                  <div className="bg-muted p-4 rounded-lg">
-                    <p className="text-sm font-medium mb-2">浏览器扩展开发中...</p>
-                    <p className="text-xs text-muted-foreground">
-                      扩展将支持 Chrome、Firefox 等主流浏览器，可从设置页面下载安装。
+                <div className="flex items-start gap-3 rounded-lg border p-4">
+                  <MapPin className="h-5 w-5 text-primary mt-0.5" />
+                  <div className="space-y-1">
+                    <p className="text-sm font-medium">使用流程</p>
+                    <p className="text-sm text-muted-foreground">
+                      先在 Liorvix 登录并进入岗位详情页，点击“自动网申”打开官网申请页；扩展会自动识别字段并填写，你确认后在官网手动提交。
                     </p>
                   </div>
                 </div>
               </CardContent>
             </Card>
           </TabsContent>
+
+          <TabsContent value="applications">
+            <ApplicationList />
+          </TabsContent>
         </Tabs>
       </main>
-
-      {/* 编辑映射对话框 */}
-      <Dialog open={isDialogOpen} onOpenChange={setIsDialogOpen}>
-        <DialogContent>
-          <DialogHeader>
-            <DialogTitle>{editingMapping?.id ? '编辑映射' : '添加映射'}</DialogTitle>
-            <DialogDescription>
-              配置简历字段到目标表单字段的映射关系
-            </DialogDescription>
-          </DialogHeader>
-          
-          <div className="space-y-4 py-4">
-            <div className="space-y-2">
-              <label className="text-sm font-medium">公司名称</label>
-              <Input
-                placeholder="支持模糊匹配，如 Amazon、*amazon*"
-                value={editingMapping?.company_pattern || ''}
-                onChange={(e) => setEditingMapping(prev => prev ? { ...prev, company_pattern: e.target.value } : null)}
-              />
-              <p className="text-xs text-muted-foreground">
-                留空表示适用于所有公司
-              </p>
-            </div>
-
-            <div className="space-y-2">
-              <label className="text-sm font-medium">简历字段</label>
-              <select
-                className="w-full h-10 px-3 rounded-md border border-input bg-background text-sm"
-                value={editingMapping?.field_name || ''}
-                onChange={(e) => setEditingMapping(prev => prev ? { ...prev, field_name: e.target.value } : null)}
-              >
-                <option value="">选择简历字段</option>
-                {COMMON_RESUME_FIELDS.map(field => (
-                  <option key={field.name} value={field.name}>
-                    {field.label} ({field.name})
-                  </option>
-                ))}
-              </select>
-            </div>
-
-            <div className="space-y-2">
-              <label className="text-sm font-medium">目标表单字段</label>
-              <Input
-                placeholder="输入目标表单字段名"
-                value={editingMapping?.target_field || ''}
-                onChange={(e) => setEditingMapping(prev => prev ? { ...prev, target_field: e.target.value } : null)}
-              />
-              <p className="text-xs text-muted-foreground">
-                常见字段: full_name, email, phone, address, school, degree, major, company, job_title, skills
-              </p>
-            </div>
-          </div>
-
-          <DialogFooter>
-            <Button variant="outline" onClick={() => setIsDialogOpen(false)}>
-              取消
-            </Button>
-            <Button onClick={handleSaveMapping} disabled={!editingMapping?.field_name || !editingMapping?.target_field}>
-              保存
-            </Button>
-          </DialogFooter>
-        </DialogContent>
-      </Dialog>
     </div>
   );
 }
 
-// 主组件
 export default function FieldMappingsPage() {
   return (
     <AuthGuard>
-      <FieldMappingsContent />
+      <AutoApplicationContent />
     </AuthGuard>
   );
 }

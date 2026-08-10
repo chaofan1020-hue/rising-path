@@ -1,7 +1,7 @@
 # DESIGN.md
 
 ## 品牌与视觉方向
-- 品牌名称：Rising Path（yes! 风格）
+- 品牌名称：Liorvix（yes! 风格）
 - 视觉风格：温暖、自然、现代、亲和力强
 - 灵感来源：yes! logo 配色方案
 

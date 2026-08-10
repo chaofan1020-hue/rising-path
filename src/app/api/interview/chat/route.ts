@@ -19,8 +19,6 @@ import {
   INTERVIEWERS,
   selectRoundInterviewers,
   selectScriptInterviewers,
-  getInterviewerVoice,
-  getInterviewerSpeechRate,
   getPersona,
   assignToCompany,
   ARCHETYPE_PARAMS,
@@ -32,6 +30,7 @@ import {
   type Interviewer,
   type RoundRole,
 } from '@/lib/interviewers';
+import { getInterviewerVoiceConfig, type VoiceLanguage } from '@/lib/voice-config';
 
 interface ChatMessage {
   role: 'interviewer' | 'candidate';
@@ -76,7 +75,7 @@ function cleanTail(pending: string): string {
 // 各角色轮次的参考节奏（写进 prompt 供面试官参考，不再是机械硬约束）
 const PACE_HINTS: Record<RoundRole, string> = {
   screener: '2-3',
-  griller: '3-4',
+  griller: '4-5',
   cross: '2-3',
   executive: '1-2',
 };
@@ -87,6 +86,20 @@ const TYPE_LABELS: Record<string, { zh: string; en: string }> = {
   case: { zh: '案例面试', en: 'Case Interview' },
   mixed: { zh: '综合面试', en: 'Mixed Interview' },
 };
+
+function inferInterviewType(jd: string): string {
+  const text = jd.toLowerCase();
+  if (/(consulting|case study|case interview|strategy|business analysis|咨询|案例分析|案例面试|战略|商业分析|management consulting)/.test(text)) {
+    return 'case';
+  }
+  if (/(engineer|software|developer|data|infrastructure|algorithm|python|java|sql|cloud|前端|后端|工程师|开发|算法|数据|技术|架构)/.test(text)) {
+    return 'technical';
+  }
+  if (/(leadership|communication|teamwork|collaboration|领导力|沟通|团队|协作)/.test(text)) {
+    return 'behavioral';
+  }
+  return 'mixed';
+}
 
 function buildSystemPrompt(
   interviewType: string,
@@ -116,6 +129,7 @@ You dislike: ${interviewer.dislikes}`
       : '';
     const behaviorBlock = archetype ? `\n\nHOW YOU BEHAVE:\n${archetype.behaviorEn}` : '';
     const missionBlock = roleInfo ? `\n\nTHIS ROUND'S MISSION:\n${roleInfo.missionEn}` : '';
+    const speechBlock = roleInfo ? `\n\nSPEECH SIGNATURE:\n${roleInfo.speechEn}` : '';
     const switchNote = isNewInterviewer && interviewer
       ? `\nYou are a NEW interviewer taking over this round. Reference the previous topic in one sentence WITHOUT evaluating it, briefly introduce yourself (name + company), then ask your first question.`
       : '';
@@ -123,7 +137,7 @@ You dislike: ${interviewer.dislikes}`
     return `You are conducting a ${typeLabel} for the following position:
 
 ${jobDescription}${dnaSection}${segmentSection}
-${personaBlock}${behaviorBlock}${missionBlock}${switchNote}
+${personaBlock}${behaviorBlock}${missionBlock}${speechBlock}${switchNote}
 
 Rules you MUST follow (this is a REAL interview):
 1. Stay fully in character as ${interviewer ? interviewer.name : 'a professional interviewer'} — your persona defines how you speak, probe, and apply pressure.
@@ -151,6 +165,7 @@ Reference pace for this round: about ${roundRole ? PACE_HINTS[roundRole] : '3-5'
     : '';
   const behaviorBlock = archetype ? `\n\n【你的行为方式】\n${archetype.behaviorZh}` : '';
   const missionBlock = roleInfo ? `\n\n【本轮任务】\n${roleInfo.missionZh}` : '';
+  const speechBlock = roleInfo ? `\n\n【你的说话方式】\n${roleInfo.speechZh}` : '';
   const switchNote = isNewInterviewer && interviewer
     ? `\n你是本轮新接手的面试官。用一句话提及刚才的话题作为衔接（不作任何评价），简短自我介绍（姓名+公司），然后提出你的第一个问题。`
     : '';
@@ -158,7 +173,7 @@ Reference pace for this round: about ${roundRole ? PACE_HINTS[roundRole] : '3-5'
   return `你正在为以下岗位进行一场${typeLabel}：
 
 ${jobDescription}${dnaSection}${segmentSection}
-${personaBlock}${behaviorBlock}${missionBlock}${switchNote}
+${personaBlock}${behaviorBlock}${missionBlock}${speechBlock}${switchNote}
 
 你必须遵守以下规则（这是真实面试）：
 1. 完全沉浸在${interviewer ? `「${interviewer.name}」` : '资深面试官'}的角色中，你的性格决定你的说话、追问与施压方式。
@@ -177,9 +192,17 @@ ${personaBlock}${behaviorBlock}${missionBlock}${switchNote}
 本轮参考节奏：一般 ${roundRole ? PACE_HINTS[roundRole] : '3-5'} 个问题左右收尾。聊透了就果断结束，不为凑数而追问；关键考察点没覆盖到就继续，不草率收场。`;
 }
 
-function interviewerPayload(interviewer: Interviewer, round: number, totalRounds: number, role: RoundRole | null, sessionInterviewers?: Interviewer[]) {
+function interviewerPayload(
+  interviewer: Interviewer,
+  round: number,
+  totalRounds: number,
+  role: RoundRole | null,
+  language: VoiceLanguage,
+  sessionInterviewers?: Interviewer[]
+) {
   const persona = getPersona(interviewer.id);
   const archetype = ARCHETYPE_PARAMS[persona.archetype];
+  const voiceConfig = getInterviewerVoiceConfig(interviewer, language, sessionInterviewers);
   return {
     round,
     totalRounds,
@@ -194,8 +217,10 @@ function interviewerPayload(interviewer: Interviewer, round: number, totalRounds
       title: role ? { zh: ROLE_TITLES[role].zh, en: ROLE_TITLES[role].en } : null,
       personality: interviewer.personality,
       gender: interviewer.gender,
-      voice: getInterviewerVoice(interviewer, sessionInterviewers),
-      speechRate: getInterviewerSpeechRate(interviewer),
+      voice: voiceConfig.voice,
+      speechRate: voiceConfig.speechRate,
+      loudnessRate: voiceConfig.loudnessRate,
+      pauseMs: voiceConfig.pauseMs,
       archetype: persona.archetype,
       archetypeLabel: { zh: archetype.labelZh, en: archetype.labelEn },
     },
@@ -210,7 +235,6 @@ export async function POST(request: NextRequest) {
     const body = await request.json();
     const {
       sessionId,
-      interviewType,
       jobDescription,
       jobId,
       resumeId,
@@ -219,16 +243,13 @@ export async function POST(request: NextRequest) {
       mode = 'single',
       totalRounds = 1,
       targetCompany,
+      timeout = false,
     } = body;
 
     const isGauntlet = mode === 'gauntlet' && totalRounds > 1;
 
     if (!sessionId) {
       // ===== 开始新面试 =====
-      if (!interviewType) {
-        return new Response(JSON.stringify({ error: '缺少面试类型' }), { status: 400 });
-      }
-
       let jdText = jobDescription || '';
       let selectedJobId: number | null = null;
       let jobCompany = '';
@@ -247,6 +268,7 @@ export async function POST(request: NextRequest) {
       if (!jdText) {
         jdText = language === 'en' ? 'General position (no specific JD provided)' : '通用岗位（未提供具体 JD）';
       }
+      const interviewType = inferInterviewType(jdText);
 
       // 目标公司：本场所有面试官均来自该公司（画像库仅提供性格参考）
       const company = String(targetCompany || jobCompany || '').trim();
@@ -326,7 +348,7 @@ export async function POST(request: NextRequest) {
           try {
             controller.enqueue(encoder.encode(`data: ${JSON.stringify({ sessionId: currentSessionId })}\n\n`));
             controller.enqueue(
-              encoder.encode(`data: ${JSON.stringify({ roundStart: true, ...interviewerPayload(firstInterviewer, 1, rounds, firstRole, interviewers) })}\n\n`)
+              encoder.encode(`data: ${JSON.stringify({ roundStart: true, ...interviewerPayload(firstInterviewer, 1, rounds, firstRole, language === 'en' ? 'en' : 'zh', interviewers) })}\n\n`)
             );
 
             const stream = llmClient.stream(llmMessages, { temperature: 0.8 });
@@ -403,7 +425,8 @@ export async function POST(request: NextRequest) {
     const currentInterviewerId = interviewerIds[currentRound - 1] || null;
     // switchNext：上一轮面试官主动收尾（[ROUND_END]）后，前端请求下一位面试官开场——无候选人新回答
     const isSwitchNext = body.switchNext === true;
-    if (!isSwitchNext) {
+    const isTimeout = timeout === true && !isSwitchNext;
+    if (!isSwitchNext && !isTimeout) {
       if (!answer || !String(answer).trim()) {
         return new Response(JSON.stringify({ error: '缺少回答内容' }), { status: 400 });
       }
@@ -474,10 +497,15 @@ export async function POST(request: NextRequest) {
     // 兜底催促：超出参考节奏仍未主动收尾时，强制要求本条回复收尾（防失控，正常不会触发）
     const answersThisRound = messages.filter((m) => m.role === 'candidate' && m.round === currentRound).length;
     const questionQuota = activeRole ? ROUND_QUESTION_QUOTA[activeRole] : QUESTIONS_PER_ROUND + 1;
-    const overdueNote = !isSwitchNext && answersThisRound > questionQuota
+    const overdueNote = !isSwitchNext && !isTimeout && answersThisRound > questionQuota
       ? (language === 'en'
           ? `\n\n[System note] This round is running way over pace. You MUST wrap up in this reply and put ${isLastRound ? '[WRAP_UP]' : '[ROUND_END]'} on the last line.`
           : `\n\n【系统提示】本轮已明显超出参考节奏，你必须在本次回复中收尾，并在最后一行输出 ${isLastRound ? '[WRAP_UP]' : '[ROUND_END]'}。`)
+      : '';
+    const timeoutNote = isTimeout
+      ? (language === 'en'
+          ? `The time for this stage is almost up. Do NOT ask a new question. Close the stage naturally in this reply and put ${isLastRound ? '[WRAP_UP]' : '[ROUND_END]'} on the last line.`
+          : `本阶段时间即将结束。不要再提出新问题，请在本条回复中用一句自然的话收尾，并在最后一行输出 ${isLastRound ? '[WRAP_UP]' : '[ROUND_END]'}。`)
       : '';
 
     // 防御：switchNext 正常只在上轮 [ROUND_END] 后触发（轮次已推进）；若本轮面试官已开过场
@@ -493,9 +521,11 @@ export async function POST(request: NextRequest) {
             : (language === 'en'
                 ? 'The previous round is over. You are the new interviewer for this round — begin now. This round has just started; do NOT output any control markers yet.'
                 : '上一轮已结束，你是本轮新接手的面试官，请开始。本轮刚刚开始，不要输出任何控制标记。')) + noRepeatNote
-        : (language === 'en'
-            ? 'The candidate has answered. Continue in character — probe deeper, ask your next question, or close out per your pace control (marker on the last line). Do NOT evaluate the answer.'
-            : '候选人已回答。请以你的人设继续面试——追问细节、提出下一个问题，或按你的节奏判断收尾（标记放在最后一行）。不要评价回答。') + noRepeatNote + overdueNote,
+        : isTimeout
+          ? timeoutNote
+          : (language === 'en'
+              ? 'The candidate has answered. Continue in character — probe deeper, ask your next question, or close out per your pace control (marker on the last line). Do NOT evaluate the answer.'
+              : '候选人已回答。请以你的人设继续面试——追问细节、提出下一个问题，或按你的节奏判断收尾（标记放在最后一行）。不要评价回答。') + noRepeatNote + overdueNote,
     });
 
     const encoder = new TextEncoder();
@@ -510,7 +540,7 @@ export async function POST(request: NextRequest) {
             const sessionInterviewers = interviewerIds
               .map((id) => INTERVIEWERS.find((i) => i.id === id))
               .filter((i): i is Interviewer => Boolean(i));
-            const payload = interviewerPayload(activeInterviewer, currentRound, rounds, activeRole, sessionInterviewers);
+            const payload = interviewerPayload(activeInterviewer, currentRound, rounds, activeRole, language === 'en' ? 'en' : 'zh', sessionInterviewers);
             if (isSwitchNext) {
               // 下一位面试官开场帧（round > 1 时前端触发轮间等待，开场内容后台累积）
               controller.enqueue(

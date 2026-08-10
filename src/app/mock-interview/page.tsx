@@ -14,11 +14,11 @@ import {
 } from "@/components/ui/modal";
 import { useLanguage } from "@/lib/language-context";
 import {
-  Bot, Loader2, RotateCcw, ClipboardList, Code2, MessagesSquare,
-  Puzzle, Layers, Mic, Square, PhoneOff, Video, VideoOff, User,
-  Building2, Briefcase, FileText, ChevronDown, Check, Timer, Zap,
+  Bot, Loader2, RotateCcw, ClipboardList,
+  Mic, Square, PhoneOff, Video, VideoOff, User,
+  Building2, Briefcase, FileText, ChevronDown, Check, Timer,
 } from "lucide-react";
-import { startAmbience, stopAmbience, playNotify } from "@/lib/interview-audio";
+import { startAmbience, stopAmbience } from "@/lib/interview-audio";
 
 // 通用下拉选择器（与 jobs 页一致的 Popover 交互，避免原生 select 交互问题）
 function OptionSelect({
@@ -83,7 +83,6 @@ function OptionSelect({
   );
 }
 
-type InterviewType = "technical" | "behavioral" | "case" | "mixed";
 type Stage = "setup" | "interview" | "summary";
 
 interface Message {
@@ -100,6 +99,21 @@ interface JobItem {
   id: number;
   title: string;
   company: string;
+}
+
+const sleep = (ms: number) => new Promise<void>((resolve) => setTimeout(resolve, ms));
+
+function splitSpeechSentences(pending: string): { complete: string[]; rest: string } {
+  const matches = pending.match(/[^.!?。！？\n]+[.!?。！？\n]*/g) || [];
+  if (matches.length === 0) return { complete: [], rest: pending };
+  const complete = matches.slice(0, -1).map((s) => s.trim()).filter(Boolean);
+  const last = matches[matches.length - 1];
+  if (/[.!?。！？]$/.test(last.trim()) || last.endsWith("\n")) {
+    complete.push(last.trim());
+    return { complete: complete.filter(Boolean), rest: "" };
+  }
+  const rest = last;
+  return { complete, rest };
 }
 
 // ===== 结构化面试报告 =====
@@ -251,17 +265,9 @@ function TrendChart({ points, current }: { points: HistoryPoint[]; current: numb
   );
 }
 
-const TYPE_ICONS: Record<InterviewType, React.ReactNode> = {
-  technical: <Code2 className="h-6 w-6" />,
-  behavioral: <MessagesSquare className="h-6 w-6" />,
-  case: <Puzzle className="h-6 w-6" />,
-  mixed: <Layers className="h-6 w-6" />,
-};
-
 function MockInterviewContent() {
   const { t, locale } = useLanguage();
   const [stage, setStage] = useState<Stage>("setup");
-  const [interviewType, setInterviewType] = useState<InterviewType>("mixed");
 
   // 设置项
   const [companies, setCompanies] = useState<string[]>([]);
@@ -308,9 +314,8 @@ function MockInterviewContent() {
   const [reportChars, setReportChars] = useState(0); // 生成中已接收字符数（进度展示）
   const [reportError, setReportError] = useState(false); // 报告生成失败（可重试）
 
-  // 闯关模式状态
-  const [interviewMode, setInterviewMode] = useState<"single" | "gauntlet">("single");
-  const [totalRounds, setTotalRounds] = useState(3);
+  // 自动真实流程状态：HR 初筛 → 业务深挖 → 跨部门交叉 → 高管终面
+  const totalRounds = 4;
   const [currentRound, setCurrentRound] = useState(1);
   const [currentInterviewer, setCurrentInterviewer] = useState<{
     id: number;
@@ -319,9 +324,10 @@ function MockInterviewContent() {
     personality: string;
     voice?: string;
     speechRate?: number;
+    loudnessRate?: number;
+    pauseMs?: number;
     title?: { zh: string; en: string } | null;
   } | null>(null);
-  const [roundTransition, setRoundTransition] = useState(false);
   const [roundRoleLabel, setRoundRoleLabel] = useState<{ zh: string; en: string } | null>(null);
   // 闯关轮末淘汰：面试官判定表现不达标，面试提前结束（自动进入评估）
   const [eliminated, setEliminated] = useState(false);
@@ -329,9 +335,8 @@ function MockInterviewContent() {
   // 面试官判断整场面试聊完，主动收尾（自动进入评估）
   const [interviewWrapped, setInterviewWrapped] = useState(false);
 
-  // 轮次间"等待焦虑"状态
-  const [waitingNextRound, setWaitingNextRound] = useState(false);
-  const [earlyReady, setEarlyReady] = useState(false);
+  // 自然轮次交接：上一位收尾后整理记录，再由下一位开场
+  const [organizing, setOrganizing] = useState(false);
   // 每轮倒计时（秒）
   const [roundSecondsLeft, setRoundSecondsLeft] = useState<number | null>(null);
 
@@ -370,6 +375,21 @@ function MockInterviewContent() {
   const analyserRef = useRef<AnalyserNode | null>(null);
   const graphReadyRef = useRef(false);
   const waveCanvasRef = useRef<HTMLCanvasElement>(null);
+  const speakingRef = useRef(false);
+  const audioQueueRef = useRef<Array<{
+    text: string;
+    speaker?: string;
+    speechRate?: number;
+    loudnessRate?: number;
+    pauseMs?: number;
+  }>>([]);
+  const audioDrainingRef = useRef(false);
+  const audioWaitersRef = useRef<Array<() => void>>([]);
+  const interruptRef = useRef(false);
+  const timeoutFiredRef = useRef(false);
+  const timeoutEscalateRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const ttsCacheRef = useRef(new Map<string, ArrayBuffer>());
+  const interviewAliveRef = useRef(false);
 
   // 建立音频分析图（固定 audio 元素，只建一次）；失败则音波降级为伪动画
   const ensureAudioGraph = useCallback(() => {
@@ -409,13 +429,12 @@ function MockInterviewContent() {
     return () => window.removeEventListener("pointerdown", activate);
   }, [ensureAudioGraph]);
   const messagesEndRef = useRef<HTMLDivElement>(null);
-  const waitTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
-  const earlyTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
-  const waitResolveRef = useRef<(() => void) | null>(null);
   const roundTimerRef = useRef<ReturnType<typeof setInterval> | null>(null);
-
-  const interviewTypes: InterviewType[] = ["technical", "behavioral", "case", "mixed"];
   const language = locale === "en" ? "en" : "zh";
+
+  useEffect(() => {
+    speakingRef.current = speaking;
+  }, [speaking]);
 
   // 加载公司列表
   useEffect(() => {
@@ -544,7 +563,7 @@ function MockInterviewContent() {
     try {
       const stream = await navigator.mediaDevices.getUserMedia({
         video: { width: 1280, height: 720 },
-        audio: true,
+        audio: { echoCancellation: true },
       });
       streamRef.current = stream;
       if (videoRef.current) {
@@ -575,25 +594,7 @@ function MockInterviewContent() {
     };
   }, []);
 
-  // 结束"等待焦虑"，进入下一轮（计时器到期或用户点击"立即进入"）
-  const finishRoundWait = useCallback(() => {
-    if (waitTimerRef.current) {
-      clearTimeout(waitTimerRef.current);
-      waitTimerRef.current = null;
-    }
-    if (earlyTimerRef.current) {
-      clearTimeout(earlyTimerRef.current);
-      earlyTimerRef.current = null;
-    }
-    setWaitingNextRound(false);
-    setEarlyReady(false);
-    setRoundTransition(true);
-    setTimeout(() => setRoundTransition(false), 2500);
-    waitResolveRef.current?.();
-    waitResolveRef.current = null;
-  }, []);
-
-  // 启动每轮倒计时（8 分钟）
+  // 启动每轮倒计时（分钟）；归零后由 roundSecondsLeft 副作用触发收尾请求
   const startRoundTimer = useCallback((minutes = 8) => {
     if (roundTimerRef.current) clearInterval(roundTimerRef.current);
     setRoundSecondsLeft(minutes * 60);
@@ -610,55 +611,66 @@ function MockInterviewContent() {
 
   // 清理所有压力机制（结束/重开时调用）
   const clearPressure = useCallback(() => {
-    if (waitTimerRef.current) clearTimeout(waitTimerRef.current);
-    if (earlyTimerRef.current) clearTimeout(earlyTimerRef.current);
     if (roundTimerRef.current) clearInterval(roundTimerRef.current);
-    waitTimerRef.current = null;
-    earlyTimerRef.current = null;
+    if (timeoutEscalateRef.current) clearTimeout(timeoutEscalateRef.current);
     roundTimerRef.current = null;
-    waitResolveRef.current?.();
-    waitResolveRef.current = null;
-    setWaitingNextRound(false);
-    setEarlyReady(false);
+    timeoutEscalateRef.current = null;
+    timeoutFiredRef.current = false;
+    audioQueueRef.current = [];
+    interruptRef.current = true;
+    const audio = audioRef.current;
+    audio?.pause();
+    audio?.onended?.call(audio, new Event("ended"));
+    setOrganizing(false);
     setRoundSecondsLeft(null);
     stopAmbience();
   }, []);
 
-  // 播放面试官语音（TTS，支持面试官专属音色与人格语速）
-  // 返回的 Promise 在播放结束（或失败兜底）时 resolve——淘汰流程需要等结束语播完再进评估
-  const playInterviewerAudio = useCallback(
-    async (text: string, speaker?: string, speechRate?: number): Promise<void> => {
-      if (!text.trim()) return;
+  const fetchTtsAudio = useCallback(
+    async (item: { text: string; speaker?: string; speechRate?: number; loudnessRate?: number }) => {
       try {
-        setSpeaking(true);
         const res = await apiFetch("/api/interview/tts", {
           method: "POST",
           headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ text, language, speaker, speechRate }),
+          body: JSON.stringify({
+            text: item.text,
+            language,
+            speaker: item.speaker,
+            speechRate: item.speechRate,
+            loudnessRate: item.loudnessRate,
+          }),
         });
         if (!res.ok) throw new Error("TTS failed");
-        // 后端已代理为同源音频流：转 blob URL 播放（同源，频谱分析不会被浏览器静音）
-        const buf = await res.arrayBuffer();
-        const audio = audioRef.current;
-        if (!buf.byteLength || !audio) {
-          setSpeaking(false);
-          return;
-        }
-        // 音频图只在用户手势中建立（见 pointerdown 监听）；此处仅兜底 resume。
-        // 图未建立时直接播放：音波降级为伪动画，但保证首次自动开场白有声音
+        return await res.arrayBuffer();
+      } catch {
+        return null;
+      }
+    },
+    [language]
+  );
+
+  const playSingleTts = useCallback(
+    async (item: { text: string; speaker?: string; speechRate?: number; loudnessRate?: number }) => {
+      const cacheKey = `${item.speaker || ""}|${item.text}`;
+      let buf: ArrayBuffer | null = ttsCacheRef.current.get(cacheKey) || null;
+      if (buf) ttsCacheRef.current.delete(cacheKey);
+      if (!buf) buf = await fetchTtsAudio(item);
+      if (interruptRef.current || !buf || !buf.byteLength) return;
+      const audio = audioRef.current;
+      if (!audio) return;
+      try {
         if (audioCtxRef.current?.state === "suspended") {
           try {
             await audioCtxRef.current.resume();
           } catch {
-            // 无用户手势时 resume 被拒绝：忽略，保持直接播放
           }
         }
+        if (interruptRef.current) return;
         audio.pause();
         const blobUrl = URL.createObjectURL(new Blob([buf], { type: "audio/mpeg" }));
         await new Promise<void>((resolve) => {
           const done = () => {
             URL.revokeObjectURL(blobUrl);
-            setSpeaking(false);
             resolve();
           };
           audio.src = blobUrl;
@@ -667,10 +679,69 @@ function MockInterviewContent() {
           audio.play().catch(done); // 自动播放被拒等异常：直接兜底结束
         });
       } catch {
-        setSpeaking(false);
       }
     },
-    [language]
+    [fetchTtsAudio]
+  );
+
+  const drainAudioQueue = useCallback(async () => {
+    if (audioDrainingRef.current) return;
+    audioDrainingRef.current = true;
+    try {
+      while (audioQueueRef.current.length > 0 && !interruptRef.current) {
+        const item = audioQueueRef.current.shift();
+        if (!item) break;
+        const next = audioQueueRef.current[0];
+        if (next) {
+          const cacheKey = `${next.speaker || ""}|${next.text}`;
+          void fetchTtsAudio(next).then((audio) => {
+            if (audio && ttsCacheRef.current.size < 4) {
+              ttsCacheRef.current.set(cacheKey, audio);
+            }
+          }).catch(() => {});
+        }
+        setSpeaking(true);
+        await playSingleTts(item);
+        if (!interruptRef.current && item.pauseMs) await sleep(item.pauseMs);
+      }
+    } finally {
+      audioDrainingRef.current = false;
+      setSpeaking(false);
+      const waiters = audioWaitersRef.current.splice(0);
+      waiters.forEach((resolve) => resolve());
+    }
+  }, [playSingleTts, fetchTtsAudio]);
+
+  const waitForAudioDrain = useCallback(async () => {
+    while (audioDrainingRef.current && !interruptRef.current) {
+      await new Promise<void>((resolve) => {
+        audioWaitersRef.current.push(resolve);
+      });
+    }
+  }, []);
+
+  const interruptInterviewer = useCallback(() => {
+    interruptRef.current = true;
+    audioQueueRef.current = [];
+    const audio = audioRef.current;
+    if (audio) {
+      audio.pause();
+      audio.onended?.call(audio, new Event("ended"));
+    }
+  }, []);
+
+  const enqueueInterviewerAudio = useCallback(
+    (text: string, speaker?: string, speechRate?: number, loudnessRate?: number, pauseMs?: number) => {
+      if (!text.trim()) return;
+      interruptRef.current = false;
+      audioQueueRef.current.push({ text, speaker, speechRate, loudnessRate, pauseMs });
+      if (audioDrainingRef.current) {
+        setTimeout(() => void drainAudioQueue(), 0);
+      } else {
+        void drainAudioQueue();
+      }
+    },
+    [drainAudioQueue]
   );
 
   // 流式请求面试官（复用逻辑：开始面试 / 提交回答）
@@ -695,15 +766,16 @@ function MockInterviewContent() {
       let eliminatedInfo: { round: number } | null = null; // 淘汰信息
       let roundEnded = false; // 面试官主动结束本轮（衔接下一位）
       let wrappedUp = false; // 面试官判断整场面试结束（进入评估）
-      let holding = false; // 等待焦虑期间：内容后台累积不显示
+      let speechPending = "";
 
       // 先插入一条空的面试官消息用于流式填充
       setMessages((prev) => [...prev, { role: "interviewer", content: "" }]);
       setStreaming(true);
 
       while (true) {
+        if (!interviewAliveRef.current) break;
         const { done, value } = await reader.read();
-        if (done) break;
+        if (done || !interviewAliveRef.current) break;
         buffer += decoder.decode(value, { stream: true });
         const lines = buffer.split("\n\n");
         buffer = lines.pop() || "";
@@ -736,34 +808,26 @@ function MockInterviewContent() {
             if (data.roundStart && data.interviewer) {
               setRoundRoleLabel(data.roundRoleLabel || null);
               startRoundTimer(typeof data.timeLimit === "number" ? data.timeLimit : 8);
-              if (data.round > 1) {
-                // 轮次切换：进入"等待焦虑"——内容后台累积，随机 8-16 秒等待
-                setCurrentRound(data.round);
-                holding = true;
-                setWaitingNextRound(true);
-                setEarlyReady(false);
-                playNotify();
-                const waitMs = 8000 + Math.random() * 8000;
-                // 35% 概率面试官"提前准备好"
-                if (Math.random() < 0.35) {
-                  earlyTimerRef.current = setTimeout(() => {
-                    setEarlyReady(true);
-                    playNotify();
-                  }, 5000);
-                }
-                waitTimerRef.current = setTimeout(() => finishRoundWait(), waitMs);
-              } else {
-                setCurrentRound(1);
-              }
+              if (timeoutEscalateRef.current) clearTimeout(timeoutEscalateRef.current);
+              timeoutFiredRef.current = false;
+              setCurrentRound(data.round || 1);
+              setOrganizing(false);
             }
             if (data.content) {
               fullContent += data.content;
-              if (!holding) {
-                setMessages((prev) => {
-                  const next = [...prev];
-                  next[next.length - 1] = { role: "interviewer", content: fullContent };
-                  return next;
-                });
+              setMessages((prev) => {
+                const next = [...prev];
+                next[next.length - 1] = { role: "interviewer", content: fullContent };
+                return next;
+              });
+              const { complete, rest } = splitSpeechSentences(speechPending + data.content);
+              speechPending = rest;
+              const speaker = (activeInterviewer ?? currentInterviewer)?.voice;
+              const speechRate = (activeInterviewer ?? currentInterviewer)?.speechRate;
+              const loudnessRate = (activeInterviewer ?? currentInterviewer)?.loudnessRate;
+              const pauseMs = (activeInterviewer ?? currentInterviewer)?.pauseMs;
+              for (const sentence of complete) {
+                enqueueInterviewerAudio(sentence, speaker, speechRate, loudnessRate, pauseMs);
               }
             }
           } catch {
@@ -771,21 +835,24 @@ function MockInterviewContent() {
           }
         }
       }
-      // 等待焦虑中：内容已收齐，挂起直到等待结束再一次性展示
-      if (holding) {
-        await new Promise<void>((resolve) => {
-          waitResolveRef.current = resolve;
-        });
-        setMessages((prev) => {
-          const next = [...prev];
-          next[next.length - 1] = { role: "interviewer", content: fullContent };
-          return next;
-        });
+      if (!interviewAliveRef.current) {
+        setStreaming(false);
+        return { fullContent: "", newSessionId: null, activeInterviewer: null, eliminatedInfo: null, roundEnded: false, wrappedUp: false };
+      }
+      const tail = speechPending.trim();
+      if (tail) {
+        enqueueInterviewerAudio(
+          tail,
+          (activeInterviewer ?? currentInterviewer)?.voice,
+          (activeInterviewer ?? currentInterviewer)?.speechRate,
+          (activeInterviewer ?? currentInterviewer)?.loudnessRate,
+          (activeInterviewer ?? currentInterviewer)?.pauseMs
+        );
       }
       setStreaming(false);
       return { fullContent, newSessionId, activeInterviewer, eliminatedInfo, roundEnded, wrappedUp };
     },
-    [language, startRoundTimer, finishRoundWait]
+    [language, startRoundTimer, enqueueInterviewerAudio, currentInterviewer]
   );
 
   // 开始面试
@@ -796,6 +863,15 @@ function MockInterviewContent() {
       alert(t("mockInterview.companyRequired"));
       return;
     }
+    // 进入面试间前先申请麦克风权限，被拒绝则留在设置页
+    try {
+      const preflightStream = await navigator.mediaDevices.getUserMedia({ audio: { echoCancellation: true }, video: false });
+      preflightStream.getTracks().forEach((track) => track.stop());
+    } catch (err) {
+      handleMicError(err);
+      return;
+    }
+    interviewAliveRef.current = true;
     setMessages([]);
     setSummary("");
     setOverallScore(null);
@@ -803,23 +879,27 @@ function MockInterviewContent() {
     setCurrentRound(1);
     setCurrentInterviewer(null);
     setStage("interview");
-    startCamera();
+    await startCamera();
+    setListening(true);
     startAmbience();
     try {
-      const { fullContent, activeInterviewer } = await streamInterviewer({
-        interviewType,
+      await streamInterviewer({
         jobDescription: jd || undefined,
         jobId: selectedJobId || undefined,
         resumeId: selectedResumeId || undefined,
-        mode: interviewMode,
-        totalRounds: interviewMode === "gauntlet" ? totalRounds : 1,
+        mode: "gauntlet",
+        totalRounds,
         targetCompany,
       });
-      playInterviewerAudio(fullContent, activeInterviewer?.voice, activeInterviewer?.speechRate);
+      await waitForAudioDrain();
     } catch {
-      alert(t("mockInterview.startFailed"));
-      setStage("setup");
-      stopCamera();
+      if (interviewAliveRef.current) {
+        alert(t("mockInterview.startFailed"));
+        setStage("setup");
+        setListening(false);
+        interruptInterviewer();
+        stopCamera();
+      }
     }
   };
 
@@ -828,7 +908,7 @@ function MockInterviewContent() {
     let stream = streamRef.current;
     const hasLiveAudio = !!stream?.getAudioTracks().some((tr) => tr.readyState === "live");
     if (!stream || !hasLiveAudio) {
-      const audioStream = await navigator.mediaDevices.getUserMedia({ audio: true });
+      const audioStream = await navigator.mediaDevices.getUserMedia({ audio: { echoCancellation: true } });
       if (stream && stream.getVideoTracks().some((tr) => tr.readyState === "live")) {
         // 保留摄像头视频轨，替换音轨
         stream.getAudioTracks().forEach((tr) => { tr.stop(); stream!.removeTrack(tr); });
@@ -883,10 +963,10 @@ function MockInterviewContent() {
   };
 
   // 免提模式：VAD 语音活动检测——说话自动录音，停顿 1.2s 自动识别提交；
-  // 面试官说话/思考/识别期间自动暂停监听，结束后自动恢复
+  // 面试官思考/识别期间暂停监听；说话期间保持监听，支持候选人打断
   useEffect(() => {
     if (!listening || stage !== "interview") return;
-    if (speaking || streaming || recognizing) return;
+    if (streaming || recognizing) return;
     let cancelled = false;
     let localCtx: AudioContext | null = null;
     let vadSource: MediaStreamAudioSourceNode | null = null;
@@ -920,6 +1000,7 @@ function MockInterviewContent() {
         const data = new Uint8Array(analyser.fftSize);
         let hasVoice = false;
         let silenceStart: number | null = null;
+        let voiceOnset: number | null = null;
 
         const loop = () => {
           if (cancelled) return;
@@ -935,6 +1016,16 @@ function MockInterviewContent() {
             // 检测到语音：开始/继续录音
             hasVoice = true;
             silenceStart = null;
+            if (speakingRef.current) {
+              if (voiceOnset === null) voiceOnset = now;
+              if (now - voiceOnset > 400) {
+                // 候选人连续发声超过 400ms：打断面试官并进入正常录音
+                voiceOnset = null;
+                interruptInterviewer();
+              }
+            } else {
+              voiceOnset = null;
+            }
             setVoiceActive(true);
             if (!recorder || recorder.state === "inactive") {
               audioChunksRef.current = [];
@@ -961,6 +1052,7 @@ function MockInterviewContent() {
               }
             }
           } else {
+            voiceOnset = null;
             setVoiceActive(false);
             if (hasVoice && recorder && recorder.state === "recording") {
               if (silenceStart === null) silenceStart = now;
@@ -1010,17 +1102,28 @@ function MockInterviewContent() {
       setRecording(false);
     };
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [listening, stage, speaking, streaming, recognizing]);
+  }, [listening, stage, streaming, recognizing, interruptInterviewer]);
+
+  const switchToNextInterviewer = useCallback(async () => {
+    setOrganizing(true);
+    await sleep(2500 + Math.random() * 1500);
+    setOrganizing(false);
+    const next = await streamInterviewer({ sessionId, switchNext: true });
+    await waitForAudioDrain();
+    return next;
+  }, [sessionId, streamInterviewer, waitForAudioDrain]);
 
   // 提交回答
   const submitAnswer = async (text: string) => {
     if (!text.trim() || streaming) return;
+    if (timeoutEscalateRef.current) clearTimeout(timeoutEscalateRef.current);
+    timeoutFiredRef.current = false;
     setMessages((prev) => [...prev, { role: "candidate", content: text }]);
     try {
-      const { fullContent, activeInterviewer, eliminatedInfo, roundEnded, wrappedUp } = await streamInterviewer({ sessionId, answer: text });
+      const { eliminatedInfo, roundEnded, wrappedUp } = await streamInterviewer({ sessionId, answer: text });
+      await waitForAudioDrain();
       if (eliminatedInfo) {
-        // 淘汰：面试官单方面终止面试——等结束语播完 → 停设备 → 覆盖层 → 自动进入评估
-        await playInterviewerAudio(fullContent, (activeInterviewer ?? currentInterviewer)?.voice, (activeInterviewer ?? currentInterviewer)?.speechRate);
+        // 淘汰：面试官单方面终止面试——结束语播完后进入评估
         setEliminated(true);
         setEliminatedRound(eliminatedInfo.round);
         setListening(false);
@@ -1030,8 +1133,7 @@ function MockInterviewContent() {
         return;
       }
       if (wrappedUp) {
-        // 整场自然结束：面试官判断聊完了——等收尾语播完 → 停设备 → 覆盖层 → 自动进入评估
-        await playInterviewerAudio(fullContent, (activeInterviewer ?? currentInterviewer)?.voice, (activeInterviewer ?? currentInterviewer)?.speechRate);
+        // 整场自然结束：收尾语播完后进入评估
         setInterviewWrapped(true);
         setListening(false);
         stopCamera();
@@ -1039,11 +1141,9 @@ function MockInterviewContent() {
         await generateSummary();
         return;
       }
-      playInterviewerAudio(fullContent, (activeInterviewer ?? currentInterviewer)?.voice, (activeInterviewer ?? currentInterviewer)?.speechRate);
       if (roundEnded) {
-        // 面试官主动结束本轮：自动请下一位开场（switchNext 响应带 roundStart，触发 8-16s 轮间等待）
-        const next = await streamInterviewer({ sessionId, switchNext: true });
-        playInterviewerAudio(next.fullContent, (next.activeInterviewer ?? currentInterviewer)?.voice, (next.activeInterviewer ?? currentInterviewer)?.speechRate);
+        // 面试官主动结束本轮：自然停顿后由下一位开场
+        await switchToNextInterviewer();
       }
     } catch {
       alert(t("mockInterview.sendFailed"));
@@ -1109,16 +1209,69 @@ function MockInterviewContent() {
     }
   };
 
+  // 阶段倒计时归零：通知后端收尾；若 30 秒仍未收到收尾标记，前端兜底进入评估
+  const handleStageTimeout = useCallback(async () => {
+    if (!sessionId || ending || timeoutFiredRef.current) return;
+    timeoutFiredRef.current = true;
+    try {
+      const { eliminatedInfo, roundEnded, wrappedUp } = await streamInterviewer({ sessionId, timeout: true });
+      await waitForAudioDrain();
+      if (eliminatedInfo) {
+        setEliminated(true);
+        setEliminatedRound(eliminatedInfo.round);
+        setListening(false);
+        stopCamera();
+        clearPressure();
+        await generateSummary(eliminatedInfo.round);
+        return;
+      }
+      if (wrappedUp) {
+        setInterviewWrapped(true);
+        setListening(false);
+        stopCamera();
+        clearPressure();
+        await generateSummary();
+        return;
+      }
+      if (roundEnded) {
+        await switchToNextInterviewer();
+        return;
+      }
+      timeoutEscalateRef.current = setTimeout(() => {
+        timeoutEscalateRef.current = null;
+        void generateSummary();
+      }, 30000);
+    } catch {
+      timeoutFiredRef.current = false;
+    }
+  }, [sessionId, ending, streamInterviewer, waitForAudioDrain, switchToNextInterviewer, generateSummary, clearPressure, stopCamera]);
+
+  useEffect(() => {
+    if (roundSecondsLeft !== 0 || !sessionId || stage !== "interview" || streaming || ending || organizing) return;
+    const timer = setTimeout(() => {
+      void handleStageTimeout();
+    }, 600);
+    return () => clearTimeout(timer);
+  }, [roundSecondsLeft, sessionId, stage, streaming, ending, organizing, handleStageTimeout]);
+
   // 结束面试
   const handleEnd = async () => {
-    if (!sessionId || ending) return;
+    if (ending) return;
     if (!confirm(t("mockInterview.endConfirm"))) return;
+    interviewAliveRef.current = false;
     setEnding(true);
     setListening(false);
     stopCamera();
     clearPressure();
     audioRef.current?.pause();
     setSpeaking(false);
+
+    // 会话尚未创建（开场流还没返回 sessionId）：无需生成总结，直接回设置页
+    if (!sessionId) {
+      setEnding(false);
+      handleRestart();
+      return;
+    }
 
     // 全程未作答：不生成 AI 评估，标记会话结束后直接返回设置页
     const hasAnswer = messages.some((m) => m.role === "candidate" && m.content.trim());
@@ -1165,6 +1318,9 @@ function MockInterviewContent() {
   };
 
   const handleRestart = () => {
+    interviewAliveRef.current = false;
+    setEnding(false);
+    setStreaming(false);
     setStage("setup");
     setMessages([]);
     setSummary("");
@@ -1182,7 +1338,7 @@ function MockInterviewContent() {
     setSelectedResumeId(null);
     setCurrentRound(1);
     setCurrentInterviewer(null);
-    setRoundTransition(false);
+    setOrganizing(false);
     setRoundRoleLabel(null);
     setEliminated(false);
     setEliminatedRound(null);
@@ -1241,89 +1397,6 @@ function MockInterviewContent() {
                 <ModalDescription>{t("mockInterview.subtitle")}</ModalDescription>
               </ModalHeader>
               <ModalBody className="px-6 py-4 flex-1 overflow-y-auto min-h-0">
-
-                {/* 面试类型 */}
-                <div className="mb-6">
-                  <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-3">
-                    {t("mockInterview.interviewType")}
-                  </label>
-                  <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
-                    {interviewTypes.map((type) => (
-                      <button
-                        key={type}
-                        onClick={() => setInterviewType(type)}
-                        className={`flex flex-col items-center gap-2 p-4 rounded-2xl border-2 transition-all ${
-                          interviewType === type
-                            ? "border-zinc-900 dark:border-white bg-zinc-50 dark:bg-zinc-800 text-zinc-900 dark:text-white"
-                            : "border-gray-200 dark:border-zinc-700 text-gray-600 dark:text-gray-400 hover:border-zinc-400 dark:hover:border-zinc-500"
-                        }`}
-                      >
-                        {TYPE_ICONS[type]}
-                        <span className="text-sm font-medium">{t(`mockInterview.type${type.charAt(0).toUpperCase() + type.slice(1)}`)}</span>
-                        <span className="text-xs text-center opacity-70">{t(`mockInterview.type${type.charAt(0).toUpperCase() + type.slice(1)}Desc`)}</span>
-                      </button>
-                    ))}
-                  </div>
-                </div>
-
-                {/* 面试模式 */}
-                <div className="mb-6">
-                  <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-3">
-                    {t("mockInterview.interviewMode")}
-                  </label>
-                  <div className="grid grid-cols-2 gap-3">
-                    <button
-                      onClick={() => setInterviewMode("single")}
-                      className={`flex flex-col items-center gap-2 p-4 rounded-2xl border-2 transition-all ${
-                        interviewMode === "single"
-                          ? "border-zinc-900 dark:border-white bg-zinc-50 dark:bg-zinc-800 text-zinc-900 dark:text-white"
-                          : "border-gray-200 dark:border-zinc-700 text-gray-600 dark:text-gray-400 hover:border-zinc-400 dark:hover:border-zinc-500"
-                      }`}
-                    >
-                      <svg className="w-6 h-6" fill="none" stroke="currentColor" strokeWidth={1.8} viewBox="0 0 24 24">
-                        <path strokeLinecap="round" strokeLinejoin="round" d="M16 7a4 4 0 11-8 0 4 4 0 018 0zM12 14a7 7 0 00-7 7h14a7 7 0 00-7-7z" />
-                      </svg>
-                      <span className="text-sm font-medium">{t("mockInterview.modeSingle")}</span>
-                      <span className="text-xs text-center opacity-70">{t("mockInterview.modeSingleDesc")}</span>
-                    </button>
-                    <button
-                      onClick={() => setInterviewMode("gauntlet")}
-                      className={`flex flex-col items-center gap-2 p-4 rounded-2xl border-2 transition-all ${
-                        interviewMode === "gauntlet"
-                          ? "border-zinc-900 dark:border-white bg-zinc-50 dark:bg-zinc-800 text-zinc-900 dark:text-white"
-                          : "border-gray-200 dark:border-zinc-700 text-gray-600 dark:text-gray-400 hover:border-zinc-400 dark:hover:border-zinc-500"
-                      }`}
-                    >
-                      <svg className="w-6 h-6" fill="none" stroke="currentColor" strokeWidth={1.8} viewBox="0 0 24 24">
-                        <path strokeLinecap="round" strokeLinejoin="round" d="M17 20h5v-2a3 3 0 00-5.356-1.857M17 20H7m10 0v-2c0-.656-.126-1.283-.356-1.857M7 20H2v-2a3 3 0 015.356-1.857M7 20v-2c0-.656.126-1.283.356-1.857m0 0a5.002 5.002 0 019.288 0M15 7a3 3 0 11-6 0 3 3 0 016 0zm6 3a2 2 0 11-4 0 2 2 0 014 0zM7 10a2 2 0 11-4 0 2 2 0 014 0z" />
-                      </svg>
-                      <span className="text-sm font-medium">{t("mockInterview.modeGauntlet")}</span>
-                      <span className="text-xs text-center opacity-70">{t("mockInterview.modeGauntletDesc")}</span>
-                    </button>
-                  </div>
-
-                  {/* 闯关轮数 */}
-                  {interviewMode === "gauntlet" && (
-                    <div className="mt-4 flex items-center gap-3">
-                      <span className="text-sm text-gray-600 dark:text-gray-400">{t("mockInterview.rounds")}:</span>
-                      <div className="flex gap-2">
-                        {[3, 5, 7].map((n) => (
-                          <button
-                            key={n}
-                            onClick={() => setTotalRounds(n)}
-                            className={`px-4 py-2 rounded-xl text-sm font-medium transition-all ${
-                              totalRounds === n
-                                ? "bg-zinc-900 dark:bg-white text-white dark:text-zinc-900 shadow-md"
-                                : "bg-gray-100 dark:bg-zinc-800 text-gray-600 dark:text-gray-400 hover:bg-gray-200 dark:hover:bg-zinc-700"
-                            }`}
-                          >
-                            {n} {t("mockInterview.roundUnit")}
-                          </button>
-                        ))}
-                      </div>
-                    </div>
-                  )}
-                </div>
 
                 {/* 公司/岗位筛选 */}
                 <div className="grid md:grid-cols-2 gap-4 mb-6">
@@ -1442,6 +1515,32 @@ function MockInterviewContent() {
 
               </ModalBody>
               <ModalFooter className="px-6 pb-6 pt-2">
+                {micError && (
+                  <div className="w-full mb-3 flex flex-col items-center gap-1 px-4 text-center">
+                    <p className="text-xs text-red-400">
+                      {micErrorKind === "denied"
+                        ? t("mockInterview.micDenied")
+                        : micErrorKind === "nodevice"
+                          ? t("mockInterview.micNoDevice")
+                          : micErrorKind === "busy"
+                            ? t("mockInterview.micBusy")
+                            : t("mockInterview.micError")}
+                    </p>
+                    {micErrorKind === "denied" && (
+                      <p className="text-zinc-500 text-[11px] max-w-md leading-relaxed">
+                        {t("mockInterview.micDeniedGuide")}
+                      </p>
+                    )}
+                    {micError && inIframe && (
+                      <button
+                        onClick={() => window.open(window.location.href, "_blank")}
+                        className="mt-1 px-3 py-1 rounded-full bg-zinc-100 dark:bg-zinc-800 text-zinc-700 dark:text-zinc-200 text-[11px] transition-colors"
+                      >
+                        {t("mockInterview.openInNewTab")}
+                      </button>
+                    )}
+                  </div>
+                )}
                 <Button
                   onClick={handleStart}
                   disabled={streaming}
@@ -1450,7 +1549,7 @@ function MockInterviewContent() {
                   {streaming ? (
                     <><Loader2 className="h-5 w-5 mr-2 animate-spin" />{t("mockInterview.starting")}</>
                   ) : (
-                    <><Video className="h-5 w-5 mr-2" />{t("mockInterview.start")}</>
+                    <><Mic className="h-5 w-5 mr-2" />{t("mockInterview.start")}</>
                   )}
                 </Button>
               </ModalFooter>
@@ -1462,13 +1561,17 @@ function MockInterviewContent() {
 
   // ========== 面试进行阶段（视频面试间） ==========
   if (stage === "interview") {
-    const statusText = speaking
-      ? t("mockInterview.speaking")
-      : streaming
-        ? t("mockInterview.thinking")
-        : recognizing
-          ? t("mockInterview.recognizing")
-          : t("mockInterview.listening");
+    const statusText = organizing
+      ? t("mockInterview.organizing")
+      : speaking
+        ? t("mockInterview.speaking")
+        : streaming
+          ? t("mockInterview.thinking")
+          : recognizing
+            ? t("mockInterview.recognizing")
+            : listening
+              ? t("mockInterview.micAlwaysOn")
+              : t("mockInterview.tapToSpeak");
     return (
       <div className="min-h-screen bg-zinc-950 flex flex-col">
           {/* TTS 播放元素（固定元素，供音波频谱分析） */}
@@ -1519,9 +1622,8 @@ function MockInterviewContent() {
                 </p>
               </div>
             </div>
-            {/* 闯关模式：轮次进度 */}
-            {interviewMode === "gauntlet" && (
-              <div className="hidden md:flex items-center gap-2">
+            {/* 自动流程阶段进度 */}
+            <div className="hidden md:flex items-center gap-2">
                 {Array.from({ length: totalRounds }).map((_, i) => (
                   <div
                     key={i}
@@ -1548,10 +1650,9 @@ function MockInterviewContent() {
                     {`${Math.floor(roundSecondsLeft / 60).toString().padStart(2, "0")}:${(roundSecondsLeft % 60).toString().padStart(2, "0")}`}
                   </span>
                 )}
-              </div>
-            )}
+            </div>
             <div className="flex items-center gap-2">
-              {interviewMode === "gauntlet" && roundSecondsLeft !== null && (
+              {roundSecondsLeft !== null && (
                 <span className={`md:hidden flex items-center gap-1 text-xs font-mono tabular-nums ${roundSecondsLeft < 60 ? "text-red-400 animate-pulse" : "text-zinc-400"}`}>
                   <Timer className="h-3.5 w-3.5" />
                   {`${Math.floor(roundSecondsLeft / 60)}:${String(roundSecondsLeft % 60).padStart(2, "0")}`}
@@ -1600,42 +1701,6 @@ function MockInterviewContent() {
                   : t("mockInterview.interviewer")}
               </div>
 
-              {/* 轮次切换覆盖层 */}
-              {roundTransition && currentInterviewer && (
-                <div className="absolute inset-0 z-10 flex flex-col items-center justify-center bg-zinc-950/95 backdrop-blur animate-in fade-in duration-300">
-                  <p className="text-[#C46A4A] text-xs font-medium tracking-widest uppercase mb-2">
-                    {t("mockInterview.roundProgress").replace("{current}", String(currentRound)).replace("{total}", String(totalRounds))}
-                  </p>
-                  <p className="text-zinc-500 text-xs mb-4">{t("mockInterview.newInterviewer")}</p>
-                  <div className="h-16 w-16 rounded-full bg-gradient-to-br from-[#C46A4A] to-[#B5BEB0] flex items-center justify-center mb-3">
-                    <span className="text-white text-2xl font-light">{currentInterviewer.name.charAt(0).toUpperCase()}</span>
-                  </div>
-                  <p className="text-white text-xl font-medium">{currentInterviewer.name}</p>
-                  <p className="text-zinc-400 text-sm">
-                    {currentInterviewer.title ? `${language.startsWith("zh") ? currentInterviewer.title.zh : currentInterviewer.title.en} · ` : ""}{currentInterviewer.company}
-                  </p>
-                </div>
-              )}
-
-              {/* 等待焦虑覆盖层：面试官正在撰写评价 */}
-              {waitingNextRound && (
-                <div className="absolute inset-0 z-20 flex flex-col items-center justify-center bg-zinc-950/95 backdrop-blur animate-in fade-in duration-500">
-                  <Loader2 className="h-10 w-10 text-[#C46A4A] animate-spin mb-5" />
-                  <p className="text-zinc-300 text-sm mb-2">{t("mockInterview.writingEvaluation")}</p>
-                  <p className="text-zinc-600 text-xs mb-8">
-                    {t("mockInterview.roundProgress").replace("{current}", String(currentRound - 1)).replace("{total}", String(totalRounds))}
-                  </p>
-                  {earlyReady && (
-                    <button
-                      onClick={finishRoundWait}
-                      className="flex items-center gap-2 px-5 py-2.5 rounded-full bg-[#C46A4A] text-white text-sm font-medium animate-pulse hover:bg-[#b05a3c] transition-colors"
-                    >
-                      <Zap className="h-4 w-4" />
-                      {t("mockInterview.earlyReady")}
-                    </button>
-                  )}
-                </div>
-              )}
             </div>
 
             {/* 候选人画面（摄像头） */}

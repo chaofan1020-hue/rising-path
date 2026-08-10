@@ -12,7 +12,7 @@ export default function RegistrationSuccess({ onContinue }: { onContinue: () => 
       </div>
       <div className="pointer-events-none absolute inset-x-0 bottom-[17%] z-10 px-6 text-center text-white">
         <h2 className="text-3xl font-bold">注册成功</h2>
-        <p className="mt-2 text-sm text-white/65">欢迎加入 Rising Path</p>
+        <p className="mt-2 text-sm text-white/65">欢迎加入 Liorvix</p>
       </div>
       <div className="absolute inset-x-0 bottom-8 z-10 flex justify-center">
         <button
