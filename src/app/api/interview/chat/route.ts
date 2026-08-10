@@ -1,10 +1,11 @@
 import { NextRequest } from 'next/server';
-import { LLMClient, Config, HeaderUtils } from 'coze-coding-dev-sdk';
 import { getAuthContext, unauthorizedResponse } from '@/lib/auth-server';
+import { createTextProviderClient } from '@/lib/ai/text-provider';
 import { buildDNABlock } from '@/lib/company-dna';
 import { getCompanyDNA } from '@/lib/company-dna-service';
 import { buildSegmentBlock, type UserSegmentation } from '@/lib/user-segmentation';
 import { buildRegionBlock } from '@/lib/region-dna';
+import { requireConfirmedResume } from '@/lib/resume-access';
 
 // 分层标尺块：候选人分层（评估标尺）+ 目标地区招聘逻辑（地区为分层第一权重）
 function buildSegmentationBlock(seg: UserSegmentation | null | undefined, language: string): string {
@@ -229,6 +230,18 @@ export async function POST(request: NextRequest) {
         return new Response(JSON.stringify({ error: '缺少面试类型' }), { status: 400 });
       }
 
+      if (!resumeId) {
+        return new Response(JSON.stringify({ error: '请先选择已确认求职画像的简历' }), { status: 409 });
+      }
+
+      const resumeAccess = await requireConfirmedResume(client, resumeId, auth.user.id);
+      if (!resumeAccess.ok) {
+        return new Response(JSON.stringify({ error: resumeAccess.error }), { status: resumeAccess.status });
+      }
+      const confirmedResume = resumeAccess.resume;
+      const confirmedResumeId = confirmedResume.id;
+      const confirmedProfileVersion = Number(confirmedResume.profile_version);
+
       let jdText = jobDescription || '';
       let selectedJobId: number | null = null;
       let jobCompany = '';
@@ -256,19 +269,13 @@ export async function POST(request: NextRequest) {
 
       let resumeContext = '';
       let resumeSegmentation: UserSegmentation | null = null;
-      if (resumeId) {
-        const { data: resume } = await client
-          .from('resumes')
-          .select('parsed_content, file_name, segmentation')
-          .eq('id', resumeId)
-          .eq('user_id', auth.user.id)
-          .single();
-        if (resume?.parsed_content) {
+      {
+        if (confirmedResume.parsed_content) {
           resumeContext = language === 'en'
-            ? `\n\nCandidate's resume:\n${resume.parsed_content}\n\nUse this resume to ask personalized questions about the candidate's specific experiences and projects.`
-            : `\n\n候选人简历：\n${resume.parsed_content}\n\n请结合简历中候选人的具体经历和项目进行针对性提问。`;
+            ? `\n\nCandidate's resume:\n${confirmedResume.parsed_content}\n\nUse this resume to ask personalized questions about the candidate's specific experiences and projects.`
+            : `\n\n候选人简历：\n${confirmedResume.parsed_content}\n\n请结合简历中候选人的具体经历和项目进行针对性提问。`;
         }
-        resumeSegmentation = (resume?.segmentation as UserSegmentation | null) ?? null;
+        resumeSegmentation = (confirmedResume.segmentation as UserSegmentation | null) ?? null;
       }
 
       // 闯关模式：按剧本角色抽取 N 位面试官；单面模式：随机 1 位
@@ -307,7 +314,8 @@ export async function POST(request: NextRequest) {
           total_rounds: rounds,
           current_round: 1,
           interviewer_ids: interviewers.map((i) => i.id),
-          resume_id: resumeId ? Number(resumeId) : null,
+          resume_id: confirmedResumeId,
+          resume_profile_version: confirmedProfileVersion,
         })
         .select('id')
         .single();
@@ -317,7 +325,7 @@ export async function POST(request: NextRequest) {
       }
 
       const currentSessionId = session.id;
-      const llmClient = new LLMClient(new Config(), HeaderUtils.extractForwardHeaders(request.headers));
+      const llmClient = createTextProviderClient({ requestHeaders: request.headers });
       const encoder = new TextEncoder();
       let fullContent = '';
 
@@ -412,7 +420,7 @@ export async function POST(request: NextRequest) {
     }
 
     const script = sessionMode === 'gauntlet' ? GAUNTLET_SCRIPTS[rounds] ?? null : null;
-    const llmClient = new LLMClient(new Config(), HeaderUtils.extractForwardHeaders(request.headers));
+    const llmClient = createTextProviderClient({ requestHeaders: request.headers });
 
     // 面试官自主掌控节奏：淘汰、轮末收尾、整场结束全部由面试官（LLM）通过
     // 标记协议决定——不再有机械题数切换，也没有独立于面试官人格的淘汰裁判
@@ -429,11 +437,25 @@ export async function POST(request: NextRequest) {
     const dnaBlock = dnaResult ? buildDNABlock(dnaResult.dna) : '';
     // 候选人分层标尺：从会话关联简历读取（与新会话路径保持同一评估标尺）
     let resumeSegmentation: UserSegmentation | null = null;
-    if (session.resume_id) {
+    if (session.resume_id && session.resume_profile_version) {
+      const { data: profileVersion } = await client
+        .from('resume_profile_versions')
+        .select('segmentation')
+        .eq('resume_id', session.resume_id)
+        .eq('user_id', auth.user.id)
+        .eq('version', session.resume_profile_version)
+        .single();
+      if (!profileVersion) {
+        return new Response(JSON.stringify({ error: '面试使用的画像版本不存在，无法继续' }), { status: 409 });
+      }
+      resumeSegmentation = (profileVersion.segmentation as UserSegmentation | null) ?? null;
+    } else if (session.resume_id) {
+      // Legacy sessions created before profile version snapshots remain readable.
       const { data: resume } = await client
         .from('resumes')
         .select('segmentation')
         .eq('id', session.resume_id)
+        .eq('user_id', auth.user.id)
         .single();
       resumeSegmentation = (resume?.segmentation as UserSegmentation | null) ?? null;
     }

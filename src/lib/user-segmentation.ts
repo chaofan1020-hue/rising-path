@@ -3,91 +3,29 @@
 // 叠加经历质量与求职地区（地区为分层第一权重，详见 region-dna.ts）
 // 输出差异化评估标尺：ATS 策略 + 面试官评估标尺
 
-import { RegionKey, resolveRegionKey } from './region-dna';
+import { resolveRegionKey, type RegionKey } from './region-dna';
+import type {
+  CareerStage,
+  MajorMatch,
+  ResumeProfile,
+  SchoolTier,
+  SegmentationOverrides,
+  UserSegmentation,
+} from '@/lib/resume-types';
+
+export type {
+  CareerStage,
+  EducationEntry,
+  ExperienceEntry,
+  MajorMatch,
+  ProjectEntry,
+  ResumeProfile,
+  SchoolTier,
+  SegmentationOverrides,
+  UserSegmentation,
+} from '@/lib/resume-types';
 
 // ============ 类型定义 ============
-
-export type CareerStage = 'junior' | 'senior' | 'experienced' | 'returning_intern';
-export type SchoolTier = 1 | 2 | 3;
-export type MajorMatch = 'aligned' | 'related' | 'unrelated';
-
-export interface EducationEntry {
-  school: string;
-  degree?: string;        // 本科/硕士/博士/MBA
-  major?: string;
-  startYear?: number;
-  endYear?: number;       // 毕业年份（推断年级的关键）
-  gpa?: string;
-  qsEstimate?: number;    // LLM 兜底给出的 QS 大致排名（内置表未命中时）
-  isTargetNote?: string;  // 补充说明
-}
-
-export interface ExperienceEntry {
-  company: string;
-  role: string;
-  startDate?: string;
-  endDate?: string;
-  months?: number;        // 时长（月）
-  isInternship?: boolean;
-  convertedToFulltime?: boolean;
-  level?: string;         // 职级（社招关键）
-  highlights?: string[];
-}
-
-export interface ProjectEntry {
-  name: string;
-  role?: string;
-  techStack?: string[];
-  outcomes?: string[];    // 量化结果
-}
-
-export interface ResumeProfile {
-  education: EducationEntry[];
-  internships: ExperienceEntry[];
-  workExperience: ExperienceEntry[];   // 全职经历
-  projects: ProjectEntry[];
-  skills: string[];
-  certificates: string[];
-  languages?: string[];                // 语言成绩（如 IELTS 7.5）
-  intention?: {
-    roles?: string[];      // 意向岗位
-    locations?: string[];  // 意向城市/国家
-    industries?: string[];
-  };
-  meta?: {
-    pages?: number;
-    wordDensity?: 'sparse' | 'normal' | 'dense';
-    resumeLanguage?: 'zh' | 'en' | 'bilingual';
-  };
-}
-
-export interface UserSegmentation {
-  careerStage: CareerStage;
-  careerStageReason: string;         // 判定依据（透明展示）
-  schoolTier: SchoolTier;
-  schoolTierSource: 'builtin' | 'llm_estimate' | 'unknown';
-  qsBand?: string;                   // 如 "QS 50-100"
-  targetSchoolHits: string[];        // 命中哪些企业的目标校
-  majorMatch?: MajorMatch;           // 需结合目标岗位，可能为空（未指定岗位）
-  majorMatchNote?: string;
-  regions: RegionKey[];              // 求职地区（第一权重）
-  regionSource: 'intention' | 'inferred' | 'default';
-  experienceQuality: {
-    internshipCount: number;
-    bigNameCount: number;            // 大厂/知名公司段数
-    totalMonths: number;
-    quantifiedDensity: 'low' | 'medium' | 'high';
-  };
-  summary: string;                   // 一句话画像摘要（UI 展示）
-}
-
-// 用户手动修正（PATCH 接口覆盖字段）
-export interface SegmentationOverrides {
-  careerStage?: CareerStage;
-  schoolTier?: SchoolTier;
-  majorMatch?: MajorMatch;
-  regions?: RegionKey[];
-}
 
 // ============ 院校分层库 ============
 // 注意：QS 排名 ≠ 企业认可度（两个数据都保留，不合并）。

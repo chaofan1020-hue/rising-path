@@ -4,7 +4,6 @@ import { useState, useCallback, useEffect } from 'react';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
-import { Progress } from '@/components/ui/progress';
 import {
   Dialog,
   DialogContent,
@@ -18,7 +17,6 @@ import {
   FileText,
   Trash2,
   Loader2,
-  CheckCircle,
   User,
   Calendar,
   Languages,
@@ -29,7 +27,17 @@ import Link from 'next/link';
 import { AuthGuard } from '@/components/auth-guard';
 import { apiFetch } from '@/lib/api-client';
 import { Header1 } from '@/components/header1';
-import { SegmentationCard, type Segmentation } from '@/components/segmentation-card';
+import { SegmentationCard } from '@/components/segmentation-card';
+import { ResumeProfileCard } from '@/components/resume-profile-card';
+import type {
+  ResumeProfile,
+  ResumeProcessingStage,
+  ResumeProcessingStatus,
+  ResumeProfileConfidence,
+  ResumeProfileEvidence,
+  ResumeProfileUpdateMetadata,
+  UserSegmentation,
+} from '@/lib/resume-types';
 import { Target, Wand2, Send, CheckCircle2 } from 'lucide-react';
 import { useLanguage } from '@/lib/language-context';
 
@@ -65,12 +73,17 @@ interface Resume {
   file_name: string;
   parsed_content: string;
   parsed_fields?: ParsedFields;
-  segmentation?: Segmentation | null;
+  segmentation?: UserSegmentation | null;
   segmentation_confirmed?: boolean;
-  profile?: {
-    education?: Array<{ school: string; degree?: string; major?: string }>;
-    skills?: string[];
-  } | null;
+  profile?: ResumeProfile | null;
+  processing_status?: ResumeProcessingStatus;
+  processing_stage?: ResumeProcessingStage;
+  processing_error?: string | null;
+  processing_attempts?: number;
+  profile_version?: number;
+  profile_confirmed_at?: string | null;
+  profile_evidence?: ResumeProfileEvidence;
+  profile_confidence?: ResumeProfileConfidence;
   user_info: {
     name?: string;
     email?: string;
@@ -82,47 +95,26 @@ interface Resume {
   created_at: string;
 }
 
+const ACTIVE_PROCESSING_STATUSES: ResumeProcessingStatus[] = [
+  'uploaded',
+  'extracting_text',
+  'extracting_profile',
+  'deriving_segmentation',
+];
+
+function isProcessing(resume: Resume): boolean {
+  return !!resume.processing_status && ACTIVE_PROCESSING_STATUSES.includes(resume.processing_status);
+}
+
 // 内部组件
 function ResumeContent() {
   const [resumes, setResumes] = useState<Resume[]>([]);
   const [loading, setLoading] = useState(false);
   const [uploading, setUploading] = useState(false);
-  const [uploadProgress, setUploadProgress] = useState(0);
   const [selectedFile, setSelectedFile] = useState<File | null>(null);
-  const [selectedResume, setSelectedResume] = useState<Resume | null>(null);
   const [translatingId, setTranslatingId] = useState<number | null>(null);
-  const [extractingId, setExtractingId] = useState<number | null>(null);
+  const [reparsingId, setReparsingId] = useState<number | null>(null);
   const { t } = useLanguage();
-
-  // 提取结构化字段
-  const extractFields = async (resume: Resume) => {
-    setExtractingId(resume.id);
-    try {
-      const response = await apiFetch('/api/resume/extract-fields', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          resume_id: resume.id,
-        }),
-      });
-
-      const data = await response.json();
-      if (data.success && data.parsed_fields) {
-        setResumes(resumes.map(r => 
-          r.id === resume.id ? { ...r, parsed_fields: data.parsed_fields } : r
-        ));
-        setSelectedResume(prev => prev?.id === resume.id ? { ...prev, parsed_fields: data.parsed_fields } : prev);
-        alert(t('resume.extractSuccess'));
-      } else if (data.error) {
-        alert(t('resume.extractFailed') + ': ' + data.error);
-      }
-    } catch (error) {
-      console.error('Extract failed:', error);
-      alert(t('resume.extractFailedRetry'));
-    } finally {
-      setExtractingId(null);
-    }
-  };
 
   const handleFileSelect = useCallback((e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
@@ -135,34 +127,21 @@ function ResumeContent() {
     if (!selectedFile) return;
 
     setUploading(true);
-    setUploadProgress(0);
 
     try {
       const formData = new FormData();
       formData.append('file', selectedFile);
-
-      // Simulate progress
-      const progressInterval = setInterval(() => {
-        setUploadProgress((prev) => Math.min(prev + 10, 90));
-      }, 200);
 
       const response = await apiFetch('/api/resume', {
         method: 'POST',
         body: formData,
       });
 
-      clearInterval(progressInterval);
-      setUploadProgress(100);
-
       const data = await response.json();
       
-      if (data.resume) {
-        // 等待几秒后刷新列表以获取解析结果
-        setTimeout(() => {
-          fetchResumes();
-        }, 3000);
+      if (response.ok && data.resume) {
+        setResumes((prev) => [data.resume as Resume, ...prev]);
         setSelectedFile(null);
-        setUploadProgress(0);
       } else if (data.error) {
         alert(t('resume.uploadFailed') + ': ' + data.error);
       }
@@ -174,7 +153,7 @@ function ResumeContent() {
     }
   };
 
-  const fetchResumes = async () => {
+  const fetchResumes = useCallback(async () => {
     setLoading(true);
     try {
       const response = await apiFetch('/api/resume');
@@ -184,6 +163,28 @@ function ResumeContent() {
       console.error('Failed to fetch resumes:', error);
     } finally {
       setLoading(false);
+    }
+  }, []);
+
+  const reparseResume = async (resume: Resume) => {
+    setReparsingId(resume.id);
+    try {
+      const response = await apiFetch('/api/resume/reparse', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ resumeId: resume.id }),
+      });
+      const data = await response.json();
+      if (response.ok && data.resume) {
+        setResumes((prev) => prev.map((item) => item.id === resume.id ? data.resume as Resume : item));
+      } else {
+        alert(t('resume.uploadFailed') + ': ' + (data.error || t('resume.uploadFailedRetry')));
+      }
+    } catch (error) {
+      console.error('Re-parse failed:', error);
+      alert(t('resume.uploadFailedRetry'));
+    } finally {
+      setReparsingId(null);
     }
   };
 
@@ -235,7 +236,24 @@ function ResumeContent() {
 
   useEffect(() => {
     fetchResumes();
-  }, []);
+  }, [fetchResumes]);
+
+  const processingResumeIds = resumes
+    .filter(isProcessing)
+    .map((resume) => resume.id)
+    .join(',');
+
+  useEffect(() => {
+    if (!processingResumeIds) return;
+    const interval = window.setInterval(() => {
+      fetchResumes();
+    }, 2000);
+    return () => window.clearInterval(interval);
+  }, [fetchResumes, processingResumeIds]);
+
+  const hasConfirmedResume = resumes.some((resume) =>
+    resume.segmentation_confirmed === true && resume.processing_status === 'ready',
+  );
 
   return (
     <div className="min-h-screen bg-white dark:bg-zinc-950">
@@ -296,14 +314,6 @@ function ResumeContent() {
             </div>
           )}
 
-          {uploading && (
-            <div className="mt-4 max-w-sm mx-auto">
-              <Progress value={uploadProgress} className="h-1.5" />
-              <p className="text-xs text-zinc-400 mt-2 text-center">
-                {uploadProgress < 100 ? t('resume.upload.parsing') : t('resume.upload.complete')}
-              </p>
-            </div>
-          )}
         </div>
 
         {/* 状态引导区域 */}
@@ -315,11 +325,15 @@ function ResumeContent() {
                   <CheckCircle2 className="h-5 w-5 text-zinc-700 dark:text-zinc-300" />
                 </div>
                 <div>
-                  <p className="font-medium text-sm text-zinc-800 dark:text-zinc-100">{t('resume.uploaded')} {resumes.length} {t('resume.resumesUnit')}</p>
-                  <p className="text-xs text-zinc-400 dark:text-zinc-500">{t('resume.nextStep')}</p>
+                  <p className="font-medium text-sm text-zinc-800 dark:text-zinc-100">
+                    {hasConfirmedResume ? t('resume.uploaded') : t('resume.parsing')} {resumes.length} {t('resume.resumesUnit')}
+                  </p>
+                  <p className="text-xs text-zinc-400 dark:text-zinc-500">
+                    {hasConfirmedResume ? t('resume.nextStep') : t('resume.upload.parsing')}
+                  </p>
                 </div>
               </div>
-              <div className="flex items-center gap-2">
+              {hasConfirmedResume && <div className="flex items-center gap-2">
                 <Link href="/ai-match">
                   <Button size="sm" className="gap-1.5 bg-zinc-900 text-white hover:bg-zinc-800 dark:bg-white dark:text-zinc-900 dark:hover:bg-zinc-200">
                     <Target className="h-3.5 w-3.5" />
@@ -332,7 +346,7 @@ function ResumeContent() {
                     {t('resume.optimize')}
                   </Button>
                 </Link>
-              </div>
+              </div>}
             </div>
           </div>
         ) : (
@@ -401,7 +415,20 @@ function ResumeContent() {
                               {t('resume.parsing')}
                             </Badge>
                           )}
+                          {resume.processing_status === 'needs_confirmation' && (
+                            <Badge variant="outline" className="text-xs border-amber-200 text-amber-700 dark:border-amber-800 dark:text-amber-300">
+                              {t('resume.nextStep')}
+                            </Badge>
+                          )}
+                          {resume.processing_status === 'failed' && (
+                            <Badge variant="outline" className="text-xs border-red-200 text-red-700 dark:border-red-800 dark:text-red-300">
+                              {t('resume.uploadFailed')}
+                            </Badge>
+                          )}
                         </div>
+                        {resume.processing_status === 'failed' && resume.processing_error && (
+                          <p className="text-xs text-red-600 dark:text-red-400 mt-1.5">{resume.processing_error}</p>
+                        )}
                         {resume.parsed_content && !resume.parsed_content.includes('正在解析') && (
                           <p className="text-xs text-zinc-400 dark:text-zinc-500 mt-1.5 line-clamp-2 hidden md:block">
                             {resume.parsed_content.substring(0, 140)}...
@@ -411,6 +438,23 @@ function ResumeContent() {
                     </div>
 
                     {/* 分层确认卡片：求职画像透明展示 + 可修正 */}
+                    {resume.profile && (
+                      <ResumeProfileCard
+                        resumeId={resume.id}
+                        profile={resume.profile}
+                        confirmed={resume.segmentation_confirmed}
+                        onUpdated={(profile, segmentation, metadata: ResumeProfileUpdateMetadata = {}) => setResumes((prev) => prev.map((item) => item.id === resume.id ? {
+                          ...item,
+                          profile,
+                          segmentation: segmentation || item.segmentation,
+                          processing_status: metadata.processingStatus || 'ready',
+                          processing_stage: metadata.processingStage || 'complete',
+                          profile_version: metadata.profileVersion || item.profile_version,
+                          profile_confirmed_at: metadata.profileConfirmedAt ?? item.profile_confirmed_at,
+                          segmentation_confirmed: metadata.confirmed ?? true,
+                        } : item))}
+                      />
+                    )}
                     {resume.segmentation && (
                       <SegmentationCard
                         resumeId={resume.id}
@@ -420,38 +464,32 @@ function ResumeContent() {
                         schoolLine={resume.profile?.education?.[0]
                           ? `${resume.profile.education[0].school}${resume.profile.education[0].major ? ` · ${resume.profile.education[0].major}` : ''}${resume.profile.education[0].degree ? ` · ${resume.profile.education[0].degree}` : ''}`
                           : undefined}
-                        onUpdated={(seg) =>
-                          setResumes((prev) => prev.map((r) => r.id === resume.id ? { ...r, segmentation: seg, segmentation_confirmed: true } : r))
+                        onUpdated={(seg, metadata: ResumeProfileUpdateMetadata = {}) =>
+                          setResumes((prev) => prev.map((r) => r.id === resume.id ? {
+                            ...r,
+                            segmentation: seg,
+                            segmentation_confirmed: metadata.confirmed ?? true,
+                            processing_status: metadata.processingStatus || 'ready',
+                            processing_stage: metadata.processingStage || 'complete',
+                            profile_version: metadata.profileVersion || r.profile_version,
+                            profile_confirmed_at: metadata.profileConfirmedAt ?? r.profile_confirmed_at,
+                          } : r))
                         }
                       />
                     )}
                     
                     {/* 操作按钮 - 手机端换行显示 */}
                     <div className="flex flex-wrap gap-2 pl-0 md:pl-[48px]">
-                      {resume.parsed_content && !resume.parsed_content.includes('正在解析') && (
+                      {resume.processing_status === 'failed' && (
                         <Button
                           variant="outline"
                           size="sm"
-                          className="text-xs h-7 px-2.5 border-zinc-200 dark:border-zinc-700 text-zinc-600 dark:text-zinc-300 hover:bg-zinc-100 hover:text-zinc-900 dark:hover:bg-zinc-800 dark:hover:text-zinc-100"
-                          onClick={() => extractFields(resume)}
-                          disabled={extractingId === resume.id}
+                          className="text-xs h-7 px-2.5 border-red-200 text-red-700 dark:border-red-800 dark:text-red-300 hover:bg-red-50 dark:hover:bg-red-950/30"
+                          onClick={() => reparseResume(resume)}
+                          disabled={reparsingId === resume.id}
                         >
-                          {extractingId === resume.id ? (
-                            <>
-                              <Loader2 className="h-3 w-3 mr-1 animate-spin" />
-                              {t('resume.extracting')}
-                            </>
-                          ) : resume.parsed_fields ? (
-                            <>
-                              <CheckCircle className="h-3 w-3 mr-1" />
-                              {t('resume.extracted')}
-                            </>
-                          ) : (
-                            <>
-                              <Sparkles className="h-3 w-3 mr-1" />
-                              {t('resume.extractFields')}
-                            </>
-                          )}
+                          {reparsingId === resume.id && <Loader2 className="h-3 w-3 mr-1 animate-spin" />}
+                          {t('resume.uploadFailedRetry')}
                         </Button>
                       )}
                       <Button
@@ -485,7 +523,6 @@ function ResumeContent() {
                             variant="outline"
                             size="sm"
                             className="text-xs h-7 px-2.5 border-zinc-200 dark:border-zinc-700 text-zinc-600 dark:text-zinc-300 hover:bg-zinc-100 hover:text-zinc-900 dark:hover:bg-zinc-800 dark:hover:text-zinc-100"
-                            onClick={() => setSelectedResume(resume)}
                           >
                             {t('resume.viewDetail')}
                           </Button>
@@ -583,6 +620,107 @@ function ResumeContent() {
                                     </Button>
                                   </Link>
                                 </div>
+                              </div>
+                            )}
+
+                            {resume.profile && (
+                              <div className="bg-zinc-50 dark:bg-zinc-900/60 border border-zinc-100 dark:border-zinc-800 p-3 md:p-4 rounded-xl space-y-4">
+                                <div className="flex items-center justify-between gap-2">
+                                  <div className="flex items-center gap-2">
+                                    <div className="w-7 h-7 rounded-lg bg-zinc-900 dark:bg-white flex items-center justify-center">
+                                      <User className="h-3.5 w-3.5 text-white dark:text-zinc-900" />
+                                    </div>
+                                    <h4 className="font-semibold text-sm md:text-base text-zinc-900 dark:text-zinc-50">{t('resume.segTitle')}</h4>
+                                  </div>
+                                  {resume.profile_version ? (
+                                    <Badge variant="outline" className="text-[10px] border-zinc-200 dark:border-zinc-700">
+                                      v{resume.profile_version}
+                                    </Badge>
+                                  ) : null}
+                                </div>
+
+                                {resume.profile.education.length > 0 && (
+                                  <div>
+                                    <p className="text-xs text-zinc-400 dark:text-zinc-500 mb-1">{t('resume.education')}</p>
+                                    <div className="space-y-1">
+                                      {resume.profile.education.map((education, index) => (
+                                        <p key={`${education.school}-${index}`} className="text-sm text-zinc-800 dark:text-zinc-100">
+                                          <strong>{education.school}</strong>
+                                          {[education.degree, education.major, education.endYear ? String(education.endYear) : undefined]
+                                            .filter(Boolean)
+                                            .join(' · ')}
+                                        </p>
+                                      ))}
+                                    </div>
+                                  </div>
+                                )}
+
+                                {(resume.profile.internships.length > 0 || resume.profile.workExperience.length > 0) && (
+                                  <div>
+                                    <p className="text-xs text-zinc-400 dark:text-zinc-500 mb-1">{t('resume.experience')}</p>
+                                    <div className="space-y-1">
+                                      {[...resume.profile.internships, ...resume.profile.workExperience].map((experience, index) => (
+                                        <p key={`${experience.company}-${experience.role}-${index}`} className="text-sm text-zinc-800 dark:text-zinc-100">
+                                          <strong>{experience.company}</strong> · {experience.role}
+                                          {experience.months ? <span className="text-zinc-400"> · {experience.months}个月</span> : null}
+                                        </p>
+                                      ))}
+                                    </div>
+                                  </div>
+                                )}
+
+                                {resume.profile.skills.length > 0 && (
+                                  <div>
+                                    <p className="text-xs text-zinc-400 dark:text-zinc-500 mb-1">{t('resume.skills')}</p>
+                                    <div className="flex flex-wrap gap-1.5">
+                                      {resume.profile.skills.map((skill) => (
+                                        <Badge key={skill} variant="secondary" className="text-xs bg-white dark:bg-zinc-800">{skill}</Badge>
+                                      ))}
+                                    </div>
+                                  </div>
+                                )}
+
+                                {resume.profile.intention && (
+                                  <div className="text-sm text-zinc-800 dark:text-zinc-100 space-y-1">
+                                    {resume.profile.intention.roles?.length ? <p><strong>岗位：</strong>{resume.profile.intention.roles.join('、')}</p> : null}
+                                    {resume.profile.intention.locations?.length ? <p><strong>地区：</strong>{resume.profile.intention.locations.join('、')}</p> : null}
+                                    {resume.profile.intention.industries?.length ? <p><strong>行业：</strong>{resume.profile.intention.industries.join('、')}</p> : null}
+                                    {resume.profile.intention.workAuthorization ? <p><strong>工作权限：</strong>{resume.profile.intention.workAuthorization}</p> : null}
+                                    {resume.profile.intention.availableFrom ? <p><strong>可入职：</strong>{resume.profile.intention.availableFrom}</p> : null}
+                                  </div>
+                                )}
+
+                                {Object.keys(resume.profile_confidence || {}).length > 0 && (
+                                  <div>
+                                    <p className="text-xs text-zinc-400 dark:text-zinc-500 mb-2">{t('resume.profileConfidence')}</p>
+                                    <div className="grid grid-cols-2 gap-2">
+                                      {Object.entries(resume.profile_confidence || {}).slice(0, 6).map(([field, score]) => (
+                                        <div key={field} className="flex items-center justify-between gap-2 text-xs">
+                                          <span className="truncate text-zinc-500 dark:text-zinc-400">{field}</span>
+                                          <span className="font-medium text-zinc-800 dark:text-zinc-100">{Math.round(score * 100)}%</span>
+                                        </div>
+                                      ))}
+                                    </div>
+                                  </div>
+                                )}
+
+                                {Object.keys(resume.profile_evidence || {}).length > 0 && (
+                                  <div>
+                                    <p className="text-xs text-zinc-400 dark:text-zinc-500 mb-2">{t('resume.profileEvidence')}</p>
+                                    <div className="space-y-2">
+                                      {Object.entries(resume.profile_evidence || {}).slice(0, 6).map(([field, items]) => (
+                                        <div key={field} className="text-xs">
+                                          <p className="text-zinc-500 dark:text-zinc-400">{field}</p>
+                                          {items.slice(0, 1).map((item, index) => (
+                                            <p key={`${field}-${index}`} className="mt-0.5 text-zinc-700 dark:text-zinc-300 break-words">
+                                              {item.quote || item.note || item.source}
+                                            </p>
+                                          ))}
+                                        </div>
+                                      ))}
+                                    </div>
+                                  </div>
+                                )}
                               </div>
                             )}
 

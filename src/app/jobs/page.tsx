@@ -11,7 +11,7 @@ import {
   PopoverContent,
   PopoverTrigger,
 } from '@/components/ui/popover';
-import { Search, MapPin, Briefcase, Users, ExternalLink, ChevronDown, X, Plus, Check, Loader2 } from 'lucide-react';
+import { Search, MapPin, Briefcase, Users, ExternalLink, ChevronDown, X, Plus, Check, Loader2, Heart } from 'lucide-react';
 import Link from 'next/link';
 import { AuthGuard } from '@/components/auth-guard';
 import { apiFetch } from '@/lib/api-client';
@@ -333,6 +333,8 @@ function JobsContent() {
   const [selectedAudience, setSelectedAudience] = useState('');
   const [applyingJobId, setApplyingJobId] = useState<number | null>(null);
   const [appliedJobIds, setAppliedJobIds] = useState<Set<number>>(new Set());
+  const [favoriteJobIds, setFavoriteJobIds] = useState<Set<number>>(new Set());
+  const [favoriteLoadingJobId, setFavoriteLoadingJobId] = useState<number | null>(null);
   
   // 动态配置
   const [configs, setConfigs] = useState<{
@@ -384,6 +386,18 @@ function JobsContent() {
     }
   }, []);
 
+  const fetchFavoriteJobIds = useCallback(async () => {
+    try {
+      const response = await apiFetch('/api/favorites');
+      if (!response.ok) return;
+      const data = await response.json();
+      const ids = new Set<number>((data.favorites || []).map((favorite: { job_id: number }) => favorite.job_id));
+      setFavoriteJobIds(ids);
+    } catch (error) {
+      console.error('Failed to fetch favorite job ids:', error);
+    }
+  }, []);
+
   useEffect(() => {
     // 获取配置
     apiFetch('/api/configs')
@@ -408,7 +422,36 @@ function JobsContent() {
     
     fetchJobs();
     fetchAppliedJobIds();
-  }, [fetchJobs, fetchAppliedJobIds]);
+    fetchFavoriteJobIds();
+  }, [fetchJobs, fetchAppliedJobIds, fetchFavoriteJobIds]);
+
+  const handleFavorite = async (jobId: number) => {
+    const isFavorite = favoriteJobIds.has(jobId);
+    setFavoriteLoadingJobId(jobId);
+    try {
+      const response = await apiFetch('/api/favorites', {
+        method: isFavorite ? 'DELETE' : 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ job_id: jobId }),
+      });
+      const data = await response.json();
+      if (!response.ok) {
+        alert(data.error || t('jobs.favoriteFailed'));
+        return;
+      }
+      setFavoriteJobIds((current) => {
+        const next = new Set(current);
+        if (isFavorite) next.delete(jobId);
+        else next.add(jobId);
+        return next;
+      });
+    } catch (error) {
+      console.error('Failed to update favorite:', error);
+      alert(t('jobs.favoriteRetry'));
+    } finally {
+      setFavoriteLoadingJobId(null);
+    }
+  };
 
   // 添加到网申管理
   const handleAdd = async (jobId: number) => {
@@ -618,6 +661,22 @@ function JobsContent() {
 
                     {/* 右侧按钮区 - 垂直排列 */}
                     <div className="flex flex-col gap-2 flex-shrink-0">
+                      <Button
+                        type="button"
+                        size="icon-sm"
+                        variant="ghost"
+                        title={favoriteJobIds.has(job.id) ? t('jobs.favorited') : t('jobs.favorite')}
+                        aria-label={favoriteJobIds.has(job.id) ? t('jobs.favorited') : t('jobs.favorite')}
+                        onClick={() => handleFavorite(job.id)}
+                        disabled={favoriteLoadingJobId === job.id}
+                        className={favoriteJobIds.has(job.id)
+                          ? 'text-rose-600 hover:bg-rose-50 hover:text-rose-700 dark:text-rose-400 dark:hover:bg-rose-950/30'
+                          : 'text-zinc-400 hover:bg-zinc-100 hover:text-zinc-900 dark:hover:bg-zinc-800 dark:hover:text-zinc-100'}
+                      >
+                        {favoriteLoadingJobId === job.id
+                          ? <Loader2 className="animate-spin" />
+                          : <Heart className={favoriteJobIds.has(job.id) ? 'fill-current' : ''} />}
+                      </Button>
                       {job.is_active !== false && (
                         <Button
                           size="sm"

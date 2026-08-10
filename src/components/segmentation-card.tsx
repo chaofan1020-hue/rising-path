@@ -25,29 +25,17 @@ import {
   ChevronUp,
 } from 'lucide-react';
 import { useLanguage } from '@/lib/language-context';
+import type { RegionKey } from '@/lib/region-dna';
+import type {
+  CareerStage,
+  MajorMatch,
+  ResumeProfileUpdateMetadata,
+  UserSegmentation,
+} from '@/lib/resume-types';
 
-export type CareerStage = 'junior' | 'senior' | 'experienced' | 'returning_intern';
-export type RegionKey = 'us' | 'uk' | 'sg' | 'cn_t1' | 'cn_t2';
-export type MajorMatch = 'aligned' | 'related' | 'unrelated';
-
-export interface Segmentation {
-  careerStage: CareerStage;
-  careerStageReason: string;
-  schoolTier: 1 | 2 | 3;
-  qsBand?: string;
-  targetSchoolHits: string[];
-  majorMatch?: MajorMatch;
-  majorMatchNote?: string;
-  regions: RegionKey[];
-  regionSource: 'intention' | 'inferred' | 'default';
-  experienceQuality: {
-    internshipCount: number;
-    bigNameCount: number;
-    totalMonths: number;
-    quantifiedDensity: 'low' | 'medium' | 'high';
-  };
-  summary: string;
-}
+export type { CareerStage, MajorMatch } from '@/lib/resume-types';
+export type { RegionKey } from '@/lib/region-dna';
+export type Segmentation = UserSegmentation;
 
 interface SegmentationCardProps {
   resumeId: number;
@@ -55,7 +43,7 @@ interface SegmentationCardProps {
   confirmed?: boolean;
   skills?: string[];
   schoolLine?: string;  // 如 "墨尔本大学 · 数据分析硕士"
-  onUpdated: (seg: Segmentation) => void;
+  onUpdated: (seg: Segmentation, metadata?: ResumeProfileUpdateMetadata) => void;
 }
 
 const STAGE_KEYS: CareerStage[] = ['junior', 'senior', 'experienced', 'returning_intern'];
@@ -102,11 +90,18 @@ export function SegmentationCard({
             majorMatch: draft.majorMatch,
             regions: draft.regions,
           },
+          confirm: true,
         }),
       });
       const data = await res.json();
       if (res.ok && data.segmentation) {
-        onUpdated(data.segmentation);
+        onUpdated(data.segmentation, {
+          profileVersion: data.profile_version,
+          confirmed: data.segmentation_confirmed,
+          processingStatus: data.processing_status,
+          processingStage: data.processing_stage,
+          profileConfirmedAt: data.profile_confirmed_at,
+        });
         setEditing(false);
       }
     } finally {

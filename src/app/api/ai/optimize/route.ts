@@ -1,8 +1,16 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { LLMClient, Config, HeaderUtils } from 'coze-coding-dev-sdk';
 import { buildRegionBlock, resolveRegionKey } from '@/lib/region-dna';
 import type { UserSegmentation } from '@/lib/user-segmentation';
 import { getAuthContext, unauthorizedResponse } from '@/lib/auth-server';
+import { createTextProviderClient } from '@/lib/ai/text-provider';
+import { requireConfirmedResume } from '@/lib/resume-access';
+import {
+  OPTIMIZED_RESUME_RESPONSE_SCHEMA,
+  optimizationChangeStateSchema,
+  optimizedResumeSchema,
+  parseOptimizedResume,
+  type OptimizedResumeData,
+} from '@/lib/optimized-resume-contract';
 
 // 地区名称映射
 const REGION_NAMES: Record<string, string> = {
@@ -17,27 +25,72 @@ const REGION_NAMES: Record<string, string> = {
   'jp': '日本',
 };
 
+function positiveInteger(value: unknown): number | null {
+  if (value === undefined || value === null || value === '') return null;
+  const parsed = Number(value);
+  return Number.isInteger(parsed) && parsed > 0 ? parsed : null;
+}
+
+function textValue(value: unknown): string {
+  return typeof value === 'string' ? value.trim() : '';
+}
+
 export async function POST(request: NextRequest) {
   try {
     const auth = await getAuthContext(request);
     if (!auth) return unauthorizedResponse();
     const client = auth.client;
-    const { resumeId, targetCompany, targetPosition, targetRegion, suggestions, jdContent } = await request.json();
+    const body = await request.json();
+    const resumeId = body?.resumeId;
+    const jobId = body?.jobId === undefined || body?.jobId === null || body?.jobId === ''
+      ? null
+      : positiveInteger(body.jobId);
+    if (body?.jobId !== undefined && body?.jobId !== null && body?.jobId !== '' && jobId === null) {
+      return NextResponse.json({ error: '目标岗位 ID 无效' }, { status: 400 });
+    }
 
-    // Get resume and verify ownership
-    const { data: resume, error } = await client
-      .from('resumes')
-      .select('*')
-      .eq('id', resumeId)
-      .eq('user_id', auth.user.id)
-      .single();
+    let targetCompany = textValue(body?.targetCompany);
+    let targetPosition = textValue(body?.targetPosition);
+    let targetRegion = textValue(body?.targetRegion);
+    const suggestions = textValue(body?.suggestions);
+    let jdContent = textValue(body?.jdContent);
 
-    if (error || !resume) {
-      return NextResponse.json({ error: '简历不存在或无权访问' }, { status: 404 });
+    const resumeAccess = await requireConfirmedResume(client, resumeId, auth.user.id);
+    if (!resumeAccess.ok) {
+      return NextResponse.json({ error: resumeAccess.error }, { status: resumeAccess.status });
+    }
+    const resume = resumeAccess.resume;
+
+    let targetJob: {
+      id: number;
+      title: string;
+      company: string;
+      region: string;
+      description?: string;
+      requirements?: string;
+    } | null = null;
+    if (jobId !== null) {
+      const { data, error } = await client
+        .from('jobs')
+        .select('id, title, company, region, description, requirements')
+        .eq('id', jobId)
+        .eq('is_active', true)
+        .maybeSingle();
+      if (error) throw new Error(`查询目标岗位失败: ${error.message}`);
+      if (!data) return NextResponse.json({ error: '目标岗位不存在或已下架' }, { status: 404 });
+      targetJob = data;
+      targetCompany ||= textValue(data.company);
+      targetPosition ||= textValue(data.title);
+      targetRegion ||= textValue(data.region);
+      jdContent ||= [data.description, data.requirements].filter(Boolean).join('\n\n');
+    }
+
+    if (!targetPosition) {
+      return NextResponse.json({ error: '目标岗位不能为空' }, { status: 400 });
     }
 
     // AI optimization
-    const llmClient = new LLMClient(new Config(), HeaderUtils.extractForwardHeaders(request.headers));
+    const llmClient = createTextProviderClient({ requestHeaders: request.headers });
     
     const resumeContent = resume.parsed_content || JSON.stringify(resume.user_info);
 
@@ -120,7 +173,17 @@ ${resumeContent}${suggestionsSection}
       "highlights": ["成果1", "成果2"]
     }
   ],
-  "certifications": ["证书1", "证书2"]
+  "certifications": ["证书1", "证书2"],
+  "change_items": [
+    {
+      "id": "change-1",
+      "section": "summary",
+      "title": "个人简介更贴近岗位",
+      "before": "原简历中的对应内容；没有内容时填写空字符串",
+      "after": "修改后的完整内容",
+      "rationale": "对应目标岗位的具体要求"
+    }
+  ]
 }
 
 优化要求：
@@ -129,13 +192,20 @@ ${resumeContent}${suggestionsSection}
 3. 突出与目标岗位最相关的经验
 4. 保持内容真实，基于原简历优化
 5. 保持与原简历相同的语言（中文或英文）
+6. change_items 的 section 只能使用 summary、skills、experience、education、projects、certifications 或 contact；after 必须逐字对应上方结构化简历中新增或修改后的内容，before 必须逐字对应原简历内容，没有原内容时填写空字符串
 
 只返回JSON，不要其他说明文字。`;
 
     const stream = llmClient.stream([
       { role: 'system', content: '你是一个专业的简历优化专家，擅长针对ATS系统优化简历，提高简历通过率。请始终以有效的JSON格式输出，并保持与原简历相同的语言。' },
       { role: 'user', content: prompt },
-    ], { temperature: 0.7 });
+    ], {
+      temperature: 0.7,
+      responseFormat: {
+        name: 'optimized_resume',
+        schema: OPTIMIZED_RESUME_RESPONSE_SCHEMA,
+      },
+    });
 
     let optimizedContent = '';
     for await (const chunk of stream) {
@@ -144,33 +214,60 @@ ${resumeContent}${suggestionsSection}
       }
     }
 
-    // 尝试解析JSON，验证格式正确
+    let parsed: OptimizedResumeData;
     try {
-      const jsonMatch = optimizedContent.match(/\{[\s\S]*\}/);
-      if (jsonMatch) {
-        const parsed = JSON.parse(jsonMatch[0]);
-        
-        // 检测语言：检查内容中是否主要是英文字符
-        const textToCheck = `${parsed.name || ''} ${parsed.summary || ''} ${(parsed.skills || []).join(' ')}`;
-        const englishCharCount = (textToCheck.match(/[a-zA-Z]/g) || []).length;
-        const chineseCharCount = (textToCheck.match(/[\u4e00-\u9fa5]/g) || []).length;
-        const isEnglish = englishCharCount > chineseCharCount;
-        
-        return NextResponse.json({ 
-          optimized_content: optimizedContent,
-          resume_data: parsed,
-          original_content: resumeContent,
-          is_english: isEnglish
-        });
-      }
-    } catch (e) {
-      console.error('Failed to parse optimized resume as JSON:', e);
+      parsed = parseOptimizedResume(optimizedContent);
+    } catch (error) {
+      console.error('Invalid optimized resume response:', error);
+      return NextResponse.json(
+        { error: 'AI返回的简历优化结果格式无效，请重试' },
+        { status: 502 },
+      );
     }
 
-    // 如果JSON解析失败，返回原始内容
+    // 检测语言：检查内容中是否主要是英文字符
+    const { change_items: generatedChangeItems, ...resumeData } = parsed;
+    const changeItems = generatedChangeItems.map((item) => ({
+      ...item,
+      status: 'pending' as const,
+    }));
+
+    const textToCheck = `${resumeData.name} ${resumeData.summary} ${resumeData.skills.join(' ')}`;
+    const englishCharCount = (textToCheck.match(/[a-zA-Z]/g) || []).length;
+    const chineseCharCount = (textToCheck.match(/[\u4e00-\u9fa5]/g) || []).length;
+    const isEnglish = englishCharCount > chineseCharCount;
+
+    const { data: optimization, error: optimizationError } = await client
+      .from('resume_optimizations')
+      .insert({
+        user_id: auth.user.id,
+        resume_id: resume.id,
+        job_id: targetJob?.id || null,
+        resume_profile_version: Number(resume.profile_version),
+        target_company: targetCompany,
+        target_position: targetPosition,
+        target_region: targetRegion || null,
+        original_content: resumeContent,
+        optimized_content: resumeData,
+        reviewed_content: resumeData,
+        change_items: changeItems,
+        is_english: isEnglish,
+      })
+      .select('id, resume_id, job_id, resume_profile_version, target_company, target_position, target_region, is_english, created_at, updated_at')
+      .single();
+    if (optimizationError || !optimization) {
+      throw new Error(`保存简历优化版本失败: ${optimizationError?.message || '未返回记录'}`);
+    }
+
     return NextResponse.json({ 
       optimized_content: optimizedContent,
-      original_content: resumeContent 
+      resume_data: resumeData,
+      change_items: changeItems,
+      original_content: resumeContent,
+      is_english: isEnglish,
+      optimization_id: optimization.id,
+      resume_profile_version: Number(resume.profile_version),
+      job_id: targetJob?.id || null,
     });
   } catch (error) {
     console.error('Optimization error:', error);
@@ -178,5 +275,102 @@ ${resumeContent}${suggestionsSection}
       { error: '简历优化失败' },
       { status: 500 }
     );
+  }
+}
+
+export async function GET(request: NextRequest) {
+  try {
+    const auth = await getAuthContext(request);
+    if (!auth) return unauthorizedResponse();
+
+    const resumeIdValue = request.nextUrl.searchParams.get('resumeId');
+    const jobIdValue = request.nextUrl.searchParams.get('jobId');
+    const resumeId = resumeIdValue ? positiveInteger(resumeIdValue) : null;
+    const jobId = jobIdValue ? positiveInteger(jobIdValue) : null;
+    if ((resumeIdValue && resumeId === null) || (jobIdValue && jobId === null)) {
+      return NextResponse.json({ error: '简历 ID 或岗位 ID 无效' }, { status: 400 });
+    }
+
+    let query = auth.client
+      .from('resume_optimizations')
+      .select('id, resume_id, job_id, resume_profile_version, target_company, target_position, target_region, original_content, optimized_content, reviewed_content, edited_content, change_items, score_comparison, original_score, optimized_score, is_english, created_at, updated_at')
+      .eq('user_id', auth.user.id)
+      .order('created_at', { ascending: false })
+      .limit(20);
+    if (resumeId !== null) query = query.eq('resume_id', resumeId);
+    if (jobId !== null) query = query.eq('job_id', jobId);
+
+    const { data, error } = await query;
+    if (error) throw new Error(`读取简历优化历史失败: ${error.message}`);
+    return NextResponse.json({ optimizations: data || [] });
+  } catch (error) {
+    console.error('Error fetching resume optimizations:', error);
+    return NextResponse.json({ error: '读取简历优化历史失败' }, { status: 500 });
+  }
+}
+
+export async function PATCH(request: NextRequest) {
+  try {
+    const auth = await getAuthContext(request);
+    if (!auth) return unauthorizedResponse();
+
+    const body = await request.json();
+    const optimizationId = positiveInteger(body?.optimizationId);
+    const parsed = optimizedResumeSchema.omit({ change_items: true }).safeParse(body?.resumeData);
+    const changeItems = body?.changeItems === undefined
+      ? null
+      : optimizationChangeStateSchema.array().max(12).safeParse(body.changeItems);
+    if (optimizationId === null || !parsed.success || (changeItems && !changeItems.success)) {
+      return NextResponse.json({ error: '优化版本或简历内容无效' }, { status: 400 });
+    }
+
+    const updates: Record<string, unknown> = {
+      reviewed_content: parsed.data,
+      updated_at: new Date().toISOString(),
+    };
+    if (typeof body?.editedContent === 'string' || body?.editedContent === null) {
+      updates.edited_content = body.editedContent;
+    }
+    if (changeItems?.success) updates.change_items = changeItems.data;
+    if (typeof body?.isEnglish === 'boolean') updates.is_english = body.isEnglish;
+
+    const { data, error } = await auth.client
+      .from('resume_optimizations')
+      .update(updates)
+      .eq('id', optimizationId)
+      .eq('user_id', auth.user.id)
+      .select('id, resume_id, job_id, resume_profile_version, target_company, target_position, target_region, optimized_content, reviewed_content, is_english, created_at, updated_at')
+      .single();
+    if (error || !data) throw new Error(`更新简历优化版本失败: ${error?.message || '未找到记录'}`);
+
+    return NextResponse.json({ optimization: data });
+  } catch (error) {
+    console.error('Error updating resume optimization:', error);
+    return NextResponse.json({ error: '保存简历优化版本失败' }, { status: 500 });
+  }
+}
+
+export async function DELETE(request: NextRequest) {
+  try {
+    const auth = await getAuthContext(request);
+    if (!auth) return unauthorizedResponse();
+
+    const body = await request.json();
+    const optimizationId = positiveInteger(body?.optimizationId);
+    if (optimizationId === null) {
+      return NextResponse.json({ error: '优化版本 ID 无效' }, { status: 400 });
+    }
+
+    const { error } = await auth.client
+      .from('resume_optimizations')
+      .delete()
+      .eq('id', optimizationId)
+      .eq('user_id', auth.user.id);
+    if (error) throw new Error(`删除简历优化版本失败: ${error.message}`);
+
+    return NextResponse.json({ success: true, optimization_id: optimizationId });
+  } catch (error) {
+    console.error('Error deleting resume optimization:', error);
+    return NextResponse.json({ error: '删除简历优化版本失败' }, { status: 500 });
   }
 }

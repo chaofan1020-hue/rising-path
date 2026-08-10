@@ -94,6 +94,8 @@ interface Message {
 interface ResumeItem {
   id: number;
   file_name: string;
+  processing_status?: string;
+  segmentation_confirmed?: boolean;
 }
 
 interface JobItem {
@@ -430,7 +432,11 @@ function MockInterviewContent() {
     apiFetch("/api/resume")
       .then((r) => (r.ok ? r.json() : null))
       .then((d) => {
-        if (d) setResumes(d.resumes || []);
+        if (d) {
+          setResumes((d.resumes || []).filter((resume: ResumeItem) =>
+            resume.processing_status === "ready" && resume.segmentation_confirmed === true,
+          ));
+        }
       })
       .catch((e) => console.error("[mock-interview] fetch resumes error:", e));
   }, []);
@@ -794,6 +800,10 @@ function MockInterviewContent() {
     const targetCompany = (selectedJobId ? selectedCompany : targetCompanyInput).trim();
     if (!targetCompany) {
       alert(t("mockInterview.companyRequired"));
+      return;
+    }
+    if (!selectedResumeId) {
+      alert(t("mockInterview.resumeRequired"));
       return;
     }
     setMessages([]);

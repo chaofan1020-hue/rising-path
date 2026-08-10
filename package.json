@@ -9,6 +9,10 @@
     "lint": "eslint",
     "start": "node dist/server.js",
     "ts-check": "tsc -p tsconfig.json",
+    "test:phase2": "tsx scripts/test-phase2.ts",
+    "test:phase3": "tsx scripts/test-phase3.ts",
+    "test:phase4": "tsx scripts/test-phase4.ts",
+    "test:ai-provider": "tsx scripts/test-ai-provider.ts",
     "lint:build": "eslint . --quiet",
     "validate": "pnpm run ts-check && pnpm run lint:build"
   },
@@ -67,6 +71,7 @@
     "meshline": "3.3.1",
     "next": "16.1.1",
     "next-themes": "^0.4.6",
+    "openai": "^7.4.0",
     "pdf2json": "^4.0.2",
     "react": "19.2.3",
     "react-day-picker": "^9.13.0",
