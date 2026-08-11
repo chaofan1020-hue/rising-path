@@ -76,12 +76,14 @@ export async function POST(request: NextRequest) {
 
     const { data: profileRow } = await client
       .from('application_profiles')
-      .select('profile')
+      .select('profile, resume_id')
       .eq('user_id', auth.user.id)
       .maybeSingle();
 
     let profile: ApplicationProfile = DEFAULT_PROFILE;
-    if (profileRow?.profile) {
+    const profileMatchesLatestResume = profileRow
+      && (profileRow.resume_id === resume?.id || (!profileRow.resume_id && !resume?.id));
+    if (profileMatchesLatestResume && profileRow.profile) {
       profile = profileRow.profile as ApplicationProfile;
     } else {
       const built = buildProfileFromResume(

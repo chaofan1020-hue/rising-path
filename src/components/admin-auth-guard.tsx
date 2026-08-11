@@ -86,16 +86,27 @@ export function AdminAuthGuard({ children }: AdminAuthGuardProps) {
             </div>
             <CardTitle>管理后台登录</CardTitle>
             <CardDescription>
-              请输入管理密码访问后台
+              请输入已配置的管理密码访问后台
             </CardDescription>
           </CardHeader>
           <CardContent>
             <form onSubmit={handleLogin} className="space-y-4">
+              <input
+                type="text"
+                name="username"
+                autoComplete="username"
+                value="admin"
+                readOnly
+                tabIndex={-1}
+                className="sr-only"
+                aria-hidden="true"
+              />
               <div>
                 <Label htmlFor="password">管理密码</Label>
                 <Input
                   id="password"
                   type="password"
+                  autoComplete="current-password"
                   value={password}
                   onChange={(e) => setPassword(e.target.value)}
                   placeholder="请输入管理密码"

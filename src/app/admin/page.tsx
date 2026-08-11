@@ -70,6 +70,8 @@ import {
   FileSpreadsheet,
   Globe,
   Download,
+  ChevronLeft,
+  ChevronRight,
 } from 'lucide-react';
 import Link from 'next/link';
 
@@ -154,8 +156,14 @@ const statusLabels: Record<string, string> = {
   closed: '已关闭',
 };
 
-export default function AdminPage() {
+function AdminContent() {
   const [jobs, setJobs] = useState<Job[]>([]);
+  const [jobsPage, setJobsPage] = useState(0);
+  const jobsPageSize = 50;
+  const [jobsTotal, setJobsTotal] = useState(0);
+  const [jobsLoading, setJobsLoading] = useState(true);
+  const [jobsError, setJobsError] = useState('');
+  const jobsRequestRef = useRef(0);
   const [resumes, setResumes] = useState<Resume[]>([]);
   const [applications, setApplications] = useState<Application[]>([]);
   const [loading, setLoading] = useState(true);
@@ -217,8 +225,8 @@ export default function AdminPage() {
       return;
     }
 
-    if (newPassword.length < 6) {
-      setPasswordError('新密码至少6位');
+    if (newPassword.length < 12) {
+      setPasswordError('新密码至少12位');
       return;
     }
 
@@ -356,6 +364,8 @@ export default function AdminPage() {
   const [batchImportOpen, setBatchImportOpen] = useState(false);
   const [batchText, setBatchText] = useState('');
   const [batchImporting, setBatchImporting] = useState(false);
+  const [feedSyncing, setFeedSyncing] = useState(false);
+  const [feedSyncMessage, setFeedSyncMessage] = useState('');
   const [batchResult, setBatchResult] = useState<{
     success?: boolean;
     created?: number;
@@ -389,19 +399,16 @@ export default function AdminPage() {
   const fetchData = async () => {
     setLoading(true);
     try {
-      const [jobsRes, resumesRes, appsRes, configsRes, companiesRes] = await Promise.all([
-        fetch('/api/jobs'),
+      const [resumesRes, appsRes, configsRes, companiesRes] = await Promise.all([
         fetch('/api/resume'),
         fetch('/api/applications'),
         fetch('/api/configs'),
         fetch('/api/admin/company-config'),
       ]);
-      const jobsData = await jobsRes.json();
       const resumesData = await resumesRes.json();
       const appsData = await appsRes.json();
       const configsData = await configsRes.json();
       const companiesData = await companiesRes.json();
-      setJobs(jobsData.jobs || []);
       setResumes(resumesData.resumes || []);
       setApplications(appsData.applications || []);
       setConfigs(configsData.configs || {});
@@ -423,6 +430,37 @@ export default function AdminPage() {
       setLoading(false);
     }
   };
+
+  const fetchJobsPage = async (requestedPage = jobsPage, requestedSearch = jobSearch) => {
+    const requestId = ++jobsRequestRef.current;
+    setJobsLoading(true);
+    setJobsError('');
+    try {
+      const params = new URLSearchParams({
+        limit: String(jobsPageSize),
+        offset: String(requestedPage * jobsPageSize),
+        status: 'all',
+      });
+      if (requestedSearch.trim()) params.set('search', requestedSearch.trim());
+      const response = await fetch(`/api/jobs?${params.toString()}`, { cache: 'no-store' });
+      const data = await response.json();
+      if (!response.ok) throw new Error(data.error || '岗位加载失败');
+      if (requestId !== jobsRequestRef.current) return;
+      setJobs(data.jobs || []);
+      setJobsTotal(data.pagination?.total || 0);
+      setSelectedJobIds(new Set());
+    } catch (error) {
+      if (requestId !== jobsRequestRef.current) return;
+      console.error('Failed to fetch jobs:', error);
+      setJobsError(error instanceof Error ? error.message : '岗位加载失败');
+    } finally {
+      if (requestId === jobsRequestRef.current) setJobsLoading(false);
+    }
+  };
+
+  useEffect(() => {
+    void fetchJobsPage();
+  }, [jobsPage, jobSearch]);
 
   // Fetch analytics data
   const fetchAnalytics = async () => {
@@ -477,13 +515,16 @@ export default function AdminPage() {
 
   const handleDeleteConfig = async (id: number, type: string) => {
     try {
-      await fetch(`/api/configs?id=${id}`, { method: 'DELETE' });
+      const response = await fetch(`/api/configs?id=${id}`, { method: 'DELETE' });
+      const data = await response.json();
+      if (!response.ok) throw new Error(data.error || '删除配置失败');
       setConfigs(prev => ({
         ...prev,
         [type]: prev[type].filter(c => c.id !== id),
       }));
     } catch (error) {
       console.error('Failed to delete config:', error);
+      alert(error instanceof Error ? error.message : '删除配置失败');
     }
   };
 
@@ -546,26 +587,19 @@ export default function AdminPage() {
   const handleDeleteCompany = async (id: number) => {
     if (!confirm('确定要删除这家企业吗？')) return;
     try {
-      await fetch(`/api/admin/company-config?id=${id}`, { method: 'DELETE' });
+      const response = await fetch(`/api/admin/company-config?id=${id}`, { method: 'DELETE' });
+      const data = await response.json();
+      if (!response.ok) throw new Error(data.error || '删除企业失败');
       setCompanies(prev => prev.filter(c => c.id !== id));
     } catch (error) {
       console.error('Failed to delete company:', error);
+      alert(error instanceof Error ? error.message : '删除企业失败');
     }
   };
 
   // Job CRUD
   const handleCreateJob = async () => {
     try {
-      // 查重：公司名称 + 岗位名称
-      const duplicateJob = jobs.find(
-        j => j.company.toLowerCase() === jobForm.company.toLowerCase() &&
-             j.title.toLowerCase() === jobForm.title.toLowerCase()
-      );
-      if (duplicateJob) {
-        alert(`发现重复岗位！\n\n公司：${duplicateJob.company}\n岗位：${duplicateJob.title}\n\n如需添加，请先删除或编辑现有岗位。`);
-        return;
-      }
-
       // 如果填写了公司名称，自动关联公司
       let company_id = null;
       if (jobForm.company) {
@@ -584,12 +618,15 @@ export default function AdminPage() {
       });
       const data = await response.json();
       if (data.job) {
-        setJobs([data.job, ...jobs]);
+        await fetchJobsPage(0, jobSearch);
         resetJobForm();
         setJobDialogOpen(false);
+      } else if (!response.ok) {
+        alert(data.error || '添加岗位失败');
       }
     } catch (error) {
       console.error('Failed to create job:', error);
+      alert('添加岗位失败，请稍后重试');
     }
   };
 
@@ -686,10 +723,7 @@ export default function AdminPage() {
       });
 
       if (data.success && data.created > 0) {
-        // 刷新岗位列表
-        const jobsRes = await fetch('/api/jobs');
-        const jobsData = await jobsRes.json();
-        setJobs(jobsData.jobs || []);
+        await fetchJobsPage();
       }
     } catch (error) {
       console.error('Failed to batch import:', error);
@@ -711,6 +745,29 @@ export default function AdminPage() {
     setPreviewJobs([]);
     setUploadedFileName('');
     setBatchImportOpen(false);
+  };
+
+  const handleFeedSync = async () => {
+    setFeedSyncing(true);
+    setFeedSyncMessage('正在同步招聘数据…');
+    try {
+      const response = await fetch('/api/jobs/sync-feed', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ maxPages: 20 }),
+      });
+      const data = await response.json();
+      if (!response.ok) throw new Error(data.error || '同步失败');
+      const result = data.result;
+      setFeedSyncMessage(
+        `本次接收 ${result.received} 条，写入 ${result.upserted} 条，关闭 ${result.closed} 条。${result.has_more ? '仍有剩余数据，请再次同步。' : '已完成同步。'}`,
+      );
+      await fetchJobsPage();
+    } catch (error) {
+      setFeedSyncMessage(error instanceof Error ? error.message : '同步失败，请稍后重试');
+    } finally {
+      setFeedSyncing(false);
+    }
   };
 
   // 文件上传处理
@@ -813,7 +870,7 @@ export default function AdminPage() {
       console.log('Response data:', data);
 
       if (data.success) {
-        setJobs(jobs.filter(j => !selectedJobIds.has(j.id)));
+        await fetchJobsPage(jobsPage, jobSearch);
         setSelectedJobIds(new Set());
         setBatchDeleteConfirmOpen(false);
       } else {
@@ -838,23 +895,29 @@ export default function AdminPage() {
       });
       const data = await response.json();
       if (data.job) {
-        setJobs(jobs.map(j => j.id === data.job.id ? data.job : j));
+        await fetchJobsPage(jobsPage, jobSearch);
         resetJobForm();
         setEditingJob(null);
         setJobDialogOpen(false);
+      } else if (!response.ok) {
+        alert(data.error || '保存岗位失败');
       }
     } catch (error) {
       console.error('Failed to update job:', error);
+      alert('保存岗位失败，请稍后重试');
     }
   };
 
   const handleDeleteJob = async (id: number) => {
     try {
-      await fetch(`/api/jobs/${id}`, { method: 'DELETE' });
-      setJobs(jobs.filter(j => j.id !== id));
+      const response = await fetch(`/api/jobs/${id}`, { method: 'DELETE' });
+      const data = await response.json();
+      if (!response.ok) throw new Error(data.error || '删除岗位失败');
+      await fetchJobsPage(jobsPage, jobSearch);
       setDeleteJobId(null);
     } catch (error) {
       console.error('Failed to delete job:', error);
+      alert(error instanceof Error ? error.message : '删除岗位失败');
     }
   };
 
@@ -926,7 +989,7 @@ export default function AdminPage() {
 
   // Stats
   const stats = {
-    totalJobs: jobs.length,
+    totalJobs: jobsTotal,
     totalResumes: resumes.length,
     totalApplications: applications.length,
     pendingApps: applications.filter(a => a.status === 'pending').length,
@@ -935,13 +998,7 @@ export default function AdminPage() {
     closedApps: applications.filter(a => a.status === 'closed').length,
   };
 
-  const filteredJobs = jobs
-    .filter(
-      job => 
-        job.title.toLowerCase().includes(jobSearch.toLowerCase()) ||
-        job.company.toLowerCase().includes(jobSearch.toLowerCase())
-    )
-    .sort((a, b) => {
+  const filteredJobs = [...jobs].sort((a, b) => {
       // 首先按投递状态排序：可投递排在前面
       const aActive = a.is_active !== false;
       const bActive = b.is_active !== false;
@@ -953,11 +1010,10 @@ export default function AdminPage() {
     });
 
   return (
-    <AdminAuthGuard>
-      <div className="min-h-screen bg-muted/30">
+      <div className="min-h-screen bg-muted/30 pt-14">
         <Header1 />
         {/* Admin Toolbar */}
-        <div className="border-b bg-background sticky top-14 z-40">
+        <div className="border-b bg-background sticky top-14 z-30">
           <div className="container mx-auto px-4 h-12 flex items-center justify-between">
             <div className="flex items-center gap-2 md:gap-3">
               <LayoutDashboard className="h-5 w-5 md:h-6 md:w-6 text-primary" />
@@ -983,6 +1039,7 @@ export default function AdminPage() {
                       <Label>原密码</Label>
                       <Input
                         type="password"
+                        autoComplete="current-password"
                         value={oldPassword}
                         onChange={(e) => setOldPassword(e.target.value)}
                         placeholder="请输入原密码"
@@ -992,15 +1049,17 @@ export default function AdminPage() {
                       <Label>新密码</Label>
                       <Input
                         type="password"
+                        autoComplete="new-password"
                         value={newPassword}
                         onChange={(e) => setNewPassword(e.target.value)}
-                        placeholder="请输入新密码（至少6位）"
+                        placeholder="请输入新密码（至少12位）"
                       />
                     </div>
                     <div>
                       <Label>确认新密码</Label>
                       <Input
                         type="password"
+                        autoComplete="new-password"
                         value={confirmPassword}
                         onChange={(e) => setConfirmPassword(e.target.value)}
                         placeholder="请再次输入新密码"
@@ -1073,7 +1132,7 @@ export default function AdminPage() {
           </div>
         ) : (
           <Tabs defaultValue="overview" className="space-y-4 md:space-y-6">
-            <div className="overflow-x-auto -mx-4 px-4 md:mx-0 md:px-0">
+            <div className="overflow-x-auto -mx-4 px-4 md:mx-0 md:px-0 scroll-mt-28">
               <TabsList className="grid w-max md:w-full grid-cols-7 gap-1 md:gap-0 md:inline-flex">
                 <TabsTrigger value="overview" className="px-3 md:px-4">
                   <LayoutDashboard className="h-4 w-4 md:mr-2" />
@@ -1712,6 +1771,17 @@ export default function AdminPage() {
                       <CardDescription className="text-xs md:text-sm">添加、编辑和删除岗位信息</CardDescription>
                     </div>
                     <div className="flex gap-2">
+                      <Button
+                        variant="outline"
+                        size="sm"
+                        className="h-8 text-xs md:text-sm"
+                        onClick={handleFeedSync}
+                        disabled={feedSyncing}
+                      >
+                        {feedSyncing ? <Loader2 className="h-4 w-4 animate-spin md:mr-2" /> : <Globe className="h-4 w-4 md:mr-2" />}
+                        <span className="hidden md:inline">同步招聘数据</span>
+                        <span className="md:hidden">同步</span>
+                      </Button>
                       <Button 
                         variant="outline"
                         size="sm"
@@ -1762,53 +1832,26 @@ export default function AdminPage() {
                             <div>
                               <Label htmlFor="company" className="text-xs md:text-sm">公司名称 *</Label>
                               <div className="space-y-1">
-                                <Select 
-                                  value={jobForm.company} 
-                                  onValueChange={(value) => {
-                                    const company = companies.find(c => c.company_name === value);
-                                    if (company) {
-                                      setJobForm({ 
-                                        ...jobForm, 
-                                        company: value,
-                                        logo_url: company.logo_url || jobForm.logo_url,
-                                      });
-                                    } else {
-                                      setJobForm({ ...jobForm, company: value });
-                                    }
+                                <Input
+                                  list="admin-company-options"
+                                  value={jobForm.company}
+                                  onChange={(e) => {
+                                    const value = e.target.value;
+                                    const company = companies.find(c => c.company_name.toLowerCase() === value.toLowerCase());
+                                    setJobForm({
+                                      ...jobForm,
+                                      company: value,
+                                      logo_url: company?.logo_url || jobForm.logo_url,
+                                    });
                                   }}
-                                >
-                                  <SelectTrigger className="h-9 md:h-10">
-                                    <SelectValue placeholder="输入或选择公司" />
-                                  </SelectTrigger>
-                                  <SelectContent>
-                                    <div className="px-2 pb-1">
-                                      <Input
-                                        placeholder="输入公司名称..."
-                                        value={jobForm.company}
-                                        onChange={(e) => setJobForm({ ...jobForm, company: e.target.value })}
-                                        className="h-8 text-sm"
-                                      />
-                                    </div>
-                                    <div className="max-h-[200px] overflow-y-auto">
-                                      {companies.length === 0 ? (
-                                        <p className="px-2 py-4 text-sm text-center text-muted-foreground">
-                                          暂无公司配置，请在下方添加
-                                        </p>
-                                      ) : (
-                                        companies.map(c => (
-                                          <SelectItem key={c.id} value={c.company_name}>
-                                            <div className="flex items-center gap-2">
-                                              {c.logo_url && (
-                                                <img src={c.logo_url} alt="" className="h-4 w-4 rounded" />
-                                              )}
-                                              {c.company_name}
-                                            </div>
-                                          </SelectItem>
-                                        ))
-                                      )}
-                                    </div>
-                                  </SelectContent>
-                                </Select>
+                                  placeholder="输入或选择公司"
+                                  className="h-9 md:h-10"
+                                />
+                                <datalist id="admin-company-options">
+                                  {companies.map((company) => (
+                                    <option key={company.id} value={company.company_name} />
+                                  ))}
+                                </datalist>
                                 {jobForm.company && (() => {
                                   const matchedCompany = companies.find(c => c.company_name.toLowerCase() === jobForm.company.toLowerCase());
                                   if (matchedCompany) {
@@ -2011,7 +2054,10 @@ export default function AdminPage() {
                       <Input
                         placeholder="搜索岗位名称或公司..."
                         value={jobSearch}
-                        onChange={(e) => setJobSearch(e.target.value)}
+                        onChange={(e) => {
+                          setJobSearch(e.target.value);
+                          setJobsPage(0);
+                        }}
                         className="pl-10 h-9 md:h-10"
                       />
                     </div>
@@ -2040,11 +2086,23 @@ export default function AdminPage() {
                       </div>
                     )}
                   </div>
+                  {feedSyncMessage && (
+                    <p className="mb-4 text-xs md:text-sm text-muted-foreground">{feedSyncMessage}</p>
+                  )}
+
+                  {jobsError && (
+                    <div className="mb-4 flex flex-col sm:flex-row sm:items-center justify-between gap-3 rounded-lg border border-red-200 bg-red-50 px-3 py-2 text-sm text-red-700">
+                      <span>{jobsError}</span>
+                      <Button type="button" size="sm" variant="outline" onClick={() => void fetchJobsPage()}>
+                        重试
+                      </Button>
+                    </div>
+                  )}
 
                   {/* Jobs Table - 手机端隐藏部分列 */}
                   <div className="border rounded-lg overflow-hidden">
                     <div className="overflow-x-auto">
-                      <table className="w-full min-w-[600px]">
+                      <table className="w-full min-w-[900px]">
                         <thead className="bg-muted/50">
                           <tr>
                             <th className="px-3 md:px-4 py-2 md:py-3 w-10 md:w-12">
@@ -2059,14 +2117,21 @@ export default function AdminPage() {
                             <th className="px-3 md:px-4 py-2 md:py-3 text-left text-xs md:text-sm font-medium">公司</th>
                             <th className="px-3 md:px-4 py-2 md:py-3 text-left text-xs md:text-sm font-medium hidden md:table-cell">地区</th>
                             <th className="px-3 md:px-4 py-2 md:py-3 text-left text-xs md:text-sm font-medium hidden md:table-cell">方向</th>
-                            <th className="px-3 md:px-4 py-2 md:py-3 text-left text-xs md:text-sm font-medium hidden lg:table-cell">受众</th>
-                            <th className="px-3 md:px-4 py-2 md:py-3 text-left text-xs md:text-sm font-medium hidden lg:table-cell">薪资</th>
-                            <th className="px-3 md:px-4 py-2 md:py-3 text-left text-xs md:text-sm font-medium">状态</th>
-                            <th className="px-3 md:px-4 py-2 md:py-3 text-right text-xs md:text-sm font-medium">操作</th>
+                            <th className="px-3 md:px-4 py-2 md:py-3 text-left text-xs md:text-sm font-medium hidden lg:table-cell whitespace-nowrap">受众</th>
+                            <th className="px-3 md:px-4 py-2 md:py-3 text-left text-xs md:text-sm font-medium hidden lg:table-cell whitespace-nowrap">薪资</th>
+                            <th className="px-3 md:px-4 py-2 md:py-3 text-left text-xs md:text-sm font-medium whitespace-nowrap">状态</th>
+                            <th className="px-3 md:px-4 py-2 md:py-3 text-right text-xs md:text-sm font-medium whitespace-nowrap">操作</th>
                           </tr>
                         </thead>
                         <tbody className="divide-y">
-                          {filteredJobs.map((job) => (
+                          {jobsLoading ? (
+                            <tr key="jobs-loading">
+                              <td colSpan={9} className="py-10 text-center text-muted-foreground">
+                                <Loader2 className="mx-auto mb-2 h-5 w-5 animate-spin" />
+                                正在加载岗位…
+                              </td>
+                            </tr>
+                          ) : filteredJobs.map((job) => (
                             <tr key={job.id} className={`hover:bg-muted/30 ${selectedJobIds.has(job.id) ? 'bg-primary/5' : ''}`}>
                               <td className="px-3 md:px-4 py-2 md:py-3">
                                 <input
@@ -2082,9 +2147,9 @@ export default function AdminPage() {
                                 <Badge variant="outline" className="text-xs">{job.region}</Badge>
                               </td>
                               <td className="px-3 md:px-4 py-2 md:py-3 text-xs md:text-sm hidden md:table-cell">{job.direction}</td>
-                              <td className="px-3 md:px-4 py-2 md:py-3 text-xs md:text-sm hidden lg:table-cell">{job.audience}</td>
-                              <td className="px-3 md:px-4 py-2 md:py-3 text-xs md:text-sm text-green-600 hidden lg:table-cell">{job.salary_range}</td>
-                              <td className="px-3 md:px-4 py-2 md:py-3 text-xs md:text-sm">
+                              <td className="px-3 md:px-4 py-2 md:py-3 text-xs md:text-sm hidden lg:table-cell whitespace-nowrap">{job.audience}</td>
+                              <td className="px-3 md:px-4 py-2 md:py-3 text-xs md:text-sm text-green-600 hidden lg:table-cell whitespace-nowrap">{job.salary_range || '-'}</td>
+                              <td className="px-3 md:px-4 py-2 md:py-3 text-xs md:text-sm whitespace-nowrap">
                                 {job.is_active === false ? (
                                   <Badge variant="secondary" className="bg-gray-100 text-gray-600 text-xs">不可投递</Badge>
                                 ) : (
@@ -2118,12 +2183,37 @@ export default function AdminPage() {
                         </tbody>
                       </table>
                     </div>
-                    {filteredJobs.length === 0 && (
+                    {!jobsLoading && filteredJobs.length === 0 && (
                       <div className="text-center py-8 text-muted-foreground">
                         暂无岗位数据
                       </div>
                     )}
                   </div>
+                  {jobsTotal > 0 && (
+                    <div className="mt-4 flex flex-col sm:flex-row items-center justify-between gap-3 text-xs text-muted-foreground">
+                      <span>共 {jobsTotal} 个岗位，第 {jobsPage + 1} 页，每页 {jobsPageSize} 条</span>
+                      <div className="flex items-center gap-2">
+                        <Button
+                          type="button"
+                          size="sm"
+                          variant="outline"
+                          onClick={() => setJobsPage((current) => Math.max(0, current - 1))}
+                          disabled={jobsPage === 0}
+                        >
+                          <ChevronLeft className="h-4 w-4 mr-1" />上一页
+                        </Button>
+                        <Button
+                          type="button"
+                          size="sm"
+                          variant="outline"
+                          onClick={() => setJobsPage((current) => current + 1)}
+                          disabled={(jobsPage + 1) * jobsPageSize >= jobsTotal}
+                        >
+                          下一页<ChevronRight className="h-4 w-4 ml-1" />
+                        </Button>
+                      </div>
+                    </div>
+                  )}
                 </CardContent>
               </Card>
             </TabsContent>
@@ -3115,6 +3205,13 @@ export default function AdminPage() {
           onSuccess={fetchLogos}
         />
       </div>
+  );
+}
+
+export default function AdminPage() {
+  return (
+    <AdminAuthGuard>
+      <AdminContent />
     </AdminAuthGuard>
   );
 }

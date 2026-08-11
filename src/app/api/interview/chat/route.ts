@@ -1,5 +1,6 @@
 import { NextRequest } from 'next/server';
 import { getAuthContext, unauthorizedResponse } from '@/lib/auth-server';
+import { consumeAuthRateLimit } from '@/lib/auth-security';
 import { createTextProviderClient } from '@/lib/ai/text-provider';
 import { buildDNABlock, type CompanyDNA } from '@/lib/company-dna';
 import { getCompanyDNA } from '@/lib/company-dna-service';
@@ -40,6 +41,7 @@ import {
   type RoundRole,
 } from '@/lib/interviewers';
 import { getInterviewerVoiceConfig, type VoiceLanguage } from '@/lib/voice-config';
+import { interviewChatRequestSchema } from '@/lib/interview-chat-validation';
 
 interface ChatMessage {
   role: 'interviewer' | 'candidate';
@@ -51,6 +53,21 @@ interface ChatMessage {
 }
 
 const QUESTIONS_PER_ROUND = 2;
+const COMPANY_DNA_TIMEOUT_MS = 8_000;
+
+async function getCompanyDNAWithTimeout(company: string, headers: Headers) {
+  let timer: ReturnType<typeof setTimeout> | undefined;
+  const timeout = new Promise<null>((resolve) => {
+    timer = setTimeout(() => resolve(null), COMPANY_DNA_TIMEOUT_MS);
+  });
+  try {
+    return await Promise.race([getCompanyDNA(company, headers), timeout]);
+  } catch {
+    return null;
+  } finally {
+    if (timer) clearTimeout(timer);
+  }
+}
 
 // ===== 面试官节奏控制标记协议 =====
 // 面试官（LLM）在回复最后一行输出标记来自主推进面试：
@@ -242,7 +259,25 @@ export async function POST(request: NextRequest) {
     const auth = await getAuthContext(request);
     if (!auth) return unauthorizedResponse();
     const client = auth.client;
-    const body = await request.json();
+    const rateLimit = await consumeAuthRateLimit(`interview-chat:user:${auth.user.id}`, 30, 300, 900);
+    if (!rateLimit.allowed) {
+      return new Response(JSON.stringify({ error: '面试请求过于频繁，请稍后再试' }), {
+        status: 429,
+        headers: { 'Retry-After': String(Math.max(rateLimit.retryAfterSeconds, 30)) },
+      });
+    }
+
+    let rawBody: unknown;
+    try {
+      rawBody = await request.json();
+    } catch {
+      return new Response(JSON.stringify({ error: '请求体必须是有效 JSON' }), { status: 400 });
+    }
+    const parsedBody = interviewChatRequestSchema.safeParse(rawBody);
+    if (!parsedBody.success) {
+      return new Response(JSON.stringify({ error: '面试请求参数无效' }), { status: 400 });
+    }
+    const body = parsedBody.data;
     const {
       sessionId,
       interviewType: requestedInterviewType,
@@ -256,10 +291,10 @@ export async function POST(request: NextRequest) {
       targetCompany,
       timeout = false,
       practiceMode = 'fresh',
+      switchNext = false,
     } = body;
 
-    const resolvedPracticeMode: PracticeMode =
-      practiceMode === 'targeted' || practiceMode === 'review' ? practiceMode : 'fresh';
+    const resolvedPracticeMode: PracticeMode = practiceMode;
 
     const isGauntlet = mode === 'gauntlet' && totalRounds > 1;
 
@@ -326,7 +361,7 @@ export async function POST(request: NextRequest) {
       const script = isGauntlet ? GAUNTLET_SCRIPTS[rounds] ?? null : null;
       const firstRole: RoundRole | null = script ? script[0] : null;
 
-      const dnaResult = await getCompanyDNA(company, request.headers).catch(() => null);
+      const dnaResult = await getCompanyDNAWithTimeout(company, request.headers);
       const dnaBlock = dnaResult ? buildDNABlock(dnaResult.dna) : '';
       const recentQuestions = resolvedPracticeMode === 'review'
         ? []
@@ -473,7 +508,7 @@ export async function POST(request: NextRequest) {
 
     const currentInterviewerId = interviewerIds[currentRound - 1] || null;
     // switchNext：上一轮面试官主动收尾（[ROUND_END]）后，前端请求下一位面试官开场——无候选人新回答
-    const isSwitchNext = body.switchNext === true;
+    const isSwitchNext = switchNext;
     const isTimeout = timeout === true && !isSwitchNext;
     if (!isSwitchNext && !isTimeout) {
       if (!answer || !String(answer).trim()) {
@@ -671,7 +706,7 @@ export async function POST(request: NextRequest) {
               ts: Date.now(),
             });
           }
-          await client
+          const { data: updatedSession, error: updateError } = await client
             .from('interview_sessions')
             .update({
               messages: newMessages,
@@ -681,7 +716,13 @@ export async function POST(request: NextRequest) {
               ...(finalMarker === 'eliminate' || finalMarker === 'wrap_up' ? { status: 'completed' } : {}),
               updated_at: new Date().toISOString(),
             })
-            .eq('id', sessionId);
+            .eq('id', sessionId)
+            .eq('user_id', auth.user.id)
+            .eq('updated_at', session.updated_at)
+            .select('id')
+            .maybeSingle();
+          if (updateError) throw new Error(`保存面试消息失败: ${updateError.message}`);
+          if (!updatedSession) throw new Error('面试会话已被其他请求更新，请重试');
 
           // 节奏事件帧（done 之前下发，前端据此自动衔接下一面试官或进入评估）
           if (finalMarker === 'round_end') {

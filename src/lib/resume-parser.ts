@@ -14,10 +14,12 @@ import type {
   ResumeProfileEvidence,
   UserSegmentation,
 } from '@/lib/resume-types';
+import { extractFirstJsonObject } from '@/lib/json-extract';
 
 const BASIC_PROFILE_INPUT_LIMIT = 30000;
 const PROFILE_INPUT_LIMIT = 12000;
 const DEFAULT_LLM_TIMEOUT_MS = 45_000;
+export const MAX_RESUME_FILE_SIZE_BYTES = 10 * 1024 * 1024;
 
 function getResumeLlmTimeoutMs(): number {
   const rawValue = process.env.RESUME_PROFILE_LLM_TIMEOUT_MS?.trim();
@@ -36,7 +38,10 @@ function getResumeLlmTimeoutMs(): number {
 function createResumeLlmClient(): { client: TextProviderClient; timeoutMs: number } {
   const timeoutMs = getResumeLlmTimeoutMs();
   try {
-    return { client: createTextProviderClient(), timeoutMs };
+    return {
+      client: createTextProviderClient({ model: process.env.ALIBABA_RESUME_MODEL }),
+      timeoutMs,
+    };
   } catch (error) {
     if (error instanceof AIProviderConfigError) {
       throw new ResumeProfileExtractionError(error.message);
@@ -173,7 +178,33 @@ function getResumeFormat(options: ResumeFileOptions): 'pdf' | 'docx' | 'text' | 
 }
 
 export function isSupportedResumeFile(options: ResumeFileOptions): boolean {
-  return getResumeFormat(options) !== null;
+  const format = getResumeFormat(options);
+  if (!format) return false;
+
+  const contentType = (options.contentType || '').split(';', 1)[0].toLowerCase();
+  if (!contentType || contentType === 'application/octet-stream') return true;
+  if (format === 'pdf') return contentType === 'application/pdf';
+  if (format === 'docx') {
+    return contentType === 'application/vnd.openxmlformats-officedocument.wordprocessingml.document';
+  }
+  return contentType.startsWith('text/');
+}
+
+export function hasSupportedResumeFileSignature(buffer: Buffer, options: ResumeFileOptions): boolean {
+  const format = getResumeFormat(options);
+  if (!format || buffer.length === 0) return false;
+
+  if (format === 'pdf') return buffer.subarray(0, 5).toString('ascii') === '%PDF-';
+  if (format === 'docx') {
+    return buffer.length >= 4
+      && buffer[0] === 0x50
+      && buffer[1] === 0x4b
+      && buffer[2] === 0x03
+      && buffer[3] === 0x04;
+  }
+
+  const sample = buffer.subarray(0, Math.min(buffer.length, 8_192));
+  return !sample.includes(0);
 }
 
 function decodePdfText(rawText: string): string {
@@ -275,15 +306,8 @@ function toNumberValue(value: unknown): number | undefined {
 }
 
 function extractJsonObject(content: string): Record<string, unknown> | null {
-  const jsonMatch = content.match(/\{[\s\S]*\}/);
-  if (!jsonMatch) return null;
-
-  try {
-    const parsed: unknown = JSON.parse(jsonMatch[0]);
-    return isRecord(parsed) ? parsed : null;
-  } catch {
-    return null;
-  }
+  const parsed = extractFirstJsonObject(content);
+  return isRecord(parsed) ? parsed : null;
 }
 
 function normalizeUniversities(value: unknown): ResumeUniversity[] {

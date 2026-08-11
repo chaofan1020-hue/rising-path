@@ -10,6 +10,10 @@ import WebSocket, { WebSocketServer } from 'ws';
 const TTS_WS_PATH = '/ws/interview/tts';
 const CLIENT_PROTOCOL = 'rising-path-tts-v1';
 const AUTH_PROTOCOL_PREFIX = 'rising-path-auth.';
+const MAX_CONNECTION_MS = 5 * 60 * 1000;
+const IDLE_TIMEOUT_MS = 60 * 1000;
+const MAX_ACTIVE_CONNECTIONS = 50;
+let activeConnections = 0;
 
 interface CartesiaEvent {
   type?: string;
@@ -23,7 +27,8 @@ function sendJSON(socket: WebSocket, value: Record<string, unknown>): void {
 }
 
 function rejectUpgrade(socket: import('node:stream').Duplex, status: number, message: string): void {
-  socket.write(`HTTP/1.1 ${status} Unauthorized\r\nConnection: close\r\n\r\n${message}`);
+  const statusText = status === 429 ? 'Too Many Requests' : status === 401 ? 'Unauthorized' : 'Bad Request';
+  socket.write(`HTTP/1.1 ${status} ${statusText}\r\nConnection: close\r\n\r\n${message}`);
   socket.destroy();
 }
 
@@ -73,10 +78,19 @@ function languageCode(language?: string): 'zh' | 'en' {
 }
 
 function handleConnection(client: WebSocket): void {
+  activeConnections += 1;
   let cartesia: WebSocket | null = null;
   let started = false;
+  let idleTimer: ReturnType<typeof setTimeout> | null = null;
+  const connectionTimer = setTimeout(() => client.close(1008, 'TTS connection time limit'), MAX_CONNECTION_MS);
+  const touch = () => {
+    if (idleTimer) clearTimeout(idleTimer);
+    idleTimer = setTimeout(() => client.close(1000, 'TTS connection idle timeout'), IDLE_TIMEOUT_MS);
+  };
+  touch();
 
   client.on('message', (raw, isBinary) => {
+    touch();
     if (isBinary) return;
     let request: {
       type?: string;
@@ -92,6 +106,10 @@ function handleConnection(client: WebSocket): void {
       return;
     }
     if (request.type !== 'speak' || !request.text?.trim() || started) return;
+    if (request.text.length > 2_000) {
+      sendJSON(client, { type: 'error', error: 'TTS 文本不能超过 2000 字符' });
+      return;
+    }
     started = true;
 
     const language = languageCode(request.language);
@@ -110,6 +128,7 @@ function handleConnection(client: WebSocket): void {
         }));
       });
       cartesia.on('message', (message) => {
+        touch();
         let event: CartesiaEvent;
         try {
           event = JSON.parse(message.toString()) as CartesiaEvent;
@@ -139,6 +158,9 @@ function handleConnection(client: WebSocket): void {
   });
 
   client.on('close', () => {
+    clearTimeout(connectionTimer);
+    if (idleTimer) clearTimeout(idleTimer);
+    activeConnections = Math.max(0, activeConnections - 1);
     if (cartesia?.readyState === WebSocket.OPEN) cartesia.close(1000);
     else cartesia?.terminate();
     cartesia = null;
@@ -164,6 +186,10 @@ export function attachInterviewTTSWebSocket(server: Server): void {
     void authenticate(accessToken).then((valid) => {
       if (!valid) {
         rejectUpgrade(socket, 401, 'Invalid realtime TTS authentication');
+        return;
+      }
+      if (activeConnections >= MAX_ACTIVE_CONNECTIONS) {
+        rejectUpgrade(socket, 429, 'Realtime TTS capacity reached');
         return;
       }
       wss.handleUpgrade(request, socket, head, handleConnection);

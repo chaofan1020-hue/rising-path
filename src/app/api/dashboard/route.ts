@@ -228,16 +228,22 @@ export async function GET(request: NextRequest) {
   const supabase = auth.client;
 
   // 最新简历（含画像与分层）
-  const { data: resumes } = await supabase
-    .from('resumes')
-    .select('id, created_at, updated_at, file_name, profile, segmentation, segmentation_overrides')
-    .eq('user_id', auth.user.id)
-    .order('created_at', { ascending: false })
-    .limit(1);
+  const [{ data: resumes }, { count: resumeCountResult }] = await Promise.all([
+    supabase
+      .from('resumes')
+      .select('id, created_at, updated_at, file_name, profile, segmentation, segmentation_overrides')
+      .eq('user_id', auth.user.id)
+      .order('created_at', { ascending: false })
+      .limit(1),
+    supabase
+      .from('resumes')
+      .select('id', { count: 'exact', head: true })
+      .eq('user_id', auth.user.id),
+  ]);
 
   const latestResume = (resumes?.[0] as DashboardResume | undefined) ?? null;
   const latestResumeId = latestResume?.id ?? null;
-  const resumeCount = resumes?.length ?? 0;
+  const resumeCount = resumeCountResult ?? 0;
 
   // AI 匹配
   const { data: aiMatches } = await supabase
@@ -252,28 +258,39 @@ export async function GET(request: NextRequest) {
     : 0;
 
   // 模拟面试
-  const { data: interviews } = await supabase
-    .from('interview_sessions')
-    .select('id, status, current_round, total_rounds, updated_at, created_at, target_company, interview_type, overall_score, report_grade, report')
-    .eq('user_id', auth.user.id)
-    .order('created_at', { ascending: false })
-    .limit(50);
+  const [{ data: interviews }, { count: interviewCountResult }] = await Promise.all([
+    supabase
+      .from('interview_sessions')
+      .select('id, status, current_round, total_rounds, updated_at, created_at, target_company, interview_type, overall_score, report_grade, report')
+      .eq('user_id', auth.user.id)
+      .order('created_at', { ascending: false })
+      .limit(50),
+    supabase
+      .from('interview_sessions')
+      .select('id', { count: 'exact', head: true })
+      .eq('user_id', auth.user.id),
+  ]);
 
-  const interviewCount = interviews?.length ?? 0;
+  const interviewCount = interviewCountResult ?? 0;
   const latestInterview = interviews?.[0] ?? null;
 
   // 投递记录
-  const { data: applications } = await supabase
-    .from('applications')
-    .select('id, status, created_at, updated_at')
-    .eq('user_id', auth.user.id)
-    .limit(200);
-
-  const applicationCount = applications?.length ?? 0;
-  // 本周投递数
   const weekStart = getWeekStart(new Date());
-  const weeklyApplications =
-    applications?.filter((a) => new Date(a.created_at) >= weekStart).length ?? 0;
+  const [{ data: applications }, { count: applicationCountResult }] = await Promise.all([
+    supabase
+      .from('applications')
+      .select('id, status, created_at, updated_at')
+      .eq('user_id', auth.user.id)
+      .gte('created_at', weekStart.toISOString()),
+    supabase
+      .from('applications')
+      .select('id', { count: 'exact', head: true })
+      .eq('user_id', auth.user.id),
+  ]);
+
+  const applicationCount = applicationCountResult ?? 0;
+  // 本周投递数
+  const weeklyApplications = applications?.length ?? 0;
 
   // 收藏岗位
   const { data: favorites } = await supabase

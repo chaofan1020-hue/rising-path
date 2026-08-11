@@ -11,7 +11,7 @@ import {
   PopoverContent,
   PopoverTrigger,
 } from '@/components/ui/popover';
-import { Search, MapPin, Briefcase, Users, ExternalLink, ChevronDown, X, Plus, Check, Loader2, Heart } from 'lucide-react';
+import { Search, MapPin, Briefcase, Users, ExternalLink, ChevronDown, ChevronLeft, ChevronRight, X, Plus, Check, Loader2, Heart } from 'lucide-react';
 import Link from 'next/link';
 import { AuthGuard } from '@/components/auth-guard';
 import { apiFetch } from '@/lib/api-client';
@@ -114,6 +114,18 @@ const mainRegions = [
   { id: -6, config_type: 'region', config_value: '香港', sort_order: 6, is_active: true },
   { id: -7, config_type: 'region', config_value: '日本', sort_order: 7, is_active: true },
   { id: -8, config_type: 'region', config_value: '欧洲', sort_order: 8, is_active: true },
+];
+
+const jobTypeOptions: JobConfig[] = [
+  { id: -101, config_type: 'job_type', config_value: '实习', sort_order: 1, is_active: true },
+  { id: -102, config_type: 'job_type', config_value: '校招', sort_order: 2, is_active: true },
+  { id: -103, config_type: 'job_type', config_value: '社招', sort_order: 3, is_active: true },
+];
+
+const sponsorshipOptions: JobConfig[] = [
+  { id: -111, config_type: 'sponsorship', config_value: 'yes', sort_order: 1, is_active: true },
+  { id: -112, config_type: 'sponsorship', config_value: 'no', sort_order: 2, is_active: true },
+  { id: -113, config_type: 'sponsorship', config_value: 'unknown', sort_order: 3, is_active: true },
 ];
 
 // 地区映射：将具体地区映射到所属大地区
@@ -314,7 +326,9 @@ function SingleSelectFilter({
               }`}
               translate="no"
             >
-              {option.config_value}
+              {option.config_type === 'sponsorship'
+                ? option.config_value === 'yes' ? '支持签证' : option.config_value === 'no' ? '不支持签证' : '未注明'
+                : option.config_value}
             </button>
           ))}
         </div>
@@ -328,9 +342,14 @@ function JobsContent() {
   const [jobs, setJobs] = useState<Job[]>([]);
   const [loading, setLoading] = useState(true);
   const [searchTerm, setSearchTerm] = useState('');
+  const [page, setPage] = useState(0);
+  const pageSize = 30;
+  const [totalJobs, setTotalJobs] = useState(0);
   const [selectedRegions, setSelectedRegions] = useState<string[]>([]);
   const [selectedDirections, setSelectedDirections] = useState<string[]>([]);
   const [selectedAudience, setSelectedAudience] = useState('');
+  const [selectedJobType, setSelectedJobType] = useState('');
+  const [selectedSponsorship, setSelectedSponsorship] = useState('');
   const [applyingJobId, setApplyingJobId] = useState<number | null>(null);
   const [appliedJobIds, setAppliedJobIds] = useState<Set<number>>(new Set());
   const [favoriteJobIds, setFavoriteJobIds] = useState<Set<number>>(new Set());
@@ -363,16 +382,26 @@ function JobsContent() {
         selectedDirections.forEach(d => params.append('direction', d));
       }
       if (selectedAudience !== t('page.all')) params.append('audience', selectedAudience);
+      if (selectedJobType) params.append('job_type', selectedJobType);
+      if (selectedSponsorship) params.append('sponsorship', selectedSponsorship);
+      if (searchTerm.trim()) params.set('search', searchTerm.trim());
+      params.set('limit', String(pageSize));
+      params.set('offset', String(page * pageSize));
 
       const response = await apiFetch(`/api/jobs?${params.toString()}`);
       const data = await response.json();
       setJobs(data.jobs || []);
+      setTotalJobs(data.pagination?.total || 0);
     } catch (error) {
       console.error('Failed to fetch jobs:', error);
     } finally {
       setLoading(false);
     }
-  }, [selectedRegions, selectedDirections, selectedAudience, t]);
+  }, [page, pageSize, searchTerm, selectedRegions, selectedDirections, selectedAudience, selectedJobType, selectedSponsorship, t]);
+
+  useEffect(() => {
+    setPage(0);
+  }, [searchTerm, selectedRegions, selectedDirections, selectedAudience, selectedJobType, selectedSponsorship]);
 
   // 获取已投递的岗位ID列表
   const fetchAppliedJobIds = useCallback(async () => {
@@ -486,19 +515,7 @@ function JobsContent() {
     }
   };
 
-  const filteredJobs = jobs
-    .filter(
-      (job) =>
-        (job.title.toLowerCase().includes(searchTerm.toLowerCase()) ||
-        job.company.toLowerCase().includes(searchTerm.toLowerCase())) &&
-        // 地区筛选（支持包含关系）
-        (selectedRegions.length === 0 || isRegionMatch(job.region, selectedRegions)) &&
-        // 方向筛选
-        (selectedDirections.length === 0 || selectedDirections.includes(job.direction)) &&
-        // 受众筛选
-        (selectedAudience === t('page.all') || job.audience === selectedAudience)
-    )
-    .sort((a, b) => {
+  const filteredJobs = [...jobs].sort((a, b) => {
       // 首先按投递状态排序：可投递排在前面
       const aActive = a.is_active !== false;
       const bActive = b.is_active !== false;
@@ -543,7 +560,10 @@ function JobsContent() {
                   icon={MapPin}
                   options={configs.region || []}
                   selected={selectedRegions}
-                  onChange={setSelectedRegions}
+                  onChange={(values) => {
+                    setSelectedRegions(values);
+                    setPage(0);
+                  }}
                   showFlag={true}
                   t={t}
                 />
@@ -552,7 +572,10 @@ function JobsContent() {
                   icon={Briefcase}
                   options={configs.direction || []}
                   selected={selectedDirections}
-                  onChange={setSelectedDirections}
+                  onChange={(values) => {
+                    setSelectedDirections(values);
+                    setPage(0);
+                  }}
                   t={t}
                 />
                 <SingleSelectFilter
@@ -560,17 +583,45 @@ function JobsContent() {
                   icon={Users}
                   options={configs.audience || []}
                   selected={selectedAudience}
-                  onChange={setSelectedAudience}
+                  onChange={(value) => {
+                    setSelectedAudience(value);
+                    setPage(0);
+                  }}
+                  t={t}
+                />
+                <SingleSelectFilter
+                  label="岗位类型"
+                  icon={Briefcase}
+                  options={jobTypeOptions}
+                  selected={selectedJobType}
+                  onChange={(value) => {
+                    setSelectedJobType(value);
+                    setPage(0);
+                  }}
+                  t={t}
+                />
+                <SingleSelectFilter
+                  label="签证支持"
+                  icon={Users}
+                  options={sponsorshipOptions}
+                  selected={selectedSponsorship}
+                  onChange={(value) => {
+                    setSelectedSponsorship(value);
+                    setPage(0);
+                  }}
                   t={t}
                 />
                 
                 {/* 清除筛选按钮 */}
-                {(selectedRegions.length > 0 || selectedDirections.length > 0 || selectedAudience !== t('page.all')) && (
+                {(selectedRegions.length > 0 || selectedDirections.length > 0 || selectedAudience !== t('page.all') || selectedJobType || selectedSponsorship) && (
                   <button
                     onClick={() => {
                       setSelectedRegions([]);
                       setSelectedDirections([]);
                       setSelectedAudience(t('page.all'));
+                      setSelectedJobType('');
+                      setSelectedSponsorship('');
+                      setPage(0);
                     }}
                     className="inline-flex items-center gap-1 px-2 py-1 text-xs text-zinc-400 hover:text-zinc-900 dark:hover:text-zinc-100 transition-colors"
                   >
@@ -721,9 +772,31 @@ function JobsContent() {
         </div>
 
         {/* Results count */}
-        {!loading && filteredJobs.length > 0 && (
-          <div className="relative mt-4 md:mt-6 text-center text-xs md:text-sm text-zinc-400 dark:text-zinc-500">
-            {t('jobs.foundJobs')} {filteredJobs.length} {t('jobs.jobsUnit')}
+        {!loading && totalJobs > 0 && (
+          <div className="relative mt-4 md:mt-6 flex flex-col items-center gap-3 text-xs md:text-sm text-zinc-400 dark:text-zinc-500">
+            <span>{t('jobs.foundJobs')} {totalJobs} {t('jobs.jobsUnit')} · 第 {page + 1} 页</span>
+            <div className="flex items-center gap-2">
+              <Button
+                type="button"
+                variant="outline"
+                size="sm"
+                onClick={() => setPage((current) => Math.max(0, current - 1))}
+                disabled={page === 0 || loading}
+                aria-label="上一页"
+              >
+                <ChevronLeft className="h-4 w-4 mr-1" />上一页
+              </Button>
+              <Button
+                type="button"
+                variant="outline"
+                size="sm"
+                onClick={() => setPage((current) => current + 1)}
+                disabled={loading || (page + 1) * pageSize >= totalJobs}
+                aria-label="下一页"
+              >
+                下一页<ChevronRight className="h-4 w-4 ml-1" />
+              </Button>
+            </div>
           </div>
         )}
       </main>

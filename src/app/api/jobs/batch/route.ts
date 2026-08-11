@@ -23,6 +23,14 @@ interface BatchDeleteInput {
   ids: number[];
 }
 
+function chunks<T>(values: T[], size: number): T[][] {
+  const output: T[][] = [];
+  for (let index = 0; index < values.length; index += size) {
+    output.push(values.slice(index, index + size));
+  }
+  return output;
+}
+
 export async function POST(request: NextRequest) {
   try {
     if (!hasValidAdminSession(request)) {
@@ -36,6 +44,9 @@ export async function POST(request: NextRequest) {
         { error: '请提供有效的岗位数据' },
         { status: 400 }
       );
+    }
+    if (body.jobs.length > 5000) {
+      return NextResponse.json({ error: '单次最多导入 5000 条岗位，请拆分文件后重试' }, { status: 400 });
     }
 
     // 验证必填字段
@@ -72,16 +83,19 @@ export async function POST(request: NextRequest) {
       );
     }
 
-    // 查重：查询已有的岗位
-    const { data: existingJobs } = await client
-      .from('jobs')
-      .select('title, company');
-
-    const existingSet = new Set(
-      (existingJobs || []).map(j => 
-        `${j.title.toLowerCase()}|${j.company.toLowerCase()}`
-      )
-    );
+    // 只按本次导入涉及的标题分块查重，避免岗位库变大后把整张表读入内存。
+    const existingSet = new Set<string>();
+    const titles = [...new Set(validJobs.map((job) => job.title))];
+    for (const titleBatch of chunks(titles, 500)) {
+      const { data: existingJobs, error: existingError } = await client
+        .from('jobs')
+        .select('title, company')
+        .in('title', titleBatch);
+      if (existingError) throw new Error(`查询重复岗位失败: ${existingError.message}`);
+      for (const job of existingJobs || []) {
+        existingSet.add(`${job.title.toLowerCase()}|${job.company.toLowerCase()}`);
+      }
+    }
 
     // 过滤重复岗位
     const newJobs: JobInput[] = [];
@@ -169,26 +183,30 @@ async function handleBatchDelete(request: NextRequest) {
         { status: 400 }
       );
     }
-
-    console.log('Deleting jobs with ids:', body.ids);
+    if (body.ids.length > 500 || body.ids.some((id) => !Number.isInteger(id) || id <= 0)) {
+      return NextResponse.json({ error: '岗位 ID 无效或单次最多删除 500 条' }, { status: 400 });
+    }
 
     // 先删除关联的 ai_matches 记录
-    await client
+    const aiMatchesDelete = await client
       .from('ai_matches')
       .delete()
       .in('job_id', body.ids);
+    if (aiMatchesDelete.error) throw new Error(`删除 AI 匹配记录失败: ${aiMatchesDelete.error.message}`);
 
     // 先删除关联的 applications 记录
-    await client
+    const applicationsDelete = await client
       .from('applications')
       .delete()
       .in('job_id', body.ids);
+    if (applicationsDelete.error) throw new Error(`删除网申记录失败: ${applicationsDelete.error.message}`);
 
     // 先删除关联的 application_fields 记录
-    await client
+    const fieldsDelete = await client
       .from('application_fields')
       .delete()
       .in('job_id', body.ids);
+    if (fieldsDelete.error) throw new Error(`删除网申字段失败: ${fieldsDelete.error.message}`);
 
     // 最后批量删除岗位
     const { error } = await client
@@ -200,8 +218,6 @@ async function handleBatchDelete(request: NextRequest) {
       console.error('Database delete error:', error);
       throw new Error(`批量删除岗位失败: ${error.message}`);
     }
-
-    console.log('Successfully deleted', body.ids.length, 'jobs');
 
     return NextResponse.json({
       success: true,

@@ -6,13 +6,22 @@ import { getCompanyDNA, saveManualDNA } from '@/lib/company-dna-service';
 import { CompanyDNA } from '@/lib/company-dna';
 import { hasValidAdminSession } from '@/lib/admin-auth';
 import { getAuthContext, unauthorizedResponse } from '@/lib/auth-server';
+import { consumeAuthRateLimit } from '@/lib/auth-security';
 
 export async function GET(request: NextRequest) {
   const auth = await getAuthContext(request);
   if (!auth) return unauthorizedResponse();
 
+  const rateLimit = await consumeAuthRateLimit(`company-dna:user:${auth.user.id}`, 10, 600, 1800);
+  if (!rateLimit.allowed) {
+    return new Response(JSON.stringify({ error: '企业基因查询过于频繁，请稍后再试' }), {
+      status: 429,
+      headers: { 'Retry-After': String(Math.max(rateLimit.retryAfterSeconds, 60)) },
+    });
+  }
+
   const name = request.nextUrl.searchParams.get('name')?.trim();
-  if (!name) {
+  if (!name || name.length > 255) {
     return new Response(JSON.stringify({ error: '缺少公司名称' }), { status: 400 });
   }
 
@@ -44,15 +53,28 @@ export async function PATCH(request: NextRequest) {
       return new Response(JSON.stringify({ error: '需要管理员权限' }), { status: 401 });
     }
 
-    const body = await request.json();
-    const { company, dna, reviewNotes } = body;
-    if (!company || typeof company !== 'string') {
+    const body: unknown = await request.json();
+    if (!body || typeof body !== 'object' || Array.isArray(body)) {
+      return new Response(JSON.stringify({ error: '请求体格式错误' }), { status: 400 });
+    }
+    const { company, dna, reviewNotes } = body as {
+      company?: unknown;
+      dna?: unknown;
+      reviewNotes?: unknown;
+    };
+    if (typeof company !== 'string' || !company.trim() || company.trim().length > 255) {
       return new Response(JSON.stringify({ error: '缺少公司名称' }), { status: 400 });
     }
-    if (!dna || typeof dna !== 'object' || !Array.isArray(dna.focusAreas) || dna.focusAreas.length === 0) {
+    if (reviewNotes !== undefined && (typeof reviewNotes !== 'string' || reviewNotes.length > 5_000)) {
+      return new Response(JSON.stringify({ error: '审查备注不能超过 5000 字' }), { status: 400 });
+    }
+    const focusAreas = dna && typeof dna === 'object' && !Array.isArray(dna)
+      ? (dna as { focusAreas?: unknown }).focusAreas
+      : undefined;
+    if (!Array.isArray(focusAreas) || focusAreas.length === 0) {
       return new Response(JSON.stringify({ error: '基因结构不完整（focusAreas 必填）' }), { status: 400 });
     }
-    const result = await saveManualDNA(company.trim(), dna as CompanyDNA, reviewNotes);
+    const result = await saveManualDNA(company.trim(), dna as CompanyDNA, reviewNotes as string | undefined);
     if (!result) {
       return new Response(JSON.stringify({ error: '保存失败' }), { status: 500 });
     }

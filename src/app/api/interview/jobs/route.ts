@@ -1,18 +1,16 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { getAuthContext, unauthorizedResponse } from '@/lib/auth-server';
+import { getSupabaseClient } from '@/storage/database/supabase-client';
 
 export const runtime = 'nodejs';
 export const dynamic = 'force-dynamic';
 
-// 获取可用于模拟面试的公司/岗位列表（公共数据，无需鉴权严格校验）
+// 获取可用于模拟面试的公司/岗位列表（岗位是公共数据，不依赖用户会话）
 export async function GET(request: NextRequest) {
   try {
-    const auth = await getAuthContext(request);
-    if (!auth) return unauthorizedResponse();
     const { searchParams } = new URL(request.url);
     const company = searchParams.get('company');
 
-    const client = auth.client;
+    const client = getSupabaseClient();
 
     if (company) {
       // 按公司筛选岗位

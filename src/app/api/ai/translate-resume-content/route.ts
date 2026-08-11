@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { getAuthContext, unauthorizedResponse } from '@/lib/auth-server';
 import { createTextProviderClient } from '@/lib/ai/text-provider';
+import { extractFirstJsonObject } from '@/lib/json-extract';
 
 export async function POST(request: NextRequest) {
   try {
@@ -70,14 +71,17 @@ ${JSON.stringify(userInfo, null, 2)}
     let translatedUserInfo = userInfo;
     
     try {
-      const jsonMatch = result.match(/\{[\s\S]*\}/);
-      if (jsonMatch) {
-        const parsed = JSON.parse(jsonMatch[0]);
-        translatedContent = parsed.translated_content || content;
-        translatedUserInfo = parsed.user_info || userInfo;
+      const parsed = extractFirstJsonObject(result);
+      if (!parsed || typeof parsed !== 'object' || Array.isArray(parsed)) throw new Error('translation JSON object missing');
+      const translatedData = parsed as { translated_content?: unknown; user_info?: unknown };
+      if (typeof translatedData.translated_content !== 'string' || !translatedData.translated_content.trim()) {
+        throw new Error('translated_content missing');
       }
+      translatedContent = translatedData.translated_content;
+      translatedUserInfo = translatedData.user_info ?? userInfo;
     } catch (e) {
       console.error('Failed to parse translation result:', e);
+      return NextResponse.json({ error: '翻译结果格式无效，请重试' }, { status: 502 });
     }
 
     // 更新数据库
@@ -92,6 +96,7 @@ ${JSON.stringify(userInfo, null, 2)}
 
     if (error) {
       console.error('Failed to update resume:', error);
+      return NextResponse.json({ error: '翻译结果保存失败，请重试' }, { status: 500 });
     }
 
     return NextResponse.json({ 

@@ -3,7 +3,9 @@ import { getSupabaseClient } from '@/storage/database/supabase-client';
 import { hasValidAdminSession } from '@/lib/admin-auth';
 import { getAuthContext, unauthorizedResponse } from '@/lib/auth-server';
 import {
+  hasSupportedResumeFileSignature,
   isSupportedResumeFile,
+  MAX_RESUME_FILE_SIZE_BYTES,
   sanitizeResumeRecord,
   type ResumeFileOptions,
 } from '@/lib/resume-parser';
@@ -45,6 +47,9 @@ export async function POST(request: NextRequest) {
     if (fileEntry.size === 0) {
       return NextResponse.json({ error: '文件内容为空' }, { status: 400 });
     }
+    if (fileEntry.size > MAX_RESUME_FILE_SIZE_BYTES) {
+      return NextResponse.json({ error: '简历文件不能超过 10MB' }, { status: 413 });
+    }
 
     const fileName = fileEntry.name.trim() || 'resume';
     const fileOptions: ResumeFileOptions = {
@@ -59,6 +64,9 @@ export async function POST(request: NextRequest) {
     }
 
     const buffer = Buffer.from(await fileEntry.arrayBuffer());
+    if (!hasSupportedResumeFileSignature(buffer, fileOptions)) {
+      return NextResponse.json({ error: '文件内容与声明格式不匹配' }, { status: 400 });
+    }
     const fileKey = await uploadResumeFile(buffer, auth.user.id, fileName, fileEntry.type);
     const storedUserInfo = { file_type: fileEntry.type };
 

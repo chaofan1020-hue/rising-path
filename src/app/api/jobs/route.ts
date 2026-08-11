@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from 'next/server';
 import { getSupabaseClient } from '@/storage/database/supabase-client';
 import { detectSponsorship } from '@/lib/utils';
 import { hasValidAdminSession } from '@/lib/admin-auth';
+import { targetRegionPostgrestClauses } from '@/lib/job-region-scope';
 
 // 公司域名映射
 const companyDomains: Record<string, string> = {
@@ -144,6 +145,17 @@ const regionMapping: Record<string, string> = {
   'Europe': '欧洲',
 };
 
+const regionKeywords: Record<string, string[]> = {
+  '美国': ['United States', 'USA', 'U.S.'],
+  '英国': ['United Kingdom', 'UK', 'England', 'Scotland', 'Wales'],
+  '加拿大': ['Canada'],
+  '澳大利亚': ['Australia'],
+  '新加坡': ['Singapore'],
+  '香港': ['Hong Kong'],
+  '日本': ['Japan'],
+  '欧洲': ['Germany', 'France', 'Italy', 'Spain', 'Netherlands', 'Ireland', 'Switzerland', 'Belgium', 'Sweden', 'Denmark', 'Norway', 'Finland', 'Austria', 'Portugal', 'Europe'],
+};
+
 // 方向映射：将子方向映射到父方向（SDE 包含所有工程方向）
 const directionMapping: Record<string, string> = {
   // SDE 是大类，包含所有软件工程方向
@@ -176,6 +188,23 @@ function getRegionCategory(region: string): string {
 // 获取岗位所属的方向大类
 function getDirectionCategory(direction: string): string {
   return directionMapping[direction] || direction;
+}
+
+function expandMappedValues(values: string[], mapping: Record<string, string>): string[] {
+  const expanded = new Set(values);
+  for (const [specific, category] of Object.entries(mapping)) {
+    if (values.includes(category)) expanded.add(specific);
+  }
+  return [...expanded];
+}
+
+function escapePostgrestSearchTerm(value: string): string {
+  return value
+    .trim()
+    .replace(/\\/g, '\\\\')
+    .replace(/[(),]/g, (character) => `\\${character}`)
+    .replace(/%/g, '\\%')
+    .replace(/_/g, '\\_');
 }
 
 // 判断岗位是否匹配选中的地区（支持包含关系）
@@ -214,15 +243,29 @@ export async function GET(request: NextRequest) {
     const directions = searchParams.getAll('direction');
     const audience = searchParams.get('audience');
     const jobType = searchParams.get('job_type');
+    const sponsorship = searchParams.get('sponsorship');
+    const status = searchParams.get('status') || 'active';
+    const regionScope = searchParams.get('region_scope') || 'target';
+    const search = searchParams.get('search')?.trim() || '';
     const limit = searchParams.get('limit');
+    const offsetParam = searchParams.get('offset');
+    const requestedLimit = Number.parseInt(limit || '100', 10);
+    const pageLimit = Number.isFinite(requestedLimit) ? Math.min(Math.max(requestedLimit, 1), 200) : 100;
+    const requestedOffset = Number.parseInt(offsetParam || '0', 10);
+    const offset = Number.isFinite(requestedOffset) ? Math.max(requestedOffset, 0) : 0;
 
     let query = client
       .from('jobs')
-      .select('*, company_info:company_config(id, company_name, careers_page, logo_url, short_desc, full_desc)')
+      .select('*, company_info:company_config(id, company_name, careers_page, logo_url, short_desc, full_desc)', { count: 'exact' })
       .order('created_at', { ascending: false });
 
-    // 只获取活跃的岗位
-    query = query.eq('is_active', true);
+    // 默认只显示可投递岗位；管理员或筛选器可以显式请求全部/已关闭岗位。
+    if (status === 'closed') query = query.eq('is_active', false);
+    else if (status !== 'all') query = query.eq('is_active', true);
+
+    if (regionScope !== 'all') {
+      query = query.or(targetRegionPostgrestClauses().join(','));
+    }
 
     // 受众单选筛选
     if (audience && audience !== '全部') {
@@ -234,29 +277,57 @@ export async function GET(request: NextRequest) {
       query = query.eq('job_type', jobType);
     }
 
-    // 限制返回数量（用于自动同步检查）
-    if (limit) {
-      query = query.limit(parseInt(limit));
+    if (sponsorship && sponsorship !== '全部') {
+      query = query.eq('sponsorship', sponsorship);
     }
 
-    const { data, error } = await query;
+    const company = searchParams.get('company')?.trim() || '';
+    if (company) {
+      query = query.ilike('company', `%${escapePostgrestSearchTerm(company)}%`);
+    }
+
+    if (search) {
+      const safeSearch = escapePostgrestSearchTerm(search);
+      query = query.or(`title.ilike.%${safeSearch}%,company.ilike.%${safeSearch}%`);
+    }
+
+    if (regions.length > 0) {
+      const regionClauses = new Set<string>();
+      for (const region of regions) {
+        const keywords = regionKeywords[region] || [];
+        for (const keyword of keywords) {
+          regionClauses.add(`region.ilike.%${escapePostgrestSearchTerm(keyword)}%`);
+        }
+        if (keywords.length === 0) {
+          for (const value of expandMappedValues([region], regionMapping)) {
+            regionClauses.add(`region.eq.${escapePostgrestSearchTerm(value)}`);
+          }
+        }
+      }
+      if (regionClauses.size > 0) query = query.or([...regionClauses].join(','));
+    }
+
+    if (directions.length > 0) {
+      query = query.in('direction', expandMappedValues(directions, directionMapping));
+    }
+
+    // 不允许把完整岗位库一次传回浏览器。全量同步后岗位数据可达数万条，
+    // 因此前端按页请求，默认 100 条。
+    query = query.range(offset, offset + pageLimit - 1);
+
+    const { data, error, count } = await query;
 
     if (error) {
+      if (error.message.includes('Requested range not satisfiable')) {
+        return NextResponse.json({
+          jobs: [],
+          pagination: { offset, limit: pageLimit, returned: 0, total: 0, has_more: false },
+        });
+      }
       throw new Error(`查询岗位失败: ${error.message}`);
     }
 
-    // 筛选结果
-    let filteredJobs = data || [];
-
-    // 地区筛选（支持包含关系）
-    if (regions.length > 0) {
-      filteredJobs = filteredJobs.filter((job: { region: string }) => isRegionMatch(job.region, regions));
-    }
-
-    // 方向筛选（支持包含关系：选 Tech 包含所有方向）
-    if (directions.length > 0) {
-      filteredJobs = filteredJobs.filter((job: { direction: string }) => isDirectionMatch(job.direction, directions));
-    }
+    const filteredJobs = data || [];
 
     // 检查是否需要刷新缓存
     if (Date.now() - lastCacheTime > CACHE_DURATION) {
@@ -273,7 +344,16 @@ export async function GET(request: NextRequest) {
       }))
     );
 
-    return NextResponse.json({ jobs: jobsWithLogo });
+    return NextResponse.json({
+      jobs: jobsWithLogo,
+      pagination: {
+        offset,
+        limit: pageLimit,
+        returned: jobsWithLogo.length,
+        total: count ?? 0,
+        has_more: offset + jobsWithLogo.length < (count ?? 0),
+      },
+    });
   } catch (error) {
     console.error('Error fetching jobs:', error);
     return NextResponse.json(
@@ -291,15 +371,34 @@ export async function POST(request: NextRequest) {
     const client = getSupabaseClient();
     const body = await request.json();
 
+    const requiredFields = ['title', 'company', 'region', 'direction', 'audience'] as const;
+    if (requiredFields.some((field) => typeof body[field] !== 'string' || !body[field].trim())) {
+      return NextResponse.json({ error: '岗位名称、公司、地区、方向、受众均为必填项' }, { status: 400 });
+    }
+
+    const { data: duplicate } = await client
+      .from('jobs')
+      .select('id, title, company')
+      .ilike('title', body.title.trim())
+      .ilike('company', body.company.trim())
+      .limit(1)
+      .maybeSingle();
+    if (duplicate) {
+      return NextResponse.json({ error: '岗位已存在', duplicate }, { status: 409 });
+    }
+
     // 自动检测 sponsorship
     const description = body.description || '';
     const requirements = body.requirements || '';
     const fullText = description + ' ' + requirements;
     const sponsorship = detectSponsorship(fullText);
 
+    const normalizedBody = Object.fromEntries(
+      Object.entries(body).map(([key, value]) => [key, typeof value === 'string' ? value.trim() : value]),
+    );
     const { data, error } = await client
       .from('jobs')
-      .insert({ ...body, sponsorship })
+      .insert({ ...normalizedBody, sponsorship })
       .select()
       .single();
 

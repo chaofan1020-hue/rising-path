@@ -13,6 +13,11 @@ import {
 const CLIENT_PROTOCOL = 'rising-path-asr-v1';
 const AUTH_PROTOCOL_PREFIX = 'rising-path-auth.';
 const MAX_QUEUED_AUDIO_BYTES = 1024 * 1024;
+const MAX_AUDIO_BYTES_PER_CONNECTION = 20 * 1024 * 1024;
+const MAX_CONNECTION_MS = 5 * 60 * 1000;
+const IDLE_TIMEOUT_MS = 60 * 1000;
+const MAX_ACTIVE_CONNECTIONS = 50;
+let activeConnections = 0;
 
 interface AlibabaASREvent {
   type?: string;
@@ -37,7 +42,8 @@ function sendJSON(socket: WebSocket, value: Record<string, unknown>): void {
 }
 
 function rejectUpgrade(socket: import('node:stream').Duplex, status: number, message: string): void {
-  socket.write(`HTTP/1.1 ${status} Unauthorized\r\nConnection: close\r\n\r\n${message}`);
+  const statusText = status === 429 ? 'Too Many Requests' : status === 401 ? 'Unauthorized' : 'Bad Request';
+  socket.write(`HTTP/1.1 ${status} ${statusText}\r\nConnection: close\r\n\r\n${message}`);
   socket.destroy();
 }
 
@@ -125,12 +131,21 @@ function forwardAlibabaEvent(client: WebSocket, raw: WebSocket.RawData): void {
 }
 
 function setupConnection(client: WebSocket, userId: string): void {
+  activeConnections += 1;
   let upstream: WebSocket | null = null;
   let upstreamReady = false;
   let finishing = false;
   let language = 'zh';
   let queuedAudio: Buffer[] = [];
   let queuedAudioBytes = 0;
+  let audioBytes = 0;
+  let idleTimer: ReturnType<typeof setTimeout> | null = null;
+  const connectionTimer = setTimeout(() => client.close(1008, 'ASR connection time limit'), MAX_CONNECTION_MS);
+  const touch = () => {
+    if (idleTimer) clearTimeout(idleTimer);
+    idleTimer = setTimeout(() => client.close(1000, 'ASR connection idle timeout'), IDLE_TIMEOUT_MS);
+  };
+  touch();
 
   const closeUpstream = () => {
     if (!upstream) return;
@@ -141,6 +156,12 @@ function setupConnection(client: WebSocket, userId: string): void {
   };
 
   const sendAudio = (chunk: Buffer) => {
+    audioBytes += chunk.byteLength;
+    if (audioBytes > MAX_AUDIO_BYTES_PER_CONNECTION) {
+      sendJSON(client, { type: 'error', error: '实时 ASR 音频额度已用尽' });
+      client.close(1008, 'ASR audio limit exceeded');
+      return;
+    }
     if (!upstream || !upstreamReady || upstream.readyState !== WebSocket.OPEN) {
       if (queuedAudioBytes + chunk.byteLength <= MAX_QUEUED_AUDIO_BYTES) {
         queuedAudio.push(chunk);
@@ -173,6 +194,7 @@ function setupConnection(client: WebSocket, userId: string): void {
       upstream.send(buildRealtimeSessionUpdate(language));
     });
     upstream.on('message', (raw) => {
+      touch();
       let event: AlibabaASREvent | null = null;
       try {
         event = JSON.parse(raw.toString()) as AlibabaASREvent;
@@ -203,6 +225,7 @@ function setupConnection(client: WebSocket, userId: string): void {
   };
 
   client.on('message', (raw, isBinary) => {
+    touch();
     if (isBinary) {
       const chunk = Buffer.isBuffer(raw) ? raw : Buffer.from(raw as ArrayBuffer);
       sendAudio(chunk);
@@ -218,7 +241,12 @@ function setupConnection(client: WebSocket, userId: string): void {
     }
 
     if (message.type === 'start') {
-      language = message.language?.trim() || 'zh';
+      const requestedLanguage = message.language?.trim().toLowerCase() || 'zh';
+      if (requestedLanguage !== 'zh' && requestedLanguage !== 'en') {
+        sendJSON(client, { type: 'error', error: '不支持的 ASR 语言' });
+        return;
+      }
+      language = requestedLanguage;
       startUpstream();
     } else if (message.type === 'stop') {
       finishing = true;
@@ -234,6 +262,9 @@ function setupConnection(client: WebSocket, userId: string): void {
   });
 
   client.on('close', () => {
+    clearTimeout(connectionTimer);
+    if (idleTimer) clearTimeout(idleTimer);
+    activeConnections = Math.max(0, activeConnections - 1);
     finishing = true;
     queuedAudio = [];
     queuedAudioBytes = 0;
@@ -263,6 +294,10 @@ export function attachInterviewASRWebSocket(server: Server): void {
     void authenticate(accessToken).then((userId) => {
       if (!userId) {
         rejectUpgrade(socket, 401, 'Invalid realtime ASR authentication');
+        return;
+      }
+      if (activeConnections >= MAX_ACTIVE_CONNECTIONS) {
+        rejectUpgrade(socket, 429, 'Realtime ASR capacity reached');
         return;
       }
       wss.handleUpgrade(request, socket, head, (client) => setupConnection(client, userId));

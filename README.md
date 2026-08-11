@@ -301,6 +301,19 @@ export default function ClientComponent() {
 
 ## 常见开发场景
 
+### 接入统一招聘数据源
+
+平台通过服务端接口 `/api/jobs/sync-feed` 将统一招聘采集服务的只读 feed 投影到 Supabase `jobs` 表。先在部署环境设置 `JOBS_FEED_URL` 和 `JOBS_FEED_API_KEY`，再从后台「岗位管理」点击“同步招聘数据”。该接口仅接受管理员会话，避免把同步能力或密钥暴露给普通用户。
+
+```bash
+POST /api/jobs/sync-feed
+Content-Type: application/json
+
+{"maxPages": 20}
+```
+
+首次导入每次默认处理 20 页（默认每页 500 条）并自动保存游标，重复点击同步按钮直到 `result.has_more` 为 `false`。之后会从保存的游标增量同步，或用 `since` 做一次恢复窗口。浏览器不会接触数据源密钥；现有岗位列表、岗位详情、收藏、投递和 AI 匹配继续使用本地 `jobs` 表。岗位列表 API 默认分页为 100 条，避免全量同步后向浏览器一次返回数万条记录。
+
 ### 添加新页面
 
 1. 在 `src/app/` 下创建文件夹和 `page.tsx`

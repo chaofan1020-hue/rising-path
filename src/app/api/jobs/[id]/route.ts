@@ -112,6 +112,9 @@ export async function GET(
   try {
     const client = getSupabaseClient();
     const { id } = await params;
+    if (!/^\d+$/.test(id)) {
+      return NextResponse.json({ error: '岗位 ID 无效' }, { status: 400 });
+    }
 
     const { data, error } = await client
       .from('jobs')
@@ -160,6 +163,9 @@ export async function PUT(
     }
     const client = getSupabaseClient();
     const { id } = await params;
+    if (!/^\d+$/.test(id)) {
+      return NextResponse.json({ error: '岗位 ID 无效' }, { status: 400 });
+    }
     const body = await request.json();
 
     const { data, error } = await client
@@ -196,24 +202,30 @@ export async function DELETE(
     }
     const client = getSupabaseClient();
     const { id } = await params;
+    if (!/^\d+$/.test(id)) {
+      return NextResponse.json({ error: '岗位 ID 无效' }, { status: 400 });
+    }
 
     // 先删除关联的 ai_matches 记录
-    await client
+    const aiMatchesDelete = await client
       .from('ai_matches')
       .delete()
       .eq('job_id', id);
+    if (aiMatchesDelete.error) throw new Error(`删除 AI 匹配记录失败: ${aiMatchesDelete.error.message}`);
 
     // 先删除关联的 applications 记录
-    await client
+    const applicationsDelete = await client
       .from('applications')
       .delete()
       .eq('job_id', id);
+    if (applicationsDelete.error) throw new Error(`删除网申记录失败: ${applicationsDelete.error.message}`);
 
     // 先删除关联的 application_fields 记录
-    await client
+    const fieldsDelete = await client
       .from('application_fields')
       .delete()
       .eq('job_id', id);
+    if (fieldsDelete.error) throw new Error(`删除网申字段失败: ${fieldsDelete.error.message}`);
 
     // 最后删除岗位
     const { error } = await client

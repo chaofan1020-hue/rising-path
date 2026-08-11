@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, useCallback, useEffect } from 'react';
+import { useState, useCallback, useEffect, useRef } from 'react';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
@@ -153,8 +153,12 @@ function ResumeContent() {
     }
   };
 
-  const fetchResumes = useCallback(async () => {
-    setLoading(true);
+  const fetchingResumesRef = useRef(false);
+
+  const fetchResumes = useCallback(async (options: { showLoading?: boolean } = {}) => {
+    if (fetchingResumesRef.current) return;
+    fetchingResumesRef.current = true;
+    if (options.showLoading) setLoading(true);
     try {
       const response = await apiFetch('/api/resume');
       const data = await response.json();
@@ -162,7 +166,8 @@ function ResumeContent() {
     } catch (error) {
       console.error('Failed to fetch resumes:', error);
     } finally {
-      setLoading(false);
+      fetchingResumesRef.current = false;
+      if (options.showLoading) setLoading(false);
     }
   }, []);
 
@@ -235,7 +240,7 @@ function ResumeContent() {
   };
 
   useEffect(() => {
-    fetchResumes();
+    void fetchResumes({ showLoading: true });
   }, [fetchResumes]);
 
   const processingResumeIds = resumes
@@ -246,7 +251,7 @@ function ResumeContent() {
   useEffect(() => {
     if (!processingResumeIds) return;
     const interval = window.setInterval(() => {
-      fetchResumes();
+      void fetchResumes();
     }, 2000);
     return () => window.clearInterval(interval);
   }, [fetchResumes, processingResumeIds]);
@@ -373,7 +378,7 @@ function ResumeContent() {
         <div className="relative space-y-3 max-w-3xl mx-auto">
           <div className="flex items-center justify-between">
             <h2 className="text-base md:text-lg font-semibold tracking-tight text-zinc-800 dark:text-zinc-100">{t('resume.myResumes')}</h2>
-            <Button variant="ghost" size="sm" className="text-xs text-zinc-500 hover:bg-zinc-100 hover:text-zinc-900 dark:hover:bg-zinc-800 dark:hover:text-zinc-100" onClick={fetchResumes}>
+            <Button variant="ghost" size="sm" className="text-xs text-zinc-500 hover:bg-zinc-100 hover:text-zinc-900 dark:hover:bg-zinc-800 dark:hover:text-zinc-100" onClick={() => void fetchResumes({ showLoading: true })}>
               {t('resume.refresh')}
             </Button>
           </div>

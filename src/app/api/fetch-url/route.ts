@@ -1,40 +1,43 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { FetchClient, Config, HeaderUtils } from 'coze-coding-dev-sdk';
+import { hasValidAdminSession } from '@/lib/admin-auth';
+import { getClientIp } from '@/lib/auth-server';
+import { consumeAuthRateLimit } from '@/lib/auth-security';
+import { ExternalFetchError, fetchSafeExternalPage } from '@/lib/safe-external-fetch';
+
+export const runtime = 'nodejs';
 
 export async function POST(request: NextRequest) {
   try {
-    const { url } = await request.json();
-    
-    if (!url) {
-      return NextResponse.json({ error: 'URL is required' }, { status: 400 });
+    if (!hasValidAdminSession(request)) {
+      return NextResponse.json({ error: '需要管理员权限' }, { status: 401 });
     }
 
-    const config = new Config();
-    const customHeaders = HeaderUtils.extractForwardHeaders(request.headers);
-    const client = new FetchClient(config, customHeaders);
+    const rateLimit = await consumeAuthRateLimit(`admin-fetch-url:ip:${getClientIp(request)}`, 20, 300, 900);
+    if (!rateLimit.allowed) {
+      return NextResponse.json(
+        { error: '请求过于频繁，请稍后再试' },
+        { status: 429, headers: { 'Retry-After': String(Math.max(rateLimit.retryAfterSeconds, 30)) } },
+      );
+    }
 
-    const response = await client.fetch(url);
+    const body: unknown = await request.json();
+    if (!body || typeof body !== 'object' || Array.isArray(body) || typeof (body as { url?: unknown }).url !== 'string') {
+      return NextResponse.json({ error: 'URL 格式无效' }, { status: 400 });
+    }
 
-    // 提取文本内容
-    const textContent = response.content
-      .filter(item => item.type === 'text')
-      .map(item => item.text)
-      .join('\n')
-      .substring(0, 5000); // 限制长度
-
+    const page = await fetchSafeExternalPage((body as { url: string }).url);
     return NextResponse.json({
-      success: response.status_code === 0,
-      title: response.title,
-      content: textContent,
-      url: response.url,
-      status: response.status_message,
+      success: true,
+      title: page.title,
+      content: page.content,
+      url: page.url,
+      status: `HTTP ${page.httpStatus}`,
     });
-
   } catch (error) {
+    if (error instanceof ExternalFetchError) {
+      return NextResponse.json({ error: error.message }, { status: error.status });
+    }
     console.error('Fetch error:', error);
-    return NextResponse.json(
-      { error: 'Failed to fetch URL', details: String(error) },
-      { status: 500 }
-    );
+    return NextResponse.json({ error: '抓取页面失败' }, { status: 500 });
   }
 }

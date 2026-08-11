@@ -2,8 +2,10 @@ import { NextRequest, NextResponse } from 'next/server';
 import { getAuthContext, unauthorizedResponse } from '@/lib/auth-server';
 import {
   getStoredResumeFile,
+  hasSupportedResumeFileSignature,
   isRecord,
   isSupportedResumeFile,
+  MAX_RESUME_FILE_SIZE_BYTES,
   ResumeProfileExtractionError,
   sanitizeResumeRecord,
   UnsupportedResumeFileError,
@@ -85,6 +87,12 @@ export async function POST(request: NextRequest) {
       fileBuffer = await downloadResumeFile(resume.file_key);
     } else {
       return NextResponse.json({ error: '简历文件内容不存在，请重新上传' }, { status: 404 });
+    }
+    if (fileBuffer.length === 0 || fileBuffer.length > MAX_RESUME_FILE_SIZE_BYTES) {
+      return NextResponse.json({ error: '简历文件为空或超过 10MB 限制，请重新上传' }, { status: 413 });
+    }
+    if (!hasSupportedResumeFileSignature(fileBuffer, fileOptions)) {
+      return NextResponse.json({ error: '简历文件内容与声明格式不匹配，请重新上传' }, { status: 400 });
     }
     await processResume({
       resumeId,

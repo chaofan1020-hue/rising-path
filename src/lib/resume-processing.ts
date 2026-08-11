@@ -33,6 +33,7 @@ interface ResumeProcessingRow {
   user_info?: unknown;
   profile_version?: number | null;
   processing_attempts?: number | null;
+  processing_status?: ResumeProcessingStatus | null;
 }
 
 async function updateProcessingState(
@@ -78,7 +79,7 @@ export async function processResume(input: ProcessResumeInput): Promise<{
   const client = getSupabaseClient();
   const { data: current, error: currentError } = await client
     .from('resumes')
-    .select('user_info, profile_version, processing_attempts')
+    .select('user_info, profile_version, processing_attempts, processing_status')
     .eq('id', input.resumeId)
     .eq('user_id', input.userId)
     .single<ResumeProcessingRow>();
@@ -90,15 +91,33 @@ export async function processResume(input: ProcessResumeInput): Promise<{
   const attempts = Math.max(0, Number(current.processing_attempts ?? 0)) + 1;
   const startedAt = new Date().toISOString();
 
-  try {
-    await updateProcessingState(client, input.resumeId, input.userId, {
-      status: 'extracting_text',
-      stage: 'text_extraction',
-      error: null,
-      attempts,
-      startedAt,
-    });
+  // Claim the row before any parsing work. This prevents two requests from
+  // deriving the same profile version and lets retries distinguish a running
+  // job from a failed one.
+  const claimableStatuses: ResumeProcessingStatus[] = input.source === 'initial_parse'
+    ? ['uploaded']
+    : ['uploaded', 'failed', 'needs_confirmation', 'ready'];
+  const { data: claimed, error: claimError } = await client
+    .from('resumes')
+    .update({
+      processing_status: 'extracting_text',
+      processing_stage: 'text_extraction',
+      processing_error: null,
+      processing_attempts: attempts,
+      processing_started_at: startedAt,
+      processing_finished_at: null,
+      updated_at: startedAt,
+    })
+    .eq('id', input.resumeId)
+    .eq('user_id', input.userId)
+    .in('processing_status', claimableStatuses)
+    .select('id')
+    .maybeSingle();
 
+  if (claimError) throw new ResumeProcessingError(`简历处理任务抢占失败: ${claimError.message}`);
+  if (!claimed) throw new ResumeProcessingError('简历正在处理中，请稍后查看处理状态');
+
+  try {
     const extracted = await extractTextFromResumeFile(input.buffer, input.fileOptions);
     if (!extracted.text.trim()) {
       throw new ResumeProcessingError('简历中没有可读取的文本，请上传可复制文本的 PDF 或 DOCX 文件');

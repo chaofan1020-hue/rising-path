@@ -212,7 +212,7 @@ ${JSON.stringify(jobsList, null, 2)}
     enrichedMatches.sort((a: { match_score: number }, b: { match_score: number }) => b.match_score - a.match_score);
 
     // Save matches to database
-    const { error: insertError } = await client.from('ai_matches').insert(enrichedMatches.map((match) => ({
+    const { error: insertError } = await client.from('ai_matches').upsert(enrichedMatches.map((match) => ({
         resume_id: confirmedResumeId,
         job_id: match.job_id,
         match_score: match.match_score,
@@ -223,7 +223,9 @@ ${JSON.stringify(jobsList, null, 2)}
         score_breakdown: match.score_breakdown,
         evidence: match.evidence,
         key_gaps: match.key_gaps,
-      })));
+      })), {
+        onConflict: 'user_id,resume_id,job_id,resume_profile_version',
+      });
     if (insertError) {
       throw new Error(`保存匹配结果失败: ${insertError.message}`);
     }

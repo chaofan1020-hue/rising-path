@@ -20,11 +20,13 @@ export async function GET(request: NextRequest) {
       .neq('config_type', RESERVED_CONFIG_TYPE)
       .order('sort_order', { ascending: true });
 
-    if (configType) {
-      query = query.eq('config_type', configType);
-    } else if (!isAdmin) {
+    if (!isAdmin && configType && !PUBLIC_CONFIG_TYPES.includes(configType as typeof PUBLIC_CONFIG_TYPES[number])) {
+      return NextResponse.json({ error: '无权读取该配置类型' }, { status: 403 });
+    }
+    if (!isAdmin) {
       query = query.in('config_type', [...PUBLIC_CONFIG_TYPES]);
     }
+    if (configType) query = query.eq('config_type', configType);
 
     const { data, error } = await query;
 

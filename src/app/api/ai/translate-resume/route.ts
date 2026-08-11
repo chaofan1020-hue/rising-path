@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { getAuthContext, unauthorizedResponse } from '@/lib/auth-server';
 import { createTextProviderClient } from '@/lib/ai/text-provider';
+import { extractFirstJsonObject } from '@/lib/json-extract';
 
 export async function POST(request: NextRequest) {
   try {
@@ -45,9 +46,8 @@ ${JSON.stringify(resumeData, null, 2)}
 
     // 解析JSON
     try {
-      const jsonMatch = result.match(/\{[\s\S]*\}/);
-      if (jsonMatch) {
-        const translatedData = JSON.parse(jsonMatch[0]);
+      const translatedData = extractFirstJsonObject(result);
+      if (translatedData && typeof translatedData === 'object' && !Array.isArray(translatedData)) {
         return NextResponse.json({ resume_data: translatedData });
       }
     } catch (e) {

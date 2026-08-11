@@ -3,22 +3,18 @@ import {
   getSupabaseServiceRoleKey,
 } from '@/storage/database/supabase-client';
 import crypto from 'node:crypto';
+import {
+  getAdminBootstrapPassword,
+  isAdminPasswordInput,
+  verifyAdminPasswordHash,
+} from '@/lib/admin-password';
 
-const DEFAULT_PASSWORD = 'risingpath2024';
 export const ADMIN_SESSION_COOKIE = 'risingpath_admin_session';
 const ADMIN_SESSION_TTL_SECONDS = 8 * 60 * 60;
 
 interface AdminSessionPayload {
   issuedAt: number;
   expiresAt: number;
-}
-
-function hashPassword(password: string): string {
-  return crypto.createHash('sha256').update(password + 'risingpath_salt').digest('hex');
-}
-
-function verifyPassword(inputPassword: string, hashedPassword: string): boolean {
-  return hashPassword(inputPassword) === hashedPassword;
 }
 
 function getSessionSecret(): string {
@@ -118,7 +114,7 @@ export function getClearedAdminSessionCookie() {
  * 验证管理员密码
  */
 export async function verifyAdminPassword(password: string): Promise<boolean> {
-  if (!password) return false;
+  if (!isAdminPasswordInput(password)) return false;
   
   const supabase = getSupabaseClient();
   
@@ -132,19 +128,17 @@ export async function verifyAdminPassword(password: string): Promise<boolean> {
     
     if (error) {
       if (error.code === 'PGRST116') {
-        // 没有自定义密码，使用默认密码
-        return password === DEFAULT_PASSWORD;
+        // 没有持久化密码时，只允许部署者显式配置的一次性引导密码。
+        return password === getAdminBootstrapPassword();
       }
       console.error('Error fetching password:', error);
       return false;
     }
     
     if (data?.config_value) {
-      // 使用自定义密码验证（数据库中存储的是哈希值）
-      return verifyPassword(password, data.config_value);
+      return (await verifyAdminPasswordHash(password, data.config_value)).valid;
     } else {
-      // 没有自定义密码，使用默认密码
-      return password === DEFAULT_PASSWORD;
+      return password === getAdminBootstrapPassword();
     }
   } catch (err) {
     console.error('Password verification error:', err);

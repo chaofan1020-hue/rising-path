@@ -3,6 +3,7 @@ import { parse } from 'url';
 import next from 'next';
 import { attachInterviewASRWebSocket } from './lib/interview-asr-ws-server';
 import { attachInterviewTTSWebSocket } from './lib/interview-tts-ws-server';
+import { startResumeProcessingWorker } from './lib/resume-processing-worker';
 
 const dev = process.env.NODE_ENV !== 'production' && process.env.COZE_PROJECT_ENV !== 'PROD';
 const hostname = process.env.HOSTNAME || '0.0.0.0';
@@ -30,6 +31,7 @@ app.prepare().then(() => {
     process.exit(1);
   });
   server.listen(port, () => {
+    startResumeProcessingWorker();
     console.log(
       `> Server listening at http://${hostname}:${port} as ${
         dev ? 'development' : process.env.COZE_PROJECT_ENV

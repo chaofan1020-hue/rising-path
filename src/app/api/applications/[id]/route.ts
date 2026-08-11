@@ -1,16 +1,20 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { getAuthContext, unauthorizedResponse } from '@/lib/auth-server';
 import { isApplicationStatus } from '@/lib/application-status';
+import { getSupabaseClient } from '@/storage/database/supabase-client';
+import { hasValidAdminSession } from '@/lib/admin-auth';
 
 export async function PUT(
   request: NextRequest,
   { params }: { params: Promise<{ id: string }> }
 ) {
   try {
-    const auth = await getAuthContext(request);
-    if (!auth) return unauthorizedResponse();
-    const client = auth.client;
+    const isAdmin = hasValidAdminSession(request);
+    const auth = isAdmin ? null : await getAuthContext(request);
+    if (!isAdmin && !auth) return unauthorizedResponse();
+    const client = isAdmin ? getSupabaseClient() : auth!.client;
     const { id } = await params;
+    if (!/^\d+$/.test(id)) return NextResponse.json({ error: '网申记录 ID 无效' }, { status: 400 });
     const body = await request.json();
     if (body.status !== undefined && !isApplicationStatus(body.status)) {
       return NextResponse.json({ error: '无效的网申状态' }, { status: 400 });
@@ -31,11 +35,13 @@ export async function PUT(
       updateData.notes = body.notes;
     }
 
-    const { data, error } = await client
+    let query = client
       .from('applications')
       .update(updateData)
-      .eq('id', id)
-      .eq('user_id', auth.user.id)
+      .eq('id', id);
+    if (!isAdmin) query = query.eq('user_id', auth!.user.id);
+
+    const { data, error } = await query
       .select(`
         *,
         jobs (title, company),
@@ -62,16 +68,19 @@ export async function DELETE(
   { params }: { params: Promise<{ id: string }> }
 ) {
   try {
-    const auth = await getAuthContext(request);
-    if (!auth) return unauthorizedResponse();
-    const client = auth.client;
+    const isAdmin = hasValidAdminSession(request);
+    const auth = isAdmin ? null : await getAuthContext(request);
+    if (!isAdmin && !auth) return unauthorizedResponse();
+    const client = isAdmin ? getSupabaseClient() : auth!.client;
     const { id } = await params;
+    if (!/^\d+$/.test(id)) return NextResponse.json({ error: '网申记录 ID 无效' }, { status: 400 });
 
-    const { error } = await client
+    let query = client
       .from('applications')
       .delete()
-      .eq('id', id)
-      .eq('user_id', auth.user.id);
+      .eq('id', id);
+    if (!isAdmin) query = query.eq('user_id', auth!.user.id);
+    const { error } = await query;
 
     if (error) {
       throw new Error(`删除网申记录失败: ${error.message}`);

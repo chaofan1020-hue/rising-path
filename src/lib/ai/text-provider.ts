@@ -25,6 +25,11 @@ export interface TextProviderClient {
   stream(messages: TextMessage[], options?: TextGenerationOptions): AsyncIterable<TextChunk>;
 }
 
+export interface TextProviderOptions {
+  requestHeaders?: Headers;
+  model?: string;
+}
+
 export type AIProvider = 'alibaba';
 
 export class AIProviderConfigError extends Error {
@@ -53,7 +58,7 @@ export function getAIProvider(): AIProvider {
   throw new AIProviderConfigError('AI_PROVIDER 只支持 alibaba；TTS 请单独使用 Cartesia');
 }
 
-function createAlibabaClient(timeoutMs: number): TextProviderClient {
+function createAlibabaClient(timeoutMs: number, requestedModel?: string): TextProviderClient {
   const apiKey = process.env.DASHSCOPE_API_KEY?.trim();
   if (!apiKey) {
     throw new AIProviderConfigError(
@@ -72,7 +77,7 @@ function createAlibabaClient(timeoutMs: number): TextProviderClient {
     );
   }
 
-  const model = process.env.ALIBABA_MODEL?.trim() || 'qwen3.7-plus';
+  const model = requestedModel?.trim() || process.env.ALIBABA_MODEL?.trim() || 'qwen3.7-plus';
   const client = new OpenAI({
     apiKey,
     baseURL,
@@ -87,22 +92,28 @@ function createAlibabaClient(timeoutMs: number): TextProviderClient {
 
   return {
     async invoke(messages, options = {}) {
-      const response = await client.chat.completions.create({
+      const request = {
         model,
         messages: input(messages),
         temperature: options.temperature,
         response_format: options.responseFormat ? { type: 'json_object' } : undefined,
-      });
+        ...(options.thinking === 'disabled' ? { enable_thinking: false } : {}),
+      };
+      const response = await client.chat.completions.create(request as never);
       return { content: response.choices[0]?.message?.content || '' };
     },
     async *stream(messages, options = {}) {
-      const stream = await client.chat.completions.create({
+      const request = {
         model,
         messages: input(messages),
         temperature: options.temperature,
         stream: true,
         response_format: options.responseFormat ? { type: 'json_object' } : undefined,
-      });
+        ...(options.thinking === 'disabled' ? { enable_thinking: false } : {}),
+      };
+      const stream = await client.chat.completions.create(
+        request as unknown as OpenAI.Chat.Completions.ChatCompletionCreateParamsStreaming,
+      );
       for await (const chunk of stream) {
         const content = chunk.choices[0]?.delta?.content;
         if (content) yield { content };
@@ -111,8 +122,7 @@ function createAlibabaClient(timeoutMs: number): TextProviderClient {
   };
 }
 
-export function createTextProviderClient(options: { requestHeaders?: Headers } = {}): TextProviderClient {
+export function createTextProviderClient(options: TextProviderOptions = {}): TextProviderClient {
   const timeoutMs = getTimeoutMs();
-  void options;
-  return createAlibabaClient(timeoutMs);
+  return createAlibabaClient(timeoutMs, options.model);
 }

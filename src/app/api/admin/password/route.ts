@@ -7,17 +7,13 @@ import {
 } from '@/lib/admin-auth';
 import { getClientIp } from '@/lib/auth-server';
 import { consumeAuthRateLimit } from '@/lib/auth-security';
-import crypto from 'node:crypto';
-
-const DEFAULT_PASSWORD = 'risingpath2024';
-
-function hashPassword(password: string): string {
-  return crypto.createHash('sha256').update(password + 'risingpath_salt').digest('hex');
-}
-
-function verifyPassword(inputPassword: string, hashedPassword: string): boolean {
-  return hashPassword(inputPassword) === hashedPassword;
-}
+import {
+  getAdminBootstrapPassword,
+  hashAdminPassword,
+  isAdminPasswordInput,
+  isStrongAdminPasswordInput,
+  verifyAdminPasswordHash,
+} from '@/lib/admin-password';
 
 // 获取当前密码
 export async function GET(request: NextRequest) {
@@ -35,13 +31,17 @@ export async function GET(request: NextRequest) {
       throw new Error(`查询密码失败: ${error.message}`);
     }
 
-    // 如果没有设置密码，使用默认密码
     const hasCustomPassword = !!data?.config_value;
+    const hasBootstrapPassword = !hasCustomPassword && !!getAdminBootstrapPassword();
     
     return NextResponse.json({ 
       hasCustomPassword,
       authenticated: hasValidAdminSession(request),
-      message: hasCustomPassword ? '已设置自定义密码' : '使用默认密码'
+      message: hasCustomPassword
+        ? '已设置自定义密码'
+        : hasBootstrapPassword
+          ? '等待首次初始化'
+          : '管理员密码尚未初始化，请配置 ADMIN_BOOTSTRAP_PASSWORD',
     });
   } catch (error) {
     console.error('Error fetching password:', error);
@@ -67,9 +67,9 @@ export async function POST(request: NextRequest) {
     const body = await request.json();
     const { password } = body;
 
-    if (!password) {
+    if (!isAdminPasswordInput(password)) {
       return NextResponse.json(
-        { error: '请输入密码' },
+        { error: '请输入有效密码（最多256位）' },
         { status: 400 }
       );
     }
@@ -89,11 +89,21 @@ export async function POST(request: NextRequest) {
     let isValid = false;
 
     if (data?.config_value) {
-      // 使用自定义密码验证
-      isValid = verifyPassword(password, data.config_value);
+      const verification = await verifyAdminPasswordHash(password, data.config_value);
+      isValid = verification.valid;
+      if (isValid && verification.needsRehash) {
+        const upgradedHash = await hashAdminPassword(password);
+        const { error: upgradeError } = await client
+          .from('job_configs')
+          .update({ config_value: upgradedHash })
+          .eq('config_type', 'admin_password_hash')
+          .eq('is_active', true);
+        if (upgradeError) {
+          console.error('Admin password hash upgrade failed:', upgradeError);
+        }
+      }
     } else {
-      // 使用默认密码
-      isValid = password === DEFAULT_PASSWORD;
+      isValid = password === getAdminBootstrapPassword();
     }
 
     const response = NextResponse.json({
@@ -122,16 +132,9 @@ export async function PUT(request: NextRequest) {
     const body = await request.json();
     const { oldPassword, newPassword } = body;
 
-    if (!oldPassword || !newPassword) {
+    if (!isAdminPasswordInput(oldPassword) || !isStrongAdminPasswordInput(newPassword)) {
       return NextResponse.json(
-        { error: '请填写完整信息' },
-        { status: 400 }
-      );
-    }
-
-    if (newPassword.length < 6) {
-      return NextResponse.json(
-        { error: '新密码至少6位' },
+        { error: `原密码不能为空，新密码长度必须为 ${12}-${256} 位` },
         { status: 400 }
       );
     }
@@ -151,9 +154,9 @@ export async function PUT(request: NextRequest) {
     // 验证旧密码
     let isOldPasswordValid = false;
     if (existingPassword?.config_value) {
-      isOldPasswordValid = verifyPassword(oldPassword, existingPassword.config_value);
+      isOldPasswordValid = (await verifyAdminPasswordHash(oldPassword, existingPassword.config_value)).valid;
     } else {
-      isOldPasswordValid = oldPassword === DEFAULT_PASSWORD;
+      isOldPasswordValid = oldPassword === getAdminBootstrapPassword();
     }
 
     if (!isOldPasswordValid) {
@@ -164,7 +167,7 @@ export async function PUT(request: NextRequest) {
     }
 
     // 保存新密码
-    const hashedNewPassword = hashPassword(newPassword);
+    const hashedNewPassword = await hashAdminPassword(newPassword);
 
     if (existingPassword?.id) {
       // 更新现有密码

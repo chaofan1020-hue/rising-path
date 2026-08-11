@@ -3,6 +3,7 @@ import { getSupabaseClient } from '@/storage/database/supabase-client';
 import type { SupabaseClient } from '@supabase/supabase-js';
 import { CompanyDNA, findCuratedDNA, normalizeCompanyName } from './company-dna';
 import { createTextProviderClient } from './ai/text-provider';
+import { extractFirstJsonObject } from './json-extract';
 
 export type DNASource = 'curated' | 'cached' | 'generated' | 'manual';
 
@@ -98,13 +99,12 @@ async function generateDNAWithLLM(company: string, headers: Headers): Promise<Co
     const content = String(response.content || '').trim();
     const jsonMatch = content.match(/```(?:json)?\s*([\s\S]*?)```/);
     const jsonStr = jsonMatch ? jsonMatch[1] : content;
-    const start = jsonStr.indexOf('{');
-    if (start === -1) {
+    const parsed = extractFirstJsonObject(jsonStr);
+    if (!parsed) {
       console.error('[company-dna] LLM 响应无 JSON:', content.slice(0, 200));
       return null;
     }
     try {
-      const parsed: unknown = JSON.parse(jsonStr.slice(start));
       const dna = sanitizeGeneratedDNA(parsed, company);
       if (!dna) console.error('[company-dna] 基因结构校验失败:', content.slice(0, 200));
       return dna;

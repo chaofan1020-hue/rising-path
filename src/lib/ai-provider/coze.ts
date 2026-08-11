@@ -1,23 +1,10 @@
 import { Config, HeaderUtils, LLMClient } from 'coze-coding-dev-sdk';
 import type { AiChatMessage, AiProvider, AiProviderFactory } from './types';
+import { extractFirstJsonObject } from '../json-extract';
 
 function extractJson(text: string): Record<string, unknown> | null {
-  const start = text.indexOf('{');
-  if (start < 0) return null;
-  const raw = text.slice(start);
-  try {
-    const parsed = JSON.parse(raw) as unknown;
-    return isRecord(parsed) ? parsed : null;
-  } catch {
-    // 截断 JSON 时按最后一个完整对象字段做简单抢救
-    const trimmed = raw.replace(/,\s*([}\]])/g, '$1');
-    try {
-      const parsed = JSON.parse(trimmed) as unknown;
-      return isRecord(parsed) ? parsed : null;
-    } catch {
-      return null;
-    }
-  }
+  const parsed = extractFirstJsonObject(text);
+  return isRecord(parsed) ? parsed : null;
 }
 
 function isRecord(value: unknown): value is Record<string, unknown> {
