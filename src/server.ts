@@ -1,6 +1,8 @@
 import { createServer } from 'http';
 import { parse } from 'url';
 import next from 'next';
+import { attachInterviewASRWebSocket } from './lib/interview-asr-ws-server';
+import { attachInterviewTTSWebSocket } from './lib/interview-tts-ws-server';
 
 const dev = process.env.NODE_ENV !== 'production' && process.env.COZE_PROJECT_ENV !== 'PROD';
 const hostname = process.env.HOSTNAME || '0.0.0.0';
@@ -21,6 +23,8 @@ app.prepare().then(() => {
       res.end('Internal server error');
     }
   });
+  attachInterviewASRWebSocket(server);
+  attachInterviewTTSWebSocket(server);
   server.once('error', err => {
     console.error(err);
     process.exit(1);

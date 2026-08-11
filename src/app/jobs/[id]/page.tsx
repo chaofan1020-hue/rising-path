@@ -5,7 +5,15 @@ import { useParams, useRouter } from 'next/navigation';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
+import { Progress } from '@/components/ui/progress';
 import { Separator } from '@/components/ui/separator';
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from '@/components/ui/select';
 import { 
   ArrowLeft, 
   MapPin, 
@@ -18,6 +26,8 @@ import {
   FileText,
   Loader2,
   Send,
+  Heart,
+  Sparkles,
   Target,
   CheckCircle,
   Star,
@@ -28,6 +38,7 @@ import {
   ChevronDown,
   Globe,
   AlertTriangle,
+  Zap,
   type LucideIcon,
 } from 'lucide-react';
 import Link from 'next/link';
@@ -71,6 +82,40 @@ interface RelatedJob {
   title: string;
   region: string;
 }
+
+interface ResumeOption {
+  id: number;
+  file_name: string;
+  processing_status?: string;
+  segmentation_confirmed?: boolean;
+  profile_version?: number;
+  user_info?: {
+    name?: string;
+  };
+}
+
+interface JobMatchSnapshot {
+  id?: number;
+  resume_id: number;
+  job_id: number;
+  match_score: number;
+  match_reason: string;
+  suggestions: string;
+  score_breakdown: Record<string, number>;
+  evidence: string[];
+  key_gaps: string[];
+  resume_profile_version: number;
+  created_at?: string;
+}
+
+const scoreBreakdownLabels: Array<{ key: string; label: string }> = [
+  { key: 'ats', label: 'ATS 可解析性' },
+  { key: 'keywords', label: '关键词匹配' },
+  { key: 'experience', label: '经历匹配' },
+  { key: 'evidence', label: '成果证据' },
+  { key: 'region', label: '地区策略' },
+  { key: 'profile_fit', label: '画像适配度' },
+];
 
 // Company Logo Component
 function CompanyLogo({ company, logoUrl, size = 'md' }: { company: string; logoUrl?: string; size?: 'sm' | 'md' | 'lg' }) {
@@ -142,6 +187,13 @@ function JobDetailContent() {
   const [error, setError] = useState<string | null>(null);
   const [applying, setApplying] = useState(false);
   const [applied, setApplied] = useState(false);
+  const [resumes, setResumes] = useState<ResumeOption[]>([]);
+  const [selectedResumeId, setSelectedResumeId] = useState('');
+  const [match, setMatch] = useState<JobMatchSnapshot | null>(null);
+  const [matchLoading, setMatchLoading] = useState(false);
+  const [matchError, setMatchError] = useState('');
+  const [isFavorite, setIsFavorite] = useState(false);
+  const [favoriteLoading, setFavoriteLoading] = useState(false);
   const [showAllResponsibilities, setShowAllResponsibilities] = useState(false);
   const [showAllRequirements, setShowAllRequirements] = useState(false);
   
@@ -172,8 +224,70 @@ function JobDetailContent() {
     if (params.id) {
       fetchJob();
       checkIfApplied();
+      fetchConfirmedResumes();
+      checkIfFavorite();
     }
   }, [params.id]);
+
+  const fetchConfirmedResumes = async () => {
+    try {
+      const response = await apiFetch('/api/resume');
+      if (!response.ok) return;
+      const data = await response.json();
+      const availableResumes = (data.resumes || []).filter((resume: ResumeOption) => (
+        resume.processing_status === 'ready' && resume.segmentation_confirmed === true
+      ));
+      setResumes(availableResumes);
+      if (availableResumes.length === 1) {
+        setSelectedResumeId(String(availableResumes[0].id));
+      }
+    } catch (error) {
+      console.error('Failed to fetch confirmed resumes:', error);
+    }
+  };
+
+  const checkIfFavorite = async () => {
+    try {
+      const response = await apiFetch('/api/favorites');
+      if (!response.ok) return;
+      const data = await response.json();
+      setIsFavorite((data.favorites || []).some((favorite: { job_id: number }) => (
+        favorite.job_id === Number(params.id)
+      )));
+    } catch (error) {
+      console.error('Failed to check favorite status:', error);
+    }
+  };
+
+  useEffect(() => {
+    if (!selectedResumeId || !params.id) {
+      setMatch(null);
+      return;
+    }
+
+    let active = true;
+    const fetchSavedMatch = async () => {
+      setMatchLoading(true);
+      setMatchError('');
+      try {
+        const response = await apiFetch(
+          `/api/ai/match?jobId=${encodeURIComponent(String(params.id))}&resumeId=${encodeURIComponent(selectedResumeId)}`,
+        );
+        const data = await response.json();
+        if (!response.ok) throw new Error(data.error || '读取岗位评分失败');
+        if (active) setMatch(data.match || null);
+      } catch (error) {
+        if (active) setMatchError(error instanceof Error ? error.message : '读取岗位评分失败');
+      } finally {
+        if (active) setMatchLoading(false);
+      }
+    };
+
+    fetchSavedMatch();
+    return () => {
+      active = false;
+    };
+  }, [params.id, selectedResumeId]);
 
   const checkIfApplied = async () => {
     if (!params.id) return;
@@ -187,9 +301,22 @@ function JobDetailContent() {
     }
   };
 
-  const handleApply = async () => {
+  const handleAutoApply = async () => {
     if (applied) {
-      router.push('/applications');
+      if (job?.job_url) {
+        const applyContext = {
+          jobId: Number(params.id),
+          company: job.company,
+          title: job.title,
+          jobUrl: job.job_url,
+        };
+        window.postMessage({ type: "liorvix-apply-context", context: applyContext }, window.location.origin);
+        window.open(job.job_url, '_blank', 'noopener,noreferrer');
+      }
+      return;
+    }
+    if (!job?.job_url) {
+      alert('该岗位暂无可打开官网链接');
       return;
     }
 
@@ -209,7 +336,14 @@ function JobDetailContent() {
       
       if (data.application) {
         setApplied(true);
-        router.push('/applications');
+        const applyContext = {
+          jobId: Number(params.id),
+          company: job.company,
+          title: job.title,
+          jobUrl: job.job_url,
+        };
+        window.postMessage({ type: "liorvix-apply-context", context: applyContext }, window.location.origin);
+        window.open(job.job_url, '_blank', 'noopener,noreferrer');
       } else if (data.error) {
         alert('投递失败: ' + data.error);
       }
@@ -217,6 +351,53 @@ function JobDetailContent() {
       alert('投递失败，请重试');
     } finally {
       setApplying(false);
+    }
+  };
+
+  const handleScore = async () => {
+    if (!selectedResumeId || !params.id) return;
+
+    setMatchLoading(true);
+    setMatchError('');
+    try {
+      const response = await apiFetch('/api/ai/match', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          resumeId: selectedResumeId,
+          jobId: Number(params.id),
+        }),
+      });
+      const data = await response.json();
+      if (!response.ok) throw new Error(data.error || '岗位评分失败，请重试');
+      const nextMatch = data.matches?.[0] as JobMatchSnapshot | undefined;
+      if (!nextMatch) throw new Error('未返回有效的岗位评分，请重试');
+      setMatch(nextMatch);
+    } catch (error) {
+      setMatchError(error instanceof Error ? error.message : '岗位评分失败，请重试');
+    } finally {
+      setMatchLoading(false);
+    }
+  };
+
+  const handleFavorite = async () => {
+    if (!params.id) return;
+
+    const nextFavorite = !isFavorite;
+    setFavoriteLoading(true);
+    try {
+      const response = await apiFetch('/api/favorites', {
+        method: nextFavorite ? 'POST' : 'DELETE',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ job_id: Number(params.id) }),
+      });
+      const data = await response.json();
+      if (!response.ok) throw new Error(data.error || '收藏操作失败');
+      setIsFavorite(nextFavorite);
+    } catch (error) {
+      alert(error instanceof Error ? error.message : '收藏操作失败，请重试');
+    } finally {
+      setFavoriteLoading(false);
     }
   };
 
@@ -320,24 +501,41 @@ function JobDetailContent() {
             <div className="flex flex-col sm:flex-row gap-3">
               <Button
                 className="bg-zinc-900 text-white hover:bg-zinc-800 dark:bg-white dark:text-zinc-900 dark:hover:bg-zinc-200 flex-1"
-                onClick={handleApply}
+                onClick={handleAutoApply}
                 disabled={applying}
               >
                 {applying ? (
                   <>
                     <Loader2 className="h-4 w-4 mr-2 animate-spin" />
-                    投递中...
+                    正在打开官网...
                   </>
                 ) : applied ? (
                   <>
-                    <CheckCircle className="h-4 w-4 mr-2" />
-                    已投递 (查看进度)
+                    <Zap className="h-4 w-4 mr-2" />
+                    再次自动填写
                   </>
                 ) : (
                   <>
-                    <Send className="h-4 w-4 mr-2" />
-                    去官网申请
+                    <Zap className="h-4 w-4 mr-2" />
+                    自动网申
                   </>
+                )}
+              </Button>
+              <Button
+                type="button"
+                variant="outline"
+                size="icon"
+                title={isFavorite ? '取消收藏' : '收藏岗位'}
+                aria-label={isFavorite ? '取消收藏' : '收藏岗位'}
+                aria-pressed={isFavorite}
+                onClick={handleFavorite}
+                disabled={favoriteLoading}
+                className="h-11 w-11 flex-shrink-0 border-zinc-200 text-zinc-600 dark:border-zinc-700 dark:text-zinc-300"
+              >
+                {favoriteLoading ? (
+                  <Loader2 className="h-4 w-4 animate-spin" />
+                ) : (
+                  <Heart className={`h-4 w-4 ${isFavorite ? 'fill-current' : ''}`} />
                 )}
               </Button>
               {job.job_url && (
@@ -349,6 +547,146 @@ function JobDetailContent() {
                 </Button>
               )}
             </div>
+          </CardContent>
+        </Card>
+
+        {/* 目标岗位评分 */}
+        <Card className="mb-4 rounded-2xl border-zinc-200 dark:border-zinc-800 shadow-none">
+          <CardHeader className="pb-3">
+            <CardTitle className="flex items-center gap-2 text-base text-zinc-900 dark:text-zinc-50">
+              <span className="flex h-6 w-6 items-center justify-center rounded-lg bg-zinc-900 dark:bg-white">
+                <Sparkles className="h-3.5 w-3.5 text-white dark:text-zinc-900" />
+              </span>
+              目标岗位评分
+            </CardTitle>
+            <p className="text-sm text-zinc-500 dark:text-zinc-400">
+              使用已确认的求职画像，查看这份简历与当前岗位的匹配度和关键差距。
+            </p>
+          </CardHeader>
+          <CardContent>
+            {resumes.length === 0 ? (
+              <div className="flex flex-col items-start gap-3 rounded-xl border border-dashed border-zinc-200 bg-zinc-50/70 p-4 dark:border-zinc-800 dark:bg-zinc-900/50">
+                <p className="text-sm text-zinc-500 dark:text-zinc-400">
+                  暂无已确认画像，请先上传简历并完成求职画像确认。
+                </p>
+                <Button asChild variant="outline" size="sm" className="border-zinc-200 dark:border-zinc-700">
+                  <Link href="/resume">
+                    <FileText className="mr-2 h-4 w-4" />
+                    去管理简历
+                  </Link>
+                </Button>
+              </div>
+            ) : (
+              <div className="flex flex-col gap-3 sm:flex-row sm:items-end">
+                <div className="min-w-0 flex-1">
+                  <label htmlFor="job-score-resume" className="mb-1.5 block text-xs font-medium text-zinc-600 dark:text-zinc-300">
+                    选择已确认简历
+                  </label>
+                  <Select value={selectedResumeId} onValueChange={setSelectedResumeId}>
+                    <SelectTrigger id="job-score-resume" className="h-10 w-full rounded-xl border-zinc-200 dark:border-zinc-700">
+                      <SelectValue placeholder="选择一份简历" />
+                    </SelectTrigger>
+                    <SelectContent>
+                      {resumes.map((resume) => (
+                        <SelectItem key={resume.id} value={String(resume.id)}>
+                          {resume.file_name}
+                          {resume.user_info?.name ? ` · ${resume.user_info.name}` : ''}
+                          {resume.profile_version ? ` · 画像 v${resume.profile_version}` : ''}
+                        </SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                </div>
+                <Button
+                  type="button"
+                  onClick={handleScore}
+                  disabled={!selectedResumeId || matchLoading}
+                  className="h-10 rounded-xl bg-zinc-900 px-5 text-white hover:bg-zinc-800 dark:bg-white dark:text-zinc-900 dark:hover:bg-zinc-200"
+                >
+                  {matchLoading ? (
+                    <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                  ) : (
+                    <Sparkles className="mr-2 h-4 w-4" />
+                  )}
+                  {match ? '重新评分' : '生成岗位评分'}
+                </Button>
+              </div>
+            )}
+
+            {matchError && (
+              <div className="mt-4 rounded-xl border border-red-200 bg-red-50 px-3 py-2.5 text-sm text-red-700 dark:border-red-900/60 dark:bg-red-950/30 dark:text-red-300">
+                {matchError}
+              </div>
+            )}
+
+            {match && (
+              <div className="mt-5 space-y-5 border-t border-zinc-100 pt-5 dark:border-zinc-800">
+                <div className="flex flex-col gap-4 sm:flex-row sm:items-center">
+                  <div className="flex items-end gap-2">
+                    <span className="text-5xl font-semibold tracking-tight text-zinc-900 dark:text-zinc-50">
+                      {match.match_score}
+                    </span>
+                    <span className="pb-1 text-sm text-zinc-400 dark:text-zinc-500">/ 100 匹配分</span>
+                  </div>
+                  <div className="min-w-0 flex-1">
+                    <p className="text-sm leading-relaxed text-zinc-600 dark:text-zinc-300">{match.match_reason}</p>
+                    <p className="mt-1 text-xs text-zinc-400 dark:text-zinc-500">
+                      基于画像 v{match.resume_profile_version} 的评分快照
+                    </p>
+                  </div>
+                </div>
+
+                <div className="grid gap-x-5 gap-y-3 sm:grid-cols-2">
+                  {scoreBreakdownLabels.map(({ key, label }) => {
+                    const value = Math.max(0, Math.min(100, Number(match.score_breakdown?.[key] ?? 0)));
+                    return (
+                      <div key={key}>
+                        <div className="mb-1 flex items-center justify-between text-xs text-zinc-500 dark:text-zinc-400">
+                          <span>{label}</span>
+                          <span className="font-medium text-zinc-700 dark:text-zinc-200">{value}</span>
+                        </div>
+                        <Progress value={value} className="h-1.5" />
+                      </div>
+                    );
+                  })}
+                </div>
+
+                {(match.evidence.length > 0 || match.key_gaps.length > 0) && (
+                  <div className="grid gap-3 sm:grid-cols-2">
+                    {match.evidence.length > 0 && (
+                      <div className="rounded-xl border border-emerald-100 bg-emerald-50/60 p-3 dark:border-emerald-900/50 dark:bg-emerald-950/20">
+                        <h3 className="mb-1.5 text-sm font-medium text-emerald-900 dark:text-emerald-200">匹配证据</h3>
+                        <ul className="list-disc space-y-1 pl-4 text-xs text-emerald-800 dark:text-emerald-300">
+                          {match.evidence.map((item) => <li key={item}>{item}</li>)}
+                        </ul>
+                      </div>
+                    )}
+                    {match.key_gaps.length > 0 && (
+                      <div className="rounded-xl border border-amber-100 bg-amber-50/60 p-3 dark:border-amber-900/50 dark:bg-amber-950/20">
+                        <h3 className="mb-1.5 text-sm font-medium text-amber-900 dark:text-amber-200">关键差距</h3>
+                        <ul className="list-disc space-y-1 pl-4 text-xs text-amber-800 dark:text-amber-300">
+                          {match.key_gaps.map((item) => <li key={item}>{item}</li>)}
+                        </ul>
+                      </div>
+                    )}
+                  </div>
+                )}
+
+                {match.suggestions && (
+                  <div className="rounded-xl border border-zinc-200 bg-zinc-50/70 p-3 dark:border-zinc-800 dark:bg-zinc-900/50">
+                    <h3 className="mb-1.5 text-sm font-medium text-zinc-900 dark:text-zinc-100">下一步优化建议</h3>
+                    <p className="text-sm leading-relaxed text-zinc-600 dark:text-zinc-300">{match.suggestions}</p>
+                  </div>
+                )}
+
+                <Button asChild variant="outline" className="h-10 rounded-xl border-zinc-200 dark:border-zinc-700">
+                  <Link href={`/optimize?resumeId=${match.resume_id}&jobId=${job.id}&company=${encodeURIComponent(job.company)}&position=${encodeURIComponent(job.title)}&region=${encodeURIComponent(job.region)}&suggestions=${encodeURIComponent(match.suggestions || '')}`}>
+                    <Sparkles className="mr-2 h-4 w-4" />
+                    按当前岗位优化简历
+                  </Link>
+                </Button>
+              </div>
+            )}
           </CardContent>
         </Card>
 

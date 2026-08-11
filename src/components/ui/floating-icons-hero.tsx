@@ -138,7 +138,14 @@ const FloatingIconsHero = React.forwardRef<
       </div>
 
       <div className="relative z-10 text-center px-4">
-        <h1 className="text-5xl md:text-7xl font-bold tracking-tight text-black dark:text-white">
+        <h1
+          className="text-5xl md:text-7xl font-bold text-black dark:text-white"
+          style={{
+            fontFamily:
+              "'Outfit', 'PingFang SC', 'Hiragino Sans GB', 'Microsoft YaHei', ui-sans-serif, system-ui, sans-serif",
+            letterSpacing: 0,
+          }}
+        >
           {title}
         </h1>
         <p className="mt-6 max-w-xl mx-auto text-lg text-black dark:text-white">

@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { getAuthContext, unauthorizedResponse } from '@/lib/auth-server';
+import { isApplicationStatus } from '@/lib/application-status';
 
 export async function PUT(
   request: NextRequest,
@@ -11,6 +12,9 @@ export async function PUT(
     const client = auth.client;
     const { id } = await params;
     const body = await request.json();
+    if (body.status !== undefined && !isApplicationStatus(body.status)) {
+      return NextResponse.json({ error: '无效的网申状态' }, { status: 400 });
+    }
 
     const updateData: Record<string, unknown> = {
       updated_at: new Date().toISOString(),

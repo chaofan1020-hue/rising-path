@@ -6,8 +6,8 @@ import './globals.css';
 
 export const metadata: Metadata = {
   title: {
-    default: 'Rising Path求职平台',
-    template: '%s | Rising Path',
+    default: 'Liorvix求职平台',
+    template: '%s | Liorvix',
   },
   description:
     '专为海外留学生打造的一站式求职平台，提供岗位查询、AI选岗、简历优化、自动网申等功能',
@@ -21,7 +21,7 @@ export const metadata: Metadata = {
     '网申',
     '求职平台',
   ],
-  authors: [{ name: 'Rising Path Team' }],
+  authors: [{ name: 'Liorvix Team' }],
   generator: 'Coze Code',
   icons: {
     icon: '/logo.svg',
@@ -31,7 +31,7 @@ export const metadata: Metadata = {
     'link': [
       '<https://fonts.googleapis.com>; rel=preconnect',
       '<https://fonts.gstatic.com>; rel=preconnect; crossorigin',
-      '<https://fonts.googleapis.com/css2?family=Ma+Shan+Zheng&display=swap>; rel=stylesheet',
+      '<https://fonts.googleapis.com/css2?family=Ma+Shan+Zheng&family=Outfit:wght@600;700;800&display=swap>; rel=stylesheet',
     ],
   },
 };

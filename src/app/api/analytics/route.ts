@@ -117,7 +117,15 @@ export async function GET(request: NextRequest) {
     // 按状态统计
     const applicationsByStatus: Record<string, number> = {};
     applications?.forEach(a => {
-      applicationsByStatus[a.status] = (applicationsByStatus[a.status] || 0) + 1;
+      const normalized =
+        a.status === 'pending'
+          ? 'pending'
+          : a.status === 'filling'
+            ? 'filling'
+            : a.status === 'submitted' || a.status === 'interview'
+              ? 'submitted'
+              : 'closed';
+      applicationsByStatus[normalized] = (applicationsByStatus[normalized] || 0) + 1;
     });
 
     // 5. AI 匹配统计

@@ -1,17 +1,62 @@
 import PDFParser from 'pdf2json';
 import mammoth from 'mammoth';
-import { Config, LLMClient } from 'coze-coding-dev-sdk';
+import { AIProviderConfigError, createTextProviderClient, type TextProviderClient } from '@/lib/ai/text-provider';
 import {
   deriveSegmentation,
-  type EducationEntry,
-  type ExperienceEntry,
-  type ProjectEntry,
-  type ResumeProfile,
-  type UserSegmentation,
 } from '@/lib/user-segmentation';
+import type {
+  EducationEntry,
+  ExperienceEntry,
+  ProjectEntry,
+  ResumeEvidenceItem,
+  ResumeProfile,
+  ResumeProfileConfidence,
+  ResumeProfileEvidence,
+  UserSegmentation,
+} from '@/lib/resume-types';
 
 const BASIC_PROFILE_INPUT_LIMIT = 30000;
 const PROFILE_INPUT_LIMIT = 12000;
+const DEFAULT_LLM_TIMEOUT_MS = 45_000;
+
+function getResumeLlmTimeoutMs(): number {
+  const rawValue = process.env.RESUME_PROFILE_LLM_TIMEOUT_MS?.trim();
+  if (!rawValue) return DEFAULT_LLM_TIMEOUT_MS;
+
+  const timeoutMs = Number(rawValue);
+  if (!Number.isInteger(timeoutMs) || timeoutMs < 5_000 || timeoutMs > 120_000) {
+    throw new ResumeProfileExtractionError(
+      'RESUME_PROFILE_LLM_TIMEOUT_MS 配置无效，请设置为 5000 到 120000 之间的整数（毫秒）',
+    );
+  }
+
+  return timeoutMs;
+}
+
+function createResumeLlmClient(): { client: TextProviderClient; timeoutMs: number } {
+  const timeoutMs = getResumeLlmTimeoutMs();
+  try {
+    return { client: createTextProviderClient(), timeoutMs };
+  } catch (error) {
+    if (error instanceof AIProviderConfigError) {
+      throw new ResumeProfileExtractionError(error.message);
+    }
+    throw error;
+  }
+}
+
+async function withTimeout<T>(promise: Promise<T>, timeoutMs: number, message: string): Promise<T> {
+  let timeoutHandle: ReturnType<typeof setTimeout> | undefined;
+  const timeout = new Promise<never>((_, reject) => {
+    timeoutHandle = setTimeout(() => reject(new Error(message)), timeoutMs);
+  });
+
+  try {
+    return await Promise.race([promise, timeout]);
+  } finally {
+    if (timeoutHandle) clearTimeout(timeoutHandle);
+  }
+}
 
 export interface ResumeUniversity {
   school: string;
@@ -39,6 +84,8 @@ export interface ResumeParseResult {
   user_info: ResumeUserInfo;
   profile: ResumeProfile | null;
   segmentation: UserSegmentation | null;
+  profile_evidence: ResumeProfileEvidence;
+  profile_confidence: ResumeProfileConfidence;
   pages: number;
 }
 
@@ -51,6 +98,13 @@ export class UnsupportedResumeFileError extends Error {
   constructor(fileName: string) {
     super(`不支持的简历格式：${fileName}。目前仅支持 PDF、DOCX 和 TXT 文件，旧版 DOC 请先另存为 DOCX。`);
     this.name = 'UnsupportedResumeFileError';
+  }
+}
+
+export class ResumeProfileExtractionError extends Error {
+  constructor(message: string) {
+    super(message);
+    this.name = 'ResumeProfileExtractionError';
   }
 }
 
@@ -276,7 +330,7 @@ export async function parseResumeContent(content: string): Promise<{
   }
 
   try {
-    const llmClient = new LLMClient(new Config());
+    const { client: llmClient, timeoutMs } = createResumeLlmClient();
     const prompt = `请分析以下简历内容，提取关键信息并以JSON格式返回。
 
 简历内容：
@@ -306,10 +360,14 @@ ${content.slice(0, BASIC_PROFILE_INPUT_LIMIT)}
 
 只返回JSON，不要其他说明文字。如果某项信息不存在，返回null或空数组。对于地区，优先提取留学目的地或求职意向地区。`;
 
-    const response = await llmClient.invoke([
-      { role: 'system', content: '你是一个专业的简历解析助手，擅长从简历中提取结构化信息，特别是教育背景相关的地区、学校、学历等信息。' },
-      { role: 'user', content: prompt },
-    ], { temperature: 0.3 });
+    const response = await withTimeout(
+      llmClient.invoke([
+        { role: 'system', content: '你是一个专业的简历解析助手，擅长从简历中提取结构化信息，特别是教育背景相关的地区、学校、学历等信息。' },
+        { role: 'user', content: prompt },
+      ], { temperature: 0.3, thinking: 'disabled' }),
+      timeoutMs,
+      '简历基础字段提取超时',
+    );
 
     return {
       parsed_content: content,
@@ -388,8 +446,13 @@ function normalizeIntention(value: unknown): ResumeProfile['intention'] {
     roles: toStringArray(value.roles),
     locations: toStringArray(value.locations),
     industries: toStringArray(value.industries),
+    workAuthorization: toStringValue(value.workAuthorization),
+    availableFrom: toStringValue(value.availableFrom),
+    salaryExpectation: toStringValue(value.salaryExpectation),
   };
-  return Object.values(intention).some((items) => items.length > 0) ? intention : undefined;
+  return Object.values(intention).some((items) => Array.isArray(items) ? items.length > 0 : Boolean(items))
+    ? intention
+    : undefined;
 }
 
 function normalizeMeta(value: unknown, pages: number): ResumeProfile['meta'] {
@@ -408,18 +471,89 @@ function normalizeMeta(value: unknown, pages: number): ResumeProfile['meta'] {
   };
 }
 
-async function extractResumeProfile(content: string, pages: number): Promise<ResumeProfile | null> {
+function normalizeProfileEvidence(value: unknown): ResumeProfileEvidence {
+  if (!isRecord(value)) return {};
+
+  const normalized: ResumeProfileEvidence = {};
+  for (const [field, entries] of Object.entries(value)) {
+    if (!Array.isArray(entries)) continue;
+    const items = entries.flatMap((entry) => {
+      if (!isRecord(entry)) return [];
+      const sourceValue = entry.source;
+      if (sourceValue !== 'explicit' && sourceValue !== 'inferred' && sourceValue !== 'user' && sourceValue !== 'unknown') {
+        return [];
+      }
+      const source: ResumeEvidenceItem['source'] = sourceValue;
+      return [{
+        source,
+        quote: toStringValue(entry.quote),
+        note: toStringValue(entry.note),
+      }];
+    });
+    if (items.length > 0) normalized[field] = items;
+  }
+  return normalized;
+}
+
+function normalizeProfileConfidence(value: unknown): ResumeProfileConfidence {
+  if (!isRecord(value)) return {};
+
+  return Object.fromEntries(
+    Object.entries(value).flatMap(([field, score]) => {
+      const parsed = toNumberValue(score);
+      if (parsed === undefined) return [];
+      return [[field, Math.max(0, Math.min(1, parsed > 1 ? parsed / 100 : parsed))]];
+    }),
+  );
+}
+
+function buildProfileUserInfo(raw: Record<string, unknown>, profile: ResumeProfile): ResumeUserInfo {
+  const contact = isRecord(raw.contact) ? { ...raw, ...raw.contact } : raw;
+  const education = profile.education.map((entry) =>
+    [entry.school, entry.degree, entry.major].filter(Boolean).join(' · '),
+  );
+  const experience = [...profile.internships, ...profile.workExperience].map((entry) =>
+    [entry.company, entry.role, entry.months ? `${entry.months}个月` : undefined]
+      .filter(Boolean)
+      .join(' · '),
+  );
+
+  return normalizeUserInfo({
+    ...contact,
+    education,
+    experience,
+    skills: profile.skills,
+    region: toStringValue(contact.location) || profile.intention?.locations?.[0],
+    school: profile.education[0]?.school,
+    degree: profile.education[0]?.degree,
+    major: profile.education[0]?.major,
+    universities: profile.education,
+  });
+}
+
+interface ResumeProfileExtraction {
+  profile: ResumeProfile;
+  userInfo: ResumeUserInfo;
+  evidence: ResumeProfileEvidence;
+  confidence: ResumeProfileConfidence;
+}
+
+async function extractResumeProfile(content: string, pages: number): Promise<ResumeProfileExtraction | null> {
   if (!content.trim()) return null;
 
   try {
-    const llmClient = new LLMClient(new Config());
+    const { client: llmClient, timeoutMs } = createResumeLlmClient();
     const prompt = `你是简历结构化专家。请从以下简历中提取完整画像，严格以 JSON 返回。
 
 简历内容：
 ${content.slice(0, PROFILE_INPUT_LIMIT)}
 
-返回 JSON 结构（不存在的信息用 null 或空数组，不要编造）：
+    返回 JSON 结构（不存在的信息用 null 或空数组，不要编造）：
 {
+  "name": "姓名",
+  "email": "邮箱",
+  "phone": "电话",
+  "location": "所在地",
   "education": [
     { "school": "学校全称", "degree": "本科/硕士/博士/MBA", "major": "专业", "startYear": 2021, "endYear": 2025, "gpa": "GPA或学位等级(如First/2:1)", "qsEstimate": 50 }
   ],
@@ -438,11 +572,24 @@ ${content.slice(0, PROFILE_INPUT_LIMIT)}
   "intention": {
     "roles": ["意向岗位"],
     "locations": ["意向城市/国家，如'上海'、'新加坡'"],
-    "industries": ["意向行业"]
+    "industries": ["意向行业"],
+    "workAuthorization": "工作权限/签证状态（如简历明确写出）",
+    "availableFrom": "可入职时间（如简历明确写出）",
+    "salaryExpectation": "薪资期望（如简历明确写出）"
   },
   "meta": {
     "wordDensity": "sparse/normal/dense",
     "resumeLanguage": "zh/en/bilingual"
+  },
+  "evidence": {
+    "education[0].school": [
+      { "source": "explicit", "quote": "简历中的原文片段", "note": "判断说明" }
+    ]
+  },
+  "confidence": {
+    "education": 0.95,
+    "experience": 0.8,
+    "intention": 0.4
   }
 }
 
@@ -455,18 +602,22 @@ ${content.slice(0, PROFILE_INPUT_LIMIT)}
 6. wordDensity 按简历内容密度判断；resumeLanguage 判断简历语言版本。
 只返回 JSON，不要任何说明文字。`;
 
-    const response = await llmClient.invoke([
-      { role: 'system', content: '你是专业的简历结构化引擎，只输出合法 JSON。' },
-      { role: 'user', content: prompt },
-    ], { temperature: 0.2 });
+    const response = await withTimeout(
+      llmClient.invoke([
+        { role: 'system', content: '你是专业的简历结构化引擎，只输出合法 JSON。' },
+        { role: 'user', content: prompt },
+      ], { temperature: 0.2, thinking: 'disabled' }),
+      timeoutMs,
+      '简历画像提取超时',
+    );
 
     const parsed = extractJsonObject(response.content || '');
-    if (!parsed || !Array.isArray(parsed.education)) {
+    if (!parsed) {
       console.error('[profile] LLM 未返回有效画像 JSON');
-      return null;
+      throw new ResumeProfileExtractionError('画像服务未返回有效结果，请点击重试');
     }
 
-    return {
+    const profile: ResumeProfile = {
       education: normalizeEducationEntries(parsed.education),
       internships: normalizeExperienceEntries(parsed.internships),
       workExperience: normalizeExperienceEntries(parsed.workExperience),
@@ -477,10 +628,63 @@ ${content.slice(0, PROFILE_INPUT_LIMIT)}
       intention: normalizeIntention(parsed.intention),
       meta: normalizeMeta(parsed.meta, pages),
     };
+
+    const hasStructuredData = [
+      profile.education,
+      profile.internships,
+      profile.workExperience,
+      profile.projects,
+      profile.skills,
+      profile.certificates,
+      profile.languages || [],
+      profile.intention?.roles || [],
+      profile.intention?.locations || [],
+      profile.intention?.industries || [],
+    ].some((items) => items.length > 0);
+    if (!hasStructuredData) {
+      console.error('[profile] LLM 返回了空画像');
+      throw new ResumeProfileExtractionError('未能从简历中识别出有效信息，请检查文件内容后重试');
+    }
+
+    return {
+      profile,
+      userInfo: buildProfileUserInfo(parsed, profile),
+      evidence: normalizeProfileEvidence(parsed.evidence),
+      confidence: normalizeProfileConfidence(parsed.confidence),
+    };
   } catch (error) {
     console.error('[profile] 画像提取失败:', error);
-    return null;
+    if (error instanceof ResumeProfileExtractionError) throw error;
+    if (error instanceof Error && error.message.includes('超时')) {
+      throw new ResumeProfileExtractionError('画像提取超时，请稍后重试');
+    }
+    throw new ResumeProfileExtractionError('画像服务暂时不可用，请稍后重试');
   }
+}
+
+export async function parseResumeText(content: string, pages: number): Promise<ResumeParseResult> {
+  const extraction = await extractResumeProfile(content, pages);
+  if (!extraction) {
+    return {
+      parsed_content: content,
+      user_info: {},
+      profile: null,
+      segmentation: null,
+      profile_evidence: {},
+      profile_confidence: {},
+      pages,
+    };
+  }
+
+  return {
+    parsed_content: content,
+    user_info: extraction.userInfo,
+    profile: extraction.profile,
+    segmentation: deriveSegmentation(extraction.profile),
+    profile_evidence: extraction.evidence,
+    profile_confidence: extraction.confidence,
+    pages,
+  };
 }
 
 export async function parseResumeFile(
@@ -488,13 +692,5 @@ export async function parseResumeFile(
   options: ResumeFileOptions,
 ): Promise<ResumeParseResult> {
   const extracted = await extractTextFromResumeFile(buffer, options);
-  const parsed = await parseResumeContent(extracted.text);
-  const profile = await extractResumeProfile(extracted.text, extracted.pages);
-
-  return {
-    ...parsed,
-    profile,
-    segmentation: profile ? deriveSegmentation(profile) : null,
-    pages: extracted.pages,
-  };
+  return parseResumeText(extracted.text, extracted.pages);
 }

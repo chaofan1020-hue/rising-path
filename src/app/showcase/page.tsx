@@ -54,17 +54,17 @@ export default function ShowcasePage() {
 
   const content = {
     'zh-CN': {
-      title: 'Rising Path',
+      title: 'Liorvix',
       subtitle: '专为海外留学生打造的一站式求职平台',
       cta: '开始探索',
     },
     'zh-TW': {
-      title: 'Rising Path',
+      title: 'Liorvix',
       subtitle: '專為海外留學生打造的一站式求職平台',
       cta: '開始探索',
     },
     'en': {
-      title: 'Rising Path',
+      title: 'Liorvix',
       subtitle: 'Your one-stop career platform for international students',
       cta: 'Get Started',
     },

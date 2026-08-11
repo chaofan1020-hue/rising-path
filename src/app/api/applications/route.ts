@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from 'next/server';
 import { getSupabaseClient } from '@/storage/database/supabase-client';
 import { hasValidAdminSession } from '@/lib/admin-auth';
 import { getAuthContext, unauthorizedResponse } from '@/lib/auth-server';
+import { isApplicationStatus } from '@/lib/application-status';
 
 export async function GET(request: NextRequest) {
   try {
@@ -40,6 +41,9 @@ export async function POST(request: NextRequest) {
     if (!auth) return unauthorizedResponse();
     const client = auth.client;
     const body = await request.json();
+    if (body.status !== undefined && !isApplicationStatus(body.status)) {
+      return NextResponse.json({ error: '无效的网申状态' }, { status: 400 });
+    }
     const writableFields = ['job_id', 'resume_id', 'status', 'notes', 'submitted_at'] as const;
     const applicationData = Object.fromEntries(
       writableFields

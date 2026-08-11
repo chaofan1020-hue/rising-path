@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { LLMClient, Config, HeaderUtils } from 'coze-coding-dev-sdk';
 import { getAuthContext, unauthorizedResponse } from '@/lib/auth-server';
+import { createTextProviderClient } from '@/lib/ai/text-provider';
 
 export async function POST(request: NextRequest) {
   try {
@@ -12,7 +12,7 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ error: '简历数据不能为空' }, { status: 400 });
     }
 
-    const llmClient = new LLMClient(new Config(), HeaderUtils.extractForwardHeaders(request.headers));
+    const llmClient = createTextProviderClient({ requestHeaders: request.headers });
 
     const prompt = `请将以下简历数据翻译成${targetLanguage === 'english' ? '英文' : '中文'}。
 

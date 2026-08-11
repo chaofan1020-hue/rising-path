@@ -54,7 +54,7 @@ import {
   CheckCircle,
   XCircle,
   Clock,
-  Calendar,
+  Archive,
   LogOut,
   Settings,
   Upload,
@@ -145,14 +145,13 @@ interface AnalyticsData {
   userActivity: { userId: string; userName: string; resumes: number; applications: number; aiMatches: number }[];
 }
 
-const statusOptions = ['pending', 'submitted', 'interview', 'rejected', 'offer'];
+const statusOptions = ['pending', 'filling', 'submitted', 'closed'];
 
 const statusLabels: Record<string, string> = {
   pending: '待投递',
+  filling: '填写中',
   submitted: '已投递',
-  interview: '面试中',
-  rejected: '已拒绝',
-  offer: '已录用',
+  closed: '已关闭',
 };
 
 export default function AdminPage() {
@@ -430,6 +429,10 @@ export default function AdminPage() {
     setAnalyticsLoading(true);
     try {
       const response = await fetch(`/api/analytics?range=${analyticsRange}`);
+      if (!response.ok) {
+        setAnalytics(null);
+        return;
+      }
       const data = await response.json();
       setAnalytics(data);
     } catch (error) {
@@ -927,9 +930,9 @@ export default function AdminPage() {
     totalResumes: resumes.length,
     totalApplications: applications.length,
     pendingApps: applications.filter(a => a.status === 'pending').length,
+    fillingApps: applications.filter(a => a.status === 'filling').length,
     submittedApps: applications.filter(a => a.status === 'submitted').length,
-    interviewApps: applications.filter(a => a.status === 'interview').length,
-    offerApps: applications.filter(a => a.status === 'offer').length,
+    closedApps: applications.filter(a => a.status === 'closed').length,
   };
 
   const filteredJobs = jobs
@@ -1107,7 +1110,7 @@ export default function AdminPage() {
             <TabsContent value="overview">
               <div className="grid gap-4 md:gap-6">
                 {/* Stats Cards - 手机端横向滚动 */}
-                <div className="flex gap-3 overflow-x-auto pb-2 -mx-4 px-4 md:mx-0 md:px-0 md:grid md:grid-cols-4 lg:grid-cols-7 md:gap-4 md:overflow-visible">
+                <div className="flex gap-3 overflow-x-auto pb-2 -mx-4 px-4 md:mx-0 md:px-0 md:grid md:grid-cols-4 lg:grid-cols-8 md:gap-4 md:overflow-visible">
                   <Card className="flex-shrink-0 w-28 md:w-auto">
                     <CardContent className="pt-4 md:pt-6 pb-3 md:pb-6 text-center">
                       <div className="flex items-center justify-center gap-1 md:gap-2">
@@ -1147,6 +1150,15 @@ export default function AdminPage() {
                   <Card className="flex-shrink-0 w-28 md:w-auto">
                     <CardContent className="pt-4 md:pt-6 pb-3 md:pb-6 text-center">
                       <div className="flex items-center justify-center gap-1 md:gap-2">
+                        <Pencil className="h-4 w-4 md:h-5 md:w-5 text-amber-600" />
+                        <span className="text-xl md:text-2xl font-bold">{stats.fillingApps}</span>
+                      </div>
+                      <p className="text-xs md:text-sm text-muted-foreground mt-1">填写中</p>
+                    </CardContent>
+                  </Card>
+                  <Card className="flex-shrink-0 w-28 md:w-auto">
+                    <CardContent className="pt-4 md:pt-6 pb-3 md:pb-6 text-center">
+                      <div className="flex items-center justify-center gap-1 md:gap-2">
                         <CheckCircle className="h-4 w-4 md:h-5 md:w-5 text-blue-600" />
                         <span className="text-xl md:text-2xl font-bold">{stats.submittedApps}</span>
                       </div>
@@ -1156,19 +1168,10 @@ export default function AdminPage() {
                   <Card className="flex-shrink-0 w-28 md:w-auto">
                     <CardContent className="pt-4 md:pt-6 pb-3 md:pb-6 text-center">
                       <div className="flex items-center justify-center gap-1 md:gap-2">
-                        <Calendar className="h-4 w-4 md:h-5 md:w-5 text-terracotta-600" />
-                        <span className="text-xl md:text-2xl font-bold">{stats.interviewApps}</span>
+                        <Archive className="h-4 w-4 md:h-5 md:w-5 text-zinc-500" />
+                        <span className="text-xl md:text-2xl font-bold">{stats.closedApps}</span>
                       </div>
-                      <p className="text-xs md:text-sm text-muted-foreground mt-1">面试中</p>
-                    </CardContent>
-                  </Card>
-                  <Card className="flex-shrink-0 w-28 md:w-auto">
-                    <CardContent className="pt-4 md:pt-6 pb-3 md:pb-6 text-center">
-                      <div className="flex items-center justify-center gap-1 md:gap-2">
-                        <CheckCircle className="h-4 w-4 md:h-5 md:w-5 text-green-600" />
-                        <span className="text-xl md:text-2xl font-bold">{stats.offerApps}</span>
-                      </div>
-                      <p className="text-xs md:text-sm text-muted-foreground mt-1">已录用</p>
+                      <p className="text-xs md:text-sm text-muted-foreground mt-1">已关闭</p>
                     </CardContent>
                   </Card>
                 </div>
@@ -1422,10 +1425,9 @@ export default function AdminPage() {
                                 const percentage = Math.round((count / max) * 100);
                                 const statusColors: Record<string, string> = {
                                   pending: 'bg-yellow-500',
+                                  filling: 'bg-amber-400',
                                   submitted: 'bg-blue-500',
-                                  interview: 'bg-terracotta-500',
-                                  rejected: 'bg-red-500',
-                                  offer: 'bg-green-500',
+                                  closed: 'bg-zinc-500',
                                 };
                                 return (
                                   <div key={status} className="space-y-1">
@@ -2274,7 +2276,7 @@ export default function AdminPage() {
                                 {app.jobs?.company || '未知公司'}
                               </td>
                               <td className="px-3 md:px-4 py-2 md:py-3">
-                                <Badge variant={app.status === 'offer' ? 'default' : app.status === 'rejected' ? 'destructive' : 'secondary'} className="text-xs">
+                                <Badge variant={app.status === 'submitted' ? 'default' : app.status === 'closed' ? 'outline' : 'secondary'} className="text-xs">
                                   {statusLabels[app.status] || app.status}
                                 </Badge>
                               </td>
