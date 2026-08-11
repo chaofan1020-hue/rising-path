@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { LLMClient, Config, HeaderUtils } from 'coze-coding-dev-sdk';
 import { getAuthContext, unauthorizedResponse } from '@/lib/auth-server';
+import { createTextProviderClient } from '@/lib/ai/text-provider';
 
 export async function POST(request: NextRequest) {
   try {
@@ -18,7 +18,7 @@ export async function POST(request: NextRequest) {
     const isChinese = chineseChars > content.length * 0.1;
     const targetLanguage = isChinese ? 'english' : 'chinese';
 
-    const llmClient = new LLMClient(new Config(), HeaderUtils.extractForwardHeaders(request.headers));
+    const llmClient = createTextProviderClient({ requestHeaders: request.headers });
 
     const prompt = `请将以下简历内容翻译成${targetLanguage === 'english' ? '英文' : '中文'}。
 

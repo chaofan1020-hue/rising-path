@@ -50,8 +50,8 @@ async function testResumeSegmentation() {
 }
 
 async function testMissingResumeAiConfigurationFailsFast() {
-  delete process.env.COZE_WORKLOAD_IDENTITY_API_KEY;
-  delete process.env.COZE_INTEGRATION_MODEL_BASE_URL;
+  delete process.env.DASHSCOPE_API_KEY;
+  delete process.env.AI_PROVIDER;
   delete process.env.RESUME_PROFILE_LLM_TIMEOUT_MS;
 
   const { parseResumeText } = await import('../src/lib/resume-parser');
@@ -64,7 +64,7 @@ async function testMissingResumeAiConfigurationFailsFast() {
       parseResumeText('Candidate resume content', 1),
       (error: unknown) => error instanceof Error
         && error.name === 'ResumeProfileExtractionError'
-        && error.message.includes('COZE_WORKLOAD_IDENTITY_API_KEY'),
+        && error.message.includes('DASHSCOPE_API_KEY'),
     );
   } finally {
     console.error = originalConsoleError;

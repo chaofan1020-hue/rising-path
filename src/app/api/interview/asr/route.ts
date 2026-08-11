@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { ASRClient, Config, HeaderUtils } from 'coze-coding-dev-sdk';
 import { getAuthContext, unauthorizedResponse } from '@/lib/auth-server';
+import { recognizeWithAlibaba } from '@/lib/asr-provider';
 
 export const runtime = 'nodejs';
 export const dynamic = 'force-dynamic';
@@ -8,7 +8,7 @@ export const dynamic = 'force-dynamic';
 export async function POST(request: NextRequest) {
   try {
     const body = await request.json();
-    const { audioBase64 } = body;
+    const { audioBase64, audioMimeType, language } = body;
 
     const auth = await getAuthContext(request);
     if (!auth) return unauthorizedResponse();
@@ -16,13 +16,10 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ error: '缺少必要参数' }, { status: 400 });
     }
 
-    const customHeaders = HeaderUtils.extractForwardHeaders(request.headers);
-    const config = new Config();
-    const asrClient = new ASRClient(config, customHeaders);
-
-    const result = await asrClient.recognize({
-      uid: `interview_${auth.user.id}`,
-      base64Data: audioBase64,
+    const result = await recognizeWithAlibaba({
+      audioBase64,
+      audioMimeType,
+      language: language === 'en' ? 'en' : undefined,
     });
 
     return NextResponse.json({ text: result.text });

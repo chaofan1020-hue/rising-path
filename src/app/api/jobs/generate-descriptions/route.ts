@@ -1,10 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
-import { LLMClient, Config } from "coze-coding-dev-sdk";
 import { getSupabaseClient } from "@/storage/database/supabase-client";
 import { hasValidAdminSession } from "@/lib/admin-auth";
-
-const config = new Config();
-const client = new LLMClient(config);
+import { createTextProviderClient, type TextProviderClient } from '@/lib/ai/text-provider';
 
 interface Job {
   id: number;
@@ -30,7 +27,7 @@ Keep it scannable and specific. No fluff.`;
 }
 
 // 更新单个岗位的描述
-async function updateJobDescription(job: Job): Promise<string | null> {
+async function updateJobDescription(job: Job, client: TextProviderClient): Promise<string | null> {
   try {
     const prompt = buildPrompt(job);
     
@@ -52,6 +49,7 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ error: "需要管理员权限" }, { status: 401 });
     }
     const supabase = getSupabaseClient();
+    const llmClient = createTextProviderClient();
     
     // 获取所有岗位
     const { data: allJobs, error } = await supabase
@@ -71,7 +69,7 @@ export async function POST(request: NextRequest) {
     for (const job of allJobs || []) {
       console.log(`Processing: ${job.title} @ ${job.company}`);
       
-      const newDescription = await updateJobDescription(job);
+      const newDescription = await updateJobDescription(job, llmClient);
       
       if (newDescription) {
         const fullDescription = `${job.title}\n${job.company}\n\n${newDescription}`;

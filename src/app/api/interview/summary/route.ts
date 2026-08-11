@@ -1,6 +1,6 @@
 import { NextRequest } from 'next/server';
 import { getAuthContext, unauthorizedResponse } from '@/lib/auth-server';
-import { LLMClient, Config, HeaderUtils } from 'coze-coding-dev-sdk';
+import { createTextProviderClient } from '@/lib/ai/text-provider';
 import { INTERVIEWERS, getPersona, ARCHETYPE_PARAMS, ROUND_ROLE_INFO, GAUNTLET_SCRIPTS } from '@/lib/interviewers';
 
 interface ChatMessage {
@@ -341,7 +341,7 @@ ${jsonSpec}
 
 要求：committee 数组必须按轮次顺序覆盖委员会【每一位】成员；每位面试官口吻必须符合其人设；评议尖锐具体，引用真实记录瞬间；每条评语控制在 120 字以内，确保 JSON 完整输出。`;
 
-    const llmClient = new LLMClient(new Config(), HeaderUtils.extractForwardHeaders(request.headers));
+    const llmClient = createTextProviderClient({ requestHeaders: request.headers });
     let fullContent = '';
 
     const readableStream = new ReadableStream({

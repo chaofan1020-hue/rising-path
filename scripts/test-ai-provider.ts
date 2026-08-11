@@ -8,10 +8,7 @@ import {
 
 const environmentKeys = [
   'AI_PROVIDER',
-  'OPENAI_API_KEY',
   'DASHSCOPE_API_KEY',
-  'COZE_WORKLOAD_IDENTITY_API_KEY',
-  'COZE_INTEGRATION_MODEL_BASE_URL',
 ] as const;
 
 const originalEnvironment = Object.fromEntries(
@@ -27,15 +24,6 @@ function restoreEnvironment() {
 }
 
 try {
-  process.env.AI_PROVIDER = 'openai';
-  delete process.env.OPENAI_API_KEY;
-  assert.equal(getAIProvider(), 'openai');
-  assert.throws(
-    () => createTextProviderClient(),
-    (error: unknown) => error instanceof AIProviderConfigError
-      && error.message.includes('OPENAI_API_KEY'),
-  );
-
   process.env.AI_PROVIDER = 'alibaba';
   delete process.env.DASHSCOPE_API_KEY;
   assert.equal(getAIProvider(), 'alibaba');
@@ -52,14 +40,9 @@ try {
       && error.message.includes('AI_PROVIDER'),
   );
 
-  process.env.AI_PROVIDER = 'coze';
-  delete process.env.COZE_WORKLOAD_IDENTITY_API_KEY;
-  delete process.env.COZE_INTEGRATION_MODEL_BASE_URL;
-  assert.throws(
-    () => createTextProviderClient(),
-    (error: unknown) => error instanceof AIProviderConfigError
-      && error.message.includes('COZE_WORKLOAD_IDENTITY_API_KEY'),
-  );
+  delete process.env.AI_PROVIDER;
+  process.env.DASHSCOPE_API_KEY = 'test-key';
+  assert.equal(getAIProvider(), 'alibaba');
 } finally {
   restoreEnvironment();
 }
