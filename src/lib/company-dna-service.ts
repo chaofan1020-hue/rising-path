@@ -1,8 +1,8 @@
 // 企业面试基因获取服务：精调库 → DB 缓存 → LLM 动态生成（写回缓存）
 import { getSupabaseClient } from '@/storage/database/supabase-client';
 import type { SupabaseClient } from '@supabase/supabase-js';
-import { LLMClient, Config, HeaderUtils } from 'coze-coding-dev-sdk';
 import { CompanyDNA, findCuratedDNA, normalizeCompanyName } from './company-dna';
+import { createTextProviderClient } from './ai/text-provider';
 
 export type DNASource = 'curated' | 'cached' | 'generated' | 'manual';
 
@@ -60,7 +60,7 @@ function sanitizeGeneratedDNA(raw: unknown, company: string): CompanyDNA | null 
 }
 
 async function generateDNAWithLLM(company: string, headers: Headers): Promise<CompanyDNA | null> {
-  const llmClient = new LLMClient(new Config(), HeaderUtils.extractForwardHeaders(headers));
+  const llmClient = createTextProviderClient({ requestHeaders: headers });
   const prompt = `你是面试研究专家，精通各大公司真实的面试文化（基于公开面经、员工分享与行业共识）。
 
 请为「${company}」生成面试基因，严格输出一个 JSON 对象（不要 markdown 代码块，不要任何其他文字），结构如下：

@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { getAuthContext, unauthorizedResponse } from '@/lib/auth-server';
-import { createVoiceProvider } from '@/lib/voice-provider';
+import { createTTSProviderClient } from '@/lib/tts-provider';
 
 export const runtime = 'nodejs';
 export const dynamic = 'force-dynamic';
@@ -16,19 +16,18 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ error: '缺少必要参数' }, { status: 400 });
     }
 
-    const provider = createVoiceProvider(Object.fromEntries(request.headers.entries()));
-    const { audio, contentType } = await provider.synthesize({
+    const ttsClient = createTTSProviderClient({ requestHeaders: request.headers });
+    const result = await ttsClient.synthesize({
       text,
-      voice: speaker,
       language,
+      speaker,
       speechRate,
-      loudnessRate,
-      uid: `interview_${auth.user.id}`,
+      userId: auth.user.id,
     });
 
-    return new NextResponse(new Uint8Array(audio), {
+    return new NextResponse(result.audio, {
       headers: {
-        'Content-Type': contentType,
+        'Content-Type': result.contentType,
         'Cache-Control': 'no-store',
       },
     });

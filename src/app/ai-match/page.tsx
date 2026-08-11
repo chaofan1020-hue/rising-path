@@ -23,8 +23,6 @@ import {
   Target, 
   Loader2, 
   CheckCircle, 
-  ArrowRight,
-  Briefcase,
   Sparkles,
   TrendingUp,
   MapPin,
@@ -42,6 +40,9 @@ import { useLanguage } from '@/lib/language-context';
 interface Resume {
   id: number;
   file_name: string;
+  processing_status?: string;
+  segmentation_confirmed?: boolean;
+  profile_version?: number;
   user_info: {
     name?: string;
     skills?: string[];
@@ -55,6 +56,10 @@ interface MatchResult {
   match_score: number;
   match_reason: string;
   suggestions: string;
+  score_breakdown: Record<string, number>;
+  evidence: string[];
+  key_gaps: string[];
+  resume_profile_version: number;
 }
 
 interface JobConfig {
@@ -150,6 +155,7 @@ function AIMatchContent() {
   const [matching, setMatching] = useState(false);
   const [matchProgress, setMatchProgress] = useState(0);
   const [matchResults, setMatchResults] = useState<MatchResult[]>([]);
+  const [matchError, setMatchError] = useState('');
   
   // 筛选相关状态
   const [regions, setRegions] = useState<JobConfig[]>([]);
@@ -166,7 +172,9 @@ function AIMatchContent() {
     try {
       const response = await apiFetch('/api/resume');
       const data = await response.json();
-      setResumes(data.resumes || []);
+      setResumes((data.resumes || []).filter((resume: Resume) => (
+        resume.processing_status === 'ready' && resume.segmentation_confirmed === true
+      )));
     } catch (error) {
       console.error('Failed to fetch resumes:', error);
     }
@@ -191,6 +199,7 @@ function AIMatchContent() {
     setMatching(true);
     setMatchProgress(0);
     setMatchResults([]);
+    setMatchError('');
 
     try {
       // Simulate progress
@@ -212,6 +221,9 @@ function AIMatchContent() {
       setMatchProgress(100);
 
       const data = await response.json();
+      if (!response.ok) {
+        throw new Error(data.error || 'AI匹配失败，请重试');
+      }
       setMatchResults(data.matches || []);
 
       setTimeout(() => {
@@ -219,6 +231,7 @@ function AIMatchContent() {
       }, 1000);
     } catch (error) {
       console.error('Match failed:', error);
+      setMatchError(error instanceof Error ? error.message : 'AI匹配失败，请重试');
     } finally {
       setMatching(false);
     }
@@ -268,6 +281,7 @@ function AIMatchContent() {
                       <SelectItem key={resume.id} value={resume.id.toString()}>
                         {resume.file_name}
                         {resume.user_info?.name && ` - ${resume.user_info.name}`}
+                        {resume.profile_version ? ` · v${resume.profile_version}` : ''}
                       </SelectItem>
                     ))}
                   </SelectContent>
@@ -369,6 +383,11 @@ function AIMatchContent() {
                 <Progress value={matchProgress} className="h-1.5 md:h-2" />
               </div>
             )}
+            {matchError && (
+              <div className="mt-4 rounded-xl border border-red-200 bg-red-50 px-3 py-2.5 text-sm text-red-700 dark:border-red-900/60 dark:bg-red-950/30 dark:text-red-300">
+                {matchError}
+              </div>
+            )}
           </CardContent>
         </Card>
 
@@ -385,7 +404,7 @@ function AIMatchContent() {
               <Badge className="text-xs bg-zinc-900 text-white dark:bg-white dark:text-zinc-900 border-0 rounded-full px-3 py-1 hover:bg-zinc-900">{t('aiMatch.total')} {matchResults.length} {t('aiMatch.recommendations')}</Badge>
             </div>
 
-            {matchResults.map((result, index) => (
+            {matchResults.map((result) => (
               <Card key={result.job_id} className="rounded-2xl border-zinc-200 dark:border-zinc-800 shadow-none hover:shadow-xl hover:shadow-zinc-900/[0.06] dark:hover:shadow-black/30 transition-shadow duration-300 bg-white dark:bg-zinc-950 overflow-hidden">
                 <CardContent className="pt-4 md:pt-6">
                   {/* 手机端：纵向布局，桌面端：横向布局 */}
@@ -432,9 +451,30 @@ function AIMatchContent() {
                         </div>
                       )}
 
+                      {(result.evidence.length > 0 || result.key_gaps.length > 0) && (
+                        <div className="grid gap-3 md:grid-cols-2">
+                          {result.evidence.length > 0 && (
+                            <div className="rounded-xl border border-emerald-100 bg-emerald-50/60 p-3 dark:border-emerald-900/50 dark:bg-emerald-950/20">
+                              <h4 className="mb-1.5 text-sm font-medium text-emerald-900 dark:text-emerald-200">{t('aiMatch.evidence')}</h4>
+                              <ul className="list-disc space-y-1 pl-4 text-xs text-emerald-800 dark:text-emerald-300">
+                                {result.evidence.map((item) => <li key={item}>{item}</li>)}
+                              </ul>
+                            </div>
+                          )}
+                          {result.key_gaps.length > 0 && (
+                            <div className="rounded-xl border border-amber-100 bg-amber-50/60 p-3 dark:border-amber-900/50 dark:bg-amber-950/20">
+                              <h4 className="mb-1.5 text-sm font-medium text-amber-900 dark:text-amber-200">{t('aiMatch.keyGaps')}</h4>
+                              <ul className="list-disc space-y-1 pl-4 text-xs text-amber-800 dark:text-amber-300">
+                                {result.key_gaps.map((item) => <li key={item}>{item}</li>)}
+                              </ul>
+                            </div>
+                          )}
+                        </div>
+                      )}
+
                       <div className="flex gap-2">
                         <Button size="sm" asChild className="h-9 text-xs rounded-xl bg-zinc-900 text-white hover:bg-zinc-800 dark:bg-white dark:text-zinc-900 dark:hover:bg-zinc-200 border-0">
-                          <Link href={`/optimize?resumeId=${selectedResumeId}&company=${encodeURIComponent(result.company)}&position=${encodeURIComponent(result.job_title)}&suggestions=${encodeURIComponent(result.suggestions || '')}`}>
+                          <Link href={`/optimize?resumeId=${selectedResumeId}&jobId=${result.job_id}&company=${encodeURIComponent(result.company)}&position=${encodeURIComponent(result.job_title)}&suggestions=${encodeURIComponent(result.suggestions || '')}`}>
                             <Wand2 className="mr-1 h-3 w-3" />
                             {t('aiMatch.optimizeResume')}
                           </Link>

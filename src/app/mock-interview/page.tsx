@@ -13,6 +13,9 @@ import {
   ModalFooter, ModalHeader, ModalTitle,
 } from "@/components/ui/modal";
 import { useLanguage } from "@/lib/language-context";
+import { getCurrentSession } from "@/lib/supabase-browser";
+import { createInterviewASRSocket, downsampleToPCM16 } from "@/lib/interview-asr-client";
+import { createInterviewTTSSocket } from "@/lib/interview-tts-client";
 import {
   Bot, Loader2, RotateCcw, ClipboardList,
   Mic, Square, PhoneOff, Video, VideoOff, User,
@@ -93,6 +96,8 @@ interface Message {
 interface ResumeItem {
   id: number;
   file_name: string;
+  processing_status?: string;
+  segmentation_confirmed?: boolean;
 }
 
 interface JobItem {
@@ -363,6 +368,8 @@ function MockInterviewContent() {
   const [recording, setRecording] = useState(false);
   const [recognizing, setRecognizing] = useState(false);
   const [noSpeech, setNoSpeech] = useState(false);
+  const [liveTranscript, setLiveTranscript] = useState("");
+  const [realtimeFallback, setRealtimeFallback] = useState(false);
   const [speaking, setSpeaking] = useState(false);
   const [showSubtitle, setShowSubtitle] = useState(true);
 
@@ -370,6 +377,13 @@ function MockInterviewContent() {
   const streamRef = useRef<MediaStream | null>(null);
   const audioChunksRef = useRef<Blob[]>([]);
   const audioRef = useRef<HTMLAudioElement | null>(null);
+  const realtimeItemRef = useRef<string | null>(null);
+  const realtimeSocketRef = useRef<WebSocket | null>(null);
+  const realtimeAudioCtxRef = useRef<AudioContext | null>(null);
+  const realtimeProcessorRef = useRef<ScriptProcessorNode | null>(null);
+  const ttsNextTimeRef = useRef(0);
+  const activeTTSStopRef = useRef<(() => void) | null>(null);
+  const ttsSourcesRef = useRef<Set<AudioBufferSourceNode>>(new Set());
   // 面试官音波图：Web Audio 频谱分析
   const audioCtxRef = useRef<AudioContext | null>(null);
   const analyserRef = useRef<AnalyserNode | null>(null);
@@ -449,7 +463,11 @@ function MockInterviewContent() {
     apiFetch("/api/resume")
       .then((r) => (r.ok ? r.json() : null))
       .then((d) => {
-        if (d) setResumes(d.resumes || []);
+        if (d) {
+          setResumes((d.resumes || []).filter((resume: ResumeItem) =>
+            resume.processing_status === "ready" && resume.segmentation_confirmed === true,
+          ));
+        }
       })
       .catch((e) => console.error("[mock-interview] fetch resumes error:", e));
   }, []);
@@ -651,37 +669,156 @@ function MockInterviewContent() {
 
   const playSingleTts = useCallback(
     async (item: { text: string; speaker?: string; speechRate?: number; loudnessRate?: number }) => {
-      const cacheKey = `${item.speaker || ""}|${item.text}`;
-      let buf: ArrayBuffer | null = ttsCacheRef.current.get(cacheKey) || null;
-      if (buf) ttsCacheRef.current.delete(cacheKey);
-      if (!buf) buf = await fetchTtsAudio(item);
-      if (interruptRef.current || !buf || !buf.byteLength) return;
-      const audio = audioRef.current;
-      if (!audio) return;
       try {
-        if (audioCtxRef.current?.state === "suspended") {
-          try {
-            await audioCtxRef.current.resume();
-          } catch {
+        const playRealtime = async (): Promise<void> => {
+          const session = await getCurrentSession();
+          if (!session?.access_token) throw new Error("登录状态已失效");
+          ensureAudioGraph();
+          let ctx = audioCtxRef.current;
+          if (!ctx) {
+            const Ctor = window.AudioContext ||
+              (window as unknown as { webkitAudioContext?: typeof AudioContext }).webkitAudioContext;
+            if (!Ctor) throw new Error("当前浏览器不支持实时音频播放");
+            ctx = new Ctor();
+            const analyser = ctx.createAnalyser();
+            analyser.fftSize = 128;
+            analyser.smoothingTimeConstant = 0.75;
+            analyser.connect(ctx.destination);
+            audioCtxRef.current = ctx;
+            analyserRef.current = analyser;
           }
-        }
-        if (interruptRef.current) return;
-        audio.pause();
-        const blobUrl = URL.createObjectURL(new Blob([buf], { type: "audio/mpeg" }));
-        await new Promise<void>((resolve) => {
-          const done = () => {
-            URL.revokeObjectURL(blobUrl);
-            resolve();
+          if (ctx.state === "suspended") await ctx.resume();
+
+          const socket = createInterviewTTSSocket(session.access_token);
+          socket.binaryType = "arraybuffer";
+          let hasAudio = false;
+          let finished = false;
+          let timer: number | null = null;
+          const schedulePCM = (data: ArrayBuffer) => {
+            if (!ctx || data.byteLength < 2) return;
+            const samples = new Int16Array(data);
+            const audioBuffer = ctx.createBuffer(1, samples.length, 44100);
+            const channel = audioBuffer.getChannelData(0);
+            for (let i = 0; i < samples.length; i += 1) channel[i] = samples[i] / 0x8000;
+            const source = ctx.createBufferSource();
+            source.buffer = audioBuffer;
+            ttsSourcesRef.current.add(source);
+            source.onended = () => ttsSourcesRef.current.delete(source);
+            if (analyserRef.current) source.connect(analyserRef.current);
+            else source.connect(ctx.destination);
+            const startAt = Math.max(ctx.currentTime + 0.03, ttsNextTimeRef.current);
+            source.start(startAt);
+            ttsNextTimeRef.current = startAt + audioBuffer.duration;
+          hasAudio = true;
           };
-          audio.src = blobUrl;
-          audio.onended = done;
-          audio.onerror = done;
-          audio.play().catch(done); // 自动播放被拒等异常：直接兜底结束
-        });
+
+          await new Promise<void>((resolve, reject) => {
+            const finish = () => {
+              if (finished) return;
+              finished = true;
+              if (timer !== null) window.clearTimeout(timer);
+              socket.close(1000, "tts complete");
+              resolve();
+            };
+            const stop = () => {
+              ttsSourcesRef.current.forEach((source) => {
+                try {
+                  source.stop();
+                } catch {
+                  // The source may already have ended.
+                }
+              });
+              ttsSourcesRef.current.clear();
+              finish();
+            };
+            activeTTSStopRef.current = stop;
+            const fail = (error: Error) => {
+              if (finished) return;
+              if (hasAudio) {
+                finish();
+                return;
+              }
+              finished = true;
+              if (timer !== null) window.clearTimeout(timer);
+              socket.close();
+              reject(error);
+            };
+            timer = window.setTimeout(() => fail(new Error("Cartesia TTS stream timeout")), 30000);
+            socket.onopen = () => socket.send(JSON.stringify({
+              type: "speak",
+              text: item.text,
+              language,
+              speaker: item.speaker,
+              speechRate: item.speechRate,
+            }));
+            socket.onmessage = (event) => {
+              if (event.data instanceof ArrayBuffer) {
+                schedulePCM(event.data);
+                return;
+              }
+              if (event.data instanceof Blob) {
+                event.data.arrayBuffer().then(schedulePCM).catch(() => {});
+                return;
+              }
+              try {
+                const data = JSON.parse(String(event.data)) as { type?: string; error?: string };
+                if (data.type === "done") {
+                  const waitMs = Math.max(0, (ttsNextTimeRef.current - ctx!.currentTime) * 1000 + 60);
+                  timer = window.setTimeout(finish, waitMs);
+                } else if (data.type === "error") {
+                  fail(new Error(data.error || "Cartesia TTS failed"));
+                }
+              } catch {
+                fail(new Error("Cartesia TTS response invalid"));
+              }
+            };
+            socket.onerror = () => fail(new Error("Cartesia TTS connection failed"));
+            socket.onclose = () => {
+              if (!finished && !hasAudio) fail(new Error("Cartesia TTS connection closed"));
+            };
+          }).finally(() => {
+            activeTTSStopRef.current = null;
+          });
+        };
+
+        try {
+          await playRealtime();
+        } catch {
+          // 实时 TTS 未配置或连接失败时，保留 HTTP MP3 兜底，避免面试无声。
+          const cacheKey = `${item.speaker || ""}|${item.text}`;
+          const buf = ttsCacheRef.current.get(cacheKey) || await fetchTtsAudio(item);
+          ttsCacheRef.current.delete(cacheKey);
+          if (interruptRef.current || !buf?.byteLength) return;
+          const audio = audioRef.current;
+          if (!audio) return;
+          if (audioCtxRef.current?.state === "suspended") {
+            await audioCtxRef.current.resume().catch(() => {});
+          }
+          audio.pause();
+          const blobUrl = URL.createObjectURL(new Blob([buf], { type: "audio/mpeg" }));
+          await new Promise<void>((resolve) => {
+            const done = () => {
+              URL.revokeObjectURL(blobUrl);
+              resolve();
+            };
+            const stop = () => {
+              audio.pause();
+              done();
+            };
+            activeTTSStopRef.current = stop;
+            audio.src = blobUrl;
+            audio.onended = done;
+            audio.onerror = done;
+            audio.play().catch(done);
+          }).finally(() => {
+            activeTTSStopRef.current = null;
+          });
+        }
       } catch {
+        // TTS 失败时保持原有静默兜底，面试流程仍可继续。
       }
     },
-    [fetchTtsAudio]
+    [ensureAudioGraph, fetchTtsAudio, language]
   );
 
   const drainAudioQueue = useCallback(async () => {
@@ -872,12 +1009,19 @@ function MockInterviewContent() {
       return;
     }
     interviewAliveRef.current = true;
+    if (!selectedResumeId) {
+      alert(t("mockInterview.resumeRequired"));
+      return;
+    }
     setMessages([]);
     setSummary("");
     setOverallScore(null);
     setSessionId(null);
     setCurrentRound(1);
     setCurrentInterviewer(null);
+    setRealtimeFallback(false);
+    setLiveTranscript("");
+    realtimeItemRef.current = null;
     setStage("interview");
     await startCamera();
     setListening(true);
@@ -943,7 +1087,7 @@ function MockInterviewContent() {
       const res = await apiFetch("/api/interview/asr", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ audioBase64: base64 }),
+        body: JSON.stringify({ audioBase64: base64, audioMimeType: blob.type, language }),
       });
       if (!res.ok) throw new Error("ASR failed");
       const data = await res.json();
@@ -962,11 +1106,169 @@ function MockInterviewContent() {
     }
   };
 
-  // 免提模式：VAD 语音活动检测——说话自动录音，停顿 1.2s 自动识别提交；
-  // 面试官思考/识别期间暂停监听；说话期间保持监听，支持候选人打断
+  // 实时模式：浏览器持续发送 PCM16，服务端 VAD 返回中间结果和最终结果。
+  // 最终结果是唯一的提交点，避免重复调用面试 LLM。
   useEffect(() => {
-    if (!listening || stage !== "interview") return;
-    if (streaming || recognizing) return;
+    if (!listening || stage !== "interview" || realtimeFallback || speaking || streaming || recognizing) return;
+    let cancelled = false;
+    let socket: WebSocket | null = null;
+    let micStream: MediaStream | null = null;
+    let localCtx: AudioContext | null = null;
+    let source: MediaStreamAudioSourceNode | null = null;
+    let processor: ScriptProcessorNode | null = null;
+    let muteGain: GainNode | null = null;
+    let ready = false;
+    let intentionalClose = false;
+
+    const sendClientEvent = (payload: Record<string, unknown>) => {
+      if (socket?.readyState === WebSocket.OPEN) socket.send(JSON.stringify(payload));
+    };
+
+    const stopCapture = () => {
+      processor?.disconnect();
+      source?.disconnect();
+      muteGain?.disconnect();
+      processor = null;
+      source = null;
+      muteGain = null;
+      if (localCtx) {
+        localCtx.close().catch(() => {});
+        localCtx = null;
+      }
+      realtimeAudioCtxRef.current = null;
+      realtimeProcessorRef.current = null;
+    };
+
+    const activate = async () => {
+      try {
+        const session = await getCurrentSession();
+        if (!session?.access_token) throw new Error("登录状态已失效");
+
+        micStream = await getMicStream();
+        if (cancelled) return;
+        const Ctor = window.AudioContext ||
+          (window as unknown as { webkitAudioContext?: typeof AudioContext }).webkitAudioContext;
+        if (!Ctor) throw new Error("当前浏览器不支持实时音频采集");
+
+        socket = createInterviewASRSocket(session.access_token);
+        realtimeSocketRef.current = socket;
+        const readyPromise = new Promise<void>((resolve, reject) => {
+          const timeout = window.setTimeout(() => reject(new Error("实时 ASR 连接超时")), 12000);
+          socket!.onopen = () => sendClientEvent({ type: "start", language });
+          socket!.onmessage = (event) => {
+            let data: {
+              type?: string;
+              itemId?: string;
+              text?: string;
+              error?: string;
+            };
+            try {
+              data = JSON.parse(String(event.data));
+            } catch {
+              return;
+            }
+            if (data.type === "ready") {
+              window.clearTimeout(timeout);
+              ready = true;
+              resolve();
+              return;
+            }
+            if (data.type === "speech_started") {
+              setVoiceActive(true);
+              setRecording(true);
+              return;
+            }
+            if (data.type === "speech_stopped") {
+              setVoiceActive(false);
+              setRecording(false);
+              return;
+            }
+            if (data.type === "partial") {
+              setLiveTranscript(data.text || "");
+              return;
+            }
+            if (data.type === "final") {
+              const text = (data.text || "").trim();
+              if (!text || (data.itemId && realtimeItemRef.current === data.itemId)) return;
+              realtimeItemRef.current = data.itemId || null;
+              setLiveTranscript("");
+              setVoiceActive(false);
+              setRecording(false);
+              setRecognizing(true);
+              void submitAnswer(text).finally(() => setRecognizing(false));
+              return;
+            }
+            if (data.type === "error" && !ready) {
+              window.clearTimeout(timeout);
+              reject(new Error(data.error || "实时 ASR 失败"));
+            }
+          };
+          socket!.onerror = () => {
+            if (!ready) {
+              window.clearTimeout(timeout);
+              reject(new Error("实时 ASR 连接失败"));
+            }
+          };
+          socket!.onclose = () => {
+            if (!cancelled && !intentionalClose && ready) setRealtimeFallback(true);
+            if (!ready) {
+              window.clearTimeout(timeout);
+              reject(new Error("实时 ASR 连接已关闭"));
+            }
+          };
+        });
+
+        await readyPromise;
+        if (cancelled) return;
+
+        localCtx = new Ctor({ sampleRate: 16000 });
+        realtimeAudioCtxRef.current = localCtx;
+        if (localCtx.state === "suspended") await localCtx.resume();
+        const audioOnlyStream = new MediaStream(micStream.getAudioTracks());
+        source = localCtx.createMediaStreamSource(audioOnlyStream);
+        processor = localCtx.createScriptProcessor(4096, 1, 1);
+        muteGain = localCtx.createGain();
+        muteGain.gain.value = 0;
+        realtimeProcessorRef.current = processor;
+        source.connect(processor);
+        processor.connect(muteGain);
+        muteGain.connect(localCtx.destination);
+        processor.onaudioprocess = (event) => {
+          if (cancelled || socket?.readyState !== WebSocket.OPEN) return;
+          const input = event.inputBuffer.getChannelData(0);
+          const pcm = downsampleToPCM16(input, localCtx?.sampleRate || 16000, 16000);
+          if (pcm.byteLength > 0) socket.send(pcm);
+        };
+      } catch (error) {
+        if (!cancelled) {
+          console.warn("[mock-interview] realtime ASR unavailable, falling back to HTTP ASR", error);
+          setRealtimeFallback(true);
+        }
+      }
+    };
+
+    void activate();
+    return () => {
+      cancelled = true;
+      intentionalClose = true;
+      stopCapture();
+      if (socket?.readyState === WebSocket.OPEN) {
+        sendClientEvent({ type: "stop" });
+        socket.close(1000, "capture stopped");
+      }
+      if (realtimeSocketRef.current === socket) realtimeSocketRef.current = null;
+      setVoiceActive(false);
+      setRecording(false);
+    };
+    // submitAnswer/getMicStream are stable for the lifetime of this page render.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [listening, stage, realtimeFallback, speaking, streaming, recognizing]);
+
+  // fallback：实时 WebSocket 不可用时，使用现有 MediaRecorder + Base64 HTTP ASR。
+  // 面试官说话/思考/识别期间自动暂停监听，结束后自动恢复。
+  useEffect(() => {
+    if (!listening || stage !== "interview" || !realtimeFallback) return;
+    if (speaking || streaming || recognizing) return;
     let cancelled = false;
     let localCtx: AudioContext | null = null;
     let vadSource: MediaStreamAudioSourceNode | null = null;
@@ -1102,7 +1404,7 @@ function MockInterviewContent() {
       setRecording(false);
     };
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [listening, stage, streaming, recognizing, interruptInterviewer]);
+  }, [listening, stage, realtimeFallback, speaking, streaming, recognizing, interruptInterviewer]);
 
   const switchToNextInterviewer = useCallback(async () => {
     setOrganizing(true);
@@ -1760,6 +2062,11 @@ function MockInterviewContent() {
                         <span className="text-zinc-300">{m.content || (streaming && i === messages.slice(-4).length - 1 ? "..." : "")}</span>
                       </p>
                     ))}
+                    {liveTranscript && (
+                      <p className="text-sm text-zinc-400 italic border-t border-zinc-800 pt-2">
+                        {liveTranscript}
+                      </p>
+                    )}
                     <div ref={messagesEndRef} />
                   </div>
                 )}
@@ -1805,10 +2112,17 @@ function MockInterviewContent() {
                   if (audioCtxRef.current?.state === "suspended") {
                     audioCtxRef.current.resume().catch(() => {});
                   }
+                  if (speaking) {
+                    activeTTSStopRef.current?.();
+                    audioRef.current?.pause();
+                    setSpeaking(false);
+                    setListening(true);
+                    return;
+                  }
                   setListening((v) => !v);
                 }}
-                disabled={!listening && (streaming || recognizing || speaking)}
-                title={listening ? t("mockInterview.micAlwaysOn") : t("mockInterview.tapToSpeak")}
+                disabled={!listening && (streaming || recognizing)}
+                title={speaking ? t("mockInterview.tapToSpeak") : listening ? t("mockInterview.micAlwaysOn") : t("mockInterview.tapToSpeak")}
                 className={`h-16 w-16 md:h-20 md:w-20 rounded-full flex items-center justify-center transition-all select-none ${
                   listening
                     ? voiceActive

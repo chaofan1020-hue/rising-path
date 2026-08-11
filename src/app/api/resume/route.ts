@@ -3,13 +3,12 @@ import { getSupabaseClient } from '@/storage/database/supabase-client';
 import { hasValidAdminSession } from '@/lib/admin-auth';
 import { getAuthContext, unauthorizedResponse } from '@/lib/auth-server';
 import {
-  isRecord,
   isSupportedResumeFile,
-  mergeResumeUserInfo,
-  parseResumeFile,
   sanitizeResumeRecord,
   type ResumeFileOptions,
 } from '@/lib/resume-parser';
+import { processResume } from '@/lib/resume-processing';
+import { deleteResumeFile, uploadResumeFile } from '@/lib/resume-storage';
 
 export async function GET(request: NextRequest) {
   try {
@@ -60,96 +59,53 @@ export async function POST(request: NextRequest) {
     }
 
     const buffer = Buffer.from(await fileEntry.arrayBuffer());
-    const fileBase64 = buffer.toString('base64');
-    const storedUserInfo = {
-      file_base64: fileBase64,
-      file_type: fileEntry.type,
-    };
+    const fileKey = await uploadResumeFile(buffer, auth.user.id, fileName, fileEntry.type);
+    const storedUserInfo = { file_type: fileEntry.type };
 
-    const { data: resumeData, error: insertError } = await client
-      .from('resumes')
-      .insert({
-        file_key: `local://${fileName}`,
-        file_name: fileName,
-        parsed_content: '正在解析简历内容...',
-        user_info: storedUserInfo,
-        user_id: auth.user.id,
-      })
-      .select()
-      .single();
+    let resumeData: { id: number } & Record<string, unknown>;
+    try {
+      const { data, error: insertError } = await client
+        .from('resumes')
+        .insert({
+          file_key: fileKey,
+          file_name: fileName,
+          parsed_content: '正在解析简历内容...',
+          user_info: storedUserInfo,
+          user_id: auth.user.id,
+          processing_status: 'uploaded',
+          processing_stage: 'queued',
+          processing_attempts: 0,
+        })
+        .select()
+        .single();
 
-    if (insertError) {
-      throw new Error(`创建简历记录失败: ${insertError.message}`);
+      if (insertError || !data) {
+        throw new Error(`创建简历记录失败: ${insertError?.message || '未返回简历记录'}`);
+      }
+      resumeData = data as { id: number } & Record<string, unknown>;
+    } catch (error) {
+      try {
+        await deleteResumeFile(fileKey);
+      } catch (cleanupError) {
+        console.error('[Resume] orphaned upload cleanup failed:', cleanupError);
+      }
+      throw error;
     }
 
-    void parseResumeInBackground(resumeData.id, auth.user.id, buffer, fileOptions, storedUserInfo);
+    void processResume({
+      resumeId: resumeData.id,
+      userId: auth.user.id,
+      buffer,
+      fileOptions,
+      initialUserInfo: storedUserInfo,
+      source: 'initial_parse',
+    }).catch((error) => {
+      console.error('Background parsing error:', error);
+    });
 
     return NextResponse.json({ resume: sanitizeResumeRecord(resumeData) });
   } catch (error) {
     console.error('Error uploading resume:', error);
     return NextResponse.json({ error: '上传简历失败' }, { status: 500 });
-  }
-}
-
-async function parseResumeInBackground(
-  resumeId: number,
-  userId: string,
-  buffer: Buffer,
-  fileOptions: ResumeFileOptions,
-  initialUserInfo: Record<string, unknown>,
-): Promise<void> {
-  try {
-    const client = getSupabaseClient();
-    const parsed = await parseResumeFile(buffer, fileOptions);
-
-    const { data: currentResume, error: currentResumeError } = await client
-      .from('resumes')
-      .select('user_info, profile, segmentation')
-      .eq('id', resumeId)
-      .eq('user_id', userId)
-      .single();
-
-    if (currentResumeError) {
-      console.error('Failed to read current resume metadata:', currentResumeError);
-    }
-
-    const currentUserInfo = isRecord(currentResume?.user_info) ? currentResume.user_info : initialUserInfo;
-    const { error: updateError } = await client
-      .from('resumes')
-      .update({
-        parsed_content: parsed.parsed_content,
-        user_info: mergeResumeUserInfo(currentUserInfo, parsed.user_info),
-        profile: parsed.profile ?? currentResume?.profile ?? null,
-        segmentation: parsed.segmentation ?? currentResume?.segmentation ?? null,
-        updated_at: new Date().toISOString(),
-      })
-      .eq('id', resumeId)
-      .eq('user_id', userId);
-
-    if (updateError) {
-      console.error('Failed to update parsed resume:', updateError);
-    } else {
-      console.log(
-        'Resume parsed successfully:',
-        resumeId,
-        parsed.segmentation ? `[分层] ${parsed.segmentation.summary}` : '[分层] 画像提取失败，仅基础解析',
-      );
-    }
-  } catch (error) {
-    console.error('Background parsing error:', error);
-
-    try {
-      const client = getSupabaseClient();
-      await client
-        .from('resumes')
-        .update({
-          parsed_content: '简历解析失败，请检查文件格式是否正确',
-          updated_at: new Date().toISOString(),
-        })
-        .eq('id', resumeId)
-        .eq('user_id', userId);
-    } catch (updateError) {
-      console.error('Failed to save resume parsing error:', updateError);
-    }
   }
 }
