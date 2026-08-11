@@ -48,7 +48,7 @@ function render(state) {
           <strong>${escapeHtml(label)}</strong>
           <div class="meta"><span class="badge ${sourceClass(result.source)}">${sourceText(result.source)}</span>
           · ${Math.round(result.confidence * 100)}% 置信度</div>
-          <div class="value">${escapeHtml(result.value || result.reason || "等待手动填写")}</div>
+          <input type="text" data-key="${result.key}" data-original="${escapeHtml(result.value || "")}" value="${escapeHtml(result.value || "")}" placeholder="${escapeHtml(result.reason || "等待手动填写")}" />
         </span>
       </label>`;
     fieldsEl.appendChild(item);
@@ -76,8 +76,13 @@ document.getElementById("fill").addEventListener("click", async () => {
   showError("");
   const state = await getState();
   const keys = Array.from(selectedKeys);
+  const values = {};
+  for (const key of keys) {
+    const input = fieldsEl.querySelector(`input[type=text][data-key="${key}"]`);
+    if (input) values[key] = input.value;
+  }
   try {
-    const res = await chrome.runtime.sendMessage({ type: "fill", keys });
+    const res = await chrome.runtime.sendMessage({ type: "fill", keys, values });
     if (!res?.ok) throw new Error(res?.error || "填写失败");
     const failed = (res.results || []).filter((r) => !r.filled);
     if (failed.length) {

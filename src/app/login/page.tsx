@@ -342,7 +342,7 @@ export default function LoginPage() {
         <button
           type="button"
           onClick={() => setShowRegistrationSuccess(true)}
-          className="fixed bottom-4 left-4 z-[10000] rounded-md border border-zinc-300 bg-white px-3 py-2 text-xs text-zinc-700 shadow-sm transition-colors hover:bg-zinc-50"
+          className="fixed bottom-4 left-4 z-[10000] rounded-md border border-border bg-background px-3 py-2 text-xs text-muted-foreground shadow-sm transition-colors hover:bg-muted"
         >
           测试卡片展示
         </button>

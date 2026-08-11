@@ -72,11 +72,22 @@ function Header1() {
         window.location.href = '/';
     };
 
-    const navigationItems = [
+    const navigationItems: Array<{
+        title: string;
+        href?: string;
+        description?: string;
+        highlighted?: boolean;
+        items?: Array<{ title: string; href: string }>;
+    }> = [
         {
             title: t("nav.home"),
             href: "/",
             description: "",
+        },
+        {
+            title: t("nav.mockInterview"),
+            href: "/mock-interview",
+            highlighted: true,
         },
         {
             title: t("nav.features"),
@@ -97,10 +108,6 @@ function Header1() {
                 {
                     title: t("nav.atsOptimize"),
                     href: "/optimize",
-                },
-                {
-                    title: t("nav.mockInterview"),
-                    href: "/mock-interview",
                 },
                 {
                     title: t("nav.dashboard"),
@@ -131,7 +138,14 @@ function Header1() {
                                     {item.href ? (
                                         <>
                                             <NavigationMenuLink href={item.href}>
-                                                <Button variant="ghost" className="text-black dark:text-white hover:bg-zinc-100 dark:hover:bg-zinc-800 hover:text-zinc-900 dark:hover:text-zinc-100">{item.title}</Button>
+                                                <Button
+                                                    variant={item.highlighted ? "default" : "ghost"}
+                                                    className={item.highlighted
+                                                        ? "bg-zinc-900 text-white hover:bg-zinc-800 dark:bg-white dark:text-zinc-900 dark:hover:bg-zinc-200"
+                                                        : "text-black dark:text-white hover:bg-zinc-100 dark:hover:bg-zinc-800 hover:text-zinc-900 dark:hover:text-zinc-100"}
+                                                >
+                                                    {item.title}
+                                                </Button>
                                             </NavigationMenuLink>
                                         </>
                                     ) : (
@@ -213,7 +227,11 @@ function Header1() {
                                         {item.href ? (
                                             <Link
                                                 href={item.href}
-                                                className="flex justify-between items-center"
+                                                className={`flex justify-between items-center ${
+                                                    item.highlighted
+                                                        ? "text-white bg-zinc-900 dark:bg-white dark:text-zinc-900 px-3 py-2 rounded-md"
+                                                        : ""
+                                                }`}
                                             >
                                                 <span className="text-lg text-black dark:text-white">{item.title}</span>
                                             </Link>

@@ -40,6 +40,7 @@ import type {
 } from '@/lib/resume-types';
 import { Target, Wand2, Send, CheckCircle2 } from 'lucide-react';
 import { useLanguage } from '@/lib/language-context';
+import PageBackButton from '@/components/page-back-button';
 
 interface ParsedFields {
   name?: string;
@@ -267,6 +268,7 @@ function ResumeContent() {
         {/* Hero：左对齐 eyebrow + 大标题（Tailark 式） */}
         <div className="relative mb-8 md:mb-10">
           <p className="text-sm font-medium text-zinc-400 dark:text-zinc-500 mb-3">{t('resume.eyebrow')}</p>
+          <PageBackButton fallbackHref="/" className="mb-3" />
           <h1 className="text-2xl md:text-4xl font-bold tracking-tight text-zinc-900 dark:text-zinc-50 mb-4">{t('resume.title')}</h1>
           <p className="text-zinc-500 dark:text-zinc-400 max-w-2xl md:text-lg leading-relaxed">{t('resume.subtitle')}</p>
         </div>

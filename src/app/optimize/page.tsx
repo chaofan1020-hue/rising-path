@@ -54,6 +54,7 @@ import { apiFetch } from '@/lib/api-client';
 import { Header1 } from '@/components/header1';
 import { useLanguage } from '@/lib/language-context';
 import { applyOptimizationChangeReview } from '@/lib/optimized-resume-review';
+import PageBackButton from '@/components/page-back-button';
 
 interface Resume {
   id: number;
@@ -1100,6 +1101,7 @@ function OptimizeContent() {
         {/* Hero：左对齐 eyebrow + 大标题（Tailark 式） */}
         <div className="relative mb-8 md:mb-10">
           <p className="text-sm font-medium text-zinc-400 dark:text-zinc-500 mb-3">{t('optimize.eyebrow')}</p>
+          <PageBackButton fallbackHref="/resume" className="mb-3" />
           <h1 className="text-2xl md:text-4xl font-bold tracking-tight text-zinc-900 dark:text-zinc-50 mb-4">{t('optimize.title')}</h1>
           <p className="text-zinc-500 dark:text-zinc-400 max-w-2xl md:text-lg leading-relaxed">{t('optimize.subtitle')}</p>
         </div>

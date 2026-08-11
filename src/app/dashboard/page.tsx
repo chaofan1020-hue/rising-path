@@ -17,6 +17,7 @@ import {
   SelectValue,
 } from '@/components/ui/select';
 import { useLanguage } from '@/lib/language-context';
+import PageBackButton from '@/components/page-back-button';
 import {
   ArrowRight,
   Bell,
@@ -198,6 +199,7 @@ export default function DashboardPage() {
           <p className="text-sm font-medium text-zinc-400 dark:text-zinc-500 mb-3">
             {t('dashboard.eyebrow')}
           </p>
+          <PageBackButton fallbackHref="/" className="mb-3" />
           <h1 className="text-2xl md:text-4xl font-bold tracking-tight text-zinc-900 dark:text-zinc-50 mb-4">
             {t('dashboard.title')}
           </h1>

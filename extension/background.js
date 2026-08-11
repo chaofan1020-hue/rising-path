@@ -89,9 +89,48 @@ chrome.runtime.onMessage.addListener((message, _sender, sendResponse) => {
     if (message.type === "fill") {
       const [tab] = await chrome.tabs.query({ active: true, currentWindow: true });
       if (!tab?.id) throw new Error("没有可用的标签页");
-      const selected = (state.results || []).filter((r) => message.keys.includes(r.key));
+      const selected = (state.results || [])
+        .filter((r) => message.keys.includes(r.key))
+        .map((r) => {
+          const value = message.values?.[r.key] ?? r.value;
+          return { ...r, value, suggestedValue: r.value };
+        });
       await ensureApplication("filling");
       const fill = await chrome.tabs.sendMessage(tab.id, { type: "fillForm", fields: selected });
+      const fieldMap = new Map((state.fields || []).map((f) => [f.key, f]));
+      const feedbackFields = selected
+        .filter((r) => r.value)
+        .map((r) => ({
+          fieldKey: r.key,
+          semanticKey: fieldMap.get(r.key)?.selectorHints?.semanticKey || r.key,
+          suggestedValue: r.suggestedValue,
+          finalValue: r.value,
+          action: r.value === r.suggestedValue ? "confirmed" : "edited",
+        }));
+      const ignoredFields = (state.results || [])
+        .filter((r) => !message.keys.includes(r.key) && r.value && r.source === "ai")
+        .map((r) => ({
+          fieldKey: r.key,
+          semanticKey: fieldMap.get(r.key)?.selectorHints?.semanticKey || r.key,
+          suggestedValue: r.value,
+          finalValue: "",
+          action: "ignored",
+        }));
+      if (feedbackFields.length > 0 || ignoredFields.length > 0) {
+        try {
+          await api("/api/application/prefill-feedback", {
+            method: "POST",
+            body: JSON.stringify({
+              jobId: state.context?.jobId,
+              company: state.context?.company,
+              domain: tab.url ? new URL(tab.url).hostname : "",
+              fields: [...feedbackFields, ...ignoredFields],
+            }),
+          });
+        } catch (error) {
+          console.error("Prefill feedback failed:", error);
+        }
+      }
       sendResponse({ ok: true, results: fill.results || [], state: serializeState() });
       return;
     }

@@ -1,7 +1,7 @@
 'use client';
 
 import { useState, useEffect } from 'react';
-import { useParams, useRouter } from 'next/navigation';
+import { useParams } from 'next/navigation';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
@@ -15,7 +15,6 @@ import {
   SelectValue,
 } from '@/components/ui/select';
 import { 
-  ArrowLeft, 
   MapPin, 
   Briefcase, 
   Users,
@@ -44,6 +43,7 @@ import {
 import Link from 'next/link';
 import { AuthGuard } from '@/components/auth-guard';
 import { apiFetch } from '@/lib/api-client';
+import PageBackButton from '@/components/page-back-button';
 
 interface Job {
   id: number;
@@ -180,7 +180,6 @@ function InfoBadge({ icon: Icon, children, variant = 'default' }: { icon: Lucide
 // 内部组件
 function JobDetailContent() {
   const params = useParams();
-  const router = useRouter();
   const [job, setJob] = useState<Job | null>(null);
   const [relatedJobs, setRelatedJobs] = useState<RelatedJob[]>([]);
   const [loading, setLoading] = useState(true);
@@ -414,10 +413,7 @@ function JobDetailContent() {
       <div className="min-h-screen bg-white dark:bg-zinc-950 flex flex-col items-center justify-center gap-4">
         <AlertCircle className="h-12 w-12 text-zinc-300 dark:text-zinc-600" />
         <p className="text-zinc-500 dark:text-zinc-400">{error || '岗位不存在'}</p>
-        <Button onClick={() => router.back()} className="bg-zinc-900 text-white hover:bg-zinc-800 dark:bg-white dark:text-zinc-900 dark:hover:bg-zinc-200">
-          <ArrowLeft className="h-4 w-4 mr-2" />
-          返回岗位列表
-        </Button>
+        <PageBackButton fallbackHref="/jobs" label="返回岗位列表" />
       </div>
     );
   }
@@ -431,10 +427,7 @@ function JobDetailContent() {
     <div className="min-h-screen bg-white dark:bg-zinc-950">
       <div className="container mx-auto px-4 py-4 md:py-8 max-w-4xl">
         {/* 返回按钮 */}
-        <Button variant="ghost" className="mb-4 h-9 text-sm text-zinc-500 hover:text-zinc-900 hover:bg-zinc-100 dark:hover:bg-zinc-800 dark:hover:text-zinc-100" onClick={() => router.back()}>
-          <ArrowLeft className="h-4 w-4 mr-2" />
-          返回岗位列表
-        </Button>
+        <PageBackButton fallbackHref="/jobs" label="返回岗位列表" className="mb-4" />
 
         {/* 主卡片 - 核心信息 */}
         <Card className="mb-4 rounded-2xl border-zinc-200 dark:border-zinc-800 shadow-none">
