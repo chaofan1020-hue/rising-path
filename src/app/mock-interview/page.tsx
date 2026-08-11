@@ -22,6 +22,7 @@ import {
   Building2, Briefcase, FileText, ChevronDown, Check, Timer,
 } from "lucide-react";
 import { startAmbience, stopAmbience } from "@/lib/interview-audio";
+import PageBackButton from "@/components/page-back-button";
 
 // 通用下拉选择器（与 jobs 页一致的 Popover 交互，避免原生 select 交互问题）
 function OptionSelect({
@@ -1663,6 +1664,7 @@ function MockInterviewContent() {
           <Header1 />
           <main className="py-8 md:py-12">
             <div className="container mx-auto px-4 max-w-3xl">
+              <PageBackButton fallbackHref="/" className="mb-3" />
               <div className="mb-8 text-center">
                 <div className="inline-flex items-center justify-center h-12 w-12 rounded-2xl bg-zinc-900 dark:bg-white mb-3">
                   <Bot className="h-6 w-6 text-white dark:text-zinc-900" />

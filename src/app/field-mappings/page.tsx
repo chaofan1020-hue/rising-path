@@ -18,10 +18,26 @@ import { AuthGuard } from '@/components/auth-guard';
 import { apiFetch } from '@/lib/api-client';
 import { Header1 } from '@/components/header1';
 import ApplicationList from '@/components/application-list';
+import PageBackButton from '@/components/page-back-button';
 
 interface ProfileSource {
   source: 'resume' | 'ai' | 'manual' | 'empty';
   confidence: number;
+  editCount?: number;
+  confirmCount?: number;
+  ignoreCount?: number;
+  updatedAt?: string;
+}
+
+interface PrefillMetrics {
+  totalFeedback: number;
+  confirmed: number;
+  edited: number;
+  ignored: number;
+  confirmationRate: number;
+  correctionRate: number;
+  editHistoryCount: number;
+  activeFields: number;
 }
 
 interface ApplicationProfile {
@@ -74,6 +90,9 @@ function FieldSource({ source }: { source?: ProfileSource }) {
   return (
     <Badge variant={color as 'default' | 'secondary' | 'outline'}>
       {sourceLabel[source.source]} · {Math.round(source.confidence * 100)}%
+      {source.confirmCount ? ` · 确认${source.confirmCount}次` : ''}
+      {source.editCount ? ` · 修正${source.editCount}次` : ''}
+      {source.ignoreCount ? ` · 忽略${source.ignoreCount}次` : ''}
     </Badge>
   );
 }
@@ -85,6 +104,7 @@ function AutoApplicationContent() {
   const [saving, setSaving] = useState(false);
   const [saveDone, setSaveDone] = useState(false);
   const [activeTab, setActiveTab] = useState('profile');
+  const [metrics, setMetrics] = useState<PrefillMetrics | null>(null);
 
   useEffect(() => {
     const tab = new URLSearchParams(window.location.search).get('tab');
@@ -97,7 +117,7 @@ function AutoApplicationContent() {
       const res = await apiFetch('/api/application-profile');
       const data = await res.json();
       setProfile(data.profile);
-      setSource(data.source || {});
+      setSource(data.fieldStats || data.source || {});
     } catch (error) {
       console.error('Failed to load application profile:', error);
     } finally {
@@ -108,6 +128,13 @@ function AutoApplicationContent() {
   useEffect(() => {
     void loadProfile();
   }, [loadProfile]);
+
+  useEffect(() => {
+    apiFetch('/api/application/prefill-metrics')
+      .then((r) => (r.ok ? r.json() : null))
+      .then((data) => setMetrics(data))
+      .catch(() => {});
+  }, []);
 
   const updatePersonal = (key: string, value: string) => {
     if (!profile) return;
@@ -133,7 +160,7 @@ function AutoApplicationContent() {
       const data = await res.json();
       if (data.profile) {
         setProfile(data.profile);
-        setSource(data.source || {});
+        setSource(data.fieldStats || data.source || {});
         setSaveDone(true);
       } else {
         alert(data.error || '保存失败');
@@ -145,11 +172,14 @@ function AutoApplicationContent() {
     }
   };
 
+  const pendingFields = source ? Object.values(source).filter((s) => s.source === 'empty').length : 0;
+
   return (
     <div className="min-h-screen bg-background">
       <Header1 />
       <main className="container mx-auto px-4 py-8 pt-20 max-w-5xl">
         <div className="mb-8">
+          <PageBackButton fallbackHref="/jobs" className="mb-3" />
           <h1 className="text-3xl font-bold mb-2 flex items-center gap-3">
             <ClipboardList className="h-8 w-8 text-primary" />
             自动网申
@@ -158,6 +188,15 @@ function AutoApplicationContent() {
             统一求职档案，配合浏览器扩展自动填写外部申请表单；扩展只填不提交。
           </p>
         </div>
+
+        {metrics && (
+          <div className="mb-6 grid grid-cols-2 md:grid-cols-4 gap-3 max-w-2xl">
+            <Metric label="AI 值确认率" value={`${metrics.confirmationRate}%`} />
+            <Metric label="用户修正率" value={`${metrics.correctionRate}%`} />
+            <Metric label="已忽略建议" value={String(metrics.ignored)} />
+            <Metric label="手动修正记录" value={String(metrics.editHistoryCount)} />
+          </div>
+        )}
 
         <Tabs value={activeTab} onValueChange={setActiveTab} className="space-y-6">
           <TabsList>
@@ -173,7 +212,7 @@ function AutoApplicationContent() {
                   <div>
                     <CardTitle>求职档案</CardTitle>
                     <CardDescription>
-                      来源标记会同步到扩展的确认列表；手动修改后来源变为“手动”。
+                      来源标记会同步到扩展的确认列表；手动修改后来源变为“手动”。还有 {pendingFields} 个字段待补充。
                     </CardDescription>
                   </div>
                   <Button onClick={handleSave} disabled={saving || !profile}>
@@ -318,6 +357,15 @@ function AutoApplicationContent() {
           </TabsContent>
         </Tabs>
       </main>
+    </div>
+  );
+}
+
+function Metric({ label, value }: { label: string; value: string }) {
+  return (
+    <div className="rounded-lg border p-3">
+      <div className="text-lg font-bold">{value}</div>
+      <div className="text-xs text-muted-foreground mt-0.5">{label}</div>
     </div>
   );
 }

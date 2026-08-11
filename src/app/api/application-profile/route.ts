@@ -32,6 +32,7 @@ export async function GET(request: NextRequest) {
       return NextResponse.json({
         profile: existing.profile || DEFAULT_PROFILE,
         source: existing.source || {},
+        fieldStats: existing.field_stats || existing.source || {},
         version: existing.version,
         resumeId: existing.resume_id,
       });
@@ -58,6 +59,7 @@ export async function GET(request: NextRequest) {
     return NextResponse.json({
       profile: inserted?.profile || built.profile,
       source: inserted?.source || built.source,
+      fieldStats: inserted?.field_stats || inserted?.source || built.source,
       version: inserted?.version || 1,
       resumeId: inserted?.resume_id || null,
     });
@@ -96,6 +98,7 @@ export async function PUT(request: NextRequest) {
         resume_id: existing?.resume_id || null,
         profile: merged.profile,
         source: merged.source,
+        field_stats: merged.source,
         version,
         updated_at: new Date().toISOString(),
       })
@@ -104,9 +107,22 @@ export async function PUT(request: NextRequest) {
 
     if (error) throw new Error(`保存求职档案失败: ${error.message}`);
 
+    if (merged.changes.length > 0 && data?.id) {
+      const editRows = merged.changes.map((change) => ({
+        user_id: auth.user.id,
+        profile_id: data.id,
+        field_key: change.fieldKey,
+        old_value: change.oldValue,
+        new_value: change.newValue,
+        source: 'manual',
+      }));
+      await client.from('profile_field_edits').insert(editRows);
+    }
+
     return NextResponse.json({
       profile: data?.profile || merged.profile,
       source: data?.source || merged.source,
+      fieldStats: data?.field_stats || data?.source || merged.source,
       version: data?.version || version,
       resumeId: data?.resume_id || null,
     });

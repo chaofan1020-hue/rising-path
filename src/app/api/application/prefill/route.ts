@@ -1,7 +1,21 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { getAuthContext, unauthorizedResponse } from '@/lib/auth-server';
 import { createAiProvider } from '@/lib/ai-provider';
-import { buildProfileFromResume, DEFAULT_PROFILE, type ApplicationProfile } from '@/lib/application-profile';
+import {
+  buildProfileFromResume,
+  DEFAULT_PROFILE,
+  type ApplicationProfile,
+  type ProfileSourceMap,
+} from '@/lib/application-profile';
+
+function decayedConfidence(fieldSource?: { source?: string; confidence?: number; updatedAt?: string }): number {
+  const base = typeof fieldSource?.confidence === 'number' ? fieldSource.confidence : 0.9;
+  if (fieldSource?.source !== 'manual' || !fieldSource.updatedAt) return base;
+  const ageDays = (Date.now() - new Date(fieldSource.updatedAt).getTime()) / (1000 * 60 * 60 * 24);
+  if (ageDays > 365) return 0.5;
+  if (ageDays > 180) return 0.7;
+  return 1;
+}
 
 interface PrefillField {
   key: string;
@@ -24,7 +38,11 @@ interface PrefillResult {
   reason?: string;
 }
 
-function directProfileValue(profile: ApplicationProfile, semanticKey: string): { value: string; confidence: number } | null {
+function directProfileValue(
+  profile: ApplicationProfile,
+  semanticKey: string,
+  sourceMap?: ProfileSourceMap
+): { value: string; confidence: number; source: 'resume' | 'manual' } | null {
   const personalMap: Record<string, string> = {
     first_name: profile.personal.firstName || '',
     last_name: profile.personal.lastName || '',
@@ -43,14 +61,48 @@ function directProfileValue(profile: ApplicationProfile, semanticKey: string): {
     visa_status: profile.visaStatus || '',
     summary: profile.summary || '',
   };
+  const sourceKeyMap: Record<string, string> = {
+    first_name: 'personal.firstName',
+    last_name: 'personal.lastName',
+    full_name: 'personal.fullName',
+    email: 'personal.email',
+    phone: 'personal.phone',
+    address: 'personal.address',
+    city: 'personal.city',
+    state: 'personal.state',
+    zip_code: 'personal.zipCode',
+    country: 'personal.country',
+    linkedin: 'links.linkedin',
+    github: 'links.github',
+    portfolio: 'links.portfolio',
+    work_authorization: 'workAuthorization',
+    visa_status: 'visaStatus',
+    summary: 'summary',
+    skills: 'skills',
+    languages: 'languages',
+  };
+  const sourceKey = sourceKeyMap[semanticKey] || semanticKey;
+  const fieldSource = sourceMap?.[sourceKey] || sourceMap?.[semanticKey];
   if (personalMap[semanticKey]) {
-    return { value: personalMap[semanticKey], confidence: 1 };
+    return {
+      value: personalMap[semanticKey],
+      confidence: fieldSource?.source === 'manual' ? decayedConfidence(fieldSource) : 0.95,
+      source: fieldSource?.source === 'manual' ? 'manual' : 'resume',
+    };
   }
   if (semanticKey === 'skills' && profile.skills.length) {
-    return { value: profile.skills.join(', '), confidence: 0.95 };
+    return {
+      value: profile.skills.join(', '),
+      confidence: fieldSource?.source === 'manual' ? decayedConfidence(fieldSource) : 0.95,
+      source: fieldSource?.source === 'manual' ? 'manual' : 'resume',
+    };
   }
   if (semanticKey === 'languages' && profile.languages.length) {
-    return { value: profile.languages.join(', '), confidence: 0.95 };
+    return {
+      value: profile.languages.join(', '),
+      confidence: fieldSource?.source === 'manual' ? decayedConfidence(fieldSource) : 0.95,
+      source: fieldSource?.source === 'manual' ? 'manual' : 'resume',
+    };
   }
   return null;
 }
@@ -76,13 +128,15 @@ export async function POST(request: NextRequest) {
 
     const { data: profileRow } = await client
       .from('application_profiles')
-      .select('profile')
+      .select('profile, source')
       .eq('user_id', auth.user.id)
       .maybeSingle();
 
     let profile: ApplicationProfile = DEFAULT_PROFILE;
+    let sourceMap: ProfileSourceMap | undefined;
     if (profileRow?.profile) {
       profile = profileRow.profile as ApplicationProfile;
+      sourceMap = (profileRow.source || {}) as ProfileSourceMap;
     } else {
       const built = buildProfileFromResume(
         resume?.user_info as Parameters<typeof buildProfileFromResume>[0],
@@ -121,14 +175,23 @@ export async function POST(request: NextRequest) {
         });
         continue;
       }
-      const direct = directProfileValue(profile, semanticKey);
+      const direct = directProfileValue(profile, semanticKey, sourceMap);
       if (direct?.value) {
         results.push({
           key: field.key,
           value: direct.value,
-          source: 'resume',
+          source: direct.source,
           confidence: direct.confidence,
           needsReview: direct.confidence < 0.9,
+        });
+      } else if ((sourceMap?.[semanticKey]?.ignoreCount || 0) >= 2) {
+        results.push({
+          key: field.key,
+          value: '',
+          source: 'empty',
+          confidence: 0,
+          needsReview: true,
+          reason: '你已多次忽略该字段，请手动填写',
         });
       } else {
         unresolved.push(field);
