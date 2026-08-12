@@ -449,6 +449,7 @@ function ResumeContent() {
                       <ResumeProfileCard
                         resumeId={resume.id}
                         profile={resume.profile}
+                        region={resume.segmentation?.regions?.[0] ?? null}
                         confirmed={resume.segmentation_confirmed}
                         onUpdated={(profile, segmentation, metadata: ResumeProfileUpdateMetadata = {}) => setResumes((prev) => prev.map((item) => item.id === resume.id ? {
                           ...item,

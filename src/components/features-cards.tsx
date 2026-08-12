@@ -2,6 +2,7 @@
 
 import type React from "react"
 import { Warp } from "@paper-design/shaders-react"
+import { Gauge } from "lucide-react"
 import { getSupabaseBrowserClient } from "@/lib/supabase-browser"
 import { useLanguage } from "@/lib/language-context"
 
@@ -51,11 +52,7 @@ const features: Feature[] = [
   {
     titleKey: "feature5.title",
     descKey: "feature5.desc",
-    icon: (
-      <svg className="w-12 h-12 text-white" fill="currentColor" viewBox="0 0 24 24">
-        <path d="M17 1H7c-1.1 0-2 .9-2 2v18c0 1.1.9 2 2 2h10c1.1 0 2-.9 2-2V3c0-1.1-.9-2-2-2zM7 4V3h10v1H7zM7 18V6h10v12H7z" />
-      </svg>
-    ),
+    icon: <Gauge className="w-12 h-12 text-white" strokeWidth={1.5} />,
   },
   {
     titleKey: "feature6.title",
@@ -153,7 +150,7 @@ export default function FeaturesCards() {
               <div
                 key={index}
                 onClick={() => {
-                  const targetPaths = ["/ai-match", "/optimize", "/field-mappings", "/jobs", "/applications", "/mock-interview"];
+                  const targetPaths = ["/ai-match", "/optimize", "/field-mappings", "/jobs", "/dashboard", "/mock-interview"];
                   const targetPath = targetPaths[index] || "/";
                   void getSupabaseBrowserClient()
                     .then((client) => client.auth.getSession())

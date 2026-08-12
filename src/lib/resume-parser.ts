@@ -4,15 +4,17 @@ import { AIProviderConfigError, createTextProviderClient, type TextProviderClien
 import {
   deriveSegmentation,
 } from '@/lib/user-segmentation';
-import type {
-  EducationEntry,
-  ExperienceEntry,
-  ProjectEntry,
-  ResumeEvidenceItem,
-  ResumeProfile,
-  ResumeProfileConfidence,
-  ResumeProfileEvidence,
-  UserSegmentation,
+import {
+  RESUME_PROFILE_SCHEMA_VERSION,
+  type EducationEntry,
+  type ExperienceEntry,
+  type ProjectEntry,
+  type ResumeEvidenceItem,
+  type ResumeProfile,
+  type ResumeProfileConfidence,
+  type ResumeProfileEvidence,
+  type UserSegmentation,
+  type VisaDates,
 } from '@/lib/resume-types';
 import { extractFirstJsonObject } from '@/lib/json-extract';
 
@@ -423,6 +425,11 @@ function normalizeEducationEntries(value: unknown): EducationEntry[] {
   });
 }
 
+export function isAcademicResearchRole(company: string, role: string): boolean {
+  const text = `${company} ${role}`.toLowerCase();
+  return /research assistant|teaching assistant|graduate assistant|student researcher|research intern|科研助理|助教|研究助理/.test(text);
+}
+
 function normalizeExperienceEntries(value: unknown): ExperienceEntry[] {
   if (!Array.isArray(value)) return [];
 
@@ -431,6 +438,7 @@ function normalizeExperienceEntries(value: unknown): ExperienceEntry[] {
     const company = toStringValue(item.company);
     const role = toStringValue(item.role);
     if (!company || !role) return [];
+    const academicResearch = isAcademicResearchRole(company, role);
 
     return [{
       company,
@@ -438,7 +446,7 @@ function normalizeExperienceEntries(value: unknown): ExperienceEntry[] {
       startDate: toStringValue(item.startDate),
       endDate: toStringValue(item.endDate),
       months: toNumberValue(item.months),
-      isInternship: typeof item.isInternship === 'boolean' ? item.isInternship : undefined,
+      isInternship: academicResearch ? true : (typeof item.isInternship === 'boolean' ? item.isInternship : undefined),
       convertedToFulltime: typeof item.convertedToFulltime === 'boolean' ? item.convertedToFulltime : undefined,
       level: toStringValue(item.level),
       highlights: toStringArray(item.highlights),
@@ -470,13 +478,52 @@ function normalizeIntention(value: unknown): ResumeProfile['intention'] {
     roles: toStringArray(value.roles),
     locations: toStringArray(value.locations),
     industries: toStringArray(value.industries),
+    targetCompanies: toStringArray(value.targetCompanies),
     workAuthorization: toStringValue(value.workAuthorization),
+    visaStatus: toStringValue(value.visaStatus),
+    visaDates: normalizeVisaDates(value.visaDates),
     availableFrom: toStringValue(value.availableFrom),
     salaryExpectation: toStringValue(value.salaryExpectation),
   };
   return Object.values(intention).some((items) => Array.isArray(items) ? items.length > 0 : Boolean(items))
     ? intention
     : undefined;
+}
+
+function normalizeVisaDates(value: unknown): VisaDates | undefined {
+  if (!isRecord(value)) return undefined;
+  return {
+    programEndDate: toStringValue(value.programEndDate),
+    visaStartDate: toStringValue(value.visaStartDate),
+    visaEndDate: toStringValue(value.visaEndDate),
+    stemEligible: typeof value.stemEligible === 'boolean' ? value.stemEligible : undefined,
+  };
+}
+
+function normalizeCareerSignals(value: unknown): ResumeProfile['careerSignals'] {
+  if (!isRecord(value)) return undefined;
+  const coding = value.codingPreference;
+  const communication = value.communicationPreference;
+  const schoolBand = value.targetSchoolBand;
+  return {
+    codingPreference:
+      coding === 'likes_coding' || coding === 'neutral' || coding === 'avoids_coding' || coding === 'unknown'
+        ? coding
+        : undefined,
+    communicationPreference:
+      communication === 'likes_communication'
+      || communication === 'neutral'
+      || communication === 'avoids_communication'
+      || communication === 'unknown'
+        ? communication
+        : undefined,
+    targetIndustries: toStringArray(value.targetIndustries),
+    targetSchoolBand:
+      schoolBand === 'target' || schoolBand === 'semi_target' || schoolBand === 'non_target' || schoolBand === 'unknown'
+        ? schoolBand
+        : undefined,
+    coop: typeof value.coop === 'boolean' ? value.coop : undefined,
+  };
 }
 
 function normalizeMeta(value: unknown, pages: number): ResumeProfile['meta'] {
@@ -597,9 +644,24 @@ ${content.slice(0, PROFILE_INPUT_LIMIT)}
     "roles": ["意向岗位"],
     "locations": ["意向城市/国家，如'上海'、'新加坡'"],
     "industries": ["意向行业"],
+    "targetCompanies": ["目标公司，如简历明确写出"],
     "workAuthorization": "工作权限/签证状态（如简历明确写出）",
+    "visaStatus": "签证/身份状态，如 OPT/H1B/PSW/EP/PGWP/无需工作许可",
+    "visaDates": {
+      "programEndDate": "课程/毕业结束日期",
+      "visaStartDate": "签证开始日期",
+      "visaEndDate": "签证到期日期",
+      "stemEligible": false
+    },
     "availableFrom": "可入职时间（如简历明确写出）",
     "salaryExpectation": "薪资期望（如简历明确写出）"
+  },
+  "careerSignals": {
+    "codingPreference": "likes_coding/neutral/avoids_coding/unknown",
+    "communicationPreference": "likes_communication/neutral/avoids_communication/unknown",
+    "targetIndustries": ["目标行业"],
+    "targetSchoolBand": "target/semi_target/non_target/unknown",
+    "coop": false
   },
   "meta": {
     "wordDensity": "sparse/normal/dense",
@@ -649,6 +711,8 @@ ${content.slice(0, PROFILE_INPUT_LIMIT)}
       skills: toStringArray(parsed.skills),
       certificates: toStringArray(parsed.certificates),
       languages: toStringArray(parsed.languages),
+      careerSignals: normalizeCareerSignals(parsed.careerSignals),
+      schemaVersion: RESUME_PROFILE_SCHEMA_VERSION,
       intention: normalizeIntention(parsed.intention),
       meta: normalizeMeta(parsed.meta, pages),
     };

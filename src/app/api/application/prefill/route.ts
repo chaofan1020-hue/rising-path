@@ -118,25 +118,43 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ fields: [] });
     }
 
-    const { data: resume } = await client
-      .from('resumes')
-      .select('id, user_info, profile')
-      .eq('user_id', auth.user.id)
-      .order('created_at', { ascending: false })
-      .limit(1)
-      .maybeSingle();
-
     const { data: profileRow } = await client
       .from('application_profiles')
       .select('profile, resume_id, source')
       .eq('user_id', auth.user.id)
       .maybeSingle();
 
+    interface ResumeRow {
+      id: number;
+      user_info: unknown;
+      profile: unknown;
+    }
+    let resume: ResumeRow | null = null;
+    if (profileRow?.resume_id) {
+      const { data: selected } = await client
+        .from('resumes')
+        .select('id, user_info, profile')
+        .eq('id', profileRow.resume_id)
+        .eq('user_id', auth.user.id)
+        .maybeSingle();
+      resume = selected as ResumeRow | null;
+    }
+    if (!resume) {
+      const { data: latest } = await client
+        .from('resumes')
+        .select('id, user_info, profile')
+        .eq('user_id', auth.user.id)
+        .order('created_at', { ascending: false })
+        .limit(1)
+        .maybeSingle();
+      resume = latest as ResumeRow | null;
+    }
+
     let profile: ApplicationProfile = DEFAULT_PROFILE;
     let sourceMap: ProfileSourceMap | undefined;
-    const profileMatchesLatestResume = profileRow
+    const profileMatchesSelectedResume = profileRow
       && (profileRow.resume_id === resume?.id || (!profileRow.resume_id && !resume?.id));
-    if (profileMatchesLatestResume && profileRow.profile) {
+    if (profileMatchesSelectedResume && profileRow.profile) {
       profile = profileRow.profile as ApplicationProfile;
       sourceMap = (profileRow.source || {}) as ProfileSourceMap;
     } else {

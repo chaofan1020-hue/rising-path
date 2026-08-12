@@ -37,7 +37,7 @@ export async function PATCH(
     const normalizedOverrides: SegmentationOverrides = overrides && typeof overrides === 'object' ? overrides : {};
     const profileIntention = profile?.intention;
     if (profileIntention) {
-      const intentionFields = ['roles', 'locations', 'industries'] as const;
+      const intentionFields = ['roles', 'locations', 'industries', 'targetCompanies'] as const;
       for (const field of intentionFields) {
         const value = profileIntention[field];
         if (value !== undefined && (!Array.isArray(value) || value.some((item) => typeof item !== 'string' || item.length > 120))) {

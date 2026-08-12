@@ -5,6 +5,13 @@ import { PencilLine, Loader2, Save } from 'lucide-react';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from '@/components/ui/select';
 import { apiFetch } from '@/lib/api-client';
 import type {
   ResumeProfile,
@@ -12,10 +19,14 @@ import type {
   UserSegmentation,
 } from '@/lib/resume-types';
 import { useLanguage } from '@/lib/language-context';
+import type { RegionKey } from '@/lib/region-dna';
+import { VISA_STATUS_OPTIONS } from '@/lib/visa-timeline';
+import type { VisaDates } from '@/lib/resume-types';
 
 interface ResumeProfileCardProps {
   resumeId: number;
   profile: ResumeProfile;
+  region?: RegionKey | null;
   confirmed?: boolean;
   onUpdated: (
     profile: ResumeProfile,
@@ -36,21 +47,35 @@ function joinList(value?: string[]): string {
   return value?.join('、') || '';
 }
 
-export function ResumeProfileCard({ resumeId, profile, confirmed, onUpdated }: ResumeProfileCardProps) {
+const fallbackVisaOptions = [
+  { value: 'permanent', labelKey: 'resume.visa.permanent' },
+  { value: 'student', labelKey: 'resume.visa.student' },
+  { value: 'work_visa', labelKey: 'resume.visa.workVisa' },
+  { value: 'none', labelKey: 'resume.visa.none' },
+  { value: 'unknown', labelKey: 'resume.visa.unknown' },
+];
+
+export function ResumeProfileCard({ resumeId, profile, region, confirmed, onUpdated }: ResumeProfileCardProps) {
   const { t } = useLanguage();
   const [editing, setEditing] = useState(false);
   const [saving, setSaving] = useState(false);
   const [roles, setRoles] = useState('');
   const [locations, setLocations] = useState('');
   const [industries, setIndustries] = useState('');
+  const [targetCompanies, setTargetCompanies] = useState('');
   const [workAuthorization, setWorkAuthorization] = useState('');
+  const [visaStatus, setVisaStatus] = useState('');
+  const [visaDates, setVisaDates] = useState<VisaDates>({});
   const [availableFrom, setAvailableFrom] = useState('');
 
   useEffect(() => {
     setRoles(joinList(profile.intention?.roles));
     setLocations(joinList(profile.intention?.locations));
     setIndustries(joinList(profile.intention?.industries));
+    setTargetCompanies(joinList(profile.intention?.targetCompanies));
     setWorkAuthorization(profile.intention?.workAuthorization || '');
+    setVisaStatus(profile.intention?.visaStatus || '');
+    setVisaDates(profile.intention?.visaDates || {});
     setAvailableFrom(profile.intention?.availableFrom || '');
   }, [profile]);
 
@@ -61,7 +86,15 @@ export function ResumeProfileCard({ resumeId, profile, confirmed, onUpdated }: R
         roles: parseList(roles),
         locations: parseList(locations),
         industries: parseList(industries),
+        targetCompanies: parseList(targetCompanies),
         workAuthorization: workAuthorization.trim() || undefined,
+        visaStatus: visaStatus || undefined,
+        visaDates: {
+          programEndDate: visaDates.programEndDate || undefined,
+          visaStartDate: visaDates.visaStartDate || undefined,
+          visaEndDate: visaDates.visaEndDate || undefined,
+          stemEligible: visaDates.stemEligible || undefined,
+        },
         availableFrom: availableFrom.trim() || undefined,
       };
       const response = await apiFetch(`/api/resume/${resumeId}`, {
@@ -138,8 +171,60 @@ export function ResumeProfileCard({ resumeId, profile, confirmed, onUpdated }: R
             <Input value={industries} onChange={(event) => setIndustries(event.target.value)} placeholder="Fintech、Internet" />
           </label>
           <label className="space-y-1 text-xs text-zinc-500 dark:text-zinc-400">
+            <span>{t('resume.profileTargetCompanies')}</span>
+            <Input value={targetCompanies} onChange={(event) => setTargetCompanies(event.target.value)} placeholder="Microsoft, LinkedIn" />
+          </label>
+          <label className="space-y-1 text-xs text-zinc-500 dark:text-zinc-400">
             <span>{t('resume.profileWorkAuthorization')}</span>
             <Input value={workAuthorization} onChange={(event) => setWorkAuthorization(event.target.value)} placeholder="可工作签证 / 需要雇主担保" />
+          </label>
+          <label className="space-y-1 text-xs text-zinc-500 dark:text-zinc-400">
+            <span>{t('resume.profileVisaStatus')}</span>
+            <Select value={visaStatus || undefined} onValueChange={setVisaStatus}>
+              <SelectTrigger className="h-9 text-sm">
+                <SelectValue placeholder={t('resume.profileVisaPlaceholder')} />
+              </SelectTrigger>
+              <SelectContent>
+                {(region ? VISA_STATUS_OPTIONS[region] : fallbackVisaOptions).map((option) => (
+                  <SelectItem key={option.value} value={option.value}>
+                    {t(option.labelKey)}
+                  </SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+          </label>
+          <label className="space-y-1 text-xs text-zinc-500 dark:text-zinc-400">
+            <span>{t('resume.profileProgramEndDate')}</span>
+            <Input
+              type="date"
+              value={visaDates.programEndDate || ''}
+              onChange={(event) => setVisaDates({ ...visaDates, programEndDate: event.target.value })}
+            />
+          </label>
+          <label className="space-y-1 text-xs text-zinc-500 dark:text-zinc-400">
+            <span>{t('resume.profileVisaStartDate')}</span>
+            <Input
+              type="date"
+              value={visaDates.visaStartDate || ''}
+              onChange={(event) => setVisaDates({ ...visaDates, visaStartDate: event.target.value })}
+            />
+          </label>
+          <label className="space-y-1 text-xs text-zinc-500 dark:text-zinc-400">
+            <span>{t('resume.profileVisaEndDate')}</span>
+            <Input
+              type="date"
+              value={visaDates.visaEndDate || ''}
+              onChange={(event) => setVisaDates({ ...visaDates, visaEndDate: event.target.value })}
+            />
+          </label>
+          <label className="flex items-center gap-2 text-xs text-zinc-500 dark:text-zinc-400">
+            <input
+              type="checkbox"
+              className="accent-zinc-900"
+              checked={Boolean(visaDates.stemEligible)}
+              onChange={(event) => setVisaDates({ ...visaDates, stemEligible: event.target.checked })}
+            />
+            {t('resume.profileStemEligible')}
           </label>
           <label className="space-y-1 text-xs text-zinc-500 dark:text-zinc-400 md:col-span-2">
             <span>{t('resume.profileAvailableFrom')}</span>

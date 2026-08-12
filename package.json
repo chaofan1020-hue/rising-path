@@ -19,6 +19,10 @@
     "test:safe-external-fetch": "tsx scripts/test-safe-external-fetch.ts",
     "test:interview-validation": "tsx scripts/test-interview-chat-validation.ts",
     "test:json-extract": "tsx scripts/test-json-extract.ts",
+    "test:career-route": "tsx scripts/test-career-route-planner.ts",
+    "test:application-profile": "tsx scripts/test-application-profile.ts",
+    "test:visa-timeline": "tsx scripts/test-visa-timeline.ts",
+    "test:networking": "tsx scripts/test-networking-recommender.ts",
     "lint:build": "eslint . --quiet",
     "validate": "pnpm run ts-check && pnpm run lint:build"
   },

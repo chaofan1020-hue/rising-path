@@ -1,6 +1,6 @@
 'use client';
 
-import { useCallback, useEffect, useMemo, useState } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import Link from 'next/link';
 import { Header1 } from '@/components/header1';
 import { AuthGuard } from '@/components/auth-guard';
@@ -8,6 +8,8 @@ import { apiFetch } from '@/lib/api-client';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent } from '@/components/ui/card';
 import { Skeleton } from '@/components/ui/skeleton';
+import { Badge } from '@/components/ui/badge';
+import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 
 import {
   Select,
@@ -18,15 +20,24 @@ import {
 } from '@/components/ui/select';
 import { useLanguage } from '@/lib/language-context';
 import PageBackButton from '@/components/page-back-button';
+import { getLocalizedText, type CareerRouteDiagnosis } from '@/lib/career-route-planner';
+import {
+  NETWORKING_STAGES,
+  type NetworkingProgress,
+  type NetworkingRecommendation,
+} from '@/lib/networking-recommender';
 import {
   ArrowRight,
   Bell,
   Briefcase,
   Calendar,
+  Check,
   FileText,
   LineChart,
+  Loader2,
   MapPin,
   MessageSquare,
+  RefreshCw,
   Target,
   TrendingUp,
   Zap,
@@ -98,6 +109,7 @@ interface DashboardData {
     };
     items: PlanItem[];
   } | null;
+  diagnosis?: CareerRouteDiagnosis | null;
   interviewEvaluations?: Array<{
     id: number;
     targetCompany: string;
@@ -115,6 +127,18 @@ export default function DashboardPage() {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [savingRegion, setSavingRegion] = useState(false);
+  const [networking, setNetworking] = useState<NetworkingRecommendation | null>(null);
+  const [networkingByStage, setNetworkingByStage] = useState<Record<string, NetworkingRecommendation>>({});
+  const [activeNetworkingStage, setActiveNetworkingStage] = useState(1);
+  const [networkingLoading, setNetworkingLoading] = useState(false);
+  const [networkingError, setNetworkingError] = useState<string | null>(null);
+  const [networkingProgress, setNetworkingProgress] = useState<NetworkingProgress>({
+    stage: 1,
+    completedMilestones: [],
+    recommendations: {},
+    updatedAt: '',
+  });
+  const networkingLocaleRef = useRef<string | null>(null);
 
   const fetchDashboard = useCallback(() => {
     setLoading(true);
@@ -139,6 +163,93 @@ export default function DashboardPage() {
     fetchDashboard();
   }, [fetchDashboard]);
 
+  const loadNetworking = useCallback(async () => {
+    setNetworkingLoading(true);
+    setNetworkingError(null);
+    try {
+      const res = await apiFetch('/api/networking/recommend', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ lang: locale }),
+      });
+      const json = await res.json();
+      if (!res.ok || !json.recommendation) {
+        throw new Error(json.error || 'Networking 推荐生成失败');
+      }
+      setNetworking(json.recommendation);
+      setNetworkingByStage(json.recommendations || {});
+      setActiveNetworkingStage(json.progress?.stage || 1);
+      setNetworkingProgress((prev) => json.progress || prev);
+    } catch (err) {
+      setNetworkingError(err instanceof Error ? err.message : 'Networking 推荐生成失败');
+    } finally {
+      setNetworkingLoading(false);
+    }
+  }, [locale]);
+
+  useEffect(() => {
+    if (data?.diagnosis?.window !== 'preparation') return;
+    let cancelled = false;
+    apiFetch('/api/networking/progress')
+      .then((res) => (res.ok ? res.json() : { progress: null }))
+      .then(async (json) => {
+        if (cancelled) return;
+        const progress = json.progress as NetworkingProgress | null;
+        if (!progress) return;
+        setNetworkingProgress(progress);
+        const cachedMap = progress.recommendations || {};
+        if (Object.keys(cachedMap).length >= NETWORKING_STAGES.length && networkingLocaleRef.current === locale) {
+          setNetworkingByStage(cachedMap);
+          setActiveNetworkingStage(progress.stage);
+          setNetworking(cachedMap[String(progress.stage)] || cachedMap['1']);
+        } else {
+          networkingLocaleRef.current = locale;
+          await loadNetworking();
+        }
+      })
+      .catch(() => setNetworkingError('Networking 推荐加载失败'));
+    return () => {
+      cancelled = true;
+    };
+  }, [data?.diagnosis?.window, locale, loadNetworking]);
+
+  const handleToggleNetworkingMilestone = useCallback(async (milestone: string) => {
+    if (!networkingProgress) return;
+    const completed = networkingProgress.completedMilestones.includes(milestone)
+      ? networkingProgress.completedMilestones.filter((item) => item !== milestone)
+      : [...networkingProgress.completedMilestones, milestone];
+    const stageMilestones = NETWORKING_STAGES[networkingProgress.stage - 1]?.milestones || [];
+    const allDone = stageMilestones.length > 0
+      && stageMilestones.every((item) => completed.includes(item));
+    const nextStage = allDone
+      ? Math.min(NETWORKING_STAGES.length, networkingProgress.stage + 1)
+      : networkingProgress.stage;
+    try {
+      const res = await apiFetch('/api/networking/progress', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ stage: nextStage, completedMilestones: completed }),
+      });
+      const json = await res.json();
+      if (!res.ok || !json.progress) throw new Error(json.error || '进度更新失败');
+      setNetworkingProgress(json.progress);
+      if (nextStage !== networkingProgress.stage) {
+        setActiveNetworkingStage(nextStage);
+        const nextRec = networkingByStage[String(nextStage)];
+        if (nextRec) setNetworking(nextRec);
+        else void loadNetworking();
+      }
+    } catch (err) {
+      setNetworkingError(err instanceof Error ? err.message : 'Networking 进度更新失败');
+    }
+  }, [loadNetworking, networkingByStage, networkingProgress]);
+
+  const switchNetworkingStage = useCallback((stage: number) => {
+    setActiveNetworkingStage(stage);
+    const rec = networkingByStage[String(stage)];
+    if (rec) setNetworking(rec);
+  }, [networkingByStage]);
+
   const handleRegionChange = useCallback(
     async (value: string) => {
       if (!data?.latestResumeId) return;
@@ -162,22 +273,6 @@ export default function DashboardPage() {
       }
     },
     [data?.latestResumeId, fetchDashboard]
-  );
-
-  const translate = useCallback(
-    (key: string, params?: Record<string, string | number>) => {
-      if (!params) return t(key);
-      const translatedParams: Record<string, string | number> = {};
-      Object.entries(params).forEach(([k, v]) => {
-        if (typeof v === 'string') {
-          translatedParams[k] = t(v);
-        } else {
-          translatedParams[k] = v;
-        }
-      });
-      return t(key, translatedParams);
-    },
-    [t]
   );
 
   const planGroups = useMemo(() => {
@@ -220,6 +315,579 @@ export default function DashboardPage() {
 
         {!loading && !error && data && (
           <div className="space-y-6 md:space-y-8">
+            {data.diagnosis && (
+              <section>
+                <div className="flex items-center gap-2 mb-4">
+                  <span className="flex items-center justify-center w-6 h-6 rounded-lg bg-zinc-900 dark:bg-white text-white dark:text-zinc-900">
+                    <Target className="h-3.5 w-3.5" />
+                  </span>
+                  <h3 className="text-sm font-medium text-zinc-900 dark:text-zinc-100 tracking-wide">
+                    {t('dashboard.diagnosis.title')}
+                  </h3>
+                </div>
+                <div className="grid grid-cols-1 lg:grid-cols-3 gap-4">
+                  <Card className="rounded-2xl border-zinc-200 dark:border-zinc-800">
+                    <CardContent className="p-5 space-y-3">
+                      <div>
+                        <p className="text-xs font-medium text-zinc-400 dark:text-zinc-500 mb-1">
+                          {t('dashboard.diagnosis.window')}
+                        </p>
+                        <p className="text-base font-semibold text-zinc-900 dark:text-zinc-100">
+                          {t(data.diagnosis.windowLabelKey)}
+                        </p>
+                      </div>
+                      <div>
+                        <p className="text-xs font-medium text-zinc-400 dark:text-zinc-500 mb-1">
+                          {t('dashboard.diagnosis.mainRoute')}
+                        </p>
+                        <p className="text-base font-semibold text-zinc-900 dark:text-zinc-100">
+                          {t(data.diagnosis.mainRouteLabelKey)}
+                        </p>
+                      </div>
+                      {data.diagnosis.backupRoute && (
+                        <div>
+                          <p className="text-xs font-medium text-zinc-400 dark:text-zinc-500 mb-1">
+                            {t('dashboard.diagnosis.backupRoute')}
+                          </p>
+                          <p className="text-sm font-medium text-zinc-700 dark:text-zinc-300">
+                            {t(data.diagnosis.backupRoute.labelKey)}
+                          </p>
+                          {getLocalizedText(data.diagnosis.llmBackupRoute, locale) && (
+                            <p className="mt-1 text-xs text-zinc-500 leading-relaxed">
+                              {getLocalizedText(data.diagnosis.llmBackupRoute, locale)}
+                            </p>
+                          )}
+                          {data.diagnosis.backupRoute?.visaViable && (
+                            <p className="mt-1 text-xs font-medium text-zinc-500 leading-relaxed">
+                              {t(`dashboard.backupVisa.${data.diagnosis.backupRoute.visaViable}`)}
+                            </p>
+                          )}
+                        </div>
+                      )}
+                      {data.diagnosis.mainSeason && (
+                        <div>
+                          <p className="text-xs font-medium text-zinc-400 dark:text-zinc-500 mb-1">
+                            {t('dashboard.diagnosis.mainSeason')}
+                          </p>
+                          <p className="text-sm font-medium text-zinc-700 dark:text-zinc-300">
+                            {t(data.diagnosis.mainSeason.labelKey)}
+                          </p>
+                          {data.diagnosis.mainSeason.noteKey && (
+                            <p className="mt-1 text-xs text-zinc-500 leading-relaxed">
+                              {t(data.diagnosis.mainSeason.noteKey)}
+                            </p>
+                          )}
+                        </div>
+                      )}
+                    </CardContent>
+                  </Card>
+                  <Card className="rounded-2xl border-zinc-200 dark:border-zinc-800 lg:col-span-2">
+                    <CardContent className="p-5">
+                      {data.diagnosis.lowGradeFocus ? (
+                        <div className="mb-4 rounded-xl border border-zinc-200 dark:border-zinc-800 p-3">
+                          <p className="text-xs text-zinc-500 leading-relaxed">
+                            {t('dashboard.diagnosis.futureVisaPrep')}
+                          </p>
+                        </div>
+                      ) : (
+                      <div className="mb-4 rounded-xl border border-zinc-200 dark:border-zinc-800 p-3">
+                        <div className="flex flex-wrap items-center gap-x-4 gap-y-1">
+                          <p className="text-xs text-zinc-500">
+                            {t('dashboard.diagnosis.visaStatus')}
+                            <span className="ml-2 font-medium text-zinc-900 dark:text-zinc-100">
+                              {t(`dashboard.visaStatus.${data.diagnosis.visaStatus}`)}
+                            </span>
+                          </p>
+                          <p className="text-xs text-zinc-500">
+                            {t('dashboard.diagnosis.visaFeasibility')}
+                            <span className="ml-2 font-medium text-zinc-900 dark:text-zinc-100">
+                              {t(`dashboard.visaFeasibility.${data.diagnosis.visaFeasibility}`)}
+                            </span>
+                          </p>
+                        </div>
+                        {getLocalizedText(data.diagnosis.visaNote, locale) && (
+                          <p className="mt-2 text-xs text-zinc-500 leading-relaxed">
+                            {getLocalizedText(data.diagnosis.visaNote, locale)}
+                          </p>
+                        )}
+                        {data.diagnosis.visaTimeline && data.diagnosis.visaTimeline.entries.length > 0 && (
+                          <div className="mt-3 space-y-1.5">
+                            {data.diagnosis.visaTimeline.entries.map((entry) => (
+                              <div key={entry.key} className="flex items-start gap-2 text-xs">
+                                <span className="mt-1.5 h-1.5 w-1.5 rounded-full bg-zinc-400 flex-shrink-0" />
+                                <div className="min-w-0">
+                                  <p className="text-zinc-600 dark:text-zinc-300">
+                                    {t(entry.labelKey)}
+                                    {entry.estimatedDate && (
+                                      <span className="ml-1 text-zinc-400">
+                                        {entry.estimatedDate}
+                                      </span>
+                                    )}
+                                  </p>
+                                  {entry.actionKey && (
+                                    <p className="text-zinc-500">
+                                      {t(entry.actionKey)}
+                                    </p>
+                                  )}
+                                </div>
+                              </div>
+                            ))}
+                          </div>
+                        )}
+                        {data.diagnosis.visaStatus === 'unknown' && (
+                          <Link
+                            href="/resume"
+                            className="mt-2 inline-flex items-center gap-1 text-xs font-medium text-zinc-900 dark:text-zinc-100 hover:underline"
+                          >
+                            {t('dashboard.diagnosis.confirmVisa')}
+                            <ArrowRight className="h-3 w-3" />
+                          </Link>
+                        )}
+                      </div>
+                      )}
+                      <p className="text-xs font-medium text-zinc-400 dark:text-zinc-500 mb-3">
+                        {t('dashboard.diagnosis.risks')}
+                      </p>
+                      {data.diagnosis.risks.length === 0 ? (
+                        <p className="text-sm text-zinc-500">
+                          {t('dashboard.diagnosis.noRisks')}
+                        </p>
+                      ) : (
+                        <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
+                          {data.diagnosis.risks.map((risk) => (
+                            <div
+                              key={risk.key}
+                              className="flex items-start gap-2 rounded-xl border border-zinc-200 dark:border-zinc-800 px-3 py-2"
+                            >
+                              <span className={`mt-1.5 h-2 w-2 rounded-full flex-shrink-0 ${riskLevelColor[risk.level]}`} />
+                              <span className="text-sm text-zinc-700 dark:text-zinc-300">
+                                {t(risk.labelKey)}
+                              </span>
+                            </div>
+                          ))}
+                        </div>
+                      )}
+                      {getLocalizedText(data.diagnosis.llmNarrative, locale) && (
+                        <p className="mt-4 text-sm text-zinc-600 dark:text-zinc-300 leading-relaxed">
+                          {getLocalizedText(data.diagnosis.llmNarrative, locale)}
+                        </p>
+                      )}
+                      {getLocalizedText(data.diagnosis.verificationNote, locale) && (
+                        <p className="mt-2 text-xs text-zinc-400 dark:text-zinc-500 leading-relaxed">
+                          {getLocalizedText(data.diagnosis.verificationNote, locale)}
+                        </p>
+                      )}
+                    </CardContent>
+                  </Card>
+                </div>
+              </section>
+            )}
+            {data.diagnosis?.window === 'preparation' && networkingError && (
+              <Card className="rounded-2xl border-zinc-200 dark:border-zinc-800 mb-4">
+                <CardContent className="p-6 text-center text-sm text-red-500">
+                  {networkingError}
+                </CardContent>
+              </Card>
+            )}
+            {data.diagnosis?.window === 'preparation' && networkingLoading && !networking && (
+              <Card className="rounded-2xl border-zinc-200 dark:border-zinc-800 mb-4">
+                <CardContent className="p-6 text-center text-sm text-zinc-500">
+                  <Loader2 className="h-5 w-5 animate-spin mx-auto mb-2" />
+                  {t('dashboard.networking.loading')}
+                </CardContent>
+              </Card>
+            )}
+            {data.diagnosis?.window === 'preparation' && networkingProgress && networking && (
+              <section>
+                <div className="flex items-center justify-between gap-3 mb-4">
+                  <div className="flex items-center gap-2">
+                    <span className="flex items-center justify-center w-6 h-6 rounded-lg bg-zinc-900 dark:bg-white text-white dark:text-zinc-900">
+                      <Briefcase className="h-3.5 w-3.5" />
+                    </span>
+                    <h3 className="text-sm font-medium text-zinc-900 dark:text-zinc-100 tracking-wide">
+                      {t('dashboard.networking.title')}
+                    </h3>
+                  </div>
+                  <Button variant="outline" size="sm" onClick={() => loadNetworking()} disabled={networkingLoading}>
+                    {networkingLoading ? (
+                      <><Loader2 className="h-3.5 w-3.5 mr-1 animate-spin" />{t('dashboard.networking.loading')}</>
+                    ) : (
+                      <><RefreshCw className="h-3.5 w-3.5 mr-1" />{t('dashboard.networking.regenerate')}</>
+                    )}
+                  </Button>
+                </div>
+                <Card className="rounded-2xl border-zinc-200 dark:border-zinc-800 overflow-hidden">
+                  <div className="grid grid-cols-1 lg:grid-cols-[220px_1fr]">
+                    <aside className="hidden lg:block border-r border-zinc-200 dark:border-zinc-800 p-3 space-y-1">
+                      {NETWORKING_STAGES.map((stage, index) => {
+                        const stageMilestones = stage.milestones;
+                        const done = stageMilestones.length > 0
+                          && stageMilestones.every((item) => networkingProgress?.completedMilestones.includes(item));
+                        return (
+                          <button
+                            key={stage.key}
+                            type="button"
+                            onClick={() => switchNetworkingStage(index + 1)}
+                            className={`w-full flex items-center gap-2 rounded-xl px-3 py-2 text-left text-xs transition-colors ${
+                              activeNetworkingStage === index + 1
+                                ? 'bg-zinc-900 text-white dark:bg-white dark:text-zinc-900'
+                                : 'text-zinc-600 hover:bg-zinc-100 dark:text-zinc-300 dark:hover:bg-zinc-800'
+                            }`}
+                          >
+                            <span className="w-5 h-5 rounded-full border flex items-center justify-center flex-shrink-0">
+                              {done ? <Check className="h-3 w-3" /> : index + 1}
+                            </span>
+                            <span className="truncate">{t(stage.titleKey)}</span>
+                          </button>
+                        );
+                      })}
+                    </aside>
+                    <div>
+                      <div className="lg:hidden flex gap-2 overflow-x-auto px-4 pt-3">
+                        {NETWORKING_STAGES.map((stage, index) => (
+                          <button
+                            key={stage.key}
+                            type="button"
+                            onClick={() => switchNetworkingStage(index + 1)}
+                            className={`shrink-0 rounded-full px-3 py-1 text-xs border ${
+                              activeNetworkingStage === index + 1
+                                ? 'bg-zinc-900 text-white border-zinc-900 dark:bg-white dark:text-zinc-900 dark:border-white'
+                                : 'border-zinc-200 dark:border-zinc-700 text-zinc-600 dark:text-zinc-300'
+                            }`}
+                          >
+                            {index + 1}. {t(stage.titleKey)}
+                          </button>
+                        ))}
+                      </div>
+                      <div className="p-4 md:p-5">
+                        {(() => {
+                          const viewingStage = NETWORKING_STAGES[activeNetworkingStage - 1] || NETWORKING_STAGES[0];
+                          const progressStage = NETWORKING_STAGES[networkingProgress?.stage - 1 || 0];
+                          const total = progressStage?.milestones.length || 0;
+                          const done = progressStage?.milestones.filter((item) =>
+                            networkingProgress?.completedMilestones.includes(item)).length || 0;
+                          const percent = total > 0 ? Math.round((done / total) * 100) : 0;
+                          return (
+                            <>
+                              <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-2">
+                                <div>
+                                  <p className="text-xs text-zinc-400 dark:text-zinc-500">
+                                    {t('dashboard.networking.currentStage')}
+                                  </p>
+                                  <p className="text-base font-semibold text-zinc-900 dark:text-zinc-100">
+                                    {t(viewingStage?.titleKey || 'dashboard.networking.stage.research')}
+                                  </p>
+                                </div>
+                                <p className="text-xs text-zinc-500">
+                                  {done} / {total}
+                                </p>
+                              </div>
+                              <div className="mt-3 h-1.5 rounded-full bg-zinc-100 dark:bg-zinc-800 overflow-hidden">
+                                <div className="h-full bg-zinc-900 dark:bg-white transition-all" style={{ width: `${percent}%` }} />
+                              </div>
+                              <div className="mt-3 flex flex-wrap gap-2">
+                                {progressStage?.milestones.map((milestone) => {
+                                  const checked = networkingProgress?.completedMilestones.includes(milestone);
+                                  return (
+                                    <label key={milestone} className="flex items-center gap-1.5 rounded-full border border-zinc-200 dark:border-zinc-700 px-2.5 py-1 text-xs text-zinc-600 dark:text-zinc-300 cursor-pointer">
+                                      <input
+                                        type="checkbox"
+                                        className="accent-zinc-900"
+                                        checked={Boolean(checked)}
+                                        onChange={() => handleToggleNetworkingMilestone(milestone)}
+                                      />
+                                      {t(milestone)}
+                                    </label>
+                                  );
+                                })}
+                              </div>
+                              <Tabs defaultValue="people" className="mt-5">
+                                <TabsList className="w-full justify-start overflow-x-auto">
+                                  <TabsTrigger value="people">{t('dashboard.networking.tabPeople')}</TabsTrigger>
+                                  <TabsTrigger value="talk">{t('dashboard.networking.tabTalk')}</TabsTrigger>
+                                  <TabsTrigger value="maintain">{t('dashboard.networking.tabMaintain')}</TabsTrigger>
+                                  <TabsTrigger value="rhythm">{t('dashboard.networking.tabRhythm')}</TabsTrigger>
+                                </TabsList>
+                                <TabsContent value="people" className="pt-4 space-y-4">
+                                  <div>
+                                    <p className="text-xs font-medium text-zinc-400 dark:text-zinc-500 mb-2">
+                                      {t('dashboard.networking.peopleTypes')}
+                                    </p>
+                                    <div className="space-y-2">
+                                      {networking.peopleTypes.map((item) => (
+                                        <div key={item.title} className="rounded-xl border border-zinc-200 dark:border-zinc-800 p-3">
+                                          <p className="text-sm font-medium text-zinc-900 dark:text-zinc-100">{item.title}</p>
+                                          <p className="mt-1 text-xs text-zinc-500 leading-relaxed">{item.why}</p>
+                                          <p className="mt-1 text-xs text-zinc-400">{item.keywords.join(' / ')}</p>
+                                        </div>
+                                      ))}
+                                    </div>
+                                  </div>
+                                  <div>
+                                    <p className="text-xs font-medium text-zinc-400 dark:text-zinc-500 mb-2">
+                                      {t('dashboard.networking.keywords')}
+                                    </p>
+                                    <div className="flex flex-wrap gap-1.5">
+                                      {networking.searchKeywords.map((keyword) => (
+                                        <Badge key={keyword} variant="outline" className="text-xs">{keyword}</Badge>
+                                      ))}
+                                    </div>
+                                  </div>
+                                </TabsContent>
+                                <TabsContent value="talk" className="pt-4 space-y-4">
+                                  <div>
+                                    <p className="text-xs font-medium text-zinc-400 dark:text-zinc-500 mb-2">
+                                      {t('dashboard.networking.outreach')}
+                                    </p>
+                                    <div className="space-y-2">
+                                      {networking.outreach.map((item) => (
+                                        <div key={item.scenario} className="rounded-xl border border-zinc-200 dark:border-zinc-800 p-3">
+                                          <p className="text-sm font-medium text-zinc-900 dark:text-zinc-100">{item.scenario}</p>
+                                          <p className="mt-1 text-xs text-zinc-500 leading-relaxed">{item.script}</p>
+                                        </div>
+                                      ))}
+                                    </div>
+                                  </div>
+                                  <div>
+                                    <p className="text-xs font-medium text-zinc-400 dark:text-zinc-500 mb-2">
+                                      {t('dashboard.networking.conversationQuestions')}
+                                    </p>
+                                    <ul className="space-y-1.5 text-xs text-zinc-600 dark:text-zinc-300">
+                                      {networking.conversationQuestions.map((question) => <li key={question}>- {question}</li>)}
+                                    </ul>
+                                  </div>
+                                </TabsContent>
+                                <TabsContent value="maintain" className="pt-4 space-y-4">
+                                  <div>
+                                    <p className="text-xs font-medium text-zinc-400 dark:text-zinc-500 mb-2">
+                                      {t('dashboard.networking.maintenanceContent')}
+                                    </p>
+                                    <div className="space-y-2">
+                                      {networking.maintenanceContent.map((item) => (
+                                        <div key={item.title} className="rounded-xl border border-zinc-200 dark:border-zinc-800 p-3">
+                                          <p className="text-sm font-medium text-zinc-900 dark:text-zinc-100">
+                                            {item.title} <span className="text-xs text-zinc-400">({item.channel})</span>
+                                          </p>
+                                          <p className="mt-1 text-xs text-zinc-500 leading-relaxed">{item.content}</p>
+                                        </div>
+                                      ))}
+                                    </div>
+                                  </div>
+                                  <div>
+                                    <p className="text-xs font-medium text-zinc-400 dark:text-zinc-500 mb-2">
+                                      {t('dashboard.networking.stageTips')}
+                                    </p>
+                                    <ul className="space-y-1.5 text-xs text-zinc-600 dark:text-zinc-300">
+                                      {networking.stageTips.map((tip) => <li key={tip}>- {tip}</li>)}
+                                    </ul>
+                                  </div>
+                                </TabsContent>
+                                <TabsContent value="rhythm" className="pt-4">
+                                  <p className="text-xs font-medium text-zinc-400 dark:text-zinc-500 mb-2">
+                                    {t('dashboard.networking.sequence')}
+                                  </p>
+                                  <div className="space-y-2">
+                                    {networking.sequence.map((item) => (
+                                      <div key={item.step} className="flex items-start gap-2 text-xs">
+                                        <span className="mt-0.5 font-medium text-zinc-700 dark:text-zinc-300">{item.step}</span>
+                                        <span className="text-zinc-500">{item.action}</span>
+                                      </div>
+                                    ))}
+                                  </div>
+                                </TabsContent>
+                              </Tabs>
+                            </>
+                          );
+                        })()}
+                      </div>
+                    </div>
+                  </div>
+                </Card>
+              </section>
+            )}
+            {/* legacy networking block
+              <section>
+                <div className="flex items-center justify-between gap-3 mb-4">
+                  <div className="flex items-center gap-2">
+                    <span className="flex items-center justify-center w-6 h-6 rounded-lg bg-zinc-900 dark:bg-white text-white dark:text-zinc-900">
+                      <Briefcase className="h-3.5 w-3.5" />
+                    </span>
+                    <h3 className="text-sm font-medium text-zinc-900 dark:text-zinc-100 tracking-wide">
+                      {t('dashboard.networking.title')}
+                    </h3>
+                  </div>
+                  <Button variant="outline" size="sm" onClick={() => loadNetworking(networkingProgress?.stage || 1)} disabled={networkingLoading}>
+                    {networkingLoading ? (
+                      <><Loader2 className="h-3.5 w-3.5 mr-1 animate-spin" />{t('dashboard.networking.loading')}</>
+                    ) : (
+                      <><RefreshCw className="h-3.5 w-3.5 mr-1" />{t('dashboard.networking.regenerate')}</>
+                    )}
+                  </Button>
+                </div>
+                {networkingProgress && (
+                  <div className="mb-4">
+                    <div className="flex gap-2 overflow-x-auto pb-2">
+                      {NETWORKING_STAGES.map((stage, index) => (
+                        <button
+                          key={stage.key}
+                          type="button"
+                          onClick={() => loadNetworking(index + 1)}
+                          className={`shrink-0 rounded-full px-3 py-1 text-xs border transition-colors ${
+                            networkingProgress.stage === index + 1
+                              ? 'bg-zinc-900 text-white border-zinc-900 dark:bg-white dark:text-zinc-900 dark:border-white'
+                              : 'border-zinc-200 dark:border-zinc-700 text-zinc-600 dark:text-zinc-300'
+                          }`}
+                        >
+                          {index + 1}. {t(stage.titleKey)}
+                        </button>
+                      ))}
+                    </div>
+                    {(() => {
+                      const currentStage = NETWORKING_STAGES[networkingProgress.stage - 1];
+                      if (!currentStage) return null;
+                      return (
+                        <div className="rounded-xl border border-zinc-200 dark:border-zinc-800 p-3">
+                          <p className="text-xs font-medium text-zinc-900 dark:text-zinc-100 mb-2">
+                            {t('dashboard.networking.currentStage')}：{t(currentStage.titleKey)}
+                          </p>
+                          <div className="space-y-1.5">
+                            {currentStage.milestones.map((milestone) => {
+                              const checked = networkingProgress.completedMilestones.includes(milestone);
+                              return (
+                                <label key={milestone} className="flex items-center gap-2 text-xs text-zinc-600 dark:text-zinc-300">
+                                  <input
+                                    type="checkbox"
+                                    className="accent-zinc-900"
+                                    checked={checked}
+                                    onChange={() => handleToggleNetworkingMilestone(milestone)}
+                                  />
+                                  {t(milestone)}
+                                </label>
+                              );
+                            })}
+                          </div>
+                        </div>
+                      );
+                    })()}
+                  </div>
+                )}
+                {networkingLoading && !networking ? (
+                  <Card className="rounded-2xl border-zinc-200 dark:border-zinc-800">
+                    <CardContent className="p-6 text-center text-sm text-zinc-500">
+                      {t('dashboard.networking.loading')}
+                    </CardContent>
+                  </Card>
+                ) : networkingError ? (
+                  <Card className="rounded-2xl border-zinc-200 dark:border-zinc-800">
+                    <CardContent className="p-6 text-center text-sm text-red-500">
+                      {networkingError}
+                    </CardContent>
+                  </Card>
+                ) : networking ? (
+                  <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
+                    <Card className="rounded-2xl border-zinc-200 dark:border-zinc-800">
+                      <CardContent className="p-5">
+                        <p className="text-xs font-medium text-zinc-400 dark:text-zinc-500 mb-3">
+                          {t('dashboard.networking.peopleTypes')}
+                        </p>
+                        <div className="space-y-3">
+                          {networking.peopleTypes.map((item) => (
+                            <div key={item.title} className="rounded-xl border border-zinc-200 dark:border-zinc-800 p-3">
+                              <p className="text-sm font-medium text-zinc-900 dark:text-zinc-100">{item.title}</p>
+                              <p className="mt-1 text-xs text-zinc-500 leading-relaxed">{item.why}</p>
+                              <p className="mt-1 text-xs text-zinc-400">{item.keywords.join(' / ')}</p>
+                            </div>
+                          ))}
+                        </div>
+                      </CardContent>
+                    </Card>
+                    <div className="space-y-4">
+                      <Card className="rounded-2xl border-zinc-200 dark:border-zinc-800">
+                        <CardContent className="p-5">
+                          <p className="text-xs font-medium text-zinc-400 dark:text-zinc-500 mb-3">
+                            {t('dashboard.networking.keywords')}
+                          </p>
+                          <div className="flex flex-wrap gap-1.5">
+                            {networking.searchKeywords.map((keyword) => (
+                              <Badge key={keyword} variant="outline" className="text-xs">
+                                {keyword}
+                              </Badge>
+                            ))}
+                          </div>
+                        </CardContent>
+                      </Card>
+                      <Card className="rounded-2xl border-zinc-200 dark:border-zinc-800">
+                        <CardContent className="p-5">
+                          <p className="text-xs font-medium text-zinc-400 dark:text-zinc-500 mb-3">
+                            {t('dashboard.networking.outreach')}
+                          </p>
+                          <div className="space-y-3">
+                            {networking.outreach.map((item) => (
+                              <div key={item.scenario}>
+                                <p className="text-sm font-medium text-zinc-900 dark:text-zinc-100">{item.scenario}</p>
+                                <p className="mt-1 text-xs text-zinc-500 leading-relaxed">{item.script}</p>
+                              </div>
+                            ))}
+                          </div>
+                        </CardContent>
+                      </Card>
+                      <Card className="rounded-2xl border-zinc-200 dark:border-zinc-800">
+                        <CardContent className="p-5">
+                          <p className="text-xs font-medium text-zinc-400 dark:text-zinc-500 mb-3">
+                            {t('dashboard.networking.sequence')}
+                          </p>
+                          <div className="space-y-2">
+                            {networking.sequence.map((item) => (
+                              <div key={item.step} className="flex items-start gap-2 text-xs">
+                                <span className="mt-0.5 font-medium text-zinc-700 dark:text-zinc-300">{item.step}</span>
+                                <span className="text-zinc-500">{item.action}</span>
+                              </div>
+                            ))}
+                          </div>
+                        </CardContent>
+                      </Card>
+                      <Card className="rounded-2xl border-zinc-200 dark:border-zinc-800">
+                        <CardContent className="p-5">
+                          <p className="text-xs font-medium text-zinc-400 dark:text-zinc-500 mb-3">
+                            {t('dashboard.networking.stageTips')}
+                          </p>
+                          <ul className="space-y-1.5 text-xs text-zinc-600 dark:text-zinc-300">
+                            {networking.stageTips.map((tip) => <li key={tip}>- {tip}</li>)}
+                          </ul>
+                        </CardContent>
+                      </Card>
+                      <Card className="rounded-2xl border-zinc-200 dark:border-zinc-800">
+                        <CardContent className="p-5">
+                          <p className="text-xs font-medium text-zinc-400 dark:text-zinc-500 mb-3">
+                            {t('dashboard.networking.conversationQuestions')}
+                          </p>
+                          <ul className="space-y-1.5 text-xs text-zinc-600 dark:text-zinc-300">
+                            {networking.conversationQuestions.map((question) => <li key={question}>- {question}</li>)}
+                          </ul>
+                        </CardContent>
+                      </Card>
+                      <Card className="rounded-2xl border-zinc-200 dark:border-zinc-800">
+                        <CardContent className="p-5">
+                          <p className="text-xs font-medium text-zinc-400 dark:text-zinc-500 mb-3">
+                            {t('dashboard.networking.maintenanceContent')}
+                          </p>
+                          <div className="space-y-3">
+                            {networking.maintenanceContent.map((item) => (
+                              <div key={item.title}>
+                                <p className="text-sm font-medium text-zinc-900 dark:text-zinc-100">
+                                  {item.title} <span className="text-xs text-zinc-400">({item.channel})</span>
+                                </p>
+                                <p className="mt-1 text-xs text-zinc-500 leading-relaxed">{item.content}</p>
+                              </div>
+                            ))}
+                          </div>
+                        </CardContent>
+                      </Card>
+                    </div>
+                  </div>
+                ) : null}
+              </section>
+            */}
             {/* 阶段定位 */}
             <section>
               <Card className="rounded-2xl border-zinc-200 dark:border-zinc-800 bg-gradient-to-br from-zinc-800 via-zinc-900 to-zinc-950 dark:from-zinc-200 dark:via-white dark:to-zinc-300 text-white dark:text-zinc-900 shadow-xl shadow-zinc-900/10">
@@ -542,6 +1210,12 @@ export default function DashboardPage() {
     </AuthGuard>
   );
 }
+
+const riskLevelColor: Record<'high' | 'medium' | 'low', string> = {
+  high: 'bg-red-500',
+  medium: 'bg-amber-500',
+  low: 'bg-emerald-500',
+};
 
 const priorityBadge: Record<
   'high' | 'medium' | 'low',

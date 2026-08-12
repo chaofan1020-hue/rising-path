@@ -44,6 +44,109 @@ export const DEFAULT_PROFILE: ApplicationProfile = {
   summary: '',
 };
 
+function isRecord(value: unknown): value is Record<string, unknown> {
+  return typeof value === 'object' && value !== null && !Array.isArray(value);
+}
+
+function normalizeRawEntry(value: unknown): Record<string, string> {
+  if (!isRecord(value)) return { raw: '' };
+  if (typeof value.raw === 'string' && value.raw.trim()) return { raw: value.raw.trim() };
+  const parts = [
+    'school', 'degree', 'major', 'company', 'role', 'title',
+    'startDate', 'endDate', 'description', 'highlights',
+  ].map((key) => typeof value[key] === 'string' ? value[key] as string : undefined)
+    .filter((item): item is string => Boolean(item?.trim()));
+  return { raw: parts.join(' | ') };
+}
+
+function stringArray(value: unknown, fallback: string[] = []): string[] {
+  if (!Array.isArray(value)) return fallback;
+  const items = value.filter((item): item is string => typeof item === 'string' && Boolean(item.trim()))
+    .map((item) => item.trim());
+  return items.length > 0 ? items : fallback;
+}
+
+export function normalizeAiProfile(
+  raw: unknown,
+  fallback: ApplicationProfile = DEFAULT_PROFILE,
+): ApplicationProfile {
+  const source = isRecord(raw) ? raw : {};
+  const personal = isRecord(source.personal) ? source.personal : {};
+  const links = isRecord(source.links) ? source.links : {};
+  const fallbackPersonal = fallback.personal || {};
+  const fallbackLinks = fallback.links || {};
+
+  const personalKeys = [
+    'firstName', 'lastName', 'fullName', 'email', 'phone',
+    'address', 'city', 'state', 'zipCode', 'country',
+  ] as const;
+  const linkKeys = ['linkedin', 'github', 'portfolio'] as const;
+
+  const normalizedPersonal = Object.fromEntries(
+    personalKeys.map((key) => [
+      key,
+      typeof personal[key] === 'string' && personal[key].trim()
+        ? (personal[key] as string).trim()
+        : (fallbackPersonal[key] || ''),
+    ]),
+  );
+  const normalizedLinks = Object.fromEntries(
+    linkKeys.map((key) => [
+      key,
+      typeof links[key] === 'string' && links[key].trim()
+        ? (links[key] as string).trim()
+        : (fallbackLinks[key] || ''),
+    ]),
+  );
+
+  const education = Array.isArray(source.education)
+    ? source.education.map(normalizeRawEntry).filter((entry) => entry.raw)
+    : [];
+  const experience = Array.isArray(source.experience)
+    ? source.experience.map(normalizeRawEntry).filter((entry) => entry.raw)
+    : [];
+
+  return {
+    personal: normalizedPersonal,
+    links: normalizedLinks,
+    education: education.length > 0 ? education : (fallback.education || []),
+    experience: experience.length > 0 ? experience : (fallback.experience || []),
+    skills: stringArray(source.skills, fallback.skills || []),
+    languages: stringArray(source.languages, fallback.languages || []),
+    workAuthorization: typeof source.workAuthorization === 'string'
+      ? source.workAuthorization.trim()
+      : (fallback.workAuthorization || ''),
+    visaStatus: typeof source.visaStatus === 'string'
+      ? source.visaStatus.trim()
+      : (fallback.visaStatus || ''),
+    summary: typeof source.summary === 'string'
+      ? source.summary.trim()
+      : (fallback.summary || ''),
+  };
+}
+
+export function buildSourceMapFromProfile(profile: ApplicationProfile): ProfileSourceMap {
+  const source: ProfileSourceMap = {};
+  const ai = (value: unknown): ProfileFieldSource => value
+    ? { source: 'ai', confidence: 0.8 }
+    : { source: 'empty', confidence: 0 };
+
+  for (const [key, value] of Object.entries(profile.personal || {})) {
+    source[`personal.${key}`] = ai(value);
+  }
+  for (const [key, value] of Object.entries(profile.links || {})) {
+    source[`links.${key}`] = ai(value);
+  }
+  source.education = ai(profile.education?.length);
+  source.experience = ai(profile.experience?.length);
+  source.skills = ai(profile.skills?.length);
+  source.languages = ai(profile.languages?.length);
+  source.workAuthorization = ai(profile.workAuthorization);
+  source.visaStatus = ai(profile.visaStatus);
+  source.summary = ai(profile.summary);
+  return source;
+}
+
 function splitName(name?: string): { firstName: string; lastName: string } {
   const parts = (name || '').trim().split(/\s+/).filter(Boolean);
   if (parts.length === 0) return { firstName: '', lastName: '' };
@@ -77,8 +180,8 @@ export function buildProfileFromResume(
     experience: (info.experience || []).map((entry) => ({ raw: entry })),
     skills: info.skills || [],
     languages: profile?.languages || [],
-    workAuthorization: '',
-    visaStatus: '',
+    workAuthorization: profile?.intention?.workAuthorization || '',
+    visaStatus: profile?.intention?.visaStatus || '',
     summary: profile?.meta ? '' : '',
   };
 
@@ -95,6 +198,18 @@ export function buildProfileFromResume(
     ? { source: 'resume', confidence: 0.9 }
     : { source: 'empty', confidence: 0 };
   source['skills'] = profileData.skills.length
+    ? { source: 'resume', confidence: 0.9 }
+    : { source: 'empty', confidence: 0 };
+  source['languages'] = profileData.languages.length
+    ? { source: 'resume', confidence: 0.9 }
+    : { source: 'empty', confidence: 0 };
+  source['workAuthorization'] = profileData.workAuthorization
+    ? { source: 'resume', confidence: 0.9 }
+    : { source: 'empty', confidence: 0 };
+  source['visaStatus'] = profileData.visaStatus
+    ? { source: 'resume', confidence: 0.9 }
+    : { source: 'empty', confidence: 0 };
+  source['summary'] = profileData.summary
     ? { source: 'resume', confidence: 0.9 }
     : { source: 'empty', confidence: 0 };
 
@@ -137,6 +252,55 @@ export function mergeApplicationProfile(
           editCount: source[`personal.${key}`]?.editCount || 0,
           ignoreCount: source[`personal.${key}`]?.ignoreCount || 0,
         };
+  }
+  for (const [key, value] of Object.entries(updates.links || {})) {
+    const oldValue = current.links[key] || '';
+    const newValue = String(value || '');
+    if (oldValue !== newValue) {
+      changes.push({ fieldKey: `links.${key}`, oldValue, newValue });
+    }
+    source[`links.${key}`] = value
+      ? {
+          source: 'manual',
+          confidence: 1,
+          updatedAt: now,
+          editCount: (source[`links.${key}`]?.editCount || 0) + (oldValue !== newValue ? 1 : 0),
+          confirmCount: source[`links.${key}`]?.confirmCount || 0,
+          ignoreCount: source[`links.${key}`]?.ignoreCount || 0,
+        }
+      : {
+          source: 'empty',
+          confidence: 0,
+          updatedAt: now,
+          editCount: source[`links.${key}`]?.editCount || 0,
+          ignoreCount: source[`links.${key}`]?.ignoreCount || 0,
+        };
+  }
+  for (const key of ['education', 'experience'] as const) {
+    if (updates[key] !== undefined) {
+      const oldValue = JSON.stringify(current[key] || []);
+      const newValue = JSON.stringify(updates[key] || []);
+      if (oldValue !== newValue) {
+        changes.push({ fieldKey: key, oldValue, newValue });
+      }
+      const filled = (updates[key] || []).length > 0;
+      source[key] = filled
+        ? {
+            source: 'manual',
+            confidence: 1,
+            updatedAt: now,
+            editCount: (source[key]?.editCount || 0) + (oldValue !== newValue ? 1 : 0),
+            confirmCount: source[key]?.confirmCount || 0,
+            ignoreCount: source[key]?.ignoreCount || 0,
+          }
+        : {
+            source: 'empty',
+            confidence: 0,
+            updatedAt: now,
+            editCount: source[key]?.editCount || 0,
+            ignoreCount: source[key]?.ignoreCount || 0,
+          };
+    }
   }
   for (const key of ['skills', 'summary', 'workAuthorization', 'visaStatus', 'languages'] as const) {
     if (updates[key] !== undefined) {

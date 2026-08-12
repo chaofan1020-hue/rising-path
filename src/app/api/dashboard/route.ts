@@ -1,10 +1,12 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { resolveRegionKey, type RegionKey, REGION_DNA, shouldBeApplying } from '@/lib/region-dna';
 import { getAuthContext, unauthorizedResponse } from '@/lib/auth-server';
+import { buildCareerRoutePlan, type CareerRouteDiagnosis } from '@/lib/career-route-planner';
+import type { ResumeProfile, UserSegmentation } from '@/lib/resume-types';
 
 type Timeframe = 'now' | 'week' | 'month';
 type CareerStage = 'junior' | 'senior' | 'experienced' | 'returning_intern';
-type MajorMatch = 'aligned' | 'related' | 'general';
+type MajorMatch = 'aligned' | 'related' | 'general' | 'unrelated';
 
 interface PlanItem {
   timeframe: Timeframe;
@@ -23,6 +25,7 @@ interface PlanContext {
 interface DashboardPlan {
   context: PlanContext;
   items: PlanItem[];
+  diagnosis: CareerRouteDiagnosis | null;
 }
 
 interface DashboardResume {
@@ -32,16 +35,46 @@ interface DashboardResume {
     inferredRegion?: string | null;
     targetRole?: string | null;
     intention?: {
+      roles?: string[] | null;
       locations?: string[] | null;
+      industries?: string[] | null;
+      targetCompanies?: string[] | null;
+      workAuthorization?: string | null;
+      visaStatus?: string | null;
+      visaDates?: {
+        programEndDate?: string | null;
+        visaStartDate?: string | null;
+        visaEndDate?: string | null;
+        stemEligible?: boolean | null;
+      } | null;
     } | null;
-    education?: Array<{ endYear?: number | null }> | null;
+    education?: Array<{
+      school?: string | null;
+      degree?: string | null;
+      major?: string | null;
+      startYear?: number | null;
+      endYear?: number | null;
+      gpa?: string | null;
+      qsEstimate?: number | null;
+    }> | null;
+    skills?: string[] | null;
+    internships?: Array<{
+      company?: string | null;
+      role?: string | null;
+      months?: number | null;
+      isInternship?: boolean | null;
+    }> | null;
+    workExperience?: Array<{
+      company?: string | null;
+      role?: string | null;
+      months?: number | null;
+      isInternship?: boolean | null;
+    }> | null;
+    projects?: Array<{ name?: string | null; role?: string | null }> | null;
+    careerSignals?: ResumeProfile['careerSignals'];
+    planRefinement?: ResumeProfile['planRefinement'];
   } | null;
-  segmentation?: {
-    regions?: RegionKey[] | null;
-    careerStage?: CareerStage;
-    majorMatch?: MajorMatch;
-    targetRole?: string | null;
-  } | null;
+  segmentation?: UserSegmentation | null;
   segmentation_overrides?: {
     regions?: RegionKey[] | null;
   } | null;
@@ -57,6 +90,9 @@ const REGION_LABEL_KEYS: Record<RegionKey, string> = {
   sg: 'region.sg',
   cn_t1: 'region.cn_t1',
   cn_t2: 'region.cn_t2',
+  ca: 'region.ca',
+  hk: 'region.hk',
+  au: 'region.au',
 };
 
 const STAGE_LABEL_KEYS: Record<CareerStage, string> = {
@@ -104,7 +140,7 @@ function resolveRegion(resume: DashboardResume | null | undefined): RegionKey | 
   return null;
 }
 
-function buildPlan(resume: DashboardResume | null, regionKey: RegionKey): DashboardPlan {
+function buildLegacyPlan(resume: DashboardResume | null, regionKey: RegionKey): DashboardPlan {
   const stage: CareerStage = resume?.segmentation?.careerStage ?? 'senior';
   const targetRole: string = resume?.profile?.targetRole ?? resume?.segmentation?.targetRole ?? '';
   const roleKey = getRoleCategory(targetRole);
@@ -170,7 +206,7 @@ function buildPlan(resume: DashboardResume | null, regionKey: RegionKey): Dashbo
     href: '/jobs',
   });
 
-  if (majorMatch === 'related' || majorMatch === 'general') {
+  if (majorMatch === 'related' || majorMatch === 'unrelated') {
     items.push({
       timeframe: 'week',
       titleKey: 'dashboard.plan.weekProjects.title',
@@ -210,7 +246,32 @@ function buildPlan(resume: DashboardResume | null, regionKey: RegionKey): Dashbo
     href: '/dashboard',
   });
 
-  return { context, items };
+  return { context, items, diagnosis: null };
+}
+
+function buildPlan(
+  resume: DashboardResume | null,
+  regionKey: RegionKey,
+  now = new Date(),
+): DashboardPlan {
+  const routePlan = buildCareerRoutePlan(
+    (resume?.profile ?? null) as ResumeProfile | null | undefined,
+    resume?.segmentation ?? null,
+    regionKey,
+    now,
+    resume?.profile?.planRefinement,
+  );
+  const stage: CareerStage = resume?.segmentation?.careerStage ?? 'senior';
+  const targetRole = resume?.profile?.targetRole ?? resume?.segmentation?.targetRole ?? '';
+  return {
+    context: {
+      region: REGION_LABEL_KEYS[regionKey],
+      stage: STAGE_LABEL_KEYS[stage] ?? STAGE_LABEL_KEYS.senior,
+      role: getRoleCategory(targetRole),
+    },
+    items: routePlan.items,
+    diagnosis: routePlan.diagnosis,
+  };
 }
 
 function getWeekStart(date: Date): Date {
@@ -491,6 +552,7 @@ export async function GET(request: NextRequest) {
     reminders,
     story,
     plan,
+    diagnosis: plan?.diagnosis ?? null,
     interviewEvaluations,
     counts: {
       resumes: resumeCount,
