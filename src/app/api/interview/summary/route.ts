@@ -1,7 +1,12 @@
 import { NextRequest } from 'next/server';
+import { z } from 'zod';
 import { getAuthContext, unauthorizedResponse } from '@/lib/auth-server';
+import { interviewSummaryRequestSchema } from '@/lib/interview-contracts';
 import { createTextProviderClient } from '@/lib/ai/text-provider';
+import { consumeTrackedTextStream } from '@/lib/ai-usage';
 import { INTERVIEWERS, getPersona, ARCHETYPE_PARAMS, ROUND_ROLE_INFO, GAUNTLET_SCRIPTS } from '@/lib/interviewers';
+import type { SupabaseClient } from '@supabase/supabase-js';
+import { untrustedBusinessDataBlock, untrustedBusinessDataPolicy } from '@/lib/prompt-safety';
 
 interface ChatMessage {
   role: 'interviewer' | 'candidate';
@@ -11,54 +16,59 @@ interface ChatMessage {
   ts?: number;
 }
 
-interface ReportCommitteeItem {
-  interviewerId: number;
-  tags: string[];
-  grade: string;
-  attitude: string;
-  comment: string;
-  keyMoment: { question: string; answer: string; note: string };
-}
-
-interface InterviewReport {
-  verdict: { pass: boolean; vote: string; grade: string; hireLevel: string; headline: string };
-  committee: ReportCommitteeItem[];
-  radar: Array<{ dimension: string; score: number; grade: string; diagnosis: string }>;
-  highlights: {
-    mistakes: Array<{ title: string; scene: string; consequence: string; coach: string }>;
-    best: { title: string; scene: string; effect: string; coach: string };
-  };
-  actionPlan: { immediate: string[]; practice: string[]; reading: string[] };
-  annotations: Array<{ msgIndex: number; label: string; note: string }>;
-}
-
 const GRADE_SCORE: Record<string, number> = {
   'A+': 97, 'A': 93, 'A-': 90, 'B+': 87, 'B': 83, 'B-': 80,
-  'C+': 77, 'C': 73, 'C-': 70, 'D': 60, 'F': 50,
+  'C+': 77, 'C': 73, 'C-': 70, 'D': 60,
 };
+const SUMMARY_JOB_CONTEXT_MAX_CHARS = 3_200;
+const SUMMARY_TRANSCRIPT_MAX_CHARS = 8_000;
 
-// 按均分反推合法等级（LLM 偶尔输出枚举外等级如 F/E 时钳制）
-function scoreToGrade(s: number): string {
-  if (s >= 95) return 'A+';
-  if (s >= 92) return 'A';
-  if (s >= 89) return 'A-';
-  if (s >= 86) return 'B+';
-  if (s >= 82) return 'B';
-  if (s >= 79) return 'B-';
-  if (s >= 76) return 'C+';
-  if (s >= 72) return 'C';
-  if (s >= 69) return 'C-';
-  return 'D';
+function boundSummaryContext(value: string, maxChars: number): string {
+  if (value.length <= maxChars) return value;
+  const head = Math.floor(maxChars * 0.45);
+  const tail = Math.max(0, maxChars - head - 64);
+  return `${value.slice(0, head)}\n[...earlier detail omitted for speed...]\n${value.slice(-tail)}`;
 }
 
 // 从消息记录计算真实统计数据
-function computeStats(messages: ChatMessage[], createdAt: string, updatedAt: string) {
+interface InterviewTurnRow {
+  role: 'interviewer' | 'candidate';
+  content: string;
+  created_at: string;
+}
+
+async function computeStats(
+  client: SupabaseClient,
+  userId: string,
+  sessionId: number,
+  messages: ChatMessage[],
+  createdAt: string,
+  updatedAt: string,
+) {
+  const { data: turnRows, error: turnError } = await client
+    .from('interview_turns')
+    .select('role, content, created_at')
+    .eq('session_id', sessionId)
+    .eq('user_id', userId)
+    .order('turn_index');
+  const turns = !turnError && turnRows && turnRows.length > 0
+    ? turnRows as InterviewTurnRow[]
+    : messages.map((message) => ({
+      role: message.role,
+      content: message.content,
+      created_at: message.ts ? new Date(message.ts).toISOString() : '',
+    }));
+  const { count: questionCount, error: questionError } = await client
+    .from('interview_questions')
+    .select('id', { count: 'exact', head: true })
+    .eq('session_id', sessionId)
+    .eq('user_id', userId);
   const candidate = messages.filter((m) => m.role === 'candidate');
-  const interviewers = messages.filter((m) => m.role === 'interviewer');
-  const totalWords = candidate.reduce((s, m) => s + (m.content?.length || 0), 0);
+  const candidateTurns = turns.filter((turn) => turn.role === 'candidate');
+  const totalCharacters = candidateTurns.reduce((sum, turn) => sum + turn.content.length, 0);
 
   // 时长：优先消息时间戳首尾差，否则用会话创建/更新时间
-  const tsList = messages.map((m) => m.ts).filter((t): t is number => typeof t === 'number');
+  const tsList = turns.map((turn) => Date.parse(turn.created_at)).filter((value) => Number.isFinite(value));
   let durationSec: number;
   if (tsList.length >= 2) {
     durationSec = Math.max(0, Math.round((Math.max(...tsList) - Math.min(...tsList)) / 1000));
@@ -68,11 +78,13 @@ function computeStats(messages: ChatMessage[], createdAt: string, updatedAt: str
 
   // 平均反应速度：候选人消息与其上一条面试官消息的时间差
   const responseTimes: number[] = [];
-  for (let i = 1; i < messages.length; i++) {
-    const cur = messages[i];
-    const prev = messages[i - 1];
-    if (cur.role === 'candidate' && prev.role === 'interviewer' && cur.ts && prev.ts) {
-      const dt = (cur.ts - prev.ts) / 1000;
+  for (let i = 1; i < turns.length; i++) {
+    const cur = turns[i];
+    const prev = turns[i - 1];
+    const currentTs = Date.parse(cur.created_at);
+    const previousTs = Date.parse(prev.created_at);
+    if (cur.role === 'candidate' && prev.role === 'interviewer' && Number.isFinite(currentTs) && Number.isFinite(previousTs)) {
+      const dt = (currentTs - previousTs) / 1000;
       if (dt > 0 && dt < 3600) responseTimes.push(dt);
     }
   }
@@ -82,89 +94,88 @@ function computeStats(messages: ChatMessage[], createdAt: string, updatedAt: str
 
   return {
     durationSec,
-    totalWords,
-    turns: candidate.length,
-    probes: interviewers.length, // 面试官提问/追问总次数
+    totalCharacters,
+    turns: candidateTurns.length || candidate.length,
+    questions: questionError || questionCount === null
+      ? turns.filter((turn) => turn.role === 'interviewer').length
+      : questionCount,
     avgResponseSec,
   };
 }
 
-// 从 LLM 输出中容错提取 JSON 对象
-function extractJson(text: string): InterviewReport | null {
+function extractJson(text: string): unknown | null {
   const start = text.indexOf('{');
   if (start < 0) return null;
-  const raw = text.slice(start);
-  // 完整解析优先
+  const end = text.lastIndexOf('}');
+  if (end < start) return null;
   try {
-    return JSON.parse(raw) as InterviewReport;
-  } catch {
-    // 继续走抢救流程
-  }
-  // 截断抢救：LLM 输出达到 token 上限时 JSON 不完整，
-  // 回退到上一个完整元素边界并补全未闭合括号，保住已生成的 verdict/committee/radar 等主体
-  return salvageJson(raw) as InterviewReport | null;
-}
-
-// 清理 LLM 常见格式瑕疵：尾逗号
-function parseLoose(json: string): unknown | null {
-  try {
-    return JSON.parse(json.replace(/,\s*([}\]])/g, '$1'));
+    return JSON.parse(text.slice(start, end + 1));
   } catch {
     return null;
   }
 }
 
-// 截断 JSON 抢救：扫描括号栈（跳过字符串内容），回退未完成的尾部片段后按栈补全闭合
-function salvageJson(raw: string): unknown | null {
-  const scan = (end: number): { stack: string[]; lastSafe: number } => {
-    const stack: string[] = [];
-    let inStr = false;
-    let escaped = false;
-    let lastSafe = -1;
-    for (let i = 0; i < end; i++) {
-      const ch = raw[i];
-      if (inStr) {
-        if (escaped) escaped = false;
-        else if (ch === '\\') escaped = true;
-        else if (ch === '"') inStr = false;
-        continue;
-      }
-      if (ch === '"') { inStr = true; continue; }
-      if (ch === '{' || ch === '[') { stack.push(ch); continue; }
-      if (ch === '}' || ch === ']') {
-        if (!stack.pop()) return { stack: [], lastSafe: -2 }; // 括号不平衡，放弃
-        lastSafe = i; // 一个完整元素的边界，可在此安全截断
-      }
-    }
-    return { stack, lastSafe };
-  };
+const gradeSchema = z.enum(['A+', 'A', 'A-', 'B+', 'B', 'B-', 'C+', 'C', 'C-', 'D']);
+const reportText = z.string().trim().min(1).max(4_000);
+const reportSchema = z.object({
+  verdict: z.object({
+    pass: z.boolean(),
+    vote: z.string().trim().min(1).max(40),
+    grade: gradeSchema,
+    hireLevel: z.enum(['Strong Hire', 'Hire', 'Lean Hire', 'No Hire']),
+    headline: reportText.max(500),
+  }).strict(),
+  committee: z.array(z.object({
+    interviewerId: z.number().int().positive(),
+    tags: z.array(z.string().trim().min(1).max(80)).min(1).max(5),
+    grade: gradeSchema,
+    attitude: z.string().trim().min(1).max(80),
+    comment: reportText,
+    keyMoment: z.object({ question: reportText, answer: reportText, note: reportText.max(800) }).strict(),
+  }).strict()).min(1).max(4),
+  radar: z.array(z.object({
+    dimension: z.string().trim().min(1).max(80),
+    score: z.number().int().min(0).max(100),
+    grade: gradeSchema,
+    diagnosis: reportText.max(800),
+  }).strict()).length(6),
+  highlights: z.object({
+    mistakes: z.array(z.object({ title: reportText.max(200), scene: reportText, consequence: reportText, coach: reportText }).strict()).min(1).max(2),
+    best: z.object({ title: reportText.max(200), scene: reportText, effect: reportText, coach: reportText }).strict(),
+  }).strict(),
+  actionPlan: z.object({
+    immediate: z.array(reportText.max(800)).min(1).max(5),
+    practice: z.array(reportText.max(800)).min(1).max(4),
+    reading: z.array(reportText.max(800)).min(1).max(4),
+  }).strict(),
+  annotations: z.array(z.object({
+    msgIndex: z.number().int().min(0), label: z.string().trim().min(1).max(100), note: reportText.max(800),
+  }).strict()).min(1).max(8),
+}).strict();
 
-  const { stack, lastSafe } = scan(raw.length);
-  if (lastSafe === -2) return null;
-  if (stack.length === 0) {
-    // 结构完整但含非法内容：截取到最后一个闭合括号再试
-    return lastSafe >= 0 ? parseLoose(raw.slice(0, lastSafe + 1)) : null;
-  }
-  if (lastSafe < 0) return null; // 连一个完整元素都没有，无法抢救
-  // 回退到上一个完整元素边界，补全该点仍未闭合的括号
-  const { stack: remaining } = scan(lastSafe + 1);
-  let fixed = raw.slice(0, lastSafe + 1);
-  for (let i = remaining.length - 1; i >= 0; i--) {
-    fixed += remaining[i] === '{' ? '}' : ']';
-  }
-  return parseLoose(fixed);
-}
+type StoredInterviewReport = z.infer<typeof reportSchema> & {
+  version: number;
+  mode: string;
+  metrics: Record<string, unknown>;
+  coach: Record<string, unknown>;
+  committee: Array<z.infer<typeof reportSchema>['committee'][number] & {
+    name: string;
+    company: string;
+    round: number;
+    roleLabel: string;
+    archetypeLabel: string;
+  }>;
+};
+type StoredCommitteeItem = StoredInterviewReport['committee'][number];
 
 export async function POST(request: NextRequest) {
   try {
     const auth = await getAuthContext(request);
     if (!auth) return unauthorizedResponse();
     const client = auth.client;
-    const { sessionId, language = 'zh', eliminatedRound } = await request.json();
-
-    if (!sessionId) {
-      return new Response(JSON.stringify({ error: '缺少必要参数' }), { status: 400 });
-    }
+    const parsedRequest = interviewSummaryRequestSchema.safeParse(await request.json());
+    if (!parsedRequest.success) return new Response(JSON.stringify({ error: '总结参数无效' }), { status: 400 });
+    const { sessionId, language } = parsedRequest.data;
 
     const { data: session, error: sessionError } = await client
       .from('interview_sessions')
@@ -176,6 +187,7 @@ export async function POST(request: NextRequest) {
     if (sessionError || !session) {
       return new Response(JSON.stringify({ error: '面试会话不存在' }), { status: 404 });
     }
+    const eliminatedRound = session.ended_reason === 'eliminated' ? session.current_round : null;
 
     const messages = (session.messages as ChatMessage[]) || [];
 
@@ -205,18 +217,20 @@ export async function POST(request: NextRequest) {
       return new Response(JSON.stringify({ error: '面试内容太少，无法生成报告' }), { status: 400 });
     }
 
-    const stats = computeStats(messages, session.created_at, session.updated_at);
-
-    // 历史趋势：该用户所有已完成且有分数的会话（不含本场）
-    const { data: historyRows } = await client
-      .from('interview_sessions')
-      .select('id, overall_score, report_grade, created_at')
-      .eq('user_id', auth.user.id)
-      .eq('status', 'completed')
-      .not('overall_score', 'is', null)
-      .neq('id', sessionId)
-      .order('created_at', { ascending: true })
-      .limit(10);
+    const [stats, historyResult] = await Promise.all([
+      computeStats(client, auth.user.id, sessionId, messages, session.created_at, session.updated_at),
+      // 历史趋势：该用户所有已完成且有分数的会话（不含本场）
+      client
+        .from('interview_sessions')
+        .select('id, overall_score, report_grade, created_at')
+        .eq('user_id', auth.user.id)
+        .eq('status', 'completed')
+        .not('overall_score', 'is', null)
+        .neq('id', sessionId)
+        .order('created_at', { ascending: true })
+        .limit(10),
+    ]);
+    const historyRows = historyResult.data;
     const history = (historyRows || []).map((r) => ({
       date: r.created_at,
       score: r.overall_score as number,
@@ -276,13 +290,13 @@ export async function POST(request: NextRequest) {
       const p = panel.find((x) => x.id === m.interviewerId);
       return p ? `${p.name} (${p.company})` : (language === 'en' ? 'Interviewer' : '面试官');
     };
-    const transcript = messages
+    const transcript = boundSummaryContext(messages
       .map((m, idx) => `[#${idx}] ${getInterviewerLabel(m)}: ${(m.content || '').slice(0, 600)}`)
-      .join('\n\n');
+      .join('\n\n'), SUMMARY_TRANSCRIPT_MAX_CHARS);
 
     const systemPrompt = language === 'en'
-      ? 'You are the secretary of a hiring committee at a top company. You compile brutally honest, multi-perspective evaluation reports in structured JSON. Each interviewer speaks in their own persona voice. You are sharp, specific and never generic.'
-      : '你是顶级公司面试委员会的记录秘书，负责以结构化 JSON 输出多视角评议报告。每位面试官以自己的人设口吻发言。你尖锐、具体、毫不客气，就像真实的大厂内部评议。';
+      ? `You are the secretary of a hiring committee at a top company. You compile brutally honest, multi-perspective evaluation reports in structured JSON. Each interviewer speaks in their own persona voice. You are sharp, specific and never generic.\n\n${untrustedBusinessDataPolicy('en')}`
+      : `你是顶级公司面试委员会的记录秘书，负责以结构化 JSON 输出多视角评议报告。每位面试官以自己的人设口吻发言。你尖锐、具体、毫不客气，就像真实的大厂内部评议。\n\n${untrustedBusinessDataPolicy('zh')}`;
 
     const jsonSpec = language === 'en'
       ? `Output ONLY a single JSON object (no markdown fences, no extra text) with EXACTLY this structure:
@@ -315,76 +329,81 @@ export async function POST(request: NextRequest) {
       ? `A ${isGauntlet ? `${rounds}-round gauntlet` : 'single-round'} mock interview (${session.interview_type}) is complete.${eliminatedNote}
 
 Job Description:
-${session.job_description}
+${untrustedBusinessDataBlock('job_description', session.job_description || '', SUMMARY_JOB_CONTEXT_MAX_CHARS)}
 
 Interview Panel:
 ${dossier || 'One interviewer'}
 
 Transcript (messages numbered from 0):
-${transcript}
+${untrustedBusinessDataBlock('interview_transcript', transcript, SUMMARY_TRANSCRIPT_MAX_CHARS)}
 
 ${jsonSpec}
 
-Requirements: committee array must cover EVERY panel member in round order; every interviewer's voice must match their persona; be brutally specific, cite real transcript moments; keep each comment under 120 words to ensure complete JSON output.`
+Requirements: committee array must cover EVERY panel member in round order; every interviewer's voice must match their persona; cite real transcript moments. Keep the complete JSON compact: 1-2 short sentences per comment, 1 mistake, 3 annotations, exactly 3 immediate actions, 2 practice drills and 2 reading items.`
       : `一场${isGauntlet ? `${rounds}轮闯关` : '单轮'}模拟面试（${session.interview_type}）已结束。${eliminatedNote}
 
 岗位描述：
-${session.job_description}
+${untrustedBusinessDataBlock('job_description', session.job_description || '', SUMMARY_JOB_CONTEXT_MAX_CHARS)}
 
 面试委员会成员：
 ${dossier || '一位面试官'}
 
 面试记录（消息序号从 0 开始）：
-${transcript}
+${untrustedBusinessDataBlock('interview_transcript', transcript, SUMMARY_TRANSCRIPT_MAX_CHARS)}
 
 ${jsonSpec}
 
-要求：committee 数组必须按轮次顺序覆盖委员会【每一位】成员；每位面试官口吻必须符合其人设；评议尖锐具体，引用真实记录瞬间；每条评语控制在 120 字以内，确保 JSON 完整输出。`;
+要求：committee 数组必须按轮次顺序覆盖委员会【每一位】成员；每位面试官口吻必须符合其人设，并引用真实记录瞬间。完整 JSON 必须紧凑：每条评语 1-2 句短句、致命失误只写 1 条、标注恰好 3 条、立即行动恰好 3 条、专项练习 2 条、阅读建议 2 条。`;
 
-    const llmClient = createTextProviderClient({ requestHeaders: request.headers });
+    const llmClient = createTextProviderClient({ requestHeaders: request.headers, timeoutMs: 32_000 });
     let fullContent = '';
 
     const readableStream = new ReadableStream({
       async start(controller) {
         try {
-          const stream = llmClient.stream([
+          controller.enqueue(encoder.encode(`data: ${JSON.stringify({ phase: 'writing' })}\n\n`));
+          await consumeTrackedTextStream(llmClient, [
             { role: 'system', content: systemPrompt },
             { role: 'user', content: userPrompt },
-          ], { temperature: 0.7 });
+          ], {
+            temperature: 0.45,
+            thinking: 'disabled',
+            responseFormat: { name: 'interview_summary', schema: { type: 'object' } },
+          }, {
+            userId: auth.user.id,
+            feature: 'interview_summary',
+            resumeId: session.resume_id,
+            interviewSessionId: sessionId,
+            metadata: { language, eliminated_round: eliminatedRound ?? null },
+          }, (text) => {
+            fullContent += text;
+            controller.enqueue(encoder.encode(`data: ${JSON.stringify({ content: text })}\n\n`));
+          });
 
-          for await (const chunk of stream) {
-            if (chunk.content) {
-              const text = chunk.content.toString();
-              fullContent += text;
-              controller.enqueue(encoder.encode(`data: ${JSON.stringify({ content: text })}\n\n`));
-            }
-          }
 
-          const report = extractJson(fullContent);
-          if (!report || !report.verdict || !Array.isArray(report.committee) || report.committee.length === 0) {
+          const parsedReport = reportSchema.safeParse(extractJson(fullContent));
+          if (!parsedReport.success) {
             controller.enqueue(encoder.encode(`data: ${JSON.stringify({ error: '报告解析失败，请重试' })}\n\n`));
             controller.close();
             return;
           }
-
-          // 截断抢救可能导致尾部字段缺失：兜底默认值，保证报告可用
-          report.radar = Array.isArray(report.radar) ? report.radar : [];
-          report.highlights = report.highlights && typeof report.highlights === 'object'
-            ? report.highlights
-            : { mistakes: [], best: { title: '', scene: '', effect: '', coach: '' } };
-          report.highlights.mistakes = Array.isArray(report.highlights.mistakes) ? report.highlights.mistakes : [];
-          report.actionPlan = report.actionPlan && typeof report.actionPlan === 'object'
-            ? report.actionPlan
-            : { immediate: [], practice: [], reading: [] };
-          report.actionPlan.immediate = Array.isArray(report.actionPlan.immediate) ? report.actionPlan.immediate : [];
-          report.actionPlan.practice = Array.isArray(report.actionPlan.practice) ? report.actionPlan.practice : [];
-          report.actionPlan.reading = Array.isArray(report.actionPlan.reading) ? report.actionPlan.reading : [];
-          report.annotations = Array.isArray(report.annotations) ? report.annotations : [];
-
-          // 回填面试官静态信息，防止 LLM 编造
-          report.committee = report.committee.map((c) => {
-            const p = panel.find((x) => x.id === c.interviewerId) || panel[0];
-            if (!p) return c;
+          const rawReport = parsedReport.data;
+          const panelIds = new Set(panel.map((member) => member.id));
+          const reportIds = rawReport.committee.map((member) => member.interviewerId);
+          const hasExpectedCommittee = panelIds.size === reportIds.length
+            && reportIds.length === new Set(reportIds).size
+            && reportIds.every((id) => panelIds.has(id));
+          const hasValidAnnotations = rawReport.annotations.every((annotation) => annotation.msgIndex < messages.length);
+          if (!hasExpectedCommittee || !hasValidAnnotations) {
+            controller.enqueue(encoder.encode(`data: ${JSON.stringify({ error: '报告引用与本场面试不一致，请重试' })}\n\n`));
+            controller.close();
+            return;
+          }
+          // Attach trusted static panel data after model output passes schema validation.
+          const committee: StoredCommitteeItem[] = rawReport.committee.map((c) => {
+            const p = panel.find((x) => x.id === c.interviewerId);
+            // `hasExpectedCommittee` above proves this path is unreachable for valid data.
+            if (!p) throw new Error('报告引用了未知面试官');
             return {
               ...c,
               interviewerId: p.id,
@@ -395,18 +414,25 @@ ${jsonSpec}
               archetypeLabel: p.archetypeLabel,
             };
           });
+          const report: StoredInterviewReport = {
+            ...rawReport,
+            committee,
+            version: 1,
+            mode: session.evaluation_mode || 'dual',
+            metrics: { ...stats },
+            coach: {
+              diagnosis: rawReport.highlights,
+              actionPlan: rawReport.actionPlan,
+              annotations: rawReport.annotations,
+            },
+          };
 
           // 综合得分：雷达均分（与等级映射取较高一致性的均分）
           const radarScores = (report.radar || []).map((r) => r.score).filter((s) => typeof s === 'number');
-          const gradeScore = GRADE_SCORE[report.verdict.grade] ?? null;
+          const gradeScore = GRADE_SCORE[report.verdict.grade];
           const overallScore = radarScores.length
             ? Math.round(radarScores.reduce((a, b) => a + b, 0) / radarScores.length)
             : gradeScore;
-
-          // 等级钳制：LLM 输出枚举外等级（如 F/E）时按均分反推合法等级
-          if (!report.verdict.grade || !(report.verdict.grade in GRADE_SCORE) || report.verdict.grade === 'F') {
-            report.verdict.grade = scoreToGrade(overallScore ?? 60);
-          }
 
           await client
             .from('interview_sessions')

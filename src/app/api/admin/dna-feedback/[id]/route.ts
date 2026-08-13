@@ -3,12 +3,12 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { getSupabaseClient } from '@/storage/database/supabase-client';
 import { getCompanyDNA } from '@/lib/company-dna-service';
-import { hasValidAdminSession } from '@/lib/admin-auth';
+import { recordAdminAuditEvent, recordAdminAuditFailure } from '@/lib/admin-audit';
+import { ADMIN_PERMISSIONS, requireAdminPermission } from '@/lib/admin-permissions';
 
 export async function GET(request: NextRequest, { params }: { params: Promise<{ id: string }> }) {
-  if (!hasValidAdminSession(request)) {
-    return NextResponse.json({ error: '需要管理员权限' }, { status: 401 });
-  }
+  const permissionError = requireAdminPermission(request, ADMIN_PERMISSIONS.feedbackRead);
+  if (permissionError) return permissionError;
 
   const { id } = await params;
   const client = getSupabaseClient();
@@ -43,9 +43,8 @@ export async function GET(request: NextRequest, { params }: { params: Promise<{ 
 }
 
 export async function PATCH(request: NextRequest, { params }: { params: Promise<{ id: string }> }) {
-  if (!hasValidAdminSession(request)) {
-    return NextResponse.json({ error: '需要管理员权限' }, { status: 401 });
-  }
+  const permissionError = requireAdminPermission(request, ADMIN_PERMISSIONS.feedbackReview);
+  if (permissionError) return permissionError;
 
   const { id } = await params;
   const client = getSupabaseClient();
@@ -56,18 +55,36 @@ export async function PATCH(request: NextRequest, { params }: { params: Promise<
     return new Response(JSON.stringify({ error: '非法状态' }), { status: 400 });
   }
 
-  const { error } = await client
+  const { data: beforeData } = await client
+    .from('interview_feedback')
+    .select('id,session_id,user_id,company,status,review_notes,dna_version')
+    .eq('id', id)
+    .maybeSingle();
+
+  const { data: updatedData, error } = await client
     .from('interview_feedback')
     .update({
       ...(status ? { status } : {}),
       ...(reviewNotes !== undefined ? { review_notes: String(reviewNotes).slice(0, 2000) } : {}),
       updated_at: new Date().toISOString(),
     })
-    .eq('id', id);
+    .eq('id', id)
+    .select('id,session_id,user_id,company,status,review_notes,dna_version')
+    .maybeSingle();
 
   if (error) {
+    await recordAdminAuditFailure({ request, action: 'dna_feedback.review', resourceType: 'interview_feedback', resourceId: id, error });
     return new Response(JSON.stringify({ error: '更新失败' }), { status: 500 });
   }
+  await recordAdminAuditEvent({
+    request,
+    action: 'dna_feedback.review',
+    resourceType: 'interview_feedback',
+    resourceId: id,
+    subjectUserId: typeof beforeData?.user_id === 'string' ? beforeData.user_id : null,
+    beforeData,
+    afterData: updatedData,
+  });
   return new Response(JSON.stringify({ success: true }), {
     headers: { 'Content-Type': 'application/json' },
   });

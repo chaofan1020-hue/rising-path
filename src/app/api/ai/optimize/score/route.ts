@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { getAuthContext, unauthorizedResponse } from '@/lib/auth-server';
 import { createTextProviderClient } from '@/lib/ai/text-provider';
+import { consumeTrackedTextStream } from '@/lib/ai-usage';
 import {
   OPTIMIZATION_SCORE_RESPONSE_SCHEMA,
   parseOptimizationScoreComparison,
@@ -71,7 +72,7 @@ ${JSON.stringify(optimization.reviewed_content || optimization.optimized_content
 
 只返回 JSON，不要其他说明文字。`;
 
-    const stream = client.stream([
+    const generated = await consumeTrackedTextStream(client, [
       { role: 'system', content: '你是严格、保守的简历评估专家。必须输出有效 JSON。' },
       { role: 'user', content: prompt },
     ], {
@@ -80,12 +81,14 @@ ${JSON.stringify(optimization.reviewed_content || optimization.optimized_content
         name: 'optimization_score_comparison',
         schema: OPTIMIZATION_SCORE_RESPONSE_SCHEMA,
       },
-    });
-
-    let raw = '';
-    for await (const chunk of stream) {
-      if (chunk.content) raw += chunk.content;
-    }
+    }, {
+      userId: auth.user.id,
+      feature: 'resume_score',
+      resumeId: optimization.resume_id,
+      jobId: optimization.job_id,
+      metadata: { optimization_id: optimization.id },
+    }, () => undefined);
+    const raw = generated.content;
 
     let comparison;
     try {

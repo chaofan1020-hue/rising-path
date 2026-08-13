@@ -1,0 +1,17 @@
+[Unit]
+Description=Liorvix full job feed reconciliation
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=oneshot
+User=liorvix
+Group=liorvix
+WorkingDirectory=/opt/liorvix
+EnvironmentFile=/opt/liorvix/.env.local
+ExecStart=/usr/bin/env corepack pnpm run reconcile:jobs -- --max-pages=1000
+TimeoutStartSec=2h
+Nice=15
+
+[Install]
+WantedBy=multi-user.target

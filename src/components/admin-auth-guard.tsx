@@ -6,6 +6,7 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/com
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Lock, Loader2 } from 'lucide-react';
+import { getSupabaseBrowserClient } from '@/lib/supabase-browser';
 
 interface AdminAuthGuardProps {
   children: React.ReactNode;
@@ -67,6 +68,33 @@ export function AdminAuthGuard({ children }: AdminAuthGuardProps) {
     setLoading(false);
   };
 
+  const handleSupabaseLogin = async () => {
+    setLoading(true);
+    setError('');
+    try {
+      const supabase = await getSupabaseBrowserClient();
+      const { data: { session } } = await supabase.auth.getSession();
+      if (!session?.access_token) {
+        setError('请先登录平台账号');
+        return;
+      }
+      const response = await fetch('/api/admin/auth', {
+        method: 'POST',
+        headers: { Authorization: `Bearer ${session.access_token}` },
+      });
+      const data = await response.json();
+      if (response.ok) {
+        setIsAuthenticated(true);
+      } else {
+        setError(data.error?.message || '该账号尚未绑定管理员权限');
+      }
+    } catch {
+      setError('管理员账号登录失败');
+    } finally {
+      setLoading(false);
+    }
+  };
+
   // 避免服务端渲染不一致
   if (!mounted) {
     return (
@@ -125,6 +153,9 @@ export function AdminAuthGuard({ children }: AdminAuthGuardProps) {
                 ) : (
                   '登录'
                 )}
+              </Button>
+              <Button type="button" variant="outline" className="w-full" disabled={loading} onClick={() => void handleSupabaseLogin()}>
+                使用已登录的 Supabase 账号
               </Button>
             </form>
           </CardContent>

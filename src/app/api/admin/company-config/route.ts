@@ -1,12 +1,12 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { getSupabaseClient } from '@/storage/database/supabase-client';
-import { hasValidAdminSession } from '@/lib/admin-auth';
+import { ADMIN_PERMISSIONS, requireAdminPermission } from '@/lib/admin-permissions';
+import { recordAdminAuditEvent, recordAdminAuditFailure } from '@/lib/admin-audit';
 
 // 获取所有公司配置
 export async function GET(request: NextRequest) {
-  if (!hasValidAdminSession(request)) {
-    return NextResponse.json({ error: '需要管理员权限' }, { status: 401 });
-  }
+  const permissionError = requireAdminPermission(request, ADMIN_PERMISSIONS.configWrite);
+  if (permissionError) return permissionError;
 
   try {
     const supabase = getSupabaseClient();
@@ -31,9 +31,8 @@ export async function GET(request: NextRequest) {
 
 // 添加或更新公司配置
 export async function POST(request: NextRequest) {
-  if (!hasValidAdminSession(request)) {
-    return NextResponse.json({ error: '需要管理员权限' }, { status: 401 });
-  }
+  const permissionError = requireAdminPermission(request, ADMIN_PERMISSIONS.configWrite);
+  if (permissionError) return permissionError;
 
   try {
     const supabase = getSupabaseClient();
@@ -84,6 +83,15 @@ export async function POST(request: NextRequest) {
         return NextResponse.json({ error: '更新失败: ' + error.message }, { status: 500 });
       }
 
+      await recordAdminAuditEvent({
+        request,
+        action: 'company_config.update',
+        resourceType: 'company_config',
+        resourceId: existing.id,
+        metadata: { company_name },
+        afterData: { company_name, short_desc, industry, headquarters, founded_year, employees, careers_page, logo_url },
+      });
+
       return NextResponse.json({ success: true, message: '公司配置已更新' });
     } else {
       // 新增
@@ -105,18 +113,26 @@ export async function POST(request: NextRequest) {
         return NextResponse.json({ error: '添加失败' }, { status: 500 });
       }
 
+      await recordAdminAuditEvent({
+        request,
+        action: 'company_config.create',
+        resourceType: 'company_config',
+        metadata: { company_name },
+        afterData: { company_name, short_desc, industry, headquarters, founded_year, employees, careers_page, logo_url },
+      });
+
       return NextResponse.json({ success: true, message: '公司已添加' });
     }
   } catch (error) {
+    await recordAdminAuditFailure({ request, action: 'company_config.write', resourceType: 'company_config', error });
     return NextResponse.json({ error: '服务器错误' }, { status: 500 });
   }
 }
 
 // 删除公司配置
 export async function DELETE(request: NextRequest) {
-  if (!hasValidAdminSession(request)) {
-    return NextResponse.json({ error: '需要管理员权限' }, { status: 401 });
-  }
+  const permissionError = requireAdminPermission(request, ADMIN_PERMISSIONS.configWrite);
+  if (permissionError) return permissionError;
 
   try {
     const supabase = getSupabaseClient();
@@ -136,8 +152,16 @@ export async function DELETE(request: NextRequest) {
       return NextResponse.json({ error: '删除失败' }, { status: 500 });
     }
 
+    await recordAdminAuditEvent({
+      request,
+      action: 'company_config.delete',
+      resourceType: 'company_config',
+      resourceId: id,
+    });
+
     return NextResponse.json({ success: true });
   } catch (error) {
+    await recordAdminAuditFailure({ request, action: 'company_config.delete', resourceType: 'company_config', error });
     return NextResponse.json({ error: '服务器错误' }, { status: 500 });
   }
 }

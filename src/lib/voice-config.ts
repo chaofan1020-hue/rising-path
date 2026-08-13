@@ -3,12 +3,15 @@ import {
   type Interviewer,
   type InterviewerArchetype,
 } from './interviewers';
+import type { InterviewVoiceSource, InterviewVoiceStyle } from './interview-company-context';
 
 export interface InterviewerVoiceConfig {
   voice: string;
   speechRate: number;
   loudnessRate: number;
   pauseMs: number;
+  voiceStyle: InterviewVoiceStyle;
+  voiceSource: InterviewVoiceSource;
 }
 
 export type VoiceLanguage = 'zh' | 'en';
@@ -93,13 +96,17 @@ const EN_GENDER_POOLS: Record<'female' | 'male', string[]> = {
 };
 
 const SPEECH_PROFILES: Record<InterviewerArchetype, Omit<InterviewerVoiceConfig, 'voice'>> = {
-  ice_tech: { speechRate: -5, loudnessRate: 0, pauseMs: 240 },
-  pressure_finance: { speechRate: 15, loudnessRate: 5, pauseMs: 160 },
-  warm_mentor: { speechRate: 5, loudnessRate: 0, pauseMs: 280 },
-  creative_eclectic: { speechRate: 10, loudnessRate: 2, pauseMs: 220 },
-  culture_guardian: { speechRate: 0, loudnessRate: 0, pauseMs: 300 },
-  silent_executive: { speechRate: -10, loudnessRate: 0, pauseMs: 420 },
+  ice_tech: { speechRate: -5, loudnessRate: 0, pauseMs: 240, voiceStyle: 'analytical', voiceSource: 'job_fallback' },
+  pressure_finance: { speechRate: 15, loudnessRate: 5, pauseMs: 160, voiceStyle: 'direct', voiceSource: 'job_fallback' },
+  warm_mentor: { speechRate: 5, loudnessRate: 0, pauseMs: 280, voiceStyle: 'warm', voiceSource: 'job_fallback' },
+  creative_eclectic: { speechRate: 10, loudnessRate: 2, pauseMs: 220, voiceStyle: 'creative', voiceSource: 'job_fallback' },
+  culture_guardian: { speechRate: 0, loudnessRate: 0, pauseMs: 300, voiceStyle: 'balanced', voiceSource: 'job_fallback' },
+  silent_executive: { speechRate: -10, loudnessRate: 0, pauseMs: 420, voiceStyle: 'executive', voiceSource: 'job_fallback' },
 };
+
+function semanticVoice(language: VoiceLanguage, style: InterviewVoiceStyle, gender: Interviewer['gender']): string {
+  return `interview_${language}_${style}_${gender}`;
+}
 
 function pickVoice(pool: string[], taken: Set<string>, fallbackPool: string[], id: number): string {
   let voice = pool.find((v) => !taken.has(v));
@@ -111,7 +118,8 @@ function pickVoice(pool: string[], taken: Set<string>, fallbackPool: string[], i
 
 export function assignSessionVoiceConfigs(
   interviewers: Interviewer[],
-  language: VoiceLanguage
+  language: VoiceLanguage,
+  companyVoice?: { style: InterviewVoiceStyle; source: InterviewVoiceSource },
 ): Map<number, InterviewerVoiceConfig> {
   const taken = new Set<string>();
   const assigned = new Map<number, InterviewerVoiceConfig>();
@@ -121,11 +129,17 @@ export function assignSessionVoiceConfigs(
   for (const it of interviewers) {
     const persona = getPersona(it.id);
     const gender = it.gender === 'female' ? 'female' : 'male';
-    const prefs = voiceMap[persona.archetype][gender];
-    const voice = pickVoice(prefs, taken, genderPools[gender], it.id);
+    const prefs = companyVoice
+      ? [semanticVoice(language, companyVoice.style, gender)]
+      : voiceMap[persona.archetype][gender];
+    const voice = companyVoice
+      ? prefs[0]
+      : pickVoice(prefs, taken, genderPools[gender], it.id);
     assigned.set(it.id, {
       voice,
       ...SPEECH_PROFILES[persona.archetype],
+      voiceStyle: companyVoice?.style ?? SPEECH_PROFILES[persona.archetype].voiceStyle,
+      voiceSource: companyVoice?.source ?? 'job_fallback',
     });
   }
   return assigned;
@@ -134,21 +148,24 @@ export function assignSessionVoiceConfigs(
 export function getInterviewerVoiceConfig(
   it: Interviewer,
   language: VoiceLanguage,
-  sessionInterviewers?: Interviewer[]
+  sessionInterviewers?: Interviewer[],
+  companyVoice?: { style: InterviewVoiceStyle; source: InterviewVoiceSource },
 ): InterviewerVoiceConfig {
   if (sessionInterviewers && sessionInterviewers.some((s) => s.id === it.id)) {
-    const assigned = assignSessionVoiceConfigs(sessionInterviewers, language).get(it.id);
+    const assigned = assignSessionVoiceConfigs(sessionInterviewers, language, companyVoice).get(it.id);
     if (assigned) return assigned;
   }
   const persona = getPersona(it.id);
   const gender = it.gender === 'female' ? 'female' : 'male';
   const voiceMap = language === 'en' ? EN_VOICE_MAP : ZH_VOICE_MAP;
   const genderPools = language === 'en' ? EN_GENDER_POOLS : ZH_GENDER_POOLS;
-  const pool = voiceMap[persona.archetype][gender];
+  const pool = companyVoice ? [semanticVoice(language, companyVoice.style, gender)] : voiceMap[persona.archetype][gender];
   const taken = new Set<string>();
-  const voice = pickVoice(pool, taken, genderPools[gender], it.id);
+  const voice = companyVoice ? pool[0] : pickVoice(pool, taken, genderPools[gender], it.id);
   return {
     voice,
     ...SPEECH_PROFILES[persona.archetype],
+    voiceStyle: companyVoice?.style ?? SPEECH_PROFILES[persona.archetype].voiceStyle,
+    voiceSource: companyVoice?.source ?? 'job_fallback',
   };
 }

@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { getAuthContext, unauthorizedResponse } from '@/lib/auth-server';
+import { fieldMappingsRequestSchema } from '@/lib/application-contracts';
 
 // 获取字段映射列表
 export async function GET(request: NextRequest) {
@@ -44,15 +45,12 @@ export async function POST(request: NextRequest) {
     const auth = await getAuthContext(request);
     if (!auth) return unauthorizedResponse();
     const client = auth.client;
-    const body = await request.json();
-    const { mappings } = body;
-
-    if (!mappings || !Array.isArray(mappings)) {
-      return NextResponse.json({ error: '无效的映射数据' }, { status: 400 });
-    }
+    const parsed = fieldMappingsRequestSchema.safeParse(await request.json());
+    if (!parsed.success) return NextResponse.json({ error: '无效的映射数据' }, { status: 400 });
+    const { mappings } = parsed.data;
 
     // 准备插入的数据
-    const insertData = mappings.map((m: { company_pattern: string; field_name: string; target_field: string }) => ({
+    const insertData = mappings.map((m) => ({
       user_id: auth.user.id,
       company_pattern: m.company_pattern,
       field_name: m.field_name,
@@ -85,33 +83,12 @@ export async function PUT(request: NextRequest) {
     const auth = await getAuthContext(request);
     if (!auth) return unauthorizedResponse();
     const client = auth.client;
-    const body = await request.json();
-    const { mappings } = body;
-
-    // 先删除旧的映射
-    await client
-      .from('field_mappings')
-      .delete()
-      .eq('user_id', auth.user.id);
-
-    // 批量插入新映射
-    if (mappings && mappings.length > 0) {
-      const insertData = mappings.map((m: { company_pattern: string; field_name: string; target_field: string }) => ({
-        user_id: auth.user.id,
-        company_pattern: m.company_pattern,
-        field_name: m.field_name,
-        target_field: m.target_field,
-        is_active: true,
-      }));
-
-      const { error } = await client
-        .from('field_mappings')
-        .insert(insertData);
-
-      if (error) {
-        throw new Error(`更新字段映射失败: ${error.message}`);
-      }
-    }
+    const parsed = fieldMappingsRequestSchema.safeParse(await request.json());
+    if (!parsed.success) return NextResponse.json({ error: '无效的映射数据' }, { status: 400 });
+    const { error } = await client.rpc('replace_field_mappings', {
+      p_mappings: parsed.data.mappings,
+    });
+    if (error) throw new Error(`更新字段映射失败: ${error.message}`);
 
     return NextResponse.json({ success: true });
   } catch (error) {

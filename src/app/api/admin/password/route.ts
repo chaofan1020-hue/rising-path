@@ -5,6 +5,7 @@ import {
   getClearedAdminSessionCookie,
   hasValidAdminSession,
 } from '@/lib/admin-auth';
+import { ADMIN_PERMISSIONS, requireAdminPermission } from '@/lib/admin-permissions';
 import { getClientIp } from '@/lib/auth-server';
 import { consumeAuthRateLimit } from '@/lib/auth-security';
 import {
@@ -14,6 +15,7 @@ import {
   isStrongAdminPasswordInput,
   verifyAdminPasswordHash,
 } from '@/lib/admin-password';
+import { recordAdminAuditEvent, recordAdminAuditFailure } from '@/lib/admin-audit';
 
 // 获取当前密码
 export async function GET(request: NextRequest) {
@@ -124,9 +126,8 @@ export async function POST(request: NextRequest) {
 // 修改密码
 export async function PUT(request: NextRequest) {
   try {
-    if (!hasValidAdminSession(request)) {
-      return NextResponse.json({ error: '需要管理员权限' }, { status: 401 });
-    }
+    const permissionError = requireAdminPermission(request, ADMIN_PERMISSIONS.configWrite);
+    if (permissionError) return permissionError;
 
     const client = getSupabaseClient();
     const body = await request.json();
@@ -195,12 +196,21 @@ export async function PUT(request: NextRequest) {
       }
     }
 
+    await recordAdminAuditEvent({
+      request,
+      action: 'admin_password.change',
+      resourceType: 'admin_password',
+      resourceId: existingPassword?.id || 'new',
+      metadata: { rehashed_existing_record: Boolean(existingPassword?.id) },
+    });
+
     return NextResponse.json({ 
       success: true,
       message: '密码修改成功'
     });
   } catch (error) {
     console.error('Error updating password:', error);
+    await recordAdminAuditFailure({ request, action: 'admin_password.change', resourceType: 'admin_password', error });
     return NextResponse.json(
       { error: '修改密码失败' },
       { status: 500 }

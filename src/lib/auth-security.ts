@@ -19,7 +19,7 @@ const localBuckets = new Map<string, LocalBucket>();
 const MAX_LOCAL_BUCKETS = 10_000;
 
 function isProductionEnvironment(): boolean {
-  return process.env.NODE_ENV === 'production' || process.env.COZE_PROJECT_ENV === 'PROD';
+  return process.env.NODE_ENV === 'production';
 }
 
 function shouldUseDevelopmentRateLimits(): boolean {

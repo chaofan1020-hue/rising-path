@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { getSupabaseClient } from '@/storage/database/supabase-client';
-import { hasValidAdminSession } from '@/lib/admin-auth';
+import { ADMIN_PERMISSIONS, requireAdminPermission } from '@/lib/admin-permissions';
+import { recordAdminAuditEvent, recordAdminAuditFailure } from '@/lib/admin-audit';
 
 // 解析岗位描述为结构化数据
 function parseJobDescription(text: string, title: string, company: string): {
@@ -91,9 +92,8 @@ function parseJobDescription(text: string, title: string, company: string): {
 
 export async function POST(request: NextRequest) {
   try {
-    if (!hasValidAdminSession(request)) {
-      return NextResponse.json({ error: '需要管理员权限' }, { status: 401 });
-    }
+    const permissionError = requireAdminPermission(request, ADMIN_PERMISSIONS.jobsWrite);
+    if (permissionError) return permissionError;
 
     const supabase = getSupabaseClient();
 
@@ -145,13 +145,16 @@ export async function POST(request: NextRequest) {
       await new Promise(resolve => setTimeout(resolve, 100));
     }
 
-    return NextResponse.json({
+    const result = {
       message: '岗位描述解析完成',
       processed,
       updated,
-    });
+    };
+    await recordAdminAuditEvent({ request, action: 'job.structured_generate', resourceType: 'job', metadata: result });
+    return NextResponse.json(result);
   } catch (error) {
     console.error('Parse error:', error);
+    await recordAdminAuditFailure({ request, action: 'job.structured_generate', resourceType: 'job', error });
     return NextResponse.json(
       { error: '解析失败', details: String(error) },
       { status: 500 }

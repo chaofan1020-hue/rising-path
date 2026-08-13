@@ -1,6 +1,7 @@
 import type { SupabaseClient } from '@supabase/supabase-js';
 
 type Sponsorship = 'yes' | 'no' | 'unknown';
+const EXISTING_JOB_LOOKUP_BATCH_SIZE = 20;
 
 export interface JobSyncRecord {
   title: string;
@@ -20,6 +21,11 @@ export interface JobSyncRecord {
   sponsorship: Sponsorship;
   is_active: boolean;
   is_closed: boolean;
+  source_system?: string | null;
+  external_job_id?: string | null;
+  valid_through?: string | null;
+  missing_from_feed_at?: string | null;
+  missing_feed_checks?: number;
 }
 
 export interface JobSyncRejection {
@@ -47,6 +53,37 @@ function chunks<T>(values: T[], size: number): T[][] {
   return output;
 }
 
+function errorMessage(error: unknown): string {
+  if (error instanceof Error) return error.message;
+  return String(error || '未知数据库错误');
+}
+
+async function retryDatabaseOperation<T extends { error: unknown }>(
+  operation: () => PromiseLike<T>,
+  label: string,
+  attempts = 3,
+): Promise<T> {
+  let lastResult: T | undefined;
+  for (let attempt = 1; attempt <= attempts; attempt += 1) {
+    try {
+      const result = await operation();
+      if (!result.error) return result;
+      lastResult = result;
+    } catch (error) {
+      if (attempt === attempts) {
+        throw new Error(`${label}失败: ${errorMessage(error)}`);
+      }
+    }
+
+    if (attempt < attempts) {
+      await new Promise((resolve) => setTimeout(resolve, attempt * 1_000));
+    }
+  }
+
+  if (lastResult) return lastResult;
+  throw new Error(`${label}失败`);
+}
+
 function key(url: string | null): string | null {
   if (!url) return null;
   try {
@@ -63,13 +100,20 @@ export async function syncJobRecords(
   client: SupabaseClient,
   jobs: JobSyncRecord[],
   _mode: 'create' | 'sync' = 'sync',
+  options: { verifiedAt?: string } = {},
 ): Promise<JobSyncResult> {
   const result: JobSyncResult = { created: 0, updated: 0, skipped: 0, failed: 0, invalidJobs: [] };
   const urls = [...new Set(jobs.map((job) => job.job_url).filter((url): url is string => Boolean(url)))];
   const existing = new Map<string, ExistingJob>();
 
-  for (const batch of chunks(urls, 100)) {
-    const { data, error } = await client.from('jobs').select('id, job_url').in('job_url', batch);
+  // job_url can be very long for ATS portals. Keep each PostgREST `in()`
+  // query comfortably below proxy request-line limits instead of sending one
+  // oversized URL that surfaces as a generic fetch failure.
+  for (const batch of chunks(urls, EXISTING_JOB_LOOKUP_BATCH_SIZE)) {
+    const { data, error } = await retryDatabaseOperation(
+      () => client.from('jobs').select('id, job_url').in('job_url', batch),
+      '查询岗位',
+    );
     if (error) throw new Error(`查询岗位失败: ${error.message}`);
     for (const row of (data ?? []) as ExistingJob[]) {
       const normalized = key(row.job_url);
@@ -90,9 +134,12 @@ export async function syncJobRecords(
     else inserts.push(job);
   }
 
-  const timestamp = new Date().toISOString();
+  const timestamp = options.verifiedAt || new Date().toISOString();
   for (const batch of chunks(inserts, 500)) {
-    const { error } = await client.from('jobs').insert(batch.map((job) => ({ ...job, last_verified_at: timestamp })));
+    const { error } = await retryDatabaseOperation(
+      () => client.from('jobs').insert(batch.map((job) => ({ ...job, last_verified_at: timestamp }))),
+      '创建岗位',
+    );
     if (error) {
       result.failed += batch.length;
       result.invalidJobs.push({ index: result.invalidJobs.length + 1, reason: `写入岗位失败: ${error.message}`, data: { count: batch.length } });
@@ -102,10 +149,13 @@ export async function syncJobRecords(
   }
 
   for (const batch of chunks(updates, 25)) {
-    const outcomes = await Promise.all(batch.map(async ({ id, job }) => client
-      .from('jobs')
-      .update({ ...job, last_verified_at: timestamp, updated_at: timestamp })
-      .eq('id', id)));
+    const outcomes = await Promise.all(batch.map(async ({ id, job }) => retryDatabaseOperation(
+      () => client
+        .from('jobs')
+        .update({ ...job, last_verified_at: timestamp, updated_at: timestamp })
+        .eq('id', id),
+      '更新岗位',
+    )));
     for (const outcome of outcomes) {
       if (outcome.error) {
         result.failed += 1;
@@ -118,4 +168,3 @@ export async function syncJobRecords(
 
   return result;
 }
-

@@ -12,6 +12,8 @@ export interface TTSResult {
   audio: ArrayBuffer;
   contentType: string;
   provider: TTSProvider;
+  model: string;
+  requestId: string | null;
 }
 
 export interface TTSProviderClient {
@@ -57,11 +59,24 @@ function isCartesiaVoiceId(value: string): boolean {
   return value.startsWith('cartesia:') || /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(value);
 }
 
+function configuredSemanticVoice(language: 'zh' | 'en', speaker?: string): string | null {
+  const match = speaker?.trim().match(/^interview_(zh|en)_(analytical|direct|warm|executive|creative|balanced)_(female|male)$/);
+  if (!match || match[1] !== language) return null;
+  const [, , style, gender] = match;
+  const prefix = `CARTESIA_VOICE_${language.toUpperCase()}_${style.toUpperCase()}`;
+  return process.env[`${prefix}_${gender.toUpperCase()}`]?.trim()
+    || process.env[prefix]?.trim()
+    || null;
+}
+
 export function getCartesiaVoiceId(language: 'zh' | 'en', speaker?: string): string {
   const requested = speaker?.trim();
   if (requested && isCartesiaVoiceId(requested)) {
     return requested.startsWith('cartesia:') ? requested.slice('cartesia:'.length) : requested;
   }
+
+  const semanticVoice = configuredSemanticVoice(language, requested);
+  if (semanticVoice) return semanticVoice.startsWith('cartesia:') ? semanticVoice.slice('cartesia:'.length) : semanticVoice;
 
   const configured = language === 'en'
     ? process.env.CARTESIA_VOICE_EN?.trim()
@@ -137,6 +152,8 @@ function createCartesiaClient(timeoutMs: number): TTSProviderClient {
         audio: await response.arrayBuffer(),
         contentType: response.headers.get('content-type')?.split(';')[0] || 'audio/mpeg',
         provider: 'cartesia',
+        model,
+        requestId: response.headers.get('x-request-id') || response.headers.get('x-cartesia-request-id'),
       };
     },
   };

@@ -15,6 +15,11 @@ function normalizeLanguage(language?: string): string | undefined {
   return value && /^[a-z]{2,3}$/.test(value) ? value : undefined;
 }
 
+function readNumberEnv(name: string, fallback: number, min: number, max: number): number {
+  const value = Number(process.env[name]?.trim());
+  return Number.isFinite(value) && value >= min && value <= max ? value : fallback;
+}
+
 function getRealtimeEndpoint(): string {
   const configured = process.env.ALIBABA_ASR_REALTIME_URL?.trim();
   const workspaceId = process.env.ALIBABA_ASR_WORKSPACE_ID?.trim();
@@ -85,8 +90,11 @@ export function buildRealtimeSessionUpdate(language?: string): string {
         : {},
       turn_detection: {
         type: 'server_vad',
-        threshold: 0.2,
-        silence_duration_ms: 400,
+        // The previous values treated keyboard clicks and room noise as speech.
+        // The browser has a matching local gate; both sides now favor a stable
+        // answer boundary over aggressively splitting a sentence.
+        threshold: readNumberEnv('ALIBABA_ASR_REALTIME_VAD_THRESHOLD', 0.42, 0.1, 0.95),
+        silence_duration_ms: readNumberEnv('ALIBABA_ASR_REALTIME_SILENCE_MS', 850, 300, 3000),
       },
     },
   });

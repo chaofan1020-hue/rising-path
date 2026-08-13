@@ -1,6 +1,8 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { getSupabaseClient } from '@/storage/database/supabase-client';
-import { hasValidAdminSession } from '@/lib/admin-auth';
+import { sanitizeJobContent } from '@/lib/job-content';
+import { ADMIN_PERMISSIONS, requireAdminPermission } from '@/lib/admin-permissions';
+import { recordAdminAuditEvent, recordAdminAuditFailure } from '@/lib/admin-audit';
 
 // 本地 logo 缓存
 let localLogosCache: Record<string, string> = {};
@@ -138,11 +140,11 @@ export async function GET(
     // 获取 company logo
     const logo_url = data.company ? await getCompanyLogo(data.company) : null;
 
-    return NextResponse.json({ 
-      job: {
+    return NextResponse.json({
+      job: sanitizeJobContent({
         ...data,
-        logo_url
-      }
+        logo_url,
+      }),
     });
   } catch (error) {
     console.error('Error fetching job:', error);
@@ -158,15 +160,15 @@ export async function PUT(
   { params }: { params: Promise<{ id: string }> }
 ) {
   try {
-    if (!hasValidAdminSession(request)) {
-      return NextResponse.json({ error: '需要管理员权限' }, { status: 401 });
-    }
+    const permissionError = requireAdminPermission(request, ADMIN_PERMISSIONS.jobsWrite);
+    if (permissionError) return permissionError;
     const client = getSupabaseClient();
     const { id } = await params;
     if (!/^\d+$/.test(id)) {
       return NextResponse.json({ error: '岗位 ID 无效' }, { status: 400 });
     }
-    const body = await request.json();
+    const body = sanitizeJobContent(await request.json());
+    const { data: beforeData } = await client.from('jobs').select('*').eq('id', id).maybeSingle();
 
     const { data, error } = await client
       .from('jobs')
@@ -182,9 +184,19 @@ export async function PUT(
       throw new Error(`更新岗位失败: ${error.message}`);
     }
 
+    await recordAdminAuditEvent({
+      request,
+      action: 'job.update',
+      resourceType: 'job',
+      resourceId: id,
+      beforeData,
+      afterData: data,
+    });
+
     return NextResponse.json({ job: data });
   } catch (error) {
     console.error('Error updating job:', error);
+    await recordAdminAuditFailure({ request, action: 'job.update', resourceType: 'job', error });
     return NextResponse.json(
       { error: '更新岗位失败' },
       { status: 500 }
@@ -197,14 +209,15 @@ export async function DELETE(
   { params }: { params: Promise<{ id: string }> }
 ) {
   try {
-    if (!hasValidAdminSession(request)) {
-      return NextResponse.json({ error: '需要管理员权限' }, { status: 401 });
-    }
+    const permissionError = requireAdminPermission(request, ADMIN_PERMISSIONS.jobsWrite);
+    if (permissionError) return permissionError;
     const client = getSupabaseClient();
     const { id } = await params;
     if (!/^\d+$/.test(id)) {
       return NextResponse.json({ error: '岗位 ID 无效' }, { status: 400 });
     }
+
+    const { data: beforeData } = await client.from('jobs').select('id,title,company,region,direction,audience,is_active').eq('id', id).maybeSingle();
 
     // 先删除关联的 ai_matches 记录
     const aiMatchesDelete = await client
@@ -237,9 +250,18 @@ export async function DELETE(
       throw new Error(`删除岗位失败: ${error.message}`);
     }
 
+    await recordAdminAuditEvent({
+      request,
+      action: 'job.delete',
+      resourceType: 'job',
+      resourceId: id,
+      beforeData,
+    });
+
     return NextResponse.json({ success: true });
   } catch (error) {
     console.error('Error deleting job:', error);
+    await recordAdminAuditFailure({ request, action: 'job.delete', resourceType: 'job', error });
     return NextResponse.json(
       { error: '删除岗位失败' },
       { status: 500 }

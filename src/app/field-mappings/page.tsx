@@ -99,6 +99,7 @@ function FieldSource({ source }: { source?: ProfileSource }) {
 
 function AutoApplicationContent() {
   const [profile, setProfile] = useState<ApplicationProfile | null>(null);
+  const [profileVersion, setProfileVersion] = useState(0);
   const [source, setSource] = useState<Record<string, ProfileSource>>({});
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
@@ -118,6 +119,7 @@ function AutoApplicationContent() {
       const data = await res.json();
       setProfile(data.profile);
       setSource(data.fieldStats || data.source || {});
+      setProfileVersion(typeof data.version === 'number' ? data.version : 0);
     } catch (error) {
       console.error('Failed to load application profile:', error);
     } finally {
@@ -155,12 +157,13 @@ function AutoApplicationContent() {
       const res = await apiFetch('/api/application-profile', {
         method: 'PUT',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ profile }),
+        body: JSON.stringify({ profile, version: profileVersion }),
       });
       const data = await res.json();
       if (data.profile) {
         setProfile(data.profile);
         setSource(data.fieldStats || data.source || {});
+        setProfileVersion(typeof data.version === 'number' ? data.version : profileVersion + 1);
         setSaveDone(true);
       } else {
         alert(data.error || '保存失败');

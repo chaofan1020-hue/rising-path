@@ -12,7 +12,7 @@
 - **UI 组件**: shadcn/ui (基于 Radix UI)
 - **Styling**: Tailwind CSS 4
 - **数据库**: Supabase (PostgreSQL)
-- **AI能力**: coze-coding-dev-sdk (LLM)
+- **AI能力**: Alibaba Model Studio（文本/ASR）+ Cartesia（TTS）
 - **存储**: S3 兼容对象存储
 
 ## 目录结构

@@ -1,6 +1,7 @@
 import PDFParser from 'pdf2json';
 import mammoth from 'mammoth';
 import { AIProviderConfigError, createTextProviderClient, type TextProviderClient } from '@/lib/ai/text-provider';
+import { invokeTrackedTextGeneration } from '@/lib/ai-usage';
 import {
   deriveSegmentation,
 } from '@/lib/user-segmentation';
@@ -385,10 +386,13 @@ ${content.slice(0, BASIC_PROFILE_INPUT_LIMIT)}
 只返回JSON，不要其他说明文字。如果某项信息不存在，返回null或空数组。对于地区，优先提取留学目的地或求职意向地区。`;
 
     const response = await withTimeout(
-      llmClient.invoke([
+      invokeTrackedTextGeneration(llmClient, [
         { role: 'system', content: '你是一个专业的简历解析助手，擅长从简历中提取结构化信息，特别是教育背景相关的地区、学校、学历等信息。' },
         { role: 'user', content: prompt },
-      ], { temperature: 0.3, thinking: 'disabled' }),
+      ], { temperature: 0.3, thinking: 'disabled' }, {
+        feature: 'resume_parse',
+        metadata: { input_characters: content.length },
+      }),
       timeoutMs,
       '简历基础字段提取超时',
     );
@@ -562,7 +566,16 @@ interface ResumeProfileExtraction {
   confidence: ResumeProfileConfidence;
 }
 
-async function extractResumeProfile(content: string, pages: number): Promise<ResumeProfileExtraction | null> {
+export interface ResumeParseContext {
+  userId?: string | null;
+  resumeId?: number | null;
+}
+
+async function extractResumeProfile(
+  content: string,
+  pages: number,
+  context: ResumeParseContext = {},
+): Promise<ResumeProfileExtraction | null> {
   if (!content.trim()) return null;
 
   try {
@@ -627,10 +640,15 @@ ${content.slice(0, PROFILE_INPUT_LIMIT)}
 只返回 JSON，不要任何说明文字。`;
 
     const response = await withTimeout(
-      llmClient.invoke([
+      invokeTrackedTextGeneration(llmClient, [
         { role: 'system', content: '你是专业的简历结构化引擎，只输出合法 JSON。' },
         { role: 'user', content: prompt },
-      ], { temperature: 0.2, thinking: 'disabled' }),
+      ], { temperature: 0.2, thinking: 'disabled' }, {
+        userId: context.userId,
+        feature: 'resume_profile',
+        resumeId: context.resumeId,
+        metadata: { pages, input_characters: content.length },
+      }),
       timeoutMs,
       '简历画像提取超时',
     );
@@ -686,8 +704,12 @@ ${content.slice(0, PROFILE_INPUT_LIMIT)}
   }
 }
 
-export async function parseResumeText(content: string, pages: number): Promise<ResumeParseResult> {
-  const extraction = await extractResumeProfile(content, pages);
+export async function parseResumeText(
+  content: string,
+  pages: number,
+  context: ResumeParseContext = {},
+): Promise<ResumeParseResult> {
+  const extraction = await extractResumeProfile(content, pages, context);
   if (!extraction) {
     return {
       parsed_content: content,
@@ -714,7 +736,8 @@ export async function parseResumeText(content: string, pages: number): Promise<R
 export async function parseResumeFile(
   buffer: Buffer,
   options: ResumeFileOptions,
+  context: ResumeParseContext = {},
 ): Promise<ResumeParseResult> {
   const extracted = await extractTextFromResumeFile(buffer, options);
-  return parseResumeText(extracted.text, extracted.pages);
+  return parseResumeText(extracted.text, extracted.pages, context);
 }

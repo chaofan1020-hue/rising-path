@@ -1,4 +1,6 @@
 import type { Metadata } from 'next';
+import { AdminAuthGuard } from '@/components/admin-auth-guard';
+import { AdminShell } from '@/components/admin-shell';
 
 export const metadata: Metadata = {
   title: 'Liorvix后台管理',
@@ -9,5 +11,9 @@ export default function AdminLayout({
 }: {
   children: React.ReactNode;
 }) {
-  return children;
+  return (
+    <AdminAuthGuard>
+      <AdminShell>{children}</AdminShell>
+    </AdminAuthGuard>
+  );
 }

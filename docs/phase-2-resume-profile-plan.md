@@ -560,4 +560,4 @@ Step 0 基线
 - Step 6 已完成第一版：AI Match 和 Optimize 服务端增加已确认画像门禁。
 - Step 6 已推进：AI Match、Optimize 和模拟面试服务端增加已确认画像门禁；新面试会话保存 `resume_id + resume_profile_version`，继续面试读取创建时的版本快照，避免重新解析后静默换标尺。新增 `0007_interview_resume_profile_snapshot.sql`。
 - Step 7 已推进：画像服务的超时、无效 JSON、空画像会落到可读的 `processing_error`，前端已展示并提供重试；私有存储桶已在当前 Supabase 创建并验证上传/下载/删除，`0006` 迁移已实际应用并验证 4 条对象级 RLS 策略。Playwright CLI 已可在当前 Windows 环境运行，`/login` 已完成无控制台错误回归；当前仍缺真实 AI 成功响应下的 `needs_confirmation -> ready` 浏览器回归。
-- Step 7 当前收尾：画像解析启动前会校验 `COZE_WORKLOAD_IDENTITY_API_KEY` 和 `COZE_INTEGRATION_MODEL_BASE_URL`，缺失配置会立即失败并写入可读错误；画像请求使用 `RESUME_PROFILE_LLM_TIMEOUT_MS`（默认 45 秒）、关闭思考链且不自动重试，避免配置错误导致长时间等待；新增 `pnpm run test:phase2`，已覆盖分层推导、AI 配置快速失败和确认门禁。下一步是补真实 Coze 配置后的成功路径回归，并记录最终验收结果。
+- Step 7 当前收尾：画像解析启动前会校验 Alibaba Model Studio 配置，缺失配置会立即失败并写入可读错误；画像请求使用 `RESUME_PROFILE_LLM_TIMEOUT_MS`（默认 45 秒）、关闭思考链且不自动重试，避免配置错误导致长时间等待；新增 `pnpm run test:phase2`，已覆盖分层推导、AI 配置快速失败和确认门禁。下一步是补真实 Alibaba 配置后的成功路径回归，并记录最终验收结果。

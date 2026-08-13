@@ -3,6 +3,7 @@ import { buildRegionBlock, resolveRegionKey } from '@/lib/region-dna';
 import type { UserSegmentation } from '@/lib/user-segmentation';
 import { getAuthContext, unauthorizedResponse } from '@/lib/auth-server';
 import { createTextProviderClient } from '@/lib/ai/text-provider';
+import { consumeTrackedTextStream } from '@/lib/ai-usage';
 import { requireConfirmedResume } from '@/lib/resume-access';
 import {
   OPTIMIZED_RESUME_RESPONSE_SCHEMA,
@@ -11,6 +12,7 @@ import {
   parseOptimizedResume,
   type OptimizedResumeData,
 } from '@/lib/optimized-resume-contract';
+import { untrustedBusinessDataBlock, untrustedBusinessDataPolicy } from '@/lib/prompt-safety';
 
 // 地区名称映射
 const REGION_NAMES: Record<string, string> = {
@@ -110,28 +112,41 @@ export async function POST(request: NextRequest) {
       returning_intern: '该候选人处于实习转正阶段：突出实习期间的独立交付与团队依赖度。',
     };
     const segmentSection = seg
-      ? `\n\n【候选人分层】${seg.summary}${stageTips[seg.careerStage] ? `\n${stageTips[seg.careerStage]}` : ''}`
+      ? untrustedBusinessDataBlock('candidate_segmentation', {
+        summary: seg.summary,
+        career_stage_tip: stageTips[seg.careerStage] || null,
+      })
       : '';
 
     // 构建岗位描述部分（如果获取到了）
     const jdSection = jdContent
-      ? `\n\n【目标岗位的真实描述和要求】\n${jdContent}\n\n请严格按照上述岗位描述中的要求来优化简历，确保简历内容与岗位需求高度匹配。`
+      ? untrustedBusinessDataBlock('target_job_description', jdContent)
       : '';
 
     // 构建优化建议部分
-    const suggestionsSection = suggestions 
-      ? `\n\n参考优化建议：\n${suggestions}\n\n请根据以上建议重点优化简历的相应部分。`
+    const suggestionsSection = suggestions
+      ? untrustedBusinessDataBlock('user_optimization_suggestions', suggestions)
       : '';
 
     const prompt = `你是一个专业的简历优化专家，擅长针对ATS（Applicant Tracking System）系统优化简历。
 
 请根据以下信息优化简历：
 
-目标公司：${targetCompany || '通用'}
-目标岗位：${targetPosition}${regionSection}${segmentSection}${jdSection}
+${untrustedBusinessDataPolicy('zh')}
 
-原简历内容：
-${resumeContent}${suggestionsSection}
+${untrustedBusinessDataBlock('optimization_target', {
+  company: targetCompany || '通用',
+  position: targetPosition,
+  region: targetRegion || null,
+})}${regionSection}
+
+${segmentSection}
+
+${jdSection}
+
+${untrustedBusinessDataBlock('original_resume', resumeContent)}
+
+${suggestionsSection}
 
 重要：请保持与原简历相同的语言！如果原简历是中文，则优化后的简历全部使用中文；如果原简历是英文，则优化后的简历全部使用英文。
 
@@ -196,8 +211,8 @@ ${resumeContent}${suggestionsSection}
 
 只返回JSON，不要其他说明文字。`;
 
-    const stream = llmClient.stream([
-      { role: 'system', content: '你是一个专业的简历优化专家，擅长针对ATS系统优化简历，提高简历通过率。请始终以有效的JSON格式输出，并保持与原简历相同的语言。' },
+    const generated = await consumeTrackedTextStream(llmClient, [
+      { role: 'system', content: `你是一个专业的简历优化专家，擅长针对ATS系统优化简历，提高简历通过率。请始终以有效的JSON格式输出，并保持与原简历相同的语言。${untrustedBusinessDataPolicy('zh')}` },
       { role: 'user', content: prompt },
     ], {
       temperature: 0.7,
@@ -205,14 +220,14 @@ ${resumeContent}${suggestionsSection}
         name: 'optimized_resume',
         schema: OPTIMIZED_RESUME_RESPONSE_SCHEMA,
       },
-    });
-
-    let optimizedContent = '';
-    for await (const chunk of stream) {
-      if (chunk.content) {
-        optimizedContent += chunk.content.toString();
-      }
-    }
+    }, {
+      userId: auth.user.id,
+      feature: 'resume_optimize',
+      resumeId: resume.id,
+      jobId: targetJob?.id || null,
+      metadata: { target_position: targetPosition, target_company: targetCompany || null },
+    }, () => undefined);
+    const optimizedContent = generated.content;
 
     let parsed: OptimizedResumeData;
     try {

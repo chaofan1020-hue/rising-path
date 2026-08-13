@@ -49,7 +49,7 @@ export function getClientIp(request: Request): string {
 
 export function getAuthRedirectOrigin(request: NextRequest): string {
   const isProductionLike =
-    process.env.NODE_ENV === 'production' || process.env.COZE_PROJECT_ENV === 'PROD';
+    process.env.NODE_ENV === 'production';
   const configuredOrigin = process.env.AUTH_SITE_URL?.trim();
   if (configuredOrigin) {
     let parsed: URL;

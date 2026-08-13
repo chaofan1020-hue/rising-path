@@ -1,8 +1,10 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { getSupabaseClient } from '@/storage/database/supabase-client';
 import { detectSponsorship } from '@/lib/utils';
-import { hasValidAdminSession } from '@/lib/admin-auth';
+import { ADMIN_PERMISSIONS, requireAdminPermission } from '@/lib/admin-permissions';
+import { sanitizeJobContent } from '@/lib/job-content';
 import { targetRegionPostgrestClauses } from '@/lib/job-region-scope';
+import { recordAdminAuditEvent, recordAdminAuditFailure } from '@/lib/admin-audit';
 
 // 公司域名映射
 const companyDomains: Record<string, string> = {
@@ -56,39 +58,6 @@ let localLogosCache: Record<string, string> = {};
 let lastCacheTime = 0;
 const CACHE_DURATION = 5 * 60 * 1000; // 5 分钟
 
-// 获取公司 logo URL（优先本地，fallback 到 Clearbit）
-async function getCompanyLogo(company: string): Promise<string | null> {
-  // 先检查缓存
-  if (localLogosCache[company]) {
-    return localLogosCache[company];
-  }
-  
-  // 尝试从数据库获取本地 logo
-  try {
-    const supabase = getSupabaseClient();
-    const { data } = await supabase
-      .from('company_logos')
-      .select('logo_url')
-      .eq('company_name', company)
-      .single();
-    
-    if (data?.logo_url) {
-      localLogosCache[company] = data.logo_url;
-      return data.logo_url;
-    }
-  } catch (error) {
-    // 忽略错误，继续使用 Clearbit
-  }
-  
-  // 使用 Clearbit API
-  const domain = companyDomains[company];
-  if (domain) {
-    return `https://logo.clearbit.com/${domain}`;
-  }
-  const cleanName = company.toLowerCase().replace(/\s+/g, '');
-  return `https://logo.clearbit.com/${cleanName}.com`;
-}
-
 // 刷新 logo 缓存
 async function refreshLogoCache(): Promise<void> {
   try {
@@ -132,28 +101,39 @@ const regionMapping: Record<string, string> = {
   'Sydney, NSW': '澳大利亚',
   'Melbourne, VIC': '澳大利亚',
   'Australia': '澳大利亚',
-  // 新加坡
-  'Singapore': '新加坡',
   // 香港
   'Hong Kong': '香港',
-  // 日本
-  'Tokyo, Japan': '日本',
-  'Japan': '日本',
-  // 欧洲
-  'Germany': '德国',
-  'France': '法国',
-  'Europe': '欧洲',
 };
 
 const regionKeywords: Record<string, string[]> = {
-  '美国': ['United States', 'USA', 'U.S.'],
-  '英国': ['United Kingdom', 'UK', 'England', 'Scotland', 'Wales'],
-  '加拿大': ['Canada'],
-  '澳大利亚': ['Australia'],
-  '新加坡': ['Singapore'],
-  '香港': ['Hong Kong'],
-  '日本': ['Japan'],
-  '欧洲': ['Germany', 'France', 'Italy', 'Spain', 'Netherlands', 'Ireland', 'Switzerland', 'Belgium', 'Sweden', 'Denmark', 'Norway', 'Finland', 'Austria', 'Portugal', 'Europe'],
+  // Keep these lists broad because the feed contains both country-qualified
+  // locations ("New York, NY, United States") and city-only locations.
+  '美国': [
+    'United States', 'United States of America', 'USA', 'U.S.',
+    'New York', 'San Francisco', 'Los Angeles', 'Seattle', 'Chicago', 'Boston',
+    'Austin', 'Dallas', 'Houston', 'Atlanta', 'Denver', 'Miami', 'Philadelphia',
+    'Washington', 'Jersey City', 'Newark', 'Palo Alto', 'Mountain View', 'Arlington',
+    'Raleigh', 'Charlotte', 'Tampa', 'Orlando', 'Columbus', 'Wilmington',
+    'Fort Lauderdale', 'Milwaukee', 'Colorado Springs', 'Baton Rouge', 'Fresno',
+    'San Antonio', 'Jacksonville', 'San Diego', 'Irvine', 'Princeton', 'St. Louis',
+    'Minneapolis', 'Detroit', 'Phoenix', 'Portland', 'Salt Lake City', 'Nashville',
+    'Pittsburgh', 'Cleveland', 'Baltimore', 'Remote - United States',
+  ],
+  '英国': [
+    'United Kingdom', 'UK', 'U.K.', 'England', 'Scotland', 'Wales', 'Northern Ireland',
+    'London', 'Bournemouth', 'Bristol', 'Manchester', 'Edinburgh', 'Glasgow',
+    'Birmingham', 'Leeds', 'Cardiff', 'Belfast', 'Cambridge', 'Oxford', 'Southampton',
+    'Reading', 'Guildford', 'Crawley', 'Aberdeen', 'Newcastle', 'Sheffield', 'Liverpool',
+  ],
+  '加拿大': [
+    'Canada', 'Toronto', 'Vancouver', 'Ottawa', 'Montreal', 'Mississauga', 'Quebec',
+    'Calgary', 'Edmonton', 'Waterloo', 'Halifax', 'Winnipeg', 'Victoria',
+  ],
+  '澳大利亚': [
+    'Australia', 'Sydney', 'Melbourne', 'Brisbane', 'Perth', 'Adelaide', 'Canberra',
+    'Ballarat', 'Gold Coast', 'Newcastle, NSW', 'Hobart', 'Darwin',
+  ],
+  '香港': ['Hong Kong', 'Kowloon', 'Hong Kong Island'],
 };
 
 // 方向映射：将子方向映射到父方向（SDE 包含所有工程方向）
@@ -190,6 +170,13 @@ function getDirectionCategory(direction: string): string {
   return directionMapping[direction] || direction;
 }
 
+function getLogoFallback(company: string): string | null {
+  const domain = companyDomains[company];
+  if (domain) return `https://logo.clearbit.com/${domain}`;
+  const cleanName = company.toLowerCase().replace(/\s+/g, '');
+  return cleanName ? `https://logo.clearbit.com/${cleanName}.com` : null;
+}
+
 function expandMappedValues(values: string[], mapping: Record<string, string>): string[] {
   const expanded = new Set(values);
   for (const [specific, category] of Object.entries(mapping)) {
@@ -205,32 +192,6 @@ function escapePostgrestSearchTerm(value: string): string {
     .replace(/[(),]/g, (character) => `\\${character}`)
     .replace(/%/g, '\\%')
     .replace(/_/g, '\\_');
-}
-
-// 判断岗位是否匹配选中的地区（支持包含关系）
-function isRegionMatch(jobRegion: string, selectedRegions: string[]): boolean {
-  if (selectedRegions.length === 0) return true;
-  
-  for (const selected of selectedRegions) {
-    const jobCategory = getRegionCategory(jobRegion);
-    if (jobCategory === selected) return true;
-    if (jobRegion === selected) return true;
-  }
-  return false;
-}
-
-// 判断岗位是否匹配选中的方向（支持包含关系）
-function isDirectionMatch(jobDirection: string, selectedDirections: string[]): boolean {
-  if (selectedDirections.length === 0) return true;
-  
-  for (const selected of selectedDirections) {
-    // 如果选中的方向等于岗位的方向
-    if (jobDirection === selected) return true;
-    // 如果岗位方向属于选中方向的大类（SDE 包含 Fullstack/Backend/Frontend/Mobile）
-    const jobCategory = getDirectionCategory(jobDirection);
-    if (jobCategory === selected) return true;
-  }
-  return false;
 }
 
 export async function GET(request: NextRequest) {
@@ -256,16 +217,17 @@ export async function GET(request: NextRequest) {
 
     let query = client
       .from('jobs')
-      .select('*, company_info:company_config(id, company_name, careers_page, logo_url, short_desc, full_desc)', { count: 'exact' })
+      .select('id,title,company,region,direction,audience,job_type,description,requirements,salary_range,job_url,sponsorship,is_active,is_closed,created_at,updated_at', { count: 'exact' })
       .order('created_at', { ascending: false });
 
     // 默认只显示可投递岗位；管理员或筛选器可以显式请求全部/已关闭岗位。
     if (status === 'closed') query = query.eq('is_active', false);
     else if (status !== 'all') query = query.eq('is_active', true);
 
-    if (regionScope !== 'all') {
-      query = query.or(targetRegionPostgrestClauses().join(','));
-    }
+    // A selected market already scopes the query to that market. Applying a
+    // second `.or()` here would create duplicate PostgREST `or` parameters
+    // and can silently replace the user's region filter, so only add the
+    // default target scope when no explicit region was selected.
 
     // 受众单选筛选
     if (audience && audience !== '全部') {
@@ -305,6 +267,8 @@ export async function GET(request: NextRequest) {
         }
       }
       if (regionClauses.size > 0) query = query.or([...regionClauses].join(','));
+    } else if (regionScope !== 'all') {
+      query = query.or(targetRegionPostgrestClauses().join(','));
     }
 
     if (directions.length > 0) {
@@ -335,14 +299,23 @@ export async function GET(request: NextRequest) {
     }
 
     // 为每个岗位添加分类信息和 logo
-    const jobsWithLogo = await Promise.all(
-      filteredJobs.map(async (job: { region: string; direction: string; company: string; [key: string]: unknown }) => ({
-        ...job,
-        region_category: getRegionCategory(job.region),
-        direction_category: getDirectionCategory(job.direction),
-        logo_url: await getCompanyLogo(job.company)
-      }))
-    );
+    const companies = [...new Set(filteredJobs.map((job) => String((job as { company?: unknown }).company || '')).filter(Boolean))];
+    const missingCompanies = companies.filter((company) => !localLogosCache[company]);
+    if (missingCompanies.length > 0) {
+      const { data: logoRows } = await client
+        .from('company_logos')
+        .select('company_name, logo_url')
+        .in('company_name', missingCompanies);
+      for (const row of logoRows || []) {
+        if (row.logo_url) localLogosCache[row.company_name] = row.logo_url;
+      }
+    }
+    const jobsWithLogo = filteredJobs.map((job: { region: string; direction: string; company: string; [key: string]: unknown }) => ({
+      ...sanitizeJobContent(job),
+      region_category: getRegionCategory(job.region),
+      direction_category: getDirectionCategory(job.direction),
+      logo_url: localLogosCache[job.company] || getLogoFallback(job.company),
+    }));
 
     return NextResponse.json({
       jobs: jobsWithLogo,
@@ -365,9 +338,8 @@ export async function GET(request: NextRequest) {
 
 export async function POST(request: NextRequest) {
   try {
-    if (!hasValidAdminSession(request)) {
-      return NextResponse.json({ error: '需要管理员权限' }, { status: 401 });
-    }
+    const permissionError = requireAdminPermission(request, ADMIN_PERMISSIONS.jobsWrite);
+    if (permissionError) return permissionError;
     const client = getSupabaseClient();
     const body = await request.json();
 
@@ -406,9 +378,18 @@ export async function POST(request: NextRequest) {
       throw new Error(`创建岗位失败: ${error.message}`);
     }
 
+    await recordAdminAuditEvent({
+      request,
+      action: 'job.create',
+      resourceType: 'job',
+      resourceId: data.id,
+      afterData: data,
+    });
+
     return NextResponse.json({ job: data });
   } catch (error) {
     console.error('Error creating job:', error);
+    await recordAdminAuditFailure({ request, action: 'job.create', resourceType: 'job', error });
     return NextResponse.json(
       { error: '创建岗位失败' },
       { status: 500 }

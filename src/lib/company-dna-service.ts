@@ -3,6 +3,7 @@ import { getSupabaseClient } from '@/storage/database/supabase-client';
 import type { SupabaseClient } from '@supabase/supabase-js';
 import { CompanyDNA, findCuratedDNA, normalizeCompanyName } from './company-dna';
 import { createTextProviderClient } from './ai/text-provider';
+import { invokeTrackedTextGeneration } from './ai-usage';
 import { extractFirstJsonObject } from './json-extract';
 
 export type DNASource = 'curated' | 'cached' | 'generated' | 'manual';
@@ -11,6 +12,16 @@ export interface DNAResult {
   dna: CompanyDNA;
   source: DNASource;
   version: number;
+}
+
+export interface CompanyDNAUsageContext {
+  userId?: string | null;
+  interviewSessionId?: number | null;
+}
+
+export interface CompanyDNALookupOptions {
+  /** Preview callers can read curated/cache data but must never incur LLM cost. */
+  allowGeneration?: boolean;
 }
 
 // LLM 生成基因的 JSON 结构校验（宽松：关键字段存在即可，缺省补默认值）
@@ -60,7 +71,11 @@ function sanitizeGeneratedDNA(raw: unknown, company: string): CompanyDNA | null 
   };
 }
 
-async function generateDNAWithLLM(company: string, headers: Headers): Promise<CompanyDNA | null> {
+async function generateDNAWithLLM(
+  company: string,
+  headers: Headers,
+  usageContext: CompanyDNAUsageContext = {},
+): Promise<CompanyDNA | null> {
   const llmClient = createTextProviderClient({ requestHeaders: headers });
   const prompt = `你是面试研究专家，精通各大公司真实的面试文化（基于公开面经、员工分享与行业共识）。
 
@@ -93,8 +108,13 @@ async function generateDNAWithLLM(company: string, headers: Headers): Promise<Co
 5. 全部用中文（公司专有名词可保留英文）。`;
 
   try {
-    const response = await llmClient.invoke([{ role: 'user', content: prompt }], {
+    const response = await invokeTrackedTextGeneration(llmClient, [{ role: 'user', content: prompt }], {
       temperature: 0.4,
+    }, {
+      userId: usageContext.userId,
+      feature: 'company_dna',
+      interviewSessionId: usageContext.interviewSessionId,
+      metadata: { company, shared_cache: true },
     });
     const content = String(response.content || '').trim();
     const jsonMatch = content.match(/```(?:json)?\s*([\s\S]*?)```/);
@@ -119,7 +139,12 @@ async function generateDNAWithLLM(company: string, headers: Headers): Promise<Co
 }
 
 // 三级获取：人工编辑版（DB 覆盖，最高优先）→ 精调库（招牌体验）→ DB 生成缓存 → LLM 生成（长尾覆盖）
-export async function getCompanyDNA(company: string, headers: Headers): Promise<DNAResult | null> {
+export async function getCompanyDNA(
+  company: string,
+  headers: Headers,
+  usageContext: CompanyDNAUsageContext = {},
+  options: CompanyDNALookupOptions = {},
+): Promise<DNAResult | null> {
   const name = company.trim();
   if (!name) return null;
 
@@ -158,8 +183,10 @@ export async function getCompanyDNA(company: string, headers: Headers): Promise<
     return { dna: dbRow.dna, source: 'cached', version: dbRow.version };
   }
 
-  // 4. LLM 生成并写回缓存
-  const generated = await generateDNAWithLLM(name, headers);
+  // 4. LLM 生成并写回缓存。设置页预览只允许走前三层，避免输入公司名
+  // 就触发外部模型调用和共享缓存写入。
+  if (options.allowGeneration === false) return null;
+  const generated = await generateDNAWithLLM(name, headers, usageContext);
   if (!generated) return null;
   let version = 1;
   try {
@@ -197,34 +224,27 @@ export async function saveManualDNA(company: string, dna: CompanyDNA, reviewNote
       return names.some((n) => n === norm);
     });
     if (existing) {
-      const nextVersion = ((existing.version as number) || 1) + 1;
-      await client
-        .from('company_dna')
-        .update({
-          dna,
-          source: 'manual',
-          manually_edited: true,
-          review_notes: reviewNotes || null,
-          version: nextVersion,
-          updated_at: new Date().toISOString(),
-        })
-        .eq('id', existing.id);
-      return { version: nextVersion };
+      const { data, error } = await client.rpc('publish_company_dna', {
+        p_company_dna_id: existing.id,
+        p_company_name: company,
+        p_aliases: dna.aliases || [],
+        p_dna: dna,
+        p_review_notes: reviewNotes || null,
+        p_published_by: 'legacy_admin_session',
+      });
+      if (error) throw new Error(error.message);
+      return { version: Number(data?.[0]?.version || ((existing.version as number) || 1) + 1) };
     }
-    const { data: inserted } = await client
-      .from('company_dna')
-      .insert({
-        company_name: company,
-        aliases: dna.aliases,
-        dna,
-        source: 'manual',
-        manually_edited: true,
-        version: 1,
-        review_notes: reviewNotes || null,
-      })
-      .select('version')
-      .single();
-    return { version: inserted?.version || 1 };
+    const { data, error } = await client.rpc('publish_company_dna', {
+      p_company_dna_id: null,
+      p_company_name: company,
+      p_aliases: dna.aliases || [],
+      p_dna: dna,
+      p_review_notes: reviewNotes || null,
+      p_published_by: 'legacy_admin_session',
+    });
+    if (error) throw new Error(error.message);
+    return { version: Number(data?.[0]?.version || 1) };
   } catch {
     return null;
   }

@@ -1,8 +1,10 @@
 import type { SupabaseClient } from '@supabase/supabase-js';
 import { syncJobRecords, type JobSyncRecord } from '@/lib/job-sync';
+import { jobHtmlToPlainText, sanitizeJobContent } from '@/lib/job-content';
 import { isTargetRegion } from '@/lib/job-region-scope';
 
 const DEFAULT_FEED_URL = 'https://hfscareer.com/collector-api/integrations/v1/jobs';
+export const JOBS_FEED_SOURCE = 'collector_feed';
 const DEFAULT_PAGE_SIZE = 500;
 const MAX_PAGES_PER_RUN = 1000;
 
@@ -49,6 +51,7 @@ export interface JobsFeedSyncResult {
   failed: number;
   next_cursor: string | null;
   has_more: boolean;
+  open_seen: number;
 }
 
 function getFeedConfig() {
@@ -58,11 +61,11 @@ function getFeedConfig() {
   }
 
   const pageSize = Number.parseInt(process.env.JOBS_FEED_PAGE_SIZE || '', 10);
-  return {
+  return sanitizeJobContent({
     url: process.env.JOBS_FEED_URL || DEFAULT_FEED_URL,
     apiKey,
     pageSize: Number.isFinite(pageSize) ? Math.min(Math.max(pageSize, 1), 500) : DEFAULT_PAGE_SIZE,
-  };
+  });
 }
 
 function text(value: unknown): string {
@@ -72,6 +75,12 @@ function text(value: unknown): string {
 function list(value: unknown): string[] {
   if (!Array.isArray(value)) return [];
   return value.map(text).filter(Boolean);
+}
+
+function chunks<T>(values: T[], size: number): T[][] {
+  const output: T[][] = [];
+  for (let index = 0; index < values.length; index += size) output.push(values.slice(index, index + size));
+  return output;
 }
 
 function inferDirection(item: JobsFeedItem): string {
@@ -102,16 +111,22 @@ function normalizeItem(item: JobsFeedItem): JobSyncRecord | null {
   const sourceUrl = text(item.source_url);
   if (!title || !company || !sourceUrl) return null;
 
-  const description = text(item.description);
+  // Normalize rich text before writing it to the shared jobs table. The feed
+  // frequently returns HTML (and sometimes encoded HTML), so keeping the raw
+  // payload here would reintroduce markup every time an existing job is synced.
+  const description = jobHtmlToPlainText(item.description);
   const required = list(item.required_skills);
   const preferred = list(item.preferred_skills);
   const location = text(item.location) || text(item.country) || '未注明';
   if (!isTargetRegion(item.location, item.country)) return null;
   const evidence = item.source_evidence ? JSON.stringify(item.source_evidence) : '';
-  const requirements = required.length > 0 ? required.join('\n') : '';
-  const niceToHave = preferred.length > 0 ? preferred.join('\n') : '';
-  const status = text(item.status).toLowerCase();
-  const closed = item.sync_action === 'close' || status === 'closed' || status === 'close';
+  const requirements = required.length > 0
+    ? required.map((value) => jobHtmlToPlainText(value)).filter(Boolean).join('\n')
+    : '';
+  const niceToHave = preferred.length > 0
+    ? preferred.map((value) => jobHtmlToPlainText(value)).filter(Boolean).join('\n')
+    : '';
+  const closed = isClosedItem(item);
 
   return {
     title: title.substring(0, 255),
@@ -131,33 +146,41 @@ function normalizeItem(item: JobsFeedItem): JobSyncRecord | null {
     sponsorship: item.visa_sponsorship === true ? 'yes' : item.visa_sponsorship === false ? 'no' : 'unknown',
     is_active: !closed,
     is_closed: closed,
+    source_system: JOBS_FEED_SOURCE,
+    external_job_id: text(item.external_job_id) || text(item.id) || null,
+    valid_through: Number.isFinite(Date.parse(text(item.valid_through))) ? new Date(text(item.valid_through)).toISOString() : null,
+    missing_from_feed_at: null,
+    missing_feed_checks: 0,
   };
 }
 
-async function fetchPage(cursor?: string, since?: string): Promise<FeedPage> {
+function isClosedItem(item: JobsFeedItem, now = Date.now()): boolean {
+  const status = text(item.status).toLowerCase();
+  if (item.sync_action === 'close' || status === 'closed' || status === 'close') return true;
+  const validThrough = Date.parse(text(item.valid_through));
+  return Number.isFinite(validThrough) && validThrough < now;
+}
+
+async function fetchPage(cursor?: string, since?: string, includeClosed = true): Promise<FeedPage> {
   const config = getFeedConfig();
-  const params = new URLSearchParams({ include_closed: 'true' });
+  const params = new URLSearchParams({ include_closed: String(includeClosed) });
   if (cursor) params.set('cursor', cursor);
   if (since) params.set('since', since);
 
   let lastError: unknown;
-  const limits = [...new Set([config.pageSize, 50, 25, 10, 1].filter((limit) => limit <= config.pageSize))];
-  const cursors: Array<string | undefined> = cursor ? [cursor] : [undefined];
-  if (cursor) {
-    try {
-      const decoded = JSON.parse(Buffer.from(cursor, 'base64url').toString('utf8')) as { updated_at?: string };
-      if (decoded.updated_at) {
-        const timestamp = Date.parse(decoded.updated_at);
-        if (Number.isFinite(timestamp)) {
-          for (const delta of [-1, 1]) {
-            cursors.push(Buffer.from(JSON.stringify({ ...decoded, updated_at: new Date(timestamp + delta).toISOString() })).toString('base64url'));
-          }
-        }
-      }
-    } catch {
-      // 游标格式由数据源定义，无法解析时继续使用原游标重试。
-    }
-  }
+  // Use the configured page size for normal operation. Smaller pages remain
+  // available for transient gateway failures or an unexpectedly oversized
+  // response, but they are no longer the primary synchronization path.
+  const limits = [...new Set([
+    config.pageSize,
+    100,
+    25,
+    10,
+    1,
+  ].filter((limit) => limit <= config.pageSize))];
+  // Keep the persisted cursor as the source of truth. Falling back to an
+  // unscoped first page after a cursor error silently replays the feed.
+  const cursors: Array<string | undefined> = [cursor];
   for (const candidateCursor of cursors) {
     if (candidateCursor) params.set('cursor', candidateCursor);
     else params.delete('cursor');
@@ -176,9 +199,21 @@ async function fetchPage(cursor?: string, since?: string): Promise<FeedPage> {
             signal: controller.signal,
           });
           if (!response.ok) {
-            throw new Error(`招聘数据源返回 HTTP ${response.status}`);
+            lastError = new Error(`招聘数据源返回 HTTP ${response.status}`);
+            // Move to a smaller page immediately on a server failure. This
+            // avoids retrying a deterministic payload-size or gateway limit
+            // while retaining the persisted cursor as the source of truth.
+            if (response.status >= 500) break;
+            throw lastError;
           }
-          return await response.json() as FeedPage;
+          const page = await response.json() as FeedPage;
+          if (cursor && page.has_more === true && page.next_cursor) {
+            if (page.next_cursor === cursor) {
+              lastError = new Error('招聘数据源游标没有前进');
+              break;
+            }
+          }
+          return page;
         } catch (error) {
           lastError = error;
           if (attempt < 3) await new Promise((resolve) => setTimeout(resolve, attempt * 2000));
@@ -193,7 +228,13 @@ async function fetchPage(cursor?: string, since?: string): Promise<FeedPage> {
 
 export async function syncJobsFeed(
   client: SupabaseClient,
-  options: { cursor?: string; since?: string; maxPages?: number } = {},
+  options: {
+    cursor?: string;
+    since?: string;
+    maxPages?: number;
+    verifiedAt?: string;
+    includeClosed?: boolean;
+  } = {},
 ): Promise<JobsFeedSyncResult> {
   const maxPages = Math.min(Math.max(options.maxPages ?? MAX_PAGES_PER_RUN, 1), MAX_PAGES_PER_RUN);
   let cursor = options.cursor;
@@ -207,29 +248,26 @@ export async function syncJobsFeed(
     failed: 0,
     next_cursor: cursor || null,
     has_more: false,
+    open_seen: 0,
   };
 
   while (hasMore && result.pages < maxPages) {
-    const page = await fetchPage(cursor, cursor ? undefined : options.since);
+    const requestedCursor = cursor;
+    const page = await fetchPage(cursor, cursor ? undefined : options.since, options.includeClosed ?? true);
     const items = Array.isArray(page.items) ? page.items : [];
     result.pages += 1;
     result.received += items.length;
 
     const openItems: JobSyncRecord[] = [];
+    const closeSources: string[] = [];
     for (const item of items) {
-      if (item.sync_action === 'close' || text(item.status).toLowerCase() === 'closed') {
+      if (isClosedItem(item)) {
         const sourceUrl = text(item.source_url);
         if (!sourceUrl) {
           result.skipped += 1;
           continue;
         }
-        const { error } = await client.from('jobs').update({
-          is_active: false,
-          is_closed: true,
-          updated_at: new Date().toISOString(),
-        }).eq('job_url', sourceUrl);
-        if (error) result.failed += 1;
-        else result.closed += 1;
+        closeSources.push(sourceUrl);
         continue;
       }
       const normalized = normalizeItem(item);
@@ -237,14 +275,36 @@ export async function syncJobsFeed(
       else result.skipped += 1;
     }
 
+    const verifiedAt = options.verifiedAt || new Date().toISOString();
+    const closePayload = {
+      is_active: false,
+      is_closed: true,
+      source_system: JOBS_FEED_SOURCE,
+      last_verified_at: verifiedAt,
+      updated_at: new Date().toISOString(),
+    };
+    for (const batch of chunks(closeSources, 100)) {
+      const { error } = await client
+        .from('jobs')
+        .update(closePayload)
+        .in('job_url', batch);
+      if (error) result.failed += batch.length;
+      else result.closed += batch.length;
+    }
+
     if (openItems.length > 0) {
-      const synced = await syncJobRecords(client, openItems, 'sync');
+      const synced = await syncJobRecords(client, openItems, 'sync', { verifiedAt });
       result.upserted += synced.created + synced.updated;
+      result.open_seen += openItems.length;
       result.failed += synced.failed;
       result.skipped += synced.skipped + synced.invalidJobs.length;
     }
 
-    cursor = page.next_cursor || undefined;
+    const nextCursor = page.next_cursor || undefined;
+    if (requestedCursor && nextCursor && nextCursor === requestedCursor) {
+      throw new Error('上游游标没有前进，已停止以避免重复同步');
+    }
+    cursor = nextCursor;
     hasMore = page.has_more === true && Boolean(cursor);
     result.next_cursor = cursor || null;
   }

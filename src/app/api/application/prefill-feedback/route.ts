@@ -1,6 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { getAuthContext, unauthorizedResponse } from '@/lib/auth-server';
-import { getSupabaseClient as getAdminSupabaseClient } from '@/storage/database/supabase-client';
 import {
   bumpFieldStats,
   DEFAULT_PROFILE,
@@ -8,24 +7,15 @@ import {
   type ApplicationProfile,
   type ProfileSourceMap,
 } from '@/lib/application-profile';
-
-interface PrefillFeedbackField {
-  fieldKey: string;
-  semanticKey?: string;
-  suggestedValue?: string;
-  finalValue?: string;
-  action: 'confirmed' | 'edited' | 'ignored';
-}
+import { prefillFeedbackRequestSchema } from '@/lib/application-contracts';
 
 export async function POST(request: NextRequest) {
   try {
     const auth = await getAuthContext(request);
     if (!auth) return unauthorizedResponse();
-    const body = await request.json();
-    const fields = Array.isArray(body.fields) ? (body.fields as PrefillFeedbackField[]) : [];
-    if (fields.length === 0) {
-      return NextResponse.json({ success: true });
-    }
+    const parsed = prefillFeedbackRequestSchema.safeParse(await request.json());
+    if (!parsed.success) return NextResponse.json({ error: '预填反馈参数无效' }, { status: 400 });
+    const { fields, jobId, domain, version: expectedVersion } = parsed.data;
 
     const { data: profileRow } = await auth.client
       .from('application_profiles')
@@ -36,16 +26,16 @@ export async function POST(request: NextRequest) {
     let profile: ApplicationProfile = profileRow?.profile || DEFAULT_PROFILE;
     let source = (profileRow?.source || {}) as ProfileSourceMap;
 
-    const admin = getAdminSupabaseClient();
+    const feedbackRows: Array<Record<string, unknown>> = [];
     for (const field of fields) {
       const semanticKey = field.semanticKey || field.fieldKey;
       const finalValue = (field.finalValue || '').trim();
       const action = field.action === 'edited' ? 'edited' : field.action === 'ignored' ? 'ignored' : 'confirmed';
 
-      await auth.client.from('prefill_feedback').insert({
+      feedbackRows.push({
         user_id: auth.user.id,
-        job_id: body.jobId || null,
-        domain: body.domain || null,
+        job_id: jobId || null,
+        domain: domain || null,
         field_key: field.fieldKey,
         semantic_key: semanticKey,
         suggested_value: field.suggestedValue || '',
@@ -60,39 +50,21 @@ export async function POST(request: NextRequest) {
         source = bumpFieldStats(source, semanticKey, 'ignore');
       }
 
-      if (body.domain) {
-        const { data: template } = await admin
-          .from('form_templates')
-          .select('id, usage_count, correction_count')
-          .ilike('domain_pattern', `%${body.domain}%`)
-          .eq('field_key', field.fieldKey)
-          .maybeSingle();
-        if (template) {
-          await admin
-            .from('form_templates')
-            .update({
-              usage_count: (template.usage_count || 0) + (action === 'confirmed' ? 1 : 0),
-              correction_count: (template.correction_count || 0) + (action === 'edited' ? 1 : 0),
-              updated_at: new Date().toISOString(),
-            })
-            .eq('id', template.id);
-        }
-      }
     }
 
-    await auth.client
-      .from('application_profiles')
-      .upsert({
-        user_id: auth.user.id,
-        resume_id: profileRow?.resume_id || null,
-        profile,
-        source,
-        field_stats: source,
-        version: (profileRow?.version || 0) + 1,
-        updated_at: new Date().toISOString(),
-      });
+    const { data: savedVersion, error: saveError } = await auth.client.rpc('apply_prefill_feedback', {
+      p_expected_version: expectedVersion,
+      p_resume_id: profileRow?.resume_id || null,
+      p_profile: profile,
+      p_source: source,
+      p_feedback: feedbackRows,
+    });
+    if (saveError) throw new Error(saveError.message);
+    if (savedVersion === null) {
+      return NextResponse.json({ error: '求职档案已更新，请刷新后重试' }, { status: 409 });
+    }
 
-    return NextResponse.json({ success: true, profile, source, fieldStats: source });
+    return NextResponse.json({ success: true, profile, source, fieldStats: source, version: savedVersion });
   } catch (error) {
     console.error('Prefill feedback error:', error);
     return NextResponse.json({ error: '保存预填反馈失败' }, { status: 500 });

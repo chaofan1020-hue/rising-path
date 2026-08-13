@@ -1,4 +1,17 @@
 import OpenAI from 'openai';
+import { randomUUID } from 'node:crypto';
+
+export type TextUsageSource = 'actual' | 'estimated' | 'unknown';
+
+export interface TextUsage {
+  provider: string;
+  model: string | null;
+  requestId: string;
+  inputTokens: number | null;
+  outputTokens: number | null;
+  totalTokens: number | null;
+  usageSource: TextUsageSource;
+}
 
 export type TextMessageRole = 'system' | 'user' | 'assistant';
 
@@ -10,6 +23,7 @@ export interface TextMessage {
 export interface TextGenerationOptions {
   temperature?: number;
   thinking?: 'disabled' | 'enabled';
+  requestId?: string;
   responseFormat?: {
     name: string;
     schema: Record<string, unknown>;
@@ -18,6 +32,7 @@ export interface TextGenerationOptions {
 
 export interface TextChunk {
   content: string;
+  usage?: TextUsage;
 }
 
 export interface TextProviderClient {
@@ -28,6 +43,8 @@ export interface TextProviderClient {
 export interface TextProviderOptions {
   requestHeaders?: Headers;
   model?: string;
+  /** A feature-specific ceiling. It may be lower than the global default. */
+  timeoutMs?: number;
 }
 
 export type AIProvider = 'alibaba';
@@ -92,6 +109,7 @@ function createAlibabaClient(timeoutMs: number, requestedModel?: string): TextPr
 
   return {
     async invoke(messages, options = {}) {
+      const requestId = options.requestId || randomUUID();
       const request = {
         model,
         messages: input(messages),
@@ -100,14 +118,28 @@ function createAlibabaClient(timeoutMs: number, requestedModel?: string): TextPr
         ...(options.thinking === 'disabled' ? { enable_thinking: false } : {}),
       };
       const response = await client.chat.completions.create(request as never);
-      return { content: response.choices[0]?.message?.content || '' };
+      const usage = response.usage;
+      return {
+        content: response.choices[0]?.message?.content || '',
+        usage: {
+          provider: 'alibaba',
+          model: response.model || model,
+          requestId: response.id || requestId,
+          inputTokens: usage?.prompt_tokens ?? null,
+          outputTokens: usage?.completion_tokens ?? null,
+          totalTokens: usage?.total_tokens ?? null,
+          usageSource: usage ? 'actual' : 'unknown',
+        },
+      };
     },
     async *stream(messages, options = {}) {
+      const requestId = options.requestId || randomUUID();
       const request = {
         model,
         messages: input(messages),
         temperature: options.temperature,
         stream: true,
+        stream_options: { include_usage: true },
         response_format: options.responseFormat ? { type: 'json_object' } : undefined,
         ...(options.thinking === 'disabled' ? { enable_thinking: false } : {}),
       };
@@ -116,13 +148,37 @@ function createAlibabaClient(timeoutMs: number, requestedModel?: string): TextPr
       );
       for await (const chunk of stream) {
         const content = chunk.choices[0]?.delta?.content;
-        if (content) yield { content };
+        const usage = chunk.usage;
+        if (content || usage) {
+          yield {
+            content: content || '',
+            ...(usage
+              ? {
+                  usage: {
+                    provider: 'alibaba',
+                    model: chunk.model || model,
+                    requestId: chunk.id || requestId,
+                    inputTokens: usage.prompt_tokens ?? null,
+                    outputTokens: usage.completion_tokens ?? null,
+                    totalTokens: usage.total_tokens ?? null,
+                    usageSource: 'actual' as const,
+                  },
+                }
+              : {}),
+          };
+        }
       }
     },
   };
 }
 
 export function createTextProviderClient(options: TextProviderOptions = {}): TextProviderClient {
-  const timeoutMs = getTimeoutMs();
+  const configuredTimeoutMs = getTimeoutMs();
+  const timeoutMs = options.timeoutMs === undefined
+    ? configuredTimeoutMs
+    : Math.min(configuredTimeoutMs, options.timeoutMs);
+  if (!Number.isInteger(timeoutMs) || timeoutMs < 5_000) {
+    throw new AIProviderConfigError('文本模型请求超时必须至少为 5000 毫秒');
+  }
   return createAlibabaClient(timeoutMs, options.model);
 }

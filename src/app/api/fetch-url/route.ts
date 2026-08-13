@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { hasValidAdminSession } from '@/lib/admin-auth';
+import { ADMIN_PERMISSIONS, requireAdminPermission } from '@/lib/admin-permissions';
 import { getClientIp } from '@/lib/auth-server';
 import { consumeAuthRateLimit } from '@/lib/auth-security';
 import { ExternalFetchError, fetchSafeExternalPage } from '@/lib/safe-external-fetch';
@@ -8,9 +8,8 @@ export const runtime = 'nodejs';
 
 export async function POST(request: NextRequest) {
   try {
-    if (!hasValidAdminSession(request)) {
-      return NextResponse.json({ error: '需要管理员权限' }, { status: 401 });
-    }
+    const permissionError = requireAdminPermission(request, ADMIN_PERMISSIONS.jobsWrite);
+    if (permissionError) return permissionError;
 
     const rateLimit = await consumeAuthRateLimit(`admin-fetch-url:ip:${getClientIp(request)}`, 20, 300, 900);
     if (!rateLimit.allowed) {

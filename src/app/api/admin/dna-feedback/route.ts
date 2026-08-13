@@ -2,12 +2,11 @@
 // 真实度反馈案例列表（审查队列）
 import { NextRequest, NextResponse } from 'next/server';
 import { getSupabaseClient } from '@/storage/database/supabase-client';
-import { hasValidAdminSession } from '@/lib/admin-auth';
+import { ADMIN_PERMISSIONS, requireAdminPermission } from '@/lib/admin-permissions';
 
 export async function GET(request: NextRequest) {
-  if (!hasValidAdminSession(request)) {
-    return NextResponse.json({ error: '需要管理员权限' }, { status: 401 });
-  }
+  const permissionError = requireAdminPermission(request, ADMIN_PERMISSIONS.feedbackRead);
+  if (permissionError) return permissionError;
 
   const client = getSupabaseClient();
   const status = request.nextUrl.searchParams.get('status') || 'pending_review';

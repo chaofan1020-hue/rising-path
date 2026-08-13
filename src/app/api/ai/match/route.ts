@@ -1,13 +1,15 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { getAuthContext, unauthorizedResponse } from '@/lib/auth-server';
 import { createTextProviderClient } from '@/lib/ai/text-provider';
+import { configuredRegionScopeKeys, targetRegionScopeKeys } from '@/lib/job-region-scope';
+import { consumeTrackedTextStream } from '@/lib/ai-usage';
 import {
   AI_MATCH_RESPONSE_SCHEMA,
   parseModelMatches,
-  validateMatchSet,
   type Match,
 } from '@/lib/ai-match-contract';
 import { requireConfirmedResume } from '@/lib/resume-access';
+import { untrustedBusinessDataBlock, untrustedBusinessDataPolicy } from '@/lib/prompt-safety';
 
 function stringArray(value: unknown): string[] {
   return Array.isArray(value) && value.every((item) => typeof item === 'string')
@@ -19,6 +21,71 @@ function positiveInteger(value: unknown): number | null {
   if (value === undefined || value === null || value === '') return null;
   const parsed = Number(value);
   return Number.isInteger(parsed) && parsed > 0 ? parsed : null;
+}
+
+function compactPromptText(value: unknown, maximumLength: number): string {
+  const text = typeof value === 'string' ? value.trim() : '';
+  if (text.length <= maximumLength) return text;
+  return `${text.slice(0, maximumLength)}\n[内容已截断]`;
+}
+
+// Five detailed recommendations give the user a useful shortlist while
+// keeping the model prompt bounded. Retrieval still scans the full active
+// library and ranks up to 80 candidates before this precision pass.
+const MATCH_CANDIDATE_LIMIT = 5;
+const MATCH_RETRIEVAL_LIMIT = 80;
+// Only the highest-signal skills, target roles and technical terms should
+// drive lexical retrieval. Broad profile text can match thousands of jobs and
+// make PostgreSQL rank a large result set before returning the top 80.
+const MATCH_RETRIEVAL_TERM_LIMIT = 12;
+const MATCH_RESUME_CONTEXT_MAX_CHARS = 7_000;
+const MATCH_PROFILE_CONTEXT_MAX_CHARS = 2_500;
+const MATCH_JOB_DESCRIPTION_MAX_CHARS = 1_200;
+const MATCH_JOB_REQUIREMENTS_MAX_CHARS = 600;
+
+type CandidateJob = {
+  id: number;
+  title: string;
+  company: string;
+  region: string;
+  direction: string;
+  description: string | null;
+  requirements: string | null;
+  lexical_score: number | null;
+  created_at: string;
+};
+
+function textTerms(value: unknown): string[] {
+  if (typeof value !== 'string') return [];
+  return value
+    .split(/[^\p{L}\p{N}+#./-]+/u)
+    .map((term) => term.trim())
+    .filter((term) => term.length >= 2 && term.length <= 48);
+}
+
+function collectResumeTerms(resume: Record<string, unknown>): string[] {
+  const profile = resume.profile && typeof resume.profile === 'object'
+    ? resume.profile as Record<string, unknown>
+    : {};
+  const intention = profile.intention && typeof profile.intention === 'object'
+    ? profile.intention as Record<string, unknown>
+    : {};
+  const skills = Array.isArray(profile.skills) ? profile.skills : [];
+  const roles = Array.isArray(intention.roles) ? intention.roles : [];
+  const experiences = [...(Array.isArray(profile.internships) ? profile.internships : []), ...(Array.isArray(profile.workExperience) ? profile.workExperience : [])];
+  const projects = Array.isArray(profile.projects) ? profile.projects : [];
+  const sources = [
+    ...skills,
+    ...roles,
+    ...projects.flatMap((item) => item && typeof item === 'object'
+      ? [(item as Record<string, unknown>).techStack, (item as Record<string, unknown>).name]
+      : []),
+    ...experiences.flatMap((item) => item && typeof item === 'object'
+      ? [(item as Record<string, unknown>).role]
+      : []),
+  ];
+  const terms = sources.flatMap((source) => Array.isArray(source) ? source.flatMap(textTerms) : textTerms(String(source || '')));
+  return [...new Set(terms)].slice(0, 60);
 }
 
 export async function GET(request: NextRequest) {
@@ -62,6 +129,9 @@ export async function GET(request: NextRequest) {
 }
 
 export async function POST(request: NextRequest) {
+  const requestId = crypto.randomUUID();
+  const startedAt = performance.now();
+  let stage = 'auth';
   try {
     const auth = await getAuthContext(request);
     if (!auth) return unauthorizedResponse();
@@ -75,6 +145,7 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ error: '目标岗位 ID 无效' }, { status: 400 });
     }
 
+    stage = 'resume';
     const resumeAccess = await requireConfirmedResume(client, resumeId, auth.user.id);
     if (!resumeAccess.ok) {
       return NextResponse.json({ error: resumeAccess.error }, { status: resumeAccess.status });
@@ -83,27 +154,59 @@ export async function POST(request: NextRequest) {
     const confirmedResumeId = resume.id;
     const profileVersion = Number(resume.profile_version);
 
-    // Build jobs query with filters
-    let jobsQuery = client.from('jobs').select('*');
-    
-    // Apply region filter
-    if (regions && regions.length > 0) {
-      jobsQuery = jobsQuery.in('region', regions);
-    }
-    
-    // Apply direction filter
-    if (directions && directions.length > 0) {
-      jobsQuery = jobsQuery.in('direction', directions);
-    }
+    const terms = collectResumeTerms(resume);
+    const retrievalTerms = terms.slice(0, MATCH_RETRIEVAL_TERM_LIMIT);
+    let retrieved: CandidateJob[];
     if (targetJobId !== null) {
-      jobsQuery = jobsQuery.eq('id', targetJobId);
+      stage = 'target_job';
+      const { data, error } = await client
+        .from('jobs')
+        .select('id, title, company, region, direction, description, requirements, created_at')
+        .eq('id', targetJobId)
+        .eq('is_active', true)
+        .maybeSingle();
+      if (error) throw new Error(`查询岗位失败: ${error.message}`);
+      retrieved = data ? [{ ...data, lexical_score: null } as CandidateJob] : [];
+    } else {
+      const regionScopes = regions.length > 0
+        ? configuredRegionScopeKeys(regions)
+        : targetRegionScopeKeys();
+      stage = 'retrieval';
+      const retrievalStartedAt = performance.now();
+      const { data, error } = await client.rpc('search_ai_match_candidates_v5', {
+        p_terms: retrievalTerms,
+        p_directions: directions,
+        p_region_scopes: regionScopes,
+        p_limit: MATCH_RETRIEVAL_LIMIT,
+      });
+      if (error) {
+        console.error('[AI match retrieval failed]', {
+          requestId,
+          resumeId: confirmedResumeId,
+          profileVersion,
+          regionCount: regionScopes.length,
+          directionCount: directions.length,
+          termCount: retrievalTerms.length,
+          durationMs: Math.round(performance.now() - retrievalStartedAt),
+          code: error.code,
+          details: error.details,
+          hint: error.hint,
+          message: error.message,
+        });
+        throw new Error(`查询岗位失败: ${error.message}`);
+      }
+      retrieved = (data || []) as CandidateJob[];
+      console.info('[AI match retrieval complete]', {
+        requestId,
+        resumeId: confirmedResumeId,
+        regionCount: regionScopes.length,
+        directionCount: directions.length,
+        termCount: retrievalTerms.length,
+        candidateCount: retrieved.length,
+        durationMs: Math.round(performance.now() - retrievalStartedAt),
+      });
     }
-    
-    const { data: jobs, error: jobsError } = await jobsQuery.limit(20);
-
-    if (jobsError) {
-      throw new Error(`查询岗位失败: ${jobsError.message}`);
-    }
+    const jobs = retrieved.slice(0, targetJobId === null ? MATCH_CANDIDATE_LIMIT : 1);
 
     if (!jobs || jobs.length === 0) {
       return NextResponse.json({
@@ -116,25 +219,31 @@ export async function POST(request: NextRequest) {
     // AI matching
     const llmClient = createTextProviderClient({ requestHeaders: request.headers });
     
-    const resumeContent = resume.parsed_content || JSON.stringify(resume.user_info);
-    const jobsList = jobs.map((j: { id: number; title: string; company: string; description: string; requirements: string }) => ({
+    const resumeContent = compactPromptText(
+      resume.parsed_content || JSON.stringify(resume.user_info),
+      MATCH_RESUME_CONTEXT_MAX_CHARS,
+    );
+    const profileContext = compactPromptText(
+      JSON.stringify({ version: profileVersion, profile: resume.profile, segmentation: resume.segmentation }),
+      MATCH_PROFILE_CONTEXT_MAX_CHARS,
+    );
+    const jobsList = jobs.map((j) => ({
       id: j.id,
       title: j.title,
       company: j.company,
-      description: j.description,
-      requirements: j.requirements,
+      description: compactPromptText(j.description, MATCH_JOB_DESCRIPTION_MAX_CHARS),
+      requirements: compactPromptText(j.requirements, MATCH_JOB_REQUIREMENTS_MAX_CHARS),
     }));
 
-    const prompt = `你是一个专业的职业顾问。请分析以下简历和岗位列表，为每个岗位计算匹配分数（0-100），并说明匹配原因和优化建议。
+    const prompt = `你是一个专业的职业顾问。请分析给定简历和岗位列表，为每个岗位计算匹配分数（0-100），并说明匹配原因和优化建议。
 
-简历内容：
-${resumeContent}
+${untrustedBusinessDataPolicy('zh')}
 
-已确认求职画像（版本 ${profileVersion}）：
-${JSON.stringify({ profile: resume.profile, segmentation: resume.segmentation }, null, 2)}
+${untrustedBusinessDataBlock('resume_content', resumeContent)}
 
-岗位列表：
-${JSON.stringify(jobsList, null, 2)}
+${untrustedBusinessDataBlock('confirmed_candidate_profile', profileContext)}
+
+${untrustedBusinessDataBlock('job_list', jobsList)}
 
 请严格返回 JSON。通常使用数组格式；如果系统要求对象格式，则使用 {"matches":[...]}。每个岗位一个结果，不能遗漏、重复或新增岗位。格式如下：
 [
@@ -149,32 +258,47 @@ ${JSON.stringify(jobsList, null, 2)}
       "region": 0,
       "profile_fit": 0
     },
-    "match_reason": "匹配原因分析",
-    "evidence": ["简历或岗位要求中的证据"],
-    "key_gaps": ["最关键的差距"],
-    "suggestions": "简历优化建议"
+    "match_reason": "不超过180字的匹配原因",
+    "evidence": ["最多2条具体证据"],
+    "key_gaps": ["最多2条关键差距"],
+    "suggestions": "不超过180字的下一步建议"
   }
 ]
 
 只返回JSON数组，不要其他说明文字。`;
 
-    const stream = llmClient.stream([
-      { role: 'system', content: '你是一个专业的职业顾问，擅长分析简历与岗位的匹配度。' },
+    stage = 'model';
+    const modelStartedAt = performance.now();
+    const generated = await consumeTrackedTextStream(llmClient, [
+      { role: 'system', content: `你是一个专业的职业顾问，擅长分析简历与岗位的匹配度。${untrustedBusinessDataPolicy('zh')}` },
       { role: 'user', content: prompt },
     ], {
-      temperature: 0.7,
+      temperature: 0.2,
+      thinking: 'disabled',
       responseFormat: {
         name: 'job_match_results',
         schema: AI_MATCH_RESPONSE_SCHEMA,
       },
+    }, {
+      userId: auth.user.id,
+      feature: 'ai_match',
+      resumeId: confirmedResumeId,
+      jobId: targetJobId,
+      metadata: {
+        retrieval_scope: 'full_library',
+        retrieval_candidate_count: retrieved.length,
+        retrieval_term_count: Math.min(terms.length, MATCH_RETRIEVAL_TERM_LIMIT),
+        job_count: jobs.length,
+        job_ids: jobs.map((job) => job.id),
+      },
+    }, () => undefined);
+    console.info('[AI match model complete]', {
+      requestId,
+      resumeId: confirmedResumeId,
+      jobCount: jobs.length,
+      durationMs: Math.round(performance.now() - modelStartedAt),
     });
-
-    let result = '';
-    for await (const chunk of stream) {
-      if (chunk.content) {
-        result += chunk.content.toString();
-      }
-    }
+    const result = generated.content;
 
     let matches: Match[];
     try {
@@ -187,19 +311,27 @@ ${JSON.stringify(jobsList, null, 2)}
       );
     }
 
-    try {
-      validateMatchSet(matches, jobs.map((job: { id: number }) => job.id));
-    } catch (error) {
-      console.error('Invalid AI match job set:', error);
-      return NextResponse.json(
-        { error: 'AI返回的岗位结果不完整，请重试' },
-        { status: 502 },
-      );
+    const expectedJobIds = new Set(jobs.map((job) => job.id));
+    const returnedJobIds = new Set<number>();
+    const validMatches = matches.filter((match) => {
+      if (!expectedJobIds.has(match.job_id) || returnedJobIds.has(match.job_id)) return false;
+      returnedJobIds.add(match.job_id);
+      return true;
+    });
+    if (validMatches.length === 0) {
+      return NextResponse.json({ error: 'AI未返回可用的岗位结果，请重试' }, { status: 502 });
+    }
+    const isPartial = validMatches.length !== jobs.length;
+    if (isPartial) {
+      console.warn('AI match returned a partial result set', {
+        expected: jobs.length,
+        returned: validMatches.length,
+      });
     }
 
     // Add job details to matches
-    const enrichedMatches = matches.map((match) => {
-      const job = jobs.find((j: { id: number }) => j.id === match.job_id);
+    const enrichedMatches = validMatches.map((match) => {
+      const job = jobs.find((j) => j.id === match.job_id);
       return {
         ...match,
         job_title: job?.title || '未知岗位',
@@ -212,6 +344,7 @@ ${JSON.stringify(jobsList, null, 2)}
     enrichedMatches.sort((a: { match_score: number }, b: { match_score: number }) => b.match_score - a.match_score);
 
     // Save matches to database
+    stage = 'persistence';
     const { error: insertError } = await client.from('ai_matches').upsert(enrichedMatches.map((match) => ({
         resume_id: confirmedResumeId,
         job_id: match.job_id,
@@ -227,16 +360,34 @@ ${JSON.stringify(jobsList, null, 2)}
         onConflict: 'user_id,resume_id,job_id,resume_profile_version',
       });
     if (insertError) {
-      throw new Error(`保存匹配结果失败: ${insertError.message}`);
+      // The recommendation is already complete. A history-write failure must
+      // not discard a successful and billable AI result for the user.
+      console.error('保存匹配结果失败:', insertError.message);
     }
 
     return NextResponse.json({
       matches: enrichedMatches,
       resume_profile_version: profileVersion,
       target_job_id: targetJobId,
+      candidate_count: jobs.length,
+      partial: isPartial,
+      persistence_warning: insertError ? '本次结果已生成，但暂未保存到匹配历史。' : null,
+      request_id: requestId,
     });
   } catch (error) {
-    console.error('AI match error:', error);
+    console.error('[AI match failed]', {
+      requestId,
+      stage,
+      durationMs: Math.round(performance.now() - startedAt),
+      error: error instanceof Error ? error.message : String(error),
+    });
+    const message = error instanceof Error ? error.message : '';
+    if (message.includes('timed out') || message.includes('statement timeout')) {
+      return NextResponse.json({ error: 'AI匹配超时，请稍后重试或缩小筛选范围' }, { status: 504 });
+    }
+    if (message.includes('未配置') || message.includes('配置无效')) {
+      return NextResponse.json({ error: message }, { status: 503 });
+    }
     return NextResponse.json(
       { error: 'AI匹配失败' },
       { status: 500 }

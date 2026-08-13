@@ -7,6 +7,7 @@ import {
   type ApplicationProfile,
   type ProfileSourceMap,
 } from '@/lib/application-profile';
+import { applicationProfilePatchSchema } from '@/lib/application-contracts';
 
 export async function GET(request: NextRequest) {
   try {
@@ -74,11 +75,12 @@ export async function PUT(request: NextRequest) {
     const auth = await getAuthContext(request);
     if (!auth) return unauthorizedResponse();
     const client = auth.client;
-    const body = await request.json();
-    const updates = body.profile as Partial<ApplicationProfile>;
-    if (!updates || typeof updates !== 'object') {
-      return NextResponse.json({ error: '无效的档案数据' }, { status: 400 });
-    }
+    const parsed = applicationProfilePatchSchema.safeParse(await request.json());
+    if (!parsed.success) return NextResponse.json({ error: '无效的档案数据' }, { status: 400 });
+    const { profile: updates, version: expectedVersion } = parsed.data as {
+      profile: Partial<ApplicationProfile>;
+      version: number;
+    };
 
     const { data: existing } = await client
       .from('application_profiles')
@@ -89,23 +91,38 @@ export async function PUT(request: NextRequest) {
     const base = existing?.profile || DEFAULT_PROFILE;
     const baseSource = (existing?.source || {}) as ProfileSourceMap;
     const merged = mergeApplicationProfile(base, updates, baseSource);
+    if (existing && existing.version !== expectedVersion) {
+      return NextResponse.json({ error: '求职档案已更新，请刷新后重试' }, { status: 409 });
+    }
+    if (!existing && expectedVersion !== 0) {
+      return NextResponse.json({ error: '求职档案已更新，请刷新后重试' }, { status: 409 });
+    }
     const version = (existing?.version || 0) + 1;
-
-    const { data, error } = await client
-      .from('application_profiles')
-      .upsert({
-        user_id: auth.user.id,
-        resume_id: existing?.resume_id || null,
-        profile: merged.profile,
-        source: merged.source,
-        field_stats: merged.source,
-        version,
-        updated_at: new Date().toISOString(),
-      })
-      .select()
-      .maybeSingle();
+    const profileWrite = {
+      user_id: auth.user.id,
+      resume_id: existing?.resume_id || null,
+      profile: merged.profile,
+      source: merged.source,
+      field_stats: merged.source,
+      version,
+      updated_at: new Date().toISOString(),
+    };
+    const { data, error } = existing
+      ? await client
+        .from('application_profiles')
+        .update(profileWrite)
+        .eq('user_id', auth.user.id)
+        .eq('version', expectedVersion)
+        .select()
+        .maybeSingle()
+      : await client
+        .from('application_profiles')
+        .insert(profileWrite)
+        .select()
+        .maybeSingle();
 
     if (error) throw new Error(`保存求职档案失败: ${error.message}`);
+    if (!data) return NextResponse.json({ error: '求职档案已更新，请刷新后重试' }, { status: 409 });
 
     if (merged.changes.length > 0 && data?.id) {
       const editRows = merged.changes.map((change) => ({

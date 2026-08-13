@@ -1,5 +1,4 @@
 import type { Metadata } from 'next';
-import { Inspector } from 'react-dev-inspector';
 import { ThemeProvider } from '@/lib/theme-context';
 import { LanguageProvider } from '@/lib/language-context';
 import './globals.css';
@@ -22,7 +21,7 @@ export const metadata: Metadata = {
     '求职平台',
   ],
   authors: [{ name: 'Liorvix Team' }],
-  generator: 'Coze Code',
+  generator: 'Liorvix',
   icons: {
     icon: '/logo.svg',
     apple: '/logo.svg',
@@ -41,14 +40,11 @@ export default function RootLayout({
 }: Readonly<{
   children: React.ReactNode;
 }>) {
-  const isDev = process.env.COZE_PROJECT_ENV === 'DEV';
-
   return (
     <html lang="zh-CN" suppressHydrationWarning>
       <body className={`antialiased bg-background`}>
         <ThemeProvider>
           <LanguageProvider>
-            {isDev && <Inspector />}
             {children}
           </LanguageProvider>
         </ThemeProvider>

@@ -1,12 +1,12 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { getSupabaseClient } from '@/storage/database/supabase-client';
 import { loadStorageSkill } from '@/lib/storage-utils';
-import { hasValidAdminSession } from '@/lib/admin-auth';
+import { ADMIN_PERMISSIONS, requireAdminPermission } from '@/lib/admin-permissions';
+import { recordAdminAuditEvent, recordAdminAuditFailure } from '@/lib/admin-audit';
 
 export async function GET(request: NextRequest) {
-  if (!hasValidAdminSession(request)) {
-    return NextResponse.json({ error: '需要管理员权限' }, { status: 401 });
-  }
+  const permissionError = requireAdminPermission(request, ADMIN_PERMISSIONS.configWrite);
+  if (permissionError) return permissionError;
 
   try {
     const supabase = getSupabaseClient();
@@ -19,7 +19,7 @@ export async function GET(request: NextRequest) {
     if (error) {
       return NextResponse.json({ error: error.message }, { status: 500 });
     }
-    
+
     return NextResponse.json({ logos: data });
   } catch (error) {
     console.error('Error fetching logos:', error);
@@ -28,9 +28,8 @@ export async function GET(request: NextRequest) {
 }
 
 export async function POST(request: NextRequest) {
-  if (!hasValidAdminSession(request)) {
-    return NextResponse.json({ error: '需要管理员权限' }, { status: 401 });
-  }
+  const permissionError = requireAdminPermission(request, ADMIN_PERMISSIONS.configWrite);
+  if (permissionError) return permissionError;
 
   try {
     const supabase = getSupabaseClient();
@@ -81,6 +80,14 @@ export async function POST(request: NextRequest) {
     if (error) {
       return NextResponse.json({ error: error.message }, { status: 500 });
     }
+
+    await recordAdminAuditEvent({
+      request,
+      action: 'company_logo.upsert',
+      resourceType: 'company_logo',
+      resourceId: companyName,
+      metadata: { company_name: companyName, file_size: logoFile.size, content_type: logoFile.type },
+    });
     
     return NextResponse.json({
       success: true,
@@ -88,14 +95,14 @@ export async function POST(request: NextRequest) {
     });
   } catch (error) {
     console.error('Error uploading logo:', error);
+    await recordAdminAuditFailure({ request, action: 'company_logo.upsert', resourceType: 'company_logo', error });
     return NextResponse.json({ error: '上传失败' }, { status: 500 });
   }
 }
 
 export async function DELETE(request: NextRequest) {
-  if (!hasValidAdminSession(request)) {
-    return NextResponse.json({ error: '需要管理员权限' }, { status: 401 });
-  }
+  const permissionError = requireAdminPermission(request, ADMIN_PERMISSIONS.configWrite);
+  if (permissionError) return permissionError;
 
   try {
     const supabase = getSupabaseClient();
@@ -114,10 +121,18 @@ export async function DELETE(request: NextRequest) {
     if (error) {
       return NextResponse.json({ error: error.message }, { status: 500 });
     }
+
+    await recordAdminAuditEvent({
+      request,
+      action: 'company_logo.delete',
+      resourceType: 'company_logo',
+      resourceId: companyName,
+    });
     
     return NextResponse.json({ success: true });
   } catch (error) {
     console.error('Error deleting logo:', error);
+    await recordAdminAuditFailure({ request, action: 'company_logo.delete', resourceType: 'company_logo', error });
     return NextResponse.json({ error: '删除失败' }, { status: 500 });
   }
 }

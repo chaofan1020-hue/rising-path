@@ -1,17 +1,21 @@
 'use client';
 
-import { useState, useEffect, useCallback } from 'react';
+import { useState, useEffect, useCallback, type ComponentType, type ReactNode } from 'react';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent } from '@/components/ui/card';
 import { Input } from '@/components/ui/input';
 import { Badge } from '@/components/ui/badge';
 import { Checkbox } from '@/components/ui/checkbox';
 import {
-  Popover,
-  PopoverContent,
-  PopoverTrigger,
-} from '@/components/ui/popover';
-import { Search, MapPin, Briefcase, Users, ExternalLink, ChevronDown, ChevronLeft, ChevronRight, X, Plus, Check, Loader2, Heart } from 'lucide-react';
+  Sheet,
+  SheetContent,
+  SheetDescription,
+  SheetFooter,
+  SheetHeader,
+  SheetTrigger,
+  SheetTitle,
+} from '@/components/ui/sheet';
+import { Search, MapPin, Briefcase, Users, SlidersHorizontal, RotateCcw, ExternalLink, ChevronLeft, ChevronRight, X, Plus, Check, Loader2, Heart } from 'lucide-react';
 import Link from 'next/link';
 import { AuthGuard } from '@/components/auth-guard';
 import { apiFetch } from '@/lib/api-client';
@@ -110,11 +114,10 @@ const mainRegions = [
   { id: -2, config_type: 'region', config_value: '英国', sort_order: 2, is_active: true },
   { id: -3, config_type: 'region', config_value: '加拿大', sort_order: 3, is_active: true },
   { id: -4, config_type: 'region', config_value: '澳大利亚', sort_order: 4, is_active: true },
-  { id: -5, config_type: 'region', config_value: '新加坡', sort_order: 5, is_active: true },
-  { id: -6, config_type: 'region', config_value: '香港', sort_order: 6, is_active: true },
-  { id: -7, config_type: 'region', config_value: '日本', sort_order: 7, is_active: true },
-  { id: -8, config_type: 'region', config_value: '欧洲', sort_order: 8, is_active: true },
+  { id: -6, config_type: 'region', config_value: '香港', sort_order: 5, is_active: true },
 ];
+
+const TARGET_REGION_LABELS = new Set(mainRegions.map((region) => region.config_value));
 
 const jobTypeOptions: JobConfig[] = [
   { id: -101, config_type: 'job_type', config_value: '实习', sort_order: 1, is_active: true },
@@ -128,212 +131,105 @@ const sponsorshipOptions: JobConfig[] = [
   { id: -113, config_type: 'sponsorship', config_value: 'unknown', sort_order: 3, is_active: true },
 ];
 
-// 地区映射：将具体地区映射到所属大地区
-const regionMapping: Record<string, string> = {
-  // 美国主要城市
-  'San Francisco, CA': '美国',
-  'Seattle, WA': '美国',
-  'New York, NY': '美国',
-  'Los Angeles, CA': '美国',
-  'Austin, TX': '美国',
-  'Boston, MA': '美国',
-  'Chicago, IL': '美国',
-  'Denver, CO': '美国',
-  'Atlanta, GA': '美国',
-  'Remote - United States': '美国',
-  'United States': '美国',
-  // 英国
-  'London, UK': '英国',
-  'United Kingdom': '英国',
-  // 加拿大
-  'Toronto, ON': '加拿大',
-  'Vancouver, BC': '加拿大',
-  'Canada': '加拿大',
-  // 澳大利亚
-  'Sydney, NSW': '澳大利亚',
-  'Melbourne, VIC': '澳大利亚',
-  'Australia': '澳大利亚',
-  // 新加坡
-  'Singapore': '新加坡',
-  // 香港
-  'Hong Kong': '香港',
-  // 日本
-  'Tokyo, Japan': '日本',
-  'Japan': '日本',
-  // 欧洲
-  'Germany': '德国',
-  'France': '法国',
-  'Europe': '欧洲',
-};
-
 // 获取地区对应的显示文本
 function getRegionDisplayText(region: string): string {
   return region;
 }
 
-// 获取岗位所属的大地区
-function getRegionCategory(region: string): string {
-  return regionMapping[region] || region;
-}
-
-// 判断岗位是否匹配选中的地区（支持包含关系）
-function isRegionMatch(jobRegion: string, selectedRegions: string[]): boolean {
-  if (selectedRegions.length === 0) return true;
-  
-  for (const selected of selectedRegions) {
-    const jobCategory = getRegionCategory(jobRegion);
-    // 如果选中的地区等于岗位的地区分类
-    if (jobCategory === selected) return true;
-    // 如果选中的地区等于岗位的完整地区
-    if (jobRegion === selected) return true;
-  }
-  return false;
-}
-
-// 多选筛选器组件 - 现代化设计
-function MultiSelectFilter({
+function FilterSection({
   label,
   icon: Icon,
-  options,
-  selected,
-  onChange,
-  showFlag = false,
-  t,
+  children,
 }: {
   label: string;
-  icon: React.ComponentType<{ className?: string }>;
-  options: JobConfig[];
-  selected: string[];
-  onChange: (values: string[]) => void;
-  showFlag?: boolean;
-  t: (key: string) => string;
+  icon: ComponentType<{ className?: string }>;
+  children: ReactNode;
 }) {
-  const handleToggle = (value: string) => {
-    if (selected.includes(value)) {
-      onChange(selected.filter(v => v !== value));
-    } else {
-      onChange([...selected, value]);
-    }
-  };
-
   return (
-    <Popover>
-      <PopoverTrigger asChild>
-        <button className="inline-flex items-center gap-1.5 md:gap-2 px-2.5 py-1.5 md:px-3 md:py-2 rounded-full text-zinc-700 dark:text-zinc-200 hover:bg-zinc-100 hover:text-zinc-900 dark:hover:bg-zinc-800 dark:hover:text-zinc-100 transition-colors text-xs md:text-sm">
-          <Icon className="h-3.5 w-3.5 md:h-4 md:w-4 text-zinc-400 dark:text-zinc-500" />
-          <span className="font-medium">{label}</span>
-          {selected.length > 0 && (
-            <Badge variant="secondary" className="ml-0.5 h-4 md:h-5 px-1 md:px-1.5 rounded-full text-[10px] md:text-xs bg-zinc-900 text-white dark:bg-white dark:text-zinc-900 hover:bg-zinc-900">
-              {selected.length}
-            </Badge>
-          )}
-          <ChevronDown className="h-3 w-3 md:h-3.5 md:w-3.5 text-zinc-400 dark:text-zinc-500" />
-        </button>
-      </PopoverTrigger>
-      <PopoverContent className="w-44 md:w-48 p-2" align="start">
-        <div className="max-h-60 overflow-y-auto space-y-1">
-          {options.map((option) => (
-            <label
-              key={option.id}
-              className={`flex items-center gap-2 px-2 py-1.5 rounded-md cursor-pointer transition-colors ${
-                selected.includes(option.config_value)
-                  ? 'bg-zinc-100 text-zinc-900 dark:bg-zinc-800 dark:text-zinc-50'
-                  : 'hover:bg-zinc-50 dark:hover:bg-zinc-800/60'
-              }`}
-              translate="no"
-            >
-              <Checkbox
-                checked={selected.includes(option.config_value)}
-                onCheckedChange={() => handleToggle(option.config_value)}
-                className="data-[state=checked]:bg-zinc-900 data-[state=checked]:border-zinc-900 dark:data-[state=checked]:bg-white dark:data-[state=checked]:border-white dark:data-[state=checked]:text-zinc-900"
-              />
-              <span className="text-sm font-medium">
-                {showFlag ? getRegionDisplayText(option.config_value) : option.config_value}
-              </span>
-            </label>
-          ))}
-        </div>
-        {options.length === 0 && (
-          <div className="text-center py-2 text-sm text-zinc-400">{t('jobs.noOptions')}</div>
-        )}
-        {selected.length > 0 && (
-          <div className="border-t border-zinc-100 dark:border-zinc-800 mt-2 pt-2">
-            <button
-              onClick={() => onChange([])}
-              className="w-full text-xs text-zinc-400 hover:text-zinc-900 dark:hover:text-zinc-100 transition-colors py-1"
-            >
-              {t('jobs.clearAll')}
-            </button>
-          </div>
-        )}
-      </PopoverContent>
-    </Popover>
+    <section className="space-y-3">
+      <h2 className="flex items-center gap-2 text-sm font-medium text-zinc-900 dark:text-zinc-100">
+        <Icon className="h-4 w-4 text-zinc-400" />
+        {label}
+      </h2>
+      {children}
+    </section>
   );
 }
 
-// 单选筛选器组件 - 现代化设计
-function SingleSelectFilter({
-  label,
-  icon: Icon,
+function CheckboxOptions({
   options,
   selected,
   onChange,
-  t,
 }: {
-  label: string;
-  icon: React.ComponentType<{ className?: string }>;
   options: JobConfig[];
-  selected: string;
-  onChange: (value: string) => void;
-  t: (key: string) => string;
+  selected: string[];
+  onChange: (values: string[]) => void;
 }) {
-  const displayValue = selected === '全部' || selected === 'All' ? null : selected;
-  
+  const toggle = (value: string) => {
+    onChange(selected.includes(value)
+      ? selected.filter((item) => item !== value)
+      : [...selected, value]);
+  };
+
+  if (options.length === 0) {
+    return <p className="text-sm text-zinc-400">暂无可用选项</p>;
+  }
+
   return (
-    <Popover>
-      <PopoverTrigger asChild>
-        <button className="inline-flex items-center gap-1.5 md:gap-2 px-2.5 py-1.5 md:px-3 md:py-2 rounded-full text-zinc-700 dark:text-zinc-200 hover:bg-zinc-100 hover:text-zinc-900 dark:hover:bg-zinc-800 dark:hover:text-zinc-100 transition-colors text-xs md:text-sm">
-          <Icon className="h-3.5 w-3.5 md:h-4 md:w-4 text-zinc-400 dark:text-zinc-500" />
-          <span className="font-medium">{label}</span>
-          {displayValue && (
-            <Badge variant="secondary" className="ml-0.5 h-4 md:h-5 px-1 md:px-1.5 rounded-full text-[10px] md:text-xs bg-zinc-900 text-white dark:bg-white dark:text-zinc-900 hover:bg-zinc-900">
-              {displayValue}
-            </Badge>
-          )}
-          <ChevronDown className="h-3 w-3 md:h-3.5 md:w-3.5 text-zinc-400 dark:text-zinc-500" />
-        </button>
-      </PopoverTrigger>
-      <PopoverContent className="w-36 md:w-40 p-1" align="start">
-        <div className="space-y-0.5">
-          <button
-            onClick={() => onChange(t('page.all'))}
-            className={`w-full text-left px-3 py-2 rounded-md text-sm transition-colors ${
-              selected === t('page.all')
-                ? 'bg-zinc-900 text-white dark:bg-white dark:text-zinc-900'
-                : 'hover:bg-zinc-100 dark:hover:bg-zinc-800'
-            }`}
-          >
-            {t('page.all')}
-          </button>
-          {options.map((option) => (
-            <button
-              key={option.id}
-              onClick={() => onChange(option.config_value)}
-              className={`w-full text-left px-3 py-2 rounded-md text-sm transition-colors ${
-                selected === option.config_value
-                  ? 'bg-zinc-900 text-white dark:bg-white dark:text-zinc-900'
-                  : 'hover:bg-zinc-100 dark:hover:bg-zinc-800'
-              }`}
-              translate="no"
-            >
-              {option.config_type === 'sponsorship'
-                ? option.config_value === 'yes' ? '支持签证' : option.config_value === 'no' ? '不支持签证' : '未注明'
-                : option.config_value}
-            </button>
-          ))}
-        </div>
-      </PopoverContent>
-    </Popover>
+    <div className="grid grid-cols-1 gap-2 sm:grid-cols-2">
+      {options.map((option) => (
+        <label
+          key={option.id}
+          className="flex cursor-pointer items-center gap-2 rounded-lg border border-zinc-200 px-3 py-2 text-sm text-zinc-700 transition-colors hover:bg-zinc-50 dark:border-zinc-700 dark:text-zinc-200 dark:hover:bg-zinc-800"
+          translate="no"
+        >
+          <Checkbox
+            checked={selected.includes(option.config_value)}
+            onCheckedChange={() => toggle(option.config_value)}
+          />
+          <span className="truncate">{getRegionDisplayText(option.config_value)}</span>
+        </label>
+      ))}
+    </div>
+  );
+}
+
+function RadioOptions({
+  value,
+  options,
+  allLabel,
+  onChange,
+  formatValue = (item) => item,
+}: {
+  value: string;
+  options: JobConfig[];
+  allLabel: string;
+  onChange: (value: string) => void;
+  formatValue?: (value: string) => string;
+}) {
+  return (
+    <div className="flex flex-wrap gap-2">
+      <Button
+        type="button"
+        variant={!value || value === allLabel ? 'default' : 'outline'}
+        size="sm"
+        onClick={() => onChange('')}
+      >
+        {allLabel}
+      </Button>
+      {options.map((option) => (
+        <Button
+          key={option.id}
+          type="button"
+          variant={value === option.config_value ? 'default' : 'outline'}
+          size="sm"
+          onClick={() => onChange(option.config_value)}
+          translate="no"
+        >
+          {formatValue(option.config_value)}
+        </Button>
+      ))}
+    </div>
   );
 }
 
@@ -350,6 +246,12 @@ function JobsContent() {
   const [selectedAudience, setSelectedAudience] = useState('');
   const [selectedJobType, setSelectedJobType] = useState('');
   const [selectedSponsorship, setSelectedSponsorship] = useState('');
+  const [filterOpen, setFilterOpen] = useState(false);
+  const [draftRegions, setDraftRegions] = useState<string[]>([]);
+  const [draftDirections, setDraftDirections] = useState<string[]>([]);
+  const [draftAudience, setDraftAudience] = useState('');
+  const [draftJobType, setDraftJobType] = useState('');
+  const [draftSponsorship, setDraftSponsorship] = useState('');
   const [applyingJobId, setApplyingJobId] = useState<number | null>(null);
   const [appliedJobIds, setAppliedJobIds] = useState<Set<number>>(new Set());
   const [favoriteJobIds, setFavoriteJobIds] = useState<Set<number>>(new Set());
@@ -370,6 +272,52 @@ function JobsContent() {
       setSelectedAudience(t('page.all'));
     }
   }, [t, selectedAudience]);
+
+  useEffect(() => {
+    if (filterOpen) {
+      setDraftRegions(selectedRegions);
+      setDraftDirections(selectedDirections);
+      setDraftAudience(selectedAudience || t('page.all'));
+      setDraftJobType(selectedJobType);
+      setDraftSponsorship(selectedSponsorship);
+    }
+  }, [filterOpen, selectedRegions, selectedDirections, selectedAudience, selectedJobType, selectedSponsorship, t]);
+
+  const clearFilters = useCallback(() => {
+    setSelectedRegions([]);
+    setSelectedDirections([]);
+    setSelectedAudience(t('page.all'));
+    setSelectedJobType('');
+    setSelectedSponsorship('');
+    setPage(0);
+  }, [t]);
+
+  const applyDraftFilters = () => {
+    setSelectedRegions(draftRegions);
+    setSelectedDirections(draftDirections);
+    setSelectedAudience(draftAudience || t('page.all'));
+    setSelectedJobType(draftJobType);
+    setSelectedSponsorship(draftSponsorship);
+    setPage(0);
+    setFilterOpen(false);
+  };
+
+  const activeFilterCount = selectedRegions.length
+    + selectedDirections.length
+    + (selectedAudience && selectedAudience !== t('page.all') ? 1 : 0)
+    + (selectedJobType ? 1 : 0)
+    + (selectedSponsorship ? 1 : 0);
+
+  const activeFilterSummaries = [
+    selectedRegions.length > 0 ? { id: 'region', label: `地区：${selectedRegions.join('、')}` } : null,
+    selectedDirections.length > 0 ? { id: 'direction', label: `${t('jobs.direction')}：${selectedDirections.join('、')}` } : null,
+    selectedAudience && selectedAudience !== t('page.all') ? { id: 'audience', label: `${t('jobs.audience')}：${selectedAudience}` } : null,
+    selectedJobType ? { id: 'job-type', label: `岗位类型：${selectedJobType}` } : null,
+    selectedSponsorship ? {
+      id: 'sponsorship',
+      label: `签证：${selectedSponsorship === 'yes' ? '支持签证' : selectedSponsorship === 'no' ? '不支持签证' : '未注明'}`,
+    } : null,
+  ].filter((summary): summary is { id: string; label: string } => summary !== null);
 
   const fetchJobs = useCallback(async () => {
     setLoading(true);
@@ -433,7 +381,12 @@ function JobsContent() {
       .then(res => res.json())
       .then(data => {
         // 合并大地区选项和具体地区选项
-        const regionConfigs = data.configs?.region || [];
+        // The API is scoped to the five supported markets. Filter legacy
+        // configuration rows as well so stale Europe/Asia options cannot
+        // reappear in the client after a config refresh.
+        const regionConfigs = (data.configs?.region || []).filter((region: JobConfig) =>
+          TARGET_REGION_LABELS.has(region.config_value),
+        );
         // 去重：大地区选项优先
         const existingMainRegions = regionConfigs.filter(
           (r: JobConfig) => mainRegions.some(mr => mr.config_value === r.config_value)
@@ -444,7 +397,12 @@ function JobsContent() {
             region: [...mainRegions, ...regionConfigs]
           });
         } else {
-          setConfigs(data.configs || {});
+          setConfigs({
+            ...(data.configs || {}),
+            region: [...mainRegions, ...regionConfigs.filter(
+              (region: JobConfig) => !mainRegions.some((main) => main.config_value === region.config_value),
+            )],
+          });
         }
       })
       .catch(console.error);
@@ -552,84 +510,65 @@ function JobsContent() {
                 />
               </div>
               
-              {/* 筛选器组 */}
+              {/* 集中筛选入口：草稿条件在点击应用前不会触发请求 */}
               <div className="flex flex-wrap items-center gap-2 md:gap-3">
-                <span className="text-xs md:text-sm text-zinc-400 dark:text-zinc-500">{t('jobs.filter')}</span>
-                <MultiSelectFilter
-                  label={t('jobs.region')}
-                  icon={MapPin}
-                  options={configs.region || []}
-                  selected={selectedRegions}
-                  onChange={(values) => {
-                    setSelectedRegions(values);
-                    setPage(0);
-                  }}
-                  showFlag={true}
-                  t={t}
-                />
-                <MultiSelectFilter
-                  label={t('jobs.direction')}
-                  icon={Briefcase}
-                  options={configs.direction || []}
-                  selected={selectedDirections}
-                  onChange={(values) => {
-                    setSelectedDirections(values);
-                    setPage(0);
-                  }}
-                  t={t}
-                />
-                <SingleSelectFilter
-                  label={t('jobs.audience')}
-                  icon={Users}
-                  options={configs.audience || []}
-                  selected={selectedAudience}
-                  onChange={(value) => {
-                    setSelectedAudience(value);
-                    setPage(0);
-                  }}
-                  t={t}
-                />
-                <SingleSelectFilter
-                  label="岗位类型"
-                  icon={Briefcase}
-                  options={jobTypeOptions}
-                  selected={selectedJobType}
-                  onChange={(value) => {
-                    setSelectedJobType(value);
-                    setPage(0);
-                  }}
-                  t={t}
-                />
-                <SingleSelectFilter
-                  label="签证支持"
-                  icon={Users}
-                  options={sponsorshipOptions}
-                  selected={selectedSponsorship}
-                  onChange={(value) => {
-                    setSelectedSponsorship(value);
-                    setPage(0);
-                  }}
-                  t={t}
-                />
-                
-                {/* 清除筛选按钮 */}
-                {(selectedRegions.length > 0 || selectedDirections.length > 0 || selectedAudience !== t('page.all') || selectedJobType || selectedSponsorship) && (
-                  <button
-                    onClick={() => {
-                      setSelectedRegions([]);
-                      setSelectedDirections([]);
-                      setSelectedAudience(t('page.all'));
-                      setSelectedJobType('');
-                      setSelectedSponsorship('');
-                      setPage(0);
-                    }}
-                    className="inline-flex items-center gap-1 px-2 py-1 text-xs text-zinc-400 hover:text-zinc-900 dark:hover:text-zinc-100 transition-colors"
-                  >
-                    <X className="h-3 w-3" />
-                    {t('jobs.clearAll')}
+                <Sheet open={filterOpen} onOpenChange={setFilterOpen}>
+                  <SheetTrigger asChild>
+                    <Button type="button" variant="outline" className="h-10 rounded-xl border-zinc-200 px-3 text-sm dark:border-zinc-700">
+                      <SlidersHorizontal className="mr-2 h-4 w-4" />
+                      {t('jobs.filter')}
+                      {activeFilterCount > 0 && (
+                        <Badge className="ml-2 rounded-full bg-zinc-900 px-1.5 text-[10px] text-white dark:bg-white dark:text-zinc-900">
+                          {activeFilterCount}
+                        </Badge>
+                      )}
+                    </Button>
+                  </SheetTrigger>
+                  <SheetContent side="right" className="w-full border-zinc-200 p-0 dark:border-zinc-800 sm:max-w-md">
+                    <SheetHeader className="border-b border-zinc-100 px-5 py-5 text-left dark:border-zinc-800">
+                      <SheetTitle className="flex items-center gap-2 text-lg"><SlidersHorizontal className="h-5 w-5" />筛选岗位</SheetTitle>
+                      <SheetDescription>组合多个条件，结果将在应用后按页加载。</SheetDescription>
+                    </SheetHeader>
+                    <div className="flex-1 space-y-6 overflow-y-auto px-5 py-5">
+                      <FilterSection label="地区" icon={MapPin}>
+                        <CheckboxOptions options={configs.region || []} selected={draftRegions} onChange={setDraftRegions} />
+                      </FilterSection>
+                      <FilterSection label={t('jobs.direction')} icon={Briefcase}>
+                        <CheckboxOptions options={configs.direction || []} selected={draftDirections} onChange={setDraftDirections} />
+                      </FilterSection>
+                      <FilterSection label={t('jobs.audience')} icon={Users}>
+                        <RadioOptions value={draftAudience || t('page.all')} options={configs.audience || []} allLabel={t('page.all')} onChange={setDraftAudience} />
+                      </FilterSection>
+                      <FilterSection label="岗位类型" icon={Briefcase}>
+                        <RadioOptions value={draftJobType} options={jobTypeOptions} allLabel="不限" onChange={setDraftJobType} />
+                      </FilterSection>
+                      <FilterSection label="签证支持" icon={Users}>
+                        <RadioOptions value={draftSponsorship} options={sponsorshipOptions} allLabel="不限" onChange={setDraftSponsorship} formatValue={(value) => value === 'yes' ? '支持签证' : value === 'no' ? '不支持签证' : '未注明'} />
+                      </FilterSection>
+                    </div>
+                    <SheetFooter className="border-t border-zinc-100 px-5 py-4 dark:border-zinc-800 sm:flex-row sm:justify-between">
+                      <Button type="button" variant="ghost" onClick={() => { setDraftRegions([]); setDraftDirections([]); setDraftAudience(t('page.all')); setDraftJobType(''); setDraftSponsorship(''); }}>
+                        <RotateCcw className="mr-2 h-4 w-4" />重置
+                      </Button>
+                      <Button type="button" onClick={applyDraftFilters} className="bg-zinc-900 text-white hover:bg-zinc-800 dark:bg-white dark:text-zinc-900 dark:hover:bg-zinc-200">应用筛选</Button>
+                    </SheetFooter>
+                  </SheetContent>
+                </Sheet>
+                {activeFilterCount > 0 && (
+                  <button type="button" onClick={clearFilters} className="inline-flex items-center gap-1 px-2 py-1 text-xs text-zinc-400 transition-colors hover:text-zinc-900 dark:hover:text-zinc-100">
+                    <X className="h-3 w-3" />{t('jobs.clearAll')}
                   </button>
                 )}
               </div>
+              {activeFilterSummaries.length > 0 && (
+                <div className="flex flex-wrap gap-2 border-t border-zinc-100 pt-3 dark:border-zinc-800">
+                  {activeFilterSummaries.map((summary) => (
+                    <Badge key={summary.id} variant="secondary" className="max-w-full rounded-md bg-zinc-100 px-2 py-1 text-xs font-normal text-zinc-600 dark:bg-zinc-800 dark:text-zinc-300">
+                      <span className="truncate">{summary.label}</span>
+                    </Badge>
+                  ))}
+                </div>
+              )}
             </div>
           </CardContent>
         </Card>

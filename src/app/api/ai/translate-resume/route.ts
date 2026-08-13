@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { getAuthContext, unauthorizedResponse } from '@/lib/auth-server';
 import { createTextProviderClient } from '@/lib/ai/text-provider';
+import { consumeTrackedTextStream } from '@/lib/ai-usage';
 import { extractFirstJsonObject } from '@/lib/json-extract';
 
 export async function POST(request: NextRequest) {
@@ -29,20 +30,18 @@ ${JSON.stringify(resumeData, null, 2)}
 
 请返回翻译后的JSON数据。`;
 
-    const stream = llmClient.stream([
+    const generated = await consumeTrackedTextStream(llmClient, [
       { 
         role: 'system', 
         content: `你是一个专业的简历翻译专家，擅长在中文和英文之间翻译简历内容。请始终以有效的JSON格式输出。` 
       },
       { role: 'user', content: prompt },
-    ], { temperature: 0.3 });
-
-    let result = '';
-    for await (const chunk of stream) {
-      if (chunk.content) {
-        result += chunk.content.toString();
-      }
-    }
+    ], { temperature: 0.3 }, {
+      userId: auth.user.id,
+      feature: 'resume_translate',
+      metadata: { target_language: targetLanguage === 'english' ? 'en' : 'zh' },
+    }, () => undefined);
+    const result = generated.content;
 
     // 解析JSON
     try {

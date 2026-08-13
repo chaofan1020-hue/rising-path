@@ -38,6 +38,35 @@ export function hashInterviewSnapshot(value: unknown): string {
   return crypto.createHash('sha256').update(JSON.stringify(value ?? null)).digest('hex');
 }
 
+export interface InterviewQuestionClassification {
+  intentKey: string;
+  dimension: string;
+  scenarioKey: string;
+}
+
+export function classifyInterviewQuestion(text: string): InterviewQuestionClassification {
+  const value = text.toLocaleLowerCase();
+  if (/(冲突|分歧|同事|团队|conflict|disagree|stakeholder)/u.test(value)) {
+    return { intentKey: 'conflict_resolution', dimension: '沟通与协作', scenarioKey: 'team_situation' };
+  }
+  if (/(失败|复盘|教训|改进|failure|mistake|lesson|retrospective)/u.test(value)) {
+    return { intentKey: 'failure_reflection', dimension: '反思与成长', scenarioKey: 'failure_case' };
+  }
+  if (/(数据|指标|实验|归因|metric|experiment|causal|sql|分析)/u.test(value)) {
+    return { intentKey: 'metric_attribution', dimension: '数据与分析', scenarioKey: 'project_or_business_case' };
+  }
+  if (/(技术|架构|代码|算法|系统|technical|architecture|algorithm|debug)/u.test(value)) {
+    return { intentKey: 'technical_depth', dimension: '技术深度', scenarioKey: 'technical_scenario' };
+  }
+  if (/(客户|用户|需求|customer|user|requirement|产品)/u.test(value)) {
+    return { intentKey: 'customer_understanding', dimension: '用户与业务理解', scenarioKey: 'customer_scenario' };
+  }
+  if (/(主动|负责|推动|owner|ownership|drive|deliver)/u.test(value)) {
+    return { intentKey: 'ownership', dimension: '主动性与执行力', scenarioKey: 'project_or_business_case' };
+  }
+  return { intentKey: 'general', dimension: '综合能力', scenarioKey: 'resume_experience' };
+}
+
 export function createInterviewSessionSeed(): string {
   return crypto.randomBytes(16).toString('hex');
 }
@@ -87,7 +116,20 @@ export function buildQuestionHistoryNote(
   language: string,
 ): string {
   if (questions.length === 0) return '';
-  const list = questions.map((question, index) => `${index + 1}. ${question}`).join('\n');
+  const limited = questions
+    .map((question) => question.trim().slice(0, 100))
+    .filter(Boolean)
+    .slice(0, 10);
+  let total = 0;
+  const bounded: string[] = [];
+  for (const question of limited) {
+    const line = `${bounded.length + 1}. ${question}`;
+    if (total + line.length + (bounded.length ? 1 : 0) > 1500) break;
+    bounded.push(line);
+    total += line.length + (bounded.length > 1 ? 1 : 0);
+  }
+  const list = bounded.join('\n');
+  if (!list) return '';
   return language === 'en'
     ? `\n\nRecent questions asked to this candidate at the same company and role. Do not repeat them or ask the same intent in different wording. Choose a new dimension, scenario, or angle:\n${list}`
     : `\n\n【该候选人在同一家公司和岗位近期已经被问过的问题】禁止重复这些问题，也不要换一种说法重复相同考察意图；请选择新的维度、场景或角度：\n${list}`;

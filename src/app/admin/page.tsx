@@ -1,12 +1,13 @@
 'use client';
 
-import { useState, useEffect, useRef } from 'react';
+import { Suspense, useState, useEffect, useRef, useCallback } from 'react';
+import { usePathname, useRouter, useSearchParams } from 'next/navigation';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Input } from '@/components/ui/input';
 import { Textarea } from '@/components/ui/textarea';
 import { Badge } from '@/components/ui/badge';
-import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
+import { Tabs, TabsContent } from '@/components/ui/tabs';
 import {
   Select,
   SelectContent,
@@ -35,8 +36,6 @@ import {
 } from '@/components/ui/alert-dialog';
 import { Label } from '@/components/ui/label';
 import { Switch } from '@/components/ui/switch';
-import { AdminAuthGuard } from '@/components/admin-auth-guard';
-import { Header1 } from '@/components/header1';
 import { LogoUploadDialog } from '@/components/logo-upload-dialog';
 import Image from 'next/image';
 import { 
@@ -44,7 +43,6 @@ import {
   Briefcase,
   Send,
   Users,
-  GraduationCap,
   Plus,
   Edit,
   Trash2,
@@ -62,6 +60,7 @@ import {
   BarChart3,
   TrendingUp,
   Activity,
+  ClipboardList,
   ImageIcon,
   PieChart,
   Building2,
@@ -72,8 +71,11 @@ import {
   Download,
   ChevronLeft,
   ChevronRight,
+  RefreshCw,
 } from 'lucide-react';
 import Link from 'next/link';
+import { useAdminPermissions } from '@/components/admin-shell';
+import { ADMIN_PERMISSIONS } from '@/lib/admin-permission-constants';
 
 // Types
 interface Job {
@@ -94,23 +96,69 @@ interface Job {
 
 interface Resume {
   id: number;
-  file_key: string;
   file_name: string;
-  parsed_content: string;
-  user_info: Record<string, unknown>;
+  user_id?: string | null;
   created_at: string;
+  updated_at?: string | null;
+  processing_status?: string | null;
+  processing_stage?: string | null;
+  processing_attempts?: number | null;
+  profile_version?: number | null;
+  segmentation_confirmed?: boolean | null;
+  profile_confirmed_at?: string | null;
 }
 
 interface Application {
   id: number;
   job_id: number;
   resume_id: number;
+  user_id?: string | null;
   status: string;
-  notes: string;
-  submitted_at: string;
+  notes: string | null;
+  submitted_at: string | null;
   created_at: string;
-  jobs: { title: string; company: string };
-  resumes: { file_name: string };
+  updated_at?: string | null;
+  jobs: { title: string; company: string; region?: string; direction?: string } | null;
+  resumes: { file_name: string } | null;
+}
+
+interface JobSubmission {
+  id: number;
+  title: string;
+  company: string;
+  region: string | null;
+  direction: string | null;
+  job_type: string | null;
+  job_url: string | null;
+  status: 'pending' | 'approved' | 'rejected';
+  notes: string | null;
+  submitted_at: string;
+  reviewed_at: string | null;
+  created_at: string;
+}
+
+interface JobFeedStateData {
+  configured: boolean;
+  healthy: boolean;
+  description: string;
+  state: {
+    source_system: string;
+    reconcile_started_at: string | null;
+    reconcile_pages: number;
+    reconcile_open_seen: number;
+    last_incremental_success_at: string | null;
+    last_reconcile_success_at: string | null;
+    last_error: string | null;
+    consecutive_failures: number;
+    lease_owner: string | null;
+    lease_expires_at: string | null;
+    updated_at: string;
+  };
+}
+
+interface AdminCountSummary {
+  total: number;
+  byStatus: Record<string, number>;
 }
 
 interface JobConfig {
@@ -125,6 +173,7 @@ interface JobConfig {
 interface AnalyticsData {
   overview: {
     totalUsers: number;
+    recentUsers: number;
     totalResumes: number;
     recentResumes: number;
     totalJobs: number;
@@ -133,18 +182,268 @@ interface AnalyticsData {
     recentApplications: number;
     totalAiMatches: number;
     recentAiMatches: number;
+    activeUsers: number;
+    totalActivityEvents: number;
+    averageActivityPerActiveUser: number;
   };
   charts: {
     jobsByRegion: Record<string, number>;
     jobsByDirection: Record<string, number>;
     applicationsByStatus: Record<string, number>;
     dailyStats: { date: string; resumes: number; applications: number; aiMatches: number }[];
-    // 用户画像统计
-    resumesByRegion: Record<string, number>;
-    resumesBySchool: Record<string, number>;
-    resumesByDegree: Record<string, number>;
   };
   userActivity: { userId: string; userName: string; resumes: number; applications: number; aiMatches: number }[];
+}
+
+interface PrefillQualityData {
+  overview: {
+    totalFeedback: number;
+    confirmed: number;
+    edited: number;
+    ignored: number;
+    decided: number;
+    confirmationRate: number;
+    correctionRate: number;
+    contributingUsers: number;
+    domains: number;
+  };
+  dailyStats: { date: string; confirmed: number; edited: number; ignored: number }[];
+  fieldQuality: {
+    domain: string;
+    semanticKey: string;
+    totalFeedback: number;
+    confirmed: number;
+    edited: number;
+    ignored: number;
+    correctionRate: number;
+  }[];
+  templateQuality: {
+    domainPattern: string;
+    atsType: string;
+    semanticKey: string;
+    usageCount: number;
+    correctionCount: number;
+    correctionRate: number;
+  }[];
+}
+
+interface ServiceHealthData {
+  overview: {
+    callCount: number;
+    successfulCalls: number;
+    failedCalls: number;
+    providersWithCalls: number;
+    lastCallAt: string | null;
+  };
+  providers: {
+    provider: string;
+    callCount: number;
+    successfulCalls: number;
+    failedCalls: number;
+    successRate: number;
+    averageDurationMs: number | null;
+    lastCallAt: string | null;
+    status: 'healthy' | 'warning' | 'degraded' | 'unknown';
+  }[];
+  failureHotspots: {
+    provider: string;
+    feature: string;
+    failedCalls: number;
+    callCount: number;
+    failureRate: number;
+    lastCallAt: string | null;
+  }[];
+  jobSync: {
+    sourceSystem: string;
+    lastIncrementalSuccessAt: string | null;
+    lastReconcileSuccessAt: string | null;
+    lastErrorAt: string | null;
+    consecutiveFailures: number;
+    syncInProgress: boolean;
+    updatedAt: string;
+    status: 'healthy' | 'running' | 'degraded' | 'stale' | 'unknown';
+  }[];
+}
+
+interface AiUsageSummary {
+  call_count: number;
+  successful_calls: number;
+  failed_calls: number;
+  input_tokens: number;
+  output_tokens: number;
+  total_tokens: number;
+  actual_calls: number;
+  estimated_calls: number;
+  unknown_calls: number;
+  audio_calls: number;
+  input_audio_seconds: number;
+  output_audio_seconds: number;
+  input_audio_bytes: number;
+  output_audio_bytes: number;
+  audio_tokens: number;
+  text_characters: number;
+  billing_units: number;
+  priced_calls: number;
+  unpriced_calls: number;
+  estimated_costs: Record<string, number | string>;
+}
+
+interface AiUsageFeatureSummary extends AiUsageSummary {
+  feature: string;
+}
+
+interface AiUsageEvent {
+  id: number;
+  request_id: string;
+  user_id: string | null;
+  feature: string;
+  provider: string;
+  model: string | null;
+  status: 'success' | 'error';
+  usage_source: 'actual' | 'estimated' | 'unknown';
+  input_tokens: number | null;
+  output_tokens: number | null;
+  total_tokens: number | null;
+  modality: 'text' | 'audio';
+  input_audio_seconds: number | null;
+  output_audio_seconds: number | null;
+  input_audio_bytes: number | null;
+  output_audio_bytes: number | null;
+  audio_tokens: number | null;
+  text_characters: number | null;
+  measurement_source: string;
+  error_message: string | null;
+  duration_ms: number | null;
+  estimated_cost: number | string | null;
+  currency: string;
+  cost_source: 'priced' | 'unpriced';
+  created_at: string;
+}
+
+interface AiUsageStudentSummary extends AiUsageSummary {
+  user_id: string;
+  display_name: string;
+}
+
+interface AiUsageData {
+  summary: AiUsageSummary;
+  features: AiUsageFeatureSummary[];
+  events: AiUsageEvent[];
+}
+
+interface AiModelPrice {
+  id: number;
+  provider: string;
+  model: string;
+  currency: string;
+  input_token_price_per_million: number | string | null;
+  output_token_price_per_million: number | string | null;
+  audio_second_price: number | string | null;
+  billing_unit_price: number | string | null;
+  effective_from: string;
+  effective_to: string | null;
+  is_active: boolean;
+  notes: string | null;
+}
+
+interface AdminAuditLog {
+  id: number;
+  actor_type: string;
+  actor_fingerprint: string | null;
+  action: string;
+  resource_type: string;
+  resource_id: string | null;
+  subject_user_id: string | null;
+  metadata: Record<string, unknown>;
+  before_data: Record<string, unknown> | null;
+  after_data: Record<string, unknown> | null;
+  success: boolean;
+  error_code: string | null;
+  error_message: string | null;
+  request_id: string;
+  request_ip: string | null;
+  user_agent: string | null;
+  created_at: string;
+}
+
+const aiFeatureLabels: Record<string, string> = {
+  ai_match: 'AI 选岗',
+  resume_optimize: '简历优化',
+  resume_score: '简历评分',
+  resume_translate: '简历翻译',
+  resume_translate_content: '简历内容翻译',
+  resume_parse: '简历解析',
+  resume_profile: '简历画像',
+  company_dna: '企业面试基因',
+  job_description: '岗位描述生成',
+  application_prefill: '网申智能预填',
+  interview_chat: '面试对话',
+  interview_summary: '面试总结',
+  interview_asr: '面试语音识别',
+  interview_asr_realtime: '实时语音识别',
+  interview_tts: '面试语音合成',
+  interview_tts_realtime: '实时语音合成',
+};
+
+const aiFeatureOptions = Object.keys(aiFeatureLabels);
+
+function formatTokenCount(value: number | string | null | undefined): string {
+  if (value === null || value === undefined || value === '') return '未知';
+  const parsed = Number(value);
+  return Number.isFinite(parsed) ? new Intl.NumberFormat('zh-CN').format(parsed) : '未知';
+}
+
+function formatAudioMinutes(value: number | string | null | undefined): string {
+  if (value === null || value === undefined || value === '') return '未知';
+  const parsed = Number(value);
+  return Number.isFinite(parsed) ? new Intl.NumberFormat('zh-CN', { maximumFractionDigits: 2 }).format(parsed / 60) : '未知';
+}
+
+function formatAudioBytes(value: number | string | null | undefined): string {
+  if (value === null || value === undefined || value === '') return '未知';
+  const parsed = Number(value);
+  if (!Number.isFinite(parsed)) return '未知';
+  if (parsed < 1024) return `${parsed} B`;
+  if (parsed < 1024 * 1024) return `${(parsed / 1024).toFixed(1)} KB`;
+  return `${(parsed / (1024 * 1024)).toFixed(2)} MB`;
+}
+
+function formatAiFeature(feature: string): string {
+  return aiFeatureLabels[feature] || feature;
+}
+
+function formatEstimatedCosts(costs: Record<string, number | string> | null | undefined): string {
+  const entries = Object.entries(costs || {}).filter(([, value]) => Number.isFinite(Number(value)));
+  if (entries.length === 0) return '未定价';
+  return entries
+    .sort(([currencyA], [currencyB]) => currencyA.localeCompare(currencyB))
+    .map(([currency, value]) => `${currency} ${Number(value).toFixed(4)}`)
+    .join(' / ');
+}
+
+function formatModelPrice(price: AiModelPrice): string {
+  if (price.input_token_price_per_million !== null || price.output_token_price_per_million !== null) {
+    return `输入 ${price.input_token_price_per_million ?? '-'} / 输出 ${price.output_token_price_per_million ?? '-'} 每百万 Token`;
+  }
+  if (price.audio_second_price !== null) return `${price.audio_second_price} / 音频秒`;
+  return `${price.billing_unit_price ?? '-'} / 自定义计费单位`;
+}
+
+function formatAuditPayload(value: Record<string, unknown> | null): string {
+  if (!value || Object.keys(value).length === 0) return '-';
+  try {
+    return JSON.stringify(value);
+  } catch {
+    return '[无法显示]';
+  }
+}
+
+function getAiUsageDateRange(range: '7d' | '30d' | '90d' | 'all'): { from?: string; to: string } {
+  const to = new Date().toISOString();
+  if (range === 'all') return { to };
+  const from = new Date();
+  from.setDate(from.getDate() - Number(range.slice(0, -1)));
+  return { from: from.toISOString(), to };
 }
 
 const statusOptions = ['pending', 'filling', 'submitted', 'closed'];
@@ -156,7 +455,65 @@ const statusLabels: Record<string, string> = {
   closed: '已关闭',
 };
 
+const resumeStatusLabels: Record<string, string> = {
+  uploaded: '已上传',
+  extracting_text: '提取文本中',
+  extracting_profile: '生成画像中',
+  deriving_segmentation: '计算分层中',
+  needs_confirmation: '待确认',
+  ready: '已完成',
+  failed: '处理失败',
+};
+
+const adminTabs = [
+  { value: 'overview', permission: ADMIN_PERMISSIONS.dashboardRead },
+  { value: 'analytics', permission: ADMIN_PERMISSIONS.dashboardRead },
+  { value: 'prefill-quality', permission: ADMIN_PERMISSIONS.dashboardRead },
+  { value: 'service-health', permission: ADMIN_PERMISSIONS.dashboardRead },
+  { value: 'ai-usage', permission: ADMIN_PERMISSIONS.dashboardRead },
+  { value: 'jobs', permission: ADMIN_PERMISSIONS.jobsRead },
+  { value: 'job-submissions', permission: ADMIN_PERMISSIONS.jobsRead },
+  { value: 'logos', permission: ADMIN_PERMISSIONS.configWrite },
+  { value: 'resumes', permission: ADMIN_PERMISSIONS.usersRead },
+  { value: 'applications', permission: ADMIN_PERMISSIONS.usersRead },
+  { value: 'configs', permission: ADMIN_PERMISSIONS.configWrite },
+  { value: 'audit', permission: ADMIN_PERMISSIONS.auditRead },
+] as const;
+
+type AdminTab = typeof adminTabs[number]['value'];
+
+const adminTabMeta: Record<AdminTab, { title: string; description: string }> = {
+  overview: { title: '运营概览', description: '核心业务数据与待处理事项' },
+  analytics: { title: '业务数据分析', description: '查看用户、简历、网申和岗位趋势' },
+  'prefill-quality': { title: '网申质量', description: '查看字段映射与预填反馈质量' },
+  'service-health': { title: '服务健康', description: '监控 AI 调用与岗位同步状态' },
+  'ai-usage': { title: 'AI 用量与成本', description: '按功能、学生和模型查看用量' },
+  jobs: { title: '岗位管理', description: '管理岗位内容与数据同步' },
+  'job-submissions': { title: '投稿审核', description: '审核用户提交的岗位线索' },
+  logos: { title: '品牌资源', description: '管理企业 Logo 与展示资源' },
+  resumes: { title: '简历处理', description: '查看简历解析与画像处理状态' },
+  applications: { title: '网申记录', description: '查看投递进度与运营状态' },
+  configs: { title: '岗位与企业配置', description: '维护地区、方向、受众和企业资料' },
+  audit: { title: '审计日志', description: '查看后台操作的安全记录' },
+};
+
 function AdminContent() {
+  const { loading: permissionsLoading, hasPermission } = useAdminPermissions();
+  const router = useRouter();
+  const pathname = usePathname();
+  const searchParams = useSearchParams();
+  const requestedTab = searchParams.get('tab');
+  const availableTabs = adminTabs.filter((tab) => hasPermission(tab.permission));
+  const fallbackTab: AdminTab = availableTabs[0]?.value || 'overview';
+  const requestedTabIsAvailable = availableTabs.some((tab) => tab.value === requestedTab);
+  const activeTab: AdminTab = requestedTabIsAvailable ? requestedTab as AdminTab : fallbackTab;
+  const canReadDashboard = hasPermission(ADMIN_PERMISSIONS.dashboardRead);
+  const canReadJobs = hasPermission(ADMIN_PERMISSIONS.jobsRead);
+  const canWriteJobs = hasPermission(ADMIN_PERMISSIONS.jobsWrite);
+  const canReadUsers = hasPermission(ADMIN_PERMISSIONS.usersRead);
+  const canExportUsage = hasPermission(ADMIN_PERMISSIONS.usageExport);
+  const canWriteConfig = hasPermission(ADMIN_PERMISSIONS.configWrite);
+  const canReadAudit = hasPermission(ADMIN_PERMISSIONS.auditRead);
   const [jobs, setJobs] = useState<Job[]>([]);
   const [jobsPage, setJobsPage] = useState(0);
   const jobsPageSize = 50;
@@ -164,14 +521,93 @@ function AdminContent() {
   const [jobsLoading, setJobsLoading] = useState(true);
   const [jobsError, setJobsError] = useState('');
   const jobsRequestRef = useRef(0);
+  const [jobSubmissions, setJobSubmissions] = useState<JobSubmission[]>([]);
+  const [jobSubmissionsPage, setJobSubmissionsPage] = useState(1);
+  const [jobSubmissionsTotal, setJobSubmissionsTotal] = useState(0);
+  const [jobSubmissionsStatus, setJobSubmissionsStatus] = useState('pending');
+  const [jobSubmissionsSearch, setJobSubmissionsSearch] = useState('');
+  const [jobSubmissionsLoading, setJobSubmissionsLoading] = useState(false);
+  const [jobSubmissionsError, setJobSubmissionsError] = useState('');
+  const [reviewingSubmission, setReviewingSubmission] = useState<JobSubmission | null>(null);
+  const [reviewNotes, setReviewNotes] = useState('');
+  const [submissionReviewAction, setSubmissionReviewAction] = useState<'approve' | 'reject' | null>(null);
+  const [submissionReviewSaving, setSubmissionReviewSaving] = useState(false);
+  const jobSubmissionsPageSize = 20;
   const [resumes, setResumes] = useState<Resume[]>([]);
   const [applications, setApplications] = useState<Application[]>([]);
-  const [loading, setLoading] = useState(true);
+  const [resumesPage, setResumesPage] = useState(1);
+  const [applicationsPage, setApplicationsPage] = useState(1);
+  const resumesPageSize = 20;
+  const applicationsPageSize = 20;
+  const [resumesTotal, setResumesTotal] = useState(0);
+  const [applicationsTotal, setApplicationsTotal] = useState(0);
+  const [resumeSummary, setResumeSummary] = useState<AdminCountSummary>({ total: 0, byStatus: {} });
+  const [applicationSummary, setApplicationSummary] = useState<AdminCountSummary>({ total: 0, byStatus: {} });
+  const [resumeSearch, setResumeSearch] = useState('');
+  const [applicationSearch, setApplicationSearch] = useState('');
+  const [resumeStatus, setResumeStatus] = useState('all');
+  const [applicationStatus, setApplicationStatus] = useState('all');
+  const resumesRequestRef = useRef(0);
+  const applicationsRequestRef = useRef(0);
+  const [loading, setLoading] = useState(false);
   
   // Analytics state
   const [analytics, setAnalytics] = useState<AnalyticsData | null>(null);
   const [analyticsLoading, setAnalyticsLoading] = useState(false);
+  const [analyticsError, setAnalyticsError] = useState('');
   const [analyticsRange, setAnalyticsRange] = useState<'7d' | '30d' | '90d' | 'all'>('7d');
+  const [prefillQuality, setPrefillQuality] = useState<PrefillQualityData | null>(null);
+  const [prefillQualityLoading, setPrefillQualityLoading] = useState(false);
+  const [prefillQualityError, setPrefillQualityError] = useState('');
+  const [prefillQualityRange, setPrefillQualityRange] = useState<'7d' | '30d' | '90d'>('30d');
+  const [serviceHealth, setServiceHealth] = useState<ServiceHealthData | null>(null);
+  const [serviceHealthLoading, setServiceHealthLoading] = useState(false);
+  const [serviceHealthError, setServiceHealthError] = useState('');
+  const [serviceHealthRange, setServiceHealthRange] = useState<'24h' | '7d' | '30d'>('24h');
+
+  // AI usage state
+  const [aiUsage, setAiUsage] = useState<AiUsageData | null>(null);
+  const [aiUsageStudents, setAiUsageStudents] = useState<AiUsageStudentSummary[]>([]);
+  const [aiUsageLoading, setAiUsageLoading] = useState(false);
+  const [aiUsageError, setAiUsageError] = useState('');
+  const [aiUsageExporting, setAiUsageExporting] = useState(false);
+  const [aiUsageRange, setAiUsageRange] = useState<'7d' | '30d' | '90d' | 'all'>('7d');
+  const [aiUsageFeature, setAiUsageFeature] = useState('all');
+  const [aiUsageProvider, setAiUsageProvider] = useState('all');
+  const [aiUsageStatus, setAiUsageStatus] = useState('all');
+  const [aiUsageSource, setAiUsageSource] = useState('all');
+  const [aiUsagePage, setAiUsagePage] = useState(1);
+  const [aiUsageStudentPage, setAiUsageStudentPage] = useState(1);
+  const [aiUsageTotal, setAiUsageTotal] = useState(0);
+  const [aiUsageStudentTotal, setAiUsageStudentTotal] = useState(0);
+  const [aiModelPrices, setAiModelPrices] = useState<AiModelPrice[]>([]);
+  const [aiPricesLoading, setAiPricesLoading] = useState(false);
+  const [aiPricesError, setAiPricesError] = useState('');
+  const [aiPriceDialogOpen, setAiPriceDialogOpen] = useState(false);
+  const [aiPriceSaving, setAiPriceSaving] = useState(false);
+  const [aiPriceForm, setAiPriceForm] = useState({
+    provider: 'alibaba',
+    model: '',
+    currency: 'USD',
+    inputTokenPricePerMillion: '',
+    outputTokenPricePerMillion: '',
+    audioSecondPrice: '',
+    billingUnitPrice: '',
+    effectiveFrom: '',
+    notes: '',
+  });
+  const aiUsagePageSize = 10;
+  const aiUsageStudentPageSize = 10;
+
+  // Admin audit state
+  const [auditLogs, setAuditLogs] = useState<AdminAuditLog[]>([]);
+  const [auditLoading, setAuditLoading] = useState(false);
+  const [auditError, setAuditError] = useState('');
+  const [auditAction, setAuditAction] = useState('all');
+  const [auditResourceType, setAuditResourceType] = useState('all');
+  const [auditPage, setAuditPage] = useState(1);
+  const [auditTotal, setAuditTotal] = useState(0);
+  const auditPageSize = 15;
 
   // Config state
   const [configs, setConfigs] = useState<Record<string, JobConfig[]>>({
@@ -366,6 +802,10 @@ function AdminContent() {
   const [batchImporting, setBatchImporting] = useState(false);
   const [feedSyncing, setFeedSyncing] = useState(false);
   const [feedSyncMessage, setFeedSyncMessage] = useState('');
+  const [jobFeedState, setJobFeedState] = useState<JobFeedStateData | null>(null);
+  const [jobFeedStateLoading, setJobFeedStateLoading] = useState(false);
+  const [jobFeedStateError, setJobFeedStateError] = useState('');
+  const [reconcileConfirmOpen, setReconcileConfirmOpen] = useState(false);
   const [batchResult, setBatchResult] = useState<{
     success?: boolean;
     created?: number;
@@ -393,24 +833,28 @@ function AdminContent() {
   const [passwordSaving, setPasswordSaving] = useState(false);
 
   useEffect(() => {
-    fetchData();
-  }, []);
+    if (permissionsLoading || requestedTabIsAvailable || availableTabs.length === 0) return;
+    const params = new URLSearchParams(searchParams.toString());
+    if (fallbackTab === 'overview') params.delete('tab');
+    else params.set('tab', fallbackTab);
+    router.replace(params.size > 0 ? `${pathname}?${params.toString()}` : pathname);
+  }, [availableTabs.length, fallbackTab, pathname, permissionsLoading, requestedTabIsAvailable, router, searchParams]);
+
+  useEffect(() => {
+    if (canWriteConfig) void fetchData();
+  }, [canWriteConfig]);
 
   const fetchData = async () => {
     setLoading(true);
     try {
-      const [resumesRes, appsRes, configsRes, companiesRes] = await Promise.all([
-        fetch('/api/resume'),
-        fetch('/api/applications'),
-        fetch('/api/configs'),
+      const [configsRes, companiesRes] = await Promise.all([
+        fetch('/api/admin/configs?page=1&pageSize=100'),
         fetch('/api/admin/company-config'),
       ]);
-      const resumesData = await resumesRes.json();
-      const appsData = await appsRes.json();
       const configsData = await configsRes.json();
       const companiesData = await companiesRes.json();
-      setResumes(resumesData.resumes || []);
-      setApplications(appsData.applications || []);
+      if (!configsRes.ok) throw new Error(configsData.error?.message || '配置加载失败');
+      if (!companiesRes.ok) throw new Error(companiesData.error || '企业配置加载失败');
       setConfigs(configsData.configs || {});
       setCompanies(companiesData.companies || []);
       
@@ -431,6 +875,20 @@ function AdminContent() {
     }
   };
 
+  const fetchJobOptions = async () => {
+    try {
+      const response = await fetch('/api/configs', { cache: 'no-store' });
+      const data = await response.json();
+      if (!response.ok) throw new Error(data.error || '岗位选项加载失败');
+      setConfigs(data.configs || {});
+      if (data.configs?.region?.[0]) setJobForm((prev) => ({ ...prev, region: prev.region || data.configs.region[0].config_value }));
+      if (data.configs?.direction?.[0]) setJobForm((prev) => ({ ...prev, direction: prev.direction || data.configs.direction[0].config_value }));
+      if (data.configs?.audience?.[0]) setJobForm((prev) => ({ ...prev, audience: prev.audience || data.configs.audience[0].config_value }));
+    } catch (error) {
+      console.error('Failed to fetch job options:', error);
+    }
+  };
+
   const fetchJobsPage = async (requestedPage = jobsPage, requestedSearch = jobSearch) => {
     const requestId = ++jobsRequestRef.current;
     setJobsLoading(true);
@@ -439,7 +897,7 @@ function AdminContent() {
       const params = new URLSearchParams({
         limit: String(jobsPageSize),
         offset: String(requestedPage * jobsPageSize),
-        status: 'all',
+        status: 'active',
       });
       if (requestedSearch.trim()) params.set('search', requestedSearch.trim());
       const response = await fetch(`/api/jobs?${params.toString()}`, { cache: 'no-store' });
@@ -458,32 +916,447 @@ function AdminContent() {
     }
   };
 
+  const fetchJobFeedState = async () => {
+    setJobFeedStateLoading(true);
+    setJobFeedStateError('');
+    try {
+      const response = await fetch('/api/jobs/sync-feed', { cache: 'no-store' });
+      const data = await response.json();
+      if (!response.ok) throw new Error(data.error || '读取岗位同步状态失败');
+      setJobFeedState(data as JobFeedStateData);
+    } catch (error) {
+      setJobFeedState(null);
+      setJobFeedStateError(error instanceof Error ? error.message : '读取岗位同步状态失败');
+    } finally {
+      setJobFeedStateLoading(false);
+    }
+  };
+
+  const fetchJobSubmissions = async (
+    requestedPage = jobSubmissionsPage,
+    requestedStatus = jobSubmissionsStatus,
+    requestedSearch = jobSubmissionsSearch,
+  ) => {
+    setJobSubmissionsLoading(true);
+    setJobSubmissionsError('');
+    try {
+      const params = new URLSearchParams({ page: String(requestedPage), pageSize: String(jobSubmissionsPageSize), status: requestedStatus });
+      if (requestedSearch.trim()) params.set('search', requestedSearch.trim());
+      const response = await fetch(`/api/admin/job-submissions?${params.toString()}`, { cache: 'no-store' });
+      const json = await response.json();
+      if (!response.ok) throw new Error(json.error?.message || '岗位投稿加载失败');
+      setJobSubmissions(json.data || []);
+      setJobSubmissionsTotal(Number(json.meta?.total || 0));
+    } catch (error) {
+      console.error('Failed to fetch job submissions:', error);
+      setJobSubmissionsError(error instanceof Error ? error.message : '岗位投稿加载失败');
+      setJobSubmissions([]);
+      setJobSubmissionsTotal(0);
+    } finally {
+      setJobSubmissionsLoading(false);
+    }
+  };
+
+  const handleJobSubmissionReview = async () => {
+    if (!reviewingSubmission || !submissionReviewAction) return;
+    setSubmissionReviewSaving(true);
+    try {
+      const response = await fetch('/api/admin/job-submissions', {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ id: reviewingSubmission.id, action: submissionReviewAction, notes: reviewNotes }),
+      });
+      const json = await response.json();
+      if (!response.ok) throw new Error(json.error?.message || '岗位投稿审核失败');
+      setReviewingSubmission(null);
+      setReviewNotes('');
+      setSubmissionReviewAction(null);
+      await fetchJobSubmissions();
+    } catch (error) {
+      alert(error instanceof Error ? error.message : '岗位投稿审核失败');
+    } finally {
+      setSubmissionReviewSaving(false);
+    }
+  };
+
+  const handleJobSubmissionDelete = async (submission: JobSubmission) => {
+    if (!confirm(`确定删除“${submission.company} - ${submission.title}”这条投稿吗？`)) return;
+    try {
+      const response = await fetch(`/api/admin/job-submissions?id=${submission.id}`, { method: 'DELETE' });
+      const json = await response.json();
+      if (!response.ok) throw new Error(json.error?.message || '删除岗位投稿失败');
+      const remaining = jobSubmissions.length - 1;
+      if (remaining === 0 && jobSubmissionsPage > 1) setJobSubmissionsPage((page) => page - 1);
+      else await fetchJobSubmissions();
+    } catch (error) {
+      alert(error instanceof Error ? error.message : '删除岗位投稿失败');
+    }
+  };
+
+  const fetchResumesPage = async (
+    requestedPage = resumesPage,
+    requestedSearch = resumeSearch,
+    requestedStatus = resumeStatus,
+  ) => {
+    const requestId = ++resumesRequestRef.current;
+    const params = new URLSearchParams({
+      page: String(requestedPage),
+      pageSize: String(resumesPageSize),
+    });
+    if (requestedSearch.trim()) params.set('search', requestedSearch.trim());
+    if (requestedStatus !== 'all') params.set('status', requestedStatus);
+
+    try {
+      const response = await fetch(`/api/admin/resumes?${params.toString()}`, { cache: 'no-store' });
+      const json = await response.json();
+      if (!response.ok) throw new Error(json.error?.message || '简历加载失败');
+      if (requestId !== resumesRequestRef.current) return;
+      setResumes(json.data || []);
+      setResumesTotal(Number(json.meta?.total || 0));
+      setResumeSummary(json.summary || { total: 0, byStatus: {} });
+    } catch (error) {
+      if (requestId !== resumesRequestRef.current) return;
+      console.error('Failed to fetch admin resumes:', error);
+      setResumes([]);
+      setResumesTotal(0);
+      setResumeSummary({ total: 0, byStatus: {} });
+    }
+  };
+
+  const fetchApplicationsPage = async (
+    requestedPage = applicationsPage,
+    requestedSearch = applicationSearch,
+    requestedStatus = applicationStatus,
+  ) => {
+    const requestId = ++applicationsRequestRef.current;
+    const params = new URLSearchParams({
+      page: String(requestedPage),
+      pageSize: String(applicationsPageSize),
+    });
+    if (requestedSearch.trim()) params.set('search', requestedSearch.trim());
+    if (requestedStatus !== 'all') params.set('status', requestedStatus);
+
+    try {
+      const response = await fetch(`/api/admin/applications?${params.toString()}`, { cache: 'no-store' });
+      const json = await response.json();
+      if (!response.ok) throw new Error(json.error?.message || '网申加载失败');
+      if (requestId !== applicationsRequestRef.current) return;
+      setApplications(json.data || []);
+      setApplicationsTotal(Number(json.meta?.total || 0));
+      setApplicationSummary(json.summary || { total: 0, byStatus: {} });
+    } catch (error) {
+      if (requestId !== applicationsRequestRef.current) return;
+      console.error('Failed to fetch admin applications:', error);
+      setApplications([]);
+      setApplicationsTotal(0);
+      setApplicationSummary({ total: 0, byStatus: {} });
+    }
+  };
+
   useEffect(() => {
-    void fetchJobsPage();
-  }, [jobsPage, jobSearch]);
+    if (canReadUsers && activeTab === 'resumes') void fetchResumesPage();
+  }, [activeTab, canReadUsers, resumesPage, resumeSearch, resumeStatus]);
+
+  useEffect(() => {
+    if (canReadUsers && activeTab === 'applications') void fetchApplicationsPage();
+  }, [activeTab, applicationSearch, applicationStatus, applicationsPage, canReadUsers]);
+
+  useEffect(() => {
+    if (canReadJobs && (activeTab === 'jobs' || activeTab === 'overview')) void fetchJobsPage();
+  }, [activeTab, canReadJobs, jobSearch, jobsPage]);
+
+  useEffect(() => {
+    if (canReadJobs && activeTab === 'job-submissions') void fetchJobSubmissions();
+  }, [activeTab, canReadJobs, jobSubmissionsPage, jobSubmissionsSearch, jobSubmissionsStatus]);
+
+  useEffect(() => {
+    if (canReadJobs && !canWriteConfig && activeTab === 'jobs') void fetchJobOptions();
+  }, [activeTab, canReadJobs, canWriteConfig]);
+
+  useEffect(() => {
+    if (canWriteJobs && activeTab === 'jobs') void fetchJobFeedState();
+  }, [activeTab, canWriteJobs]);
 
   // Fetch analytics data
   const fetchAnalytics = async () => {
     setAnalyticsLoading(true);
+    setAnalyticsError('');
     try {
-      const response = await fetch(`/api/analytics?range=${analyticsRange}`);
+      const response = await fetch(`/api/admin/analytics?range=${analyticsRange}`, { cache: 'no-store' });
+      const data = await response.json();
       if (!response.ok) {
+        const required = Array.isArray(data.error?.requiredMigrations) ? `（所需迁移：${data.error.requiredMigrations.join('、')}）` : '';
+        throw new Error(`${data.error?.message || '分析数据加载失败'}${required}`);
+      }
+      if (!data.data) {
         setAnalytics(null);
         return;
       }
-      const data = await response.json();
-      setAnalytics(data);
+      setAnalytics(data.data || null);
     } catch (error) {
       console.error('Failed to fetch analytics:', error);
+      setAnalyticsError(error instanceof Error ? error.message : '分析数据加载失败');
+      setAnalytics(null);
     } finally {
       setAnalyticsLoading(false);
     }
   };
 
+  const fetchPrefillQuality = useCallback(async () => {
+    setPrefillQualityLoading(true);
+    setPrefillQualityError('');
+    try {
+      const response = await fetch(`/api/admin/prefill-quality?range=${prefillQualityRange}`, { cache: 'no-store' });
+      const json = await response.json();
+      if (!response.ok) {
+        const required = Array.isArray(json.error?.requiredMigrations) ? `（所需迁移：${json.error.requiredMigrations.join('、')}）` : '';
+        throw new Error(`${json.error?.message || '网申预填质量加载失败'}${required}`);
+      }
+      setPrefillQuality(json.data || null);
+    } catch (error) {
+      console.error('Failed to fetch prefill quality:', error);
+      setPrefillQualityError(error instanceof Error ? error.message : '网申预填质量加载失败');
+      setPrefillQuality(null);
+    } finally {
+      setPrefillQualityLoading(false);
+    }
+  }, [prefillQualityRange]);
+
+  const fetchServiceHealth = useCallback(async () => {
+    setServiceHealthLoading(true);
+    setServiceHealthError('');
+    try {
+      const response = await fetch(`/api/admin/service-health?range=${serviceHealthRange}`, { cache: 'no-store' });
+      const json = await response.json();
+      if (!response.ok) {
+        const required = Array.isArray(json.error?.requiredMigrations) ? `（所需迁移：${json.error.requiredMigrations.join('、')}）` : '';
+        throw new Error(`${json.error?.message || '服务健康数据加载失败'}${required}`);
+      }
+      setServiceHealth(json.data || null);
+    } catch (error) {
+      console.error('Failed to fetch service health:', error);
+      setServiceHealthError(error instanceof Error ? error.message : '服务健康数据加载失败');
+      setServiceHealth(null);
+    } finally {
+      setServiceHealthLoading(false);
+    }
+  }, [serviceHealthRange]);
+
+  const fetchAiUsage = useCallback(async () => {
+    setAiUsageLoading(true);
+    setAiUsageError('');
+    const dateRange = getAiUsageDateRange(aiUsageRange);
+    const commonParams = new URLSearchParams({ pageSize: String(aiUsagePageSize) });
+    if (aiUsageFeature !== 'all') commonParams.set('feature', aiUsageFeature);
+    if (aiUsageProvider !== 'all') commonParams.set('provider', aiUsageProvider);
+    if (aiUsageStatus !== 'all') commonParams.set('status', aiUsageStatus);
+    if (aiUsageSource !== 'all') commonParams.set('usageSource', aiUsageSource);
+    if (dateRange.from) commonParams.set('from', dateRange.from);
+    commonParams.set('to', dateRange.to);
+
+    const eventParams = new URLSearchParams(commonParams);
+    eventParams.set('page', String(aiUsagePage));
+
+    try {
+      const usageResponse = await fetch(`/api/admin/ai-usage?${eventParams.toString()}`, { cache: 'no-store' });
+      const usageJson = await usageResponse.json();
+      if (!usageResponse.ok) {
+        const required = Array.isArray(usageJson.error?.requiredMigrations) ? `（所需迁移：${usageJson.error.requiredMigrations.join('、')}）` : '';
+        throw new Error(`${usageJson.error?.message || 'AI 用量加载失败'}${required}`);
+      }
+
+      setAiUsage(usageJson.data || null);
+      setAiUsageTotal(Number(usageJson.meta?.total || 0));
+    } catch (error) {
+      console.error('Failed to fetch AI usage:', error);
+      setAiUsageError(error instanceof Error ? error.message : 'AI 用量加载失败');
+      setAiUsage(null);
+    } finally {
+      setAiUsageLoading(false);
+    }
+  }, [aiUsageFeature, aiUsagePage, aiUsageProvider, aiUsageRange, aiUsageSource, aiUsageStatus]);
+
+  const fetchAiUsageStudents = useCallback(async () => {
+    const dateRange = getAiUsageDateRange(aiUsageRange);
+    const params = new URLSearchParams({ page: String(aiUsageStudentPage), pageSize: String(aiUsageStudentPageSize) });
+    if (aiUsageFeature !== 'all') params.set('feature', aiUsageFeature);
+    if (aiUsageProvider !== 'all') params.set('provider', aiUsageProvider);
+    if (aiUsageStatus !== 'all') params.set('status', aiUsageStatus);
+    if (aiUsageSource !== 'all') params.set('usageSource', aiUsageSource);
+    if (dateRange.from) params.set('from', dateRange.from);
+    params.set('to', dateRange.to);
+    try {
+      const response = await fetch(`/api/admin/ai-usage/students?${params.toString()}`, { cache: 'no-store' });
+      const json = await response.json();
+      if (!response.ok) throw new Error(json.error?.message || '学生用量加载失败');
+      setAiUsageStudents(json.data?.students || []);
+      setAiUsageStudentTotal(Number(json.meta?.total || 0));
+    } catch (error) {
+      console.error('Failed to fetch AI usage students:', error);
+      setAiUsageStudents([]);
+      setAiUsageStudentTotal(0);
+    }
+  }, [aiUsageFeature, aiUsageProvider, aiUsageRange, aiUsageSource, aiUsageStatus, aiUsageStudentPage]);
+
+  const handleAiUsageExport = async () => {
+    setAiUsageExporting(true);
+    try {
+      const dateRange = getAiUsageDateRange(aiUsageRange);
+      const params = new URLSearchParams();
+      if (aiUsageFeature !== 'all') params.set('feature', aiUsageFeature);
+      if (aiUsageProvider !== 'all') params.set('provider', aiUsageProvider);
+      if (aiUsageStatus !== 'all') params.set('status', aiUsageStatus);
+      if (aiUsageSource !== 'all') params.set('usageSource', aiUsageSource);
+      if (dateRange.from) params.set('from', dateRange.from);
+      params.set('to', dateRange.to);
+      const response = await fetch(`/api/admin/ai-usage/export?${params.toString()}`, { cache: 'no-store' });
+      if (!response.ok) {
+        const json = await response.json().catch(() => null);
+        throw new Error(json?.error?.message || '导出 AI 使用量失败');
+      }
+      const blob = await response.blob();
+      const url = URL.createObjectURL(blob);
+      const anchor = document.createElement('a');
+      anchor.href = url;
+      anchor.download = `liorvix-ai-usage-${new Date().toISOString().slice(0, 10)}.csv`;
+      document.body.appendChild(anchor);
+      anchor.click();
+      anchor.remove();
+      URL.revokeObjectURL(url);
+    } catch (error) {
+      alert(error instanceof Error ? error.message : '导出 AI 使用量失败');
+    } finally {
+      setAiUsageExporting(false);
+    }
+  };
+
+  const fetchAiModelPrices = useCallback(async () => {
+    setAiPricesLoading(true);
+    setAiPricesError('');
+    try {
+      const response = await fetch('/api/admin/ai-prices?page=1&pageSize=100', { cache: 'no-store' });
+      const json = await response.json();
+      if (!response.ok) {
+        const required = Array.isArray(json.error?.requiredMigrations) ? `（所需迁移：${json.error.requiredMigrations.join('、')}）` : '';
+        throw new Error(`${json.error?.message || '模型价格加载失败'}${required}`);
+      }
+      setAiModelPrices(json.data || []);
+    } catch (error) {
+      console.error('Failed to fetch AI model prices:', error);
+      setAiPricesError(error instanceof Error ? error.message : '模型价格加载失败');
+      setAiModelPrices([]);
+    } finally {
+      setAiPricesLoading(false);
+    }
+  }, []);
+
+  const handleCreateAiPrice = async () => {
+    setAiPriceSaving(true);
+    try {
+      const response = await fetch('/api/admin/ai-prices', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(aiPriceForm),
+      });
+      const json = await response.json();
+      if (!response.ok) throw new Error(json.error?.message || '创建模型价格失败');
+      setAiPriceDialogOpen(false);
+      setAiPriceForm({
+        provider: 'alibaba', model: '', currency: 'USD', inputTokenPricePerMillion: '', outputTokenPricePerMillion: '',
+        audioSecondPrice: '', billingUnitPrice: '', effectiveFrom: '', notes: '',
+      });
+      await Promise.all([fetchAiModelPrices(), fetchAiUsage()]);
+    } catch (error) {
+      alert(error instanceof Error ? error.message : '创建模型价格失败');
+    } finally {
+      setAiPriceSaving(false);
+    }
+  };
+
+  const handleAiPriceStatus = async (price: AiModelPrice) => {
+    try {
+      const response = await fetch('/api/admin/ai-prices', {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ id: price.id, isActive: !price.is_active }),
+      });
+      const json = await response.json();
+      if (!response.ok) throw new Error(json.error?.message || '更新模型价格失败');
+      await fetchAiModelPrices();
+    } catch (error) {
+      alert(error instanceof Error ? error.message : '更新模型价格失败');
+    }
+  };
+
+  const fetchAuditLogs = useCallback(async () => {
+    setAuditLoading(true);
+    setAuditError('');
+    const params = new URLSearchParams({
+      page: String(auditPage),
+      pageSize: String(auditPageSize),
+    });
+    if (auditAction !== 'all') params.set('action', auditAction);
+    if (auditResourceType !== 'all') params.set('resourceType', auditResourceType);
+
+    try {
+      const response = await fetch(`/api/admin/audit-logs?${params.toString()}`, { cache: 'no-store' });
+      const json = await response.json();
+      if (!response.ok) {
+        const required = Array.isArray(json.error?.requiredMigrations) ? `（所需迁移：${json.error.requiredMigrations.join('、')}）` : '';
+        throw new Error(`${json.error?.message || '审计日志加载失败'}${required}`);
+      }
+      setAuditLogs(json.data || []);
+      setAuditTotal(Number(json.meta?.total || 0));
+    } catch (error) {
+      console.error('Failed to fetch audit logs:', error);
+      setAuditError(error instanceof Error ? error.message : '审计日志加载失败');
+      setAuditLogs([]);
+      setAuditTotal(0);
+    } finally {
+      setAuditLoading(false);
+    }
+  }, [auditAction, auditPage, auditResourceType]);
+
   useEffect(() => {
-    fetchAnalytics();
-    fetchLogos();
-  }, [analyticsRange]);
+    if (canReadDashboard && (activeTab === 'analytics' || activeTab === 'overview')) void fetchAnalytics();
+  }, [activeTab, analyticsRange, canReadDashboard]);
+
+  useEffect(() => {
+    if (canReadDashboard && activeTab === 'prefill-quality') void fetchPrefillQuality();
+  }, [activeTab, canReadDashboard, fetchPrefillQuality]);
+
+  useEffect(() => {
+    if (canReadDashboard && activeTab === 'service-health') void fetchServiceHealth();
+  }, [activeTab, canReadDashboard, fetchServiceHealth]);
+
+  useEffect(() => {
+    if (canWriteConfig && activeTab === 'logos') void fetchLogos();
+  }, [activeTab, canWriteConfig]);
+
+  useEffect(() => {
+    if (canReadDashboard && activeTab === 'ai-usage') void fetchAiUsage();
+  }, [activeTab, canReadDashboard, fetchAiUsage]);
+
+  useEffect(() => {
+    if (canReadUsers && activeTab === 'ai-usage') void fetchAiUsageStudents();
+  }, [activeTab, canReadUsers, fetchAiUsageStudents]);
+
+  useEffect(() => {
+    if (canWriteConfig && activeTab === 'ai-usage') void fetchAiModelPrices();
+  }, [activeTab, canWriteConfig, fetchAiModelPrices]);
+
+  useEffect(() => {
+    if (canReadAudit && activeTab === 'audit') void fetchAuditLogs();
+  }, [activeTab, canReadAudit, fetchAuditLogs]);
+
+  useEffect(() => {
+    setAiUsagePage(1);
+    setAiUsageStudentPage(1);
+  }, [aiUsageRange, aiUsageFeature, aiUsageProvider, aiUsageStatus, aiUsageSource]);
+
+  useEffect(() => {
+    setAuditPage(1);
+  }, [auditAction, auditResourceType]);
 
 
   // Config CRUD
@@ -747,22 +1620,23 @@ function AdminContent() {
     setBatchImportOpen(false);
   };
 
-  const handleFeedSync = async () => {
+  const handleFeedSync = async (mode: 'incremental' | 'reconcile' = 'incremental') => {
     setFeedSyncing(true);
-    setFeedSyncMessage('正在同步招聘数据…');
+    setFeedSyncMessage(mode === 'reconcile' ? '正在执行完整岗位对账…' : '正在同步招聘数据…');
     try {
       const response = await fetch('/api/jobs/sync-feed', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ maxPages: 20 }),
+        body: JSON.stringify({ mode, maxPages: mode === 'reconcile' ? 100 : 20 }),
       });
       const data = await response.json();
       if (!response.ok) throw new Error(data.error || '同步失败');
       const result = data.result;
       setFeedSyncMessage(
-        `本次接收 ${result.received} 条，写入 ${result.upserted} 条，关闭 ${result.closed} 条。${result.has_more ? '仍有剩余数据，请再次同步。' : '已完成同步。'}`,
+        `${mode === 'reconcile' ? '对账' : '同步'}完成：接收 ${result.received} 条，写入 ${result.upserted} 条，关闭 ${result.closed} 条。${result.has_more ? '仍有剩余数据，请再次执行。' : '已完成。'}`,
       );
       await fetchJobsPage();
+      await fetchJobFeedState();
     } catch (error) {
       setFeedSyncMessage(error instanceof Error ? error.message : '同步失败，请稍后重试');
     } finally {
@@ -969,7 +1843,7 @@ function AdminContent() {
       });
       const data = await response.json();
       if (data.application) {
-        setApplications(applications.map(a => a.id === data.application.id ? data.application : a));
+        await fetchApplicationsPage();
         setEditingApp(null);
         setAppDialogOpen(false);
       }
@@ -980,22 +1854,25 @@ function AdminContent() {
 
   const handleDeleteResume = async (id: number) => {
     try {
-      await fetch(`/api/resume/${id}`, { method: 'DELETE' });
-      setResumes(resumes.filter(r => r.id !== id));
+      const response = await fetch(`/api/resume/${id}`, { method: 'DELETE' });
+      const data = await response.json();
+      if (!response.ok) throw new Error(data.error || '删除简历失败');
+      await fetchResumesPage();
     } catch (error) {
       console.error('Failed to delete resume:', error);
+      alert(error instanceof Error ? error.message : '删除简历失败');
     }
   };
 
   // Stats
   const stats = {
-    totalJobs: jobsTotal,
-    totalResumes: resumes.length,
-    totalApplications: applications.length,
-    pendingApps: applications.filter(a => a.status === 'pending').length,
-    fillingApps: applications.filter(a => a.status === 'filling').length,
-    submittedApps: applications.filter(a => a.status === 'submitted').length,
-    closedApps: applications.filter(a => a.status === 'closed').length,
+    totalJobs: analytics?.overview.totalJobs ?? jobsTotal,
+    totalResumes: analytics?.overview.totalResumes ?? resumeSummary.total,
+    totalApplications: analytics?.overview.totalApplications ?? applicationSummary.total,
+    pendingApps: analytics?.charts.applicationsByStatus.pending ?? applicationSummary.byStatus.pending ?? 0,
+    fillingApps: analytics?.charts.applicationsByStatus.filling ?? applicationSummary.byStatus.filling ?? 0,
+    submittedApps: analytics?.charts.applicationsByStatus.submitted ?? applicationSummary.byStatus.submitted ?? 0,
+    closedApps: analytics?.charts.applicationsByStatus.closed ?? applicationSummary.byStatus.closed ?? 0,
   };
 
   const filteredJobs = [...jobs].sort((a, b) => {
@@ -1010,17 +1887,41 @@ function AdminContent() {
     });
 
   return (
-      <div className="min-h-screen bg-muted/30 pt-14">
-        <Header1 />
-        {/* Admin Toolbar */}
+      <div className="min-h-screen bg-muted/30">
+        <Dialog open={aiPriceDialogOpen} onOpenChange={setAiPriceDialogOpen}>
+          <DialogContent className="max-h-[90vh] overflow-y-auto sm:max-w-xl">
+            <DialogHeader>
+              <DialogTitle>添加模型价格</DialogTitle>
+              <DialogDescription>同一模型只能采用 Token、音频秒或自定义计费单位的一种口径。</DialogDescription>
+            </DialogHeader>
+            <div className="grid gap-4 py-2 sm:grid-cols-2">
+              <div><Label>供应商</Label><Input value={aiPriceForm.provider} onChange={(event) => setAiPriceForm((form) => ({ ...form, provider: event.target.value }))} placeholder="alibaba / cartesia" /></div>
+              <div><Label>模型</Label><Input value={aiPriceForm.model} onChange={(event) => setAiPriceForm((form) => ({ ...form, model: event.target.value }))} placeholder="qwen3.7-plus" /></div>
+              <div><Label>币种</Label><Input value={aiPriceForm.currency} maxLength={3} onChange={(event) => setAiPriceForm((form) => ({ ...form, currency: event.target.value.toUpperCase() }))} placeholder="USD" /></div>
+              <div><Label>生效时间（可选）</Label><Input type="datetime-local" value={aiPriceForm.effectiveFrom} onChange={(event) => setAiPriceForm((form) => ({ ...form, effectiveFrom: event.target.value }))} /></div>
+              <div><Label>输入单价 / 百万 Token</Label><Input inputMode="decimal" value={aiPriceForm.inputTokenPricePerMillion} onChange={(event) => setAiPriceForm((form) => ({ ...form, inputTokenPricePerMillion: event.target.value }))} placeholder="仅文本模型" /></div>
+              <div><Label>输出单价 / 百万 Token</Label><Input inputMode="decimal" value={aiPriceForm.outputTokenPricePerMillion} onChange={(event) => setAiPriceForm((form) => ({ ...form, outputTokenPricePerMillion: event.target.value }))} placeholder="仅文本模型" /></div>
+              <div><Label>音频单价 / 秒</Label><Input inputMode="decimal" value={aiPriceForm.audioSecondPrice} onChange={(event) => setAiPriceForm((form) => ({ ...form, audioSecondPrice: event.target.value }))} placeholder="仅音频模型" /></div>
+              <div><Label>自定义单价 / 单位</Label><Input inputMode="decimal" value={aiPriceForm.billingUnitPrice} onChange={(event) => setAiPriceForm((form) => ({ ...form, billingUnitPrice: event.target.value }))} placeholder="仅特殊计费模型" /></div>
+              <div className="sm:col-span-2"><Label>备注</Label><Textarea value={aiPriceForm.notes} onChange={(event) => setAiPriceForm((form) => ({ ...form, notes: event.target.value }))} placeholder="价格来源、合同或版本说明" /></div>
+            </div>
+            <DialogFooter>
+              <Button variant="outline" onClick={() => setAiPriceDialogOpen(false)} disabled={aiPriceSaving}>取消</Button>
+              <Button onClick={() => void handleCreateAiPrice()} disabled={aiPriceSaving || !aiPriceForm.provider.trim() || !aiPriceForm.model.trim()}>
+                {aiPriceSaving && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}保存价格
+              </Button>
+            </DialogFooter>
+          </DialogContent>
+        </Dialog>
+        {/* Secondary settings toolbar; navigation and session controls live in AdminShell. */}
         <div className="border-b bg-background sticky top-14 z-30">
-          <div className="container mx-auto px-4 h-12 flex items-center justify-between">
-            <div className="flex items-center gap-2 md:gap-3">
-              <LayoutDashboard className="h-5 w-5 md:h-6 md:w-6 text-primary" />
-              <span className="font-bold text-lg md:text-xl">管理后台</span>
+          <div className="container mx-auto flex min-h-12 items-center justify-between gap-3 px-4 py-2">
+            <div className="min-w-0">
+              <h1 className="truncate text-sm font-semibold">{adminTabMeta[activeTab].title}</h1>
+              <p className="hidden truncate text-xs text-muted-foreground sm:block">{adminTabMeta[activeTab].description}</p>
             </div>
             <div className="flex items-center gap-1 md:gap-2">
-              <Dialog open={passwordDialogOpen} onOpenChange={setPasswordDialogOpen}>
+              {canWriteConfig && <Dialog open={passwordDialogOpen} onOpenChange={setPasswordDialogOpen}>
                 <DialogTrigger asChild>
                   <Button variant="ghost" size="sm" className="h-8 w-8 md:w-auto md:px-3">
                     <Settings className="h-4 w-4 md:mr-1" />
@@ -1101,69 +2002,19 @@ function AdminContent() {
                     </Button>
                   </DialogFooter>
                 </DialogContent>
-              </Dialog>
-              <Link href="/">
-                <Button variant="outline" size="sm" className="h-8 w-8 md:w-auto md:px-3">
-                  <ExternalLink className="h-4 w-4 md:mr-1" />
-                  <span className="hidden md:inline">返回首页</span>
-                </Button>
-              </Link>
-              <Button 
-                variant="ghost" 
-                size="sm"
-                className="h-8 w-8 md:w-auto md:px-3"
-                onClick={async () => {
-                  await fetch('/api/admin/password', { method: 'DELETE' });
-                  window.location.reload();
-                }}
-              >
-                <LogOut className="h-4 w-4 md:mr-1" />
-                <span className="hidden md:inline">退出</span>
-              </Button>
+              </Dialog>}
             </div>
           </div>
         </div>
 
         <main className="container mx-auto px-4 py-4 md:py-8">
-        {loading ? (
+        {loading || permissionsLoading ? (
           <div className="text-center py-12">
             <Loader2 className="h-8 w-8 animate-spin mx-auto text-primary" />
             <p className="mt-2 text-muted-foreground">加载中...</p>
           </div>
         ) : (
-          <Tabs defaultValue="overview" className="space-y-4 md:space-y-6">
-            <div className="overflow-x-auto -mx-4 px-4 md:mx-0 md:px-0 scroll-mt-28">
-              <TabsList className="grid w-max md:w-full grid-cols-7 gap-1 md:gap-0 md:inline-flex">
-                <TabsTrigger value="overview" className="px-3 md:px-4">
-                  <LayoutDashboard className="h-4 w-4 md:mr-2" />
-                  <span className="hidden md:inline">概览</span>
-                </TabsTrigger>
-                <TabsTrigger value="analytics" className="px-3 md:px-4">
-                  <BarChart3 className="h-4 w-4 md:mr-2" />
-                  <span className="hidden md:inline">数据分析</span>
-                </TabsTrigger>
-                <TabsTrigger value="jobs" className="px-3 md:px-4">
-                  <Briefcase className="h-4 w-4 md:mr-2" />
-                  <span className="hidden md:inline">岗位管理</span>
-                </TabsTrigger>
-                <TabsTrigger value="logos" className="px-3 md:px-4">
-                  <ImageIcon className="h-4 w-4 md:mr-2" />
-                  <span className="hidden md:inline">Logo</span>
-                </TabsTrigger>
-                <TabsTrigger value="resumes" className="px-3 md:px-4">
-                  <FileText className="h-4 w-4 md:mr-2" />
-                  <span className="hidden md:inline">简历管理</span>
-                </TabsTrigger>
-                <TabsTrigger value="applications" className="px-3 md:px-4">
-                  <Send className="h-4 w-4 md:mr-2" />
-                  <span className="hidden md:inline">网申管理</span>
-                </TabsTrigger>
-                <TabsTrigger value="configs" className="px-3 md:px-4">
-                  <Settings className="h-4 w-4 md:mr-2" />
-                  <span className="hidden md:inline">配置管理</span>
-                </TabsTrigger>
-              </TabsList>
-            </div>
+          <Tabs value={activeTab} className="space-y-4 md:space-y-6">
 
             {/* Overview Tab */}
             <TabsContent value="overview">
@@ -1176,7 +2027,7 @@ function AdminContent() {
                         <Briefcase className="h-4 w-4 md:h-5 md:w-5 text-blue-600" />
                         <span className="text-xl md:text-2xl font-bold">{stats.totalJobs}</span>
                       </div>
-                      <p className="text-xs md:text-sm text-muted-foreground mt-1">岗位总数</p>
+                      <p className="text-xs md:text-sm text-muted-foreground mt-1">当前可投递岗位</p>
                     </CardContent>
                   </Card>
                   <Card className="flex-shrink-0 w-28 md:w-auto">
@@ -1321,6 +2172,11 @@ function AdminContent() {
                     <Loader2 className="h-8 w-8 animate-spin mx-auto text-primary" />
                     <p className="mt-2 text-muted-foreground">加载分析数据...</p>
                   </div>
+                ) : analyticsError ? (
+                  <div className="rounded-lg border border-dashed p-10 text-center">
+                    <p className="text-sm text-destructive">{analyticsError}</p>
+                    <Button className="mt-4" variant="outline" onClick={() => void fetchAnalytics()}>重试</Button>
+                  </div>
                 ) : analytics ? (
                   <>
                     {/* Overview Stats */}
@@ -1330,10 +2186,11 @@ function AdminContent() {
                           <div className="flex items-center gap-1 md:gap-2">
                             <Users className="h-4 w-4 md:h-5 md:w-5 text-blue-600" />
                             <div>
-                              <span className="text-lg md:text-2xl font-bold">{analytics.overview.totalUsers}</span>
+                              <span className="text-lg md:text-2xl font-bold">{analytics.overview.recentUsers}</span>
+                              <span className="text-xs md:text-sm text-muted-foreground">/{analytics.overview.totalUsers}</span>
                             </div>
                           </div>
-                          <p className="text-xs md:text-sm text-muted-foreground mt-1">注册用户</p>
+                          <p className="text-xs md:text-sm text-muted-foreground mt-1">新增/总用户</p>
                         </CardContent>
                       </Card>
                       <Card className="flex-shrink-0 w-32 md:w-auto">
@@ -1377,6 +2234,7 @@ function AdminContent() {
                           <div className="flex items-center gap-1 md:gap-2">
                             <Activity className="h-4 w-4 md:h-5 md:w-5 text-cyan-600" />
                             <span className="text-lg md:text-2xl font-bold">{analytics.overview.recentAiMatches}</span>
+                            <span className="text-xs md:text-sm text-muted-foreground">/{analytics.overview.totalAiMatches}</span>
                           </div>
                           <p className="text-xs md:text-sm text-muted-foreground mt-1">AI选岗次数</p>
                         </CardContent>
@@ -1386,12 +2244,10 @@ function AdminContent() {
                           <div className="flex items-center gap-1 md:gap-2">
                             <TrendingUp className="h-4 w-4 md:h-5 md:w-5 text-emerald-600" />
                             <span className="text-lg md:text-2xl font-bold">
-                              {analytics.userActivity.length > 0 
-                                ? Math.round(analytics.userActivity.reduce((sum, u) => sum + u.resumes + u.applications + u.aiMatches, 0) / analytics.userActivity.length)
-                                : 0}
+                              {analytics.overview.averageActivityPerActiveUser}
                             </span>
                           </div>
-                          <p className="text-xs md:text-sm text-muted-foreground mt-1">平均活跃度</p>
+                          <p className="text-xs md:text-sm text-muted-foreground mt-1">活跃学生平均操作</p>
                         </CardContent>
                       </Card>
                     </div>
@@ -1473,7 +2329,7 @@ function AdminContent() {
                         <CardHeader>
                           <CardTitle className="text-lg flex items-center gap-2">
                             <Activity className="h-5 w-5" />
-                            网申状态分布
+                            范围内网申状态
                           </CardTitle>
                         </CardHeader>
                         <CardContent>
@@ -1507,136 +2363,6 @@ function AdminContent() {
                         </CardContent>
                       </Card>
                     </div>
-
-                    {/* User Profile Analysis - 简历用户画像分析 */}
-                    {(Object.keys(analytics.charts.resumesByRegion).length > 0 || 
-                      Object.keys(analytics.charts.resumesBySchool).length > 0 || 
-                      Object.keys(analytics.charts.resumesByDegree).length > 0) && (
-                      <div className="space-y-4">
-                        <h3 className="text-lg font-semibold flex items-center gap-2">
-                          <GraduationCap className="h-5 w-5" />
-                          简历用户画像分析
-                        </h3>
-                        <div className="grid grid-cols-1 md:grid-cols-3 gap-4 md:gap-6">
-                          {/* Resumes by Region - 留学地区 */}
-                          {Object.keys(analytics.charts.resumesByRegion).length > 0 && (
-                            <Card>
-                              <CardHeader className="pb-2">
-                                <CardTitle className="text-base flex items-center gap-2">
-                                  <Globe className="h-4 w-4 text-blue-500" />
-                                  留学地区分布
-                                </CardTitle>
-                              </CardHeader>
-                              <CardContent>
-                                <div className="space-y-2">
-                                  {Object.entries(analytics.charts.resumesByRegion)
-                                    .sort(([, a], [, b]) => b - a)
-                                    .slice(0, 8)
-                                    .map(([region, count]) => {
-                                      const max = Math.max(...Object.values(analytics.charts.resumesByRegion));
-                                      const percentage = Math.round((count / max) * 100);
-                                      return (
-                                        <div key={region} className="space-y-1">
-                                          <div className="flex justify-between text-sm">
-                                            <span className="truncate pr-2">{region}</span>
-                                            <span className="text-muted-foreground flex-shrink-0">{count}人</span>
-                                          </div>
-                                          <div className="h-2 bg-muted rounded-full overflow-hidden">
-                                            <div 
-                                              className="h-full bg-gradient-to-r from-[#C46A4A] to-[#B5BEB0] rounded-full transition-all"
-                                              style={{ width: `${percentage}%` }}
-                                            />
-                                          </div>
-                                        </div>
-                                      );
-                                    })}
-                                </div>
-                              </CardContent>
-                            </Card>
-                          )}
-
-                          {/* Resumes by School - 学校分布 */}
-                          {Object.keys(analytics.charts.resumesBySchool).length > 0 && (
-                            <Card>
-                              <CardHeader className="pb-2">
-                                <CardTitle className="text-base flex items-center gap-2">
-                                  <GraduationCap className="h-4 w-4 text-terracotta-500" />
-                                  学校分布
-                                </CardTitle>
-                              </CardHeader>
-                              <CardContent>
-                                <div className="space-y-2">
-                                  {Object.entries(analytics.charts.resumesBySchool)
-                                    .sort(([, a], [, b]) => b - a)
-                                    .slice(0, 8)
-                                    .map(([school, count]) => {
-                                      const max = Math.max(...Object.values(analytics.charts.resumesBySchool));
-                                      const percentage = Math.round((count / max) * 100);
-                                      return (
-                                        <div key={school} className="space-y-1">
-                                          <div className="flex justify-between text-sm">
-                                            <span className="truncate pr-2">{school}</span>
-                                            <span className="text-muted-foreground flex-shrink-0">{count}人</span>
-                                          </div>
-                                          <div className="h-2 bg-muted rounded-full overflow-hidden">
-                                            <div 
-                                              className="h-full bg-gradient-to-r from-terracotta-400 to-terracotta-600 rounded-full transition-all"
-                                              style={{ width: `${percentage}%` }}
-                                            />
-                                          </div>
-                                        </div>
-                                      );
-                                    })}
-                                </div>
-                              </CardContent>
-                            </Card>
-                          )}
-
-                          {/* Resumes by Degree - 学历分布 */}
-                          {Object.keys(analytics.charts.resumesByDegree).length > 0 && (
-                            <Card>
-                              <CardHeader className="pb-2">
-                                <CardTitle className="text-base flex items-center gap-2">
-                                  <BarChart3 className="h-4 w-4 text-green-500" />
-                                  学历分布
-                                </CardTitle>
-                              </CardHeader>
-                              <CardContent>
-                                <div className="space-y-2">
-                                  {Object.entries(analytics.charts.resumesByDegree)
-                                    .sort(([, a], [, b]) => b - a)
-                                    .slice(0, 8)
-                                    .map(([degree, count]) => {
-                                      const max = Math.max(...Object.values(analytics.charts.resumesByDegree));
-                                      const percentage = Math.round((count / max) * 100);
-                                      const degreeColors: Record<string, string> = {
-                                        '本科': 'from-[#B5BEB0] to-[#E2D0B8]',
-                                        '硕士': 'from-[#C46A4A] to-[#B5BEB0]',
-                                        '博士': 'from-[#E2D0B8] to-[#C46A4A]',
-                                        '大专': 'from-[#C5C9CE] to-[#B5BEB0]',
-                                      };
-                                      return (
-                                        <div key={degree} className="space-y-1">
-                                          <div className="flex justify-between text-sm">
-                                            <span>{degree}</span>
-                                            <span className="text-muted-foreground">{count}人</span>
-                                          </div>
-                                          <div className="h-2 bg-muted rounded-full overflow-hidden">
-                                            <div 
-                                              className={`h-full bg-gradient-to-r ${degreeColors[degree] || 'from-[#C5C9CE] to-[#B5BEB0]'} rounded-full transition-all`}
-                                              style={{ width: `${percentage}%` }}
-                                            />
-                                          </div>
-                                        </div>
-                                      );
-                                    })}
-                                </div>
-                              </CardContent>
-                            </Card>
-                          )}
-                        </div>
-                      </div>
-                    )}
 
                     {/* Daily Trend */}
                     <Card>
@@ -1761,6 +2487,676 @@ function AdminContent() {
               </div>
             </TabsContent>
 
+            <TabsContent value="service-health">
+              <div className="space-y-4 md:space-y-6">
+                <div className="flex flex-wrap items-center gap-2">
+                  <span className="text-sm text-muted-foreground">调用窗口：</span>
+                  {(['24h', '7d', '30d'] as const).map((range) => (
+                    <Button
+                      key={range}
+                      variant={serviceHealthRange === range ? 'default' : 'outline'}
+                      size="sm"
+                      className="h-8 px-3 text-xs"
+                      onClick={() => setServiceHealthRange(range)}
+                    >
+                      {range === '24h' ? '近 24 小时' : range === '7d' ? '近 7 天' : '近 30 天'}
+                    </Button>
+                  ))}
+                  <Button variant="outline" size="sm" className="ml-auto h-8" onClick={() => void fetchServiceHealth()} disabled={serviceHealthLoading}>
+                    <RefreshCw className={`mr-2 h-4 w-4 ${serviceHealthLoading ? 'animate-spin' : ''}`} />刷新
+                  </Button>
+                </div>
+
+                {serviceHealthLoading ? (
+                  <div className="py-12 text-center"><Loader2 className="mx-auto h-8 w-8 animate-spin text-primary" /><p className="mt-2 text-muted-foreground">加载服务健康数据...</p></div>
+                ) : serviceHealth ? (
+                  <>
+                    {(() => {
+                      const degradedProviders = serviceHealth.providers.filter((provider) => provider.status === 'degraded');
+                      const warningProviders = serviceHealth.providers.filter((provider) => provider.status === 'warning');
+                      const staleSyncs = serviceHealth.jobSync.filter((sync) => sync.status === 'stale' || sync.status === 'degraded');
+                      const runningSyncs = serviceHealth.jobSync.filter((sync) => sync.status === 'running');
+                      const hasIssues = degradedProviders.length > 0 || warningProviders.length > 0 || staleSyncs.length > 0;
+                      return (
+                        <div className={`border-l-4 px-4 py-3 text-sm ${hasIssues ? 'border-amber-500 bg-amber-50 text-amber-950 dark:bg-amber-950/30 dark:text-amber-100' : 'border-emerald-500 bg-emerald-50 text-emerald-950 dark:bg-emerald-950/30 dark:text-emerald-100'}`}>
+                          {hasIssues ? (
+                            <span>需要关注：{degradedProviders.length} 个供应商异常，{warningProviders.length} 个供应商有失败告警，{staleSyncs.length} 个岗位同步异常或滞后。</span>
+                          ) : (
+                            <span>当前窗口未发现供应商降级或岗位同步滞后。</span>
+                          )}
+                          {runningSyncs.length > 0 && <span className="ml-2">{runningSyncs.length} 个岗位同步正在运行。</span>}
+                        </div>
+                      );
+                    })()}
+                    <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
+                      <Card><CardContent className="pt-5"><p className="text-2xl font-semibold">{formatTokenCount(serviceHealth.overview.callCount)}</p><p className="mt-1 text-sm text-muted-foreground">记录调用数</p></CardContent></Card>
+                      <Card><CardContent className="pt-5"><p className="text-2xl font-semibold">{serviceHealth.overview.callCount > 0 ? ((serviceHealth.overview.successfulCalls / serviceHealth.overview.callCount) * 100).toFixed(1) : '0.0'}%</p><p className="mt-1 text-sm text-muted-foreground">整体成功率</p></CardContent></Card>
+                      <Card><CardContent className="pt-5"><p className="text-2xl font-semibold">{formatTokenCount(serviceHealth.overview.failedCalls)}</p><p className="mt-1 text-sm text-muted-foreground">失败调用数</p></CardContent></Card>
+                      <Card><CardContent className="pt-5"><p className="text-2xl font-semibold">{formatTokenCount(serviceHealth.overview.providersWithCalls)}</p><p className="mt-1 text-sm text-muted-foreground">有调用的供应商</p></CardContent></Card>
+                    </div>
+
+                    <Card>
+                      <CardHeader><CardTitle className="text-lg">AI 服务健康</CardTitle><CardDescription>基于已记录调用计算，不会因为打开后台而请求第三方服务。</CardDescription></CardHeader>
+                      <CardContent>
+                        <div className="overflow-x-auto"><table className="w-full min-w-[700px] text-sm"><thead><tr className="border-b text-left text-muted-foreground"><th className="py-2 font-medium">供应商</th><th className="py-2 text-right font-medium">调用</th><th className="py-2 text-right font-medium">成功率</th><th className="py-2 text-right font-medium">平均耗时</th><th className="py-2 font-medium">最近调用</th><th className="py-2 font-medium">状态</th></tr></thead><tbody>
+                          {serviceHealth.providers.map((provider) => {
+                            const statusLabel = provider.status === 'healthy' ? '正常' : provider.status === 'warning' ? '有告警' : provider.status === 'degraded' ? '异常' : '未知';
+                            const statusVariant = provider.status === 'healthy' ? 'secondary' : provider.status === 'warning' ? 'outline' : 'destructive';
+                            return <tr key={provider.provider} className="border-b last:border-0"><td className="py-2.5">{provider.provider}</td><td className="py-2.5 text-right">{provider.callCount}</td><td className="py-2.5 text-right">{provider.successRate}%</td><td className="py-2.5 text-right">{provider.averageDurationMs === null ? '-' : `${provider.averageDurationMs} ms`}</td><td className="py-2.5">{provider.lastCallAt ? new Date(provider.lastCallAt).toLocaleString('zh-CN') : '-'}</td><td className="py-2.5"><Badge variant={statusVariant}>{statusLabel}</Badge></td></tr>;
+                          })}
+                          {serviceHealth.providers.length === 0 && <tr><td colSpan={6} className="py-8 text-center text-muted-foreground">当前窗口没有已记录的 AI 调用</td></tr>}
+                        </tbody></table></div>
+                      </CardContent>
+                    </Card>
+
+                    <div className="grid gap-4 lg:grid-cols-2">
+                      <Card>
+                        <CardHeader><CardTitle className="text-lg">失败热点</CardTitle><CardDescription>按供应商和功能聚合，不展示请求内容或错误正文。</CardDescription></CardHeader>
+                        <CardContent><div className="overflow-x-auto"><table className="w-full min-w-[520px] text-sm"><thead><tr className="border-b text-left text-muted-foreground"><th className="py-2 font-medium">供应商</th><th className="py-2 font-medium">功能</th><th className="py-2 text-right font-medium">失败</th><th className="py-2 text-right font-medium">失败率</th></tr></thead><tbody>
+                          {serviceHealth.failureHotspots.map((item) => <tr key={`${item.provider}-${item.feature}`} className="border-b last:border-0"><td className="py-2.5">{item.provider}</td><td className="py-2.5">{formatAiFeature(item.feature)}</td><td className="py-2.5 text-right">{item.failedCalls}/{item.callCount}</td><td className="py-2.5 text-right">{item.failureRate}%</td></tr>)}
+                          {serviceHealth.failureHotspots.length === 0 && <tr><td colSpan={4} className="py-8 text-center text-muted-foreground">当前窗口未记录失败调用</td></tr>}
+                        </tbody></table></div></CardContent>
+                      </Card>
+                      <Card>
+                        <CardHeader><CardTitle className="text-lg">岗位同步健康</CardTitle><CardDescription>同步超过 24 小时无成功记录会标记为滞后。</CardDescription></CardHeader>
+                        <CardContent><div className="space-y-3">
+                          {serviceHealth.jobSync.map((sync) => {
+                            const statusLabel = sync.status === 'healthy' ? '正常' : sync.status === 'running' ? '同步中' : sync.status === 'stale' ? '已滞后' : sync.status === 'degraded' ? '异常' : '未知';
+                            const statusVariant = sync.status === 'healthy' ? 'secondary' : sync.status === 'running' ? 'outline' : 'destructive';
+                            return <div key={sync.sourceSystem} className="flex flex-wrap items-center justify-between gap-3 border-b pb-3 last:border-0 last:pb-0"><div><p className="font-medium">{sync.sourceSystem}</p><p className="mt-1 text-xs text-muted-foreground">上次增量成功：{sync.lastIncrementalSuccessAt ? new Date(sync.lastIncrementalSuccessAt).toLocaleString('zh-CN') : '-'}</p><p className="text-xs text-muted-foreground">连续失败：{sync.consecutiveFailures}</p></div><Badge variant={statusVariant}>{statusLabel}</Badge></div>;
+                          })}
+                          {serviceHealth.jobSync.length === 0 && <p className="py-8 text-center text-sm text-muted-foreground">尚未初始化岗位同步状态</p>}
+                        </div></CardContent>
+                      </Card>
+                    </div>
+                  </>
+                ) : <div className="py-12 text-center text-muted-foreground">{serviceHealthError || '暂无服务健康数据'}</div>}
+              </div>
+            </TabsContent>
+
+            <TabsContent value="prefill-quality">
+              <div className="space-y-4 md:space-y-6">
+                <div className="flex flex-wrap items-center gap-2">
+                  <span className="text-sm text-muted-foreground">时间：</span>
+                  {(['7d', '30d', '90d'] as const).map((range) => (
+                    <Button
+                      key={range}
+                      variant={prefillQualityRange === range ? 'default' : 'outline'}
+                      size="sm"
+                      className="h-8 px-3 text-xs"
+                      onClick={() => setPrefillQualityRange(range)}
+                    >
+                      {range === '7d' ? '近 7 天' : range === '30d' ? '近 30 天' : '近 90 天'}
+                    </Button>
+                  ))}
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    className="ml-auto h-8"
+                    onClick={() => void fetchPrefillQuality()}
+                    disabled={prefillQualityLoading}
+                  >
+                    <RefreshCw className={`mr-2 h-4 w-4 ${prefillQualityLoading ? 'animate-spin' : ''}`} />刷新
+                  </Button>
+                </div>
+
+                {prefillQualityLoading ? (
+                  <div className="py-12 text-center">
+                    <Loader2 className="mx-auto h-8 w-8 animate-spin text-primary" />
+                    <p className="mt-2 text-muted-foreground">加载网申预填质量数据...</p>
+                  </div>
+                ) : prefillQuality ? (
+                  <>
+                    <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-5">
+                      <Card>
+                        <CardContent className="pt-5">
+                          <p className="text-2xl font-semibold">{prefillQuality.overview.confirmationRate}%</p>
+                          <p className="mt-1 text-sm text-muted-foreground">确认率</p>
+                        </CardContent>
+                      </Card>
+                      <Card>
+                        <CardContent className="pt-5">
+                          <p className="text-2xl font-semibold">{prefillQuality.overview.correctionRate}%</p>
+                          <p className="mt-1 text-sm text-muted-foreground">修改率</p>
+                        </CardContent>
+                      </Card>
+                      <Card>
+                        <CardContent className="pt-5">
+                          <p className="text-2xl font-semibold">{formatTokenCount(prefillQuality.overview.decided)}</p>
+                          <p className="mt-1 text-sm text-muted-foreground">已决策字段</p>
+                        </CardContent>
+                      </Card>
+                      <Card>
+                        <CardContent className="pt-5">
+                          <p className="text-2xl font-semibold">{formatTokenCount(prefillQuality.overview.ignored)}</p>
+                          <p className="mt-1 text-sm text-muted-foreground">忽略字段</p>
+                        </CardContent>
+                      </Card>
+                      <Card>
+                        <CardContent className="pt-5">
+                          <p className="text-2xl font-semibold">{formatTokenCount(prefillQuality.overview.contributingUsers)}</p>
+                          <p className="mt-1 text-sm text-muted-foreground">贡献学生数</p>
+                        </CardContent>
+                      </Card>
+                    </div>
+
+                    <Card>
+                      <CardHeader>
+                        <CardTitle className="text-lg">反馈趋势</CardTitle>
+                        <CardDescription>确认率和修改率只统计已确认或修改的字段；忽略单独列出。</CardDescription>
+                      </CardHeader>
+                      <CardContent>
+                        <div className="flex h-40 items-end gap-2">
+                          {prefillQuality.dailyStats.map((day) => {
+                            const maximum = Math.max(
+                              ...prefillQuality.dailyStats.map((item) => Math.max(item.confirmed, item.edited, item.ignored)),
+                              1,
+                            );
+                            return (
+                              <div key={day.date} className="flex min-w-8 flex-1 flex-col items-center gap-1">
+                                <div className="flex h-28 w-full items-end justify-center gap-0.5">
+                                  <div className="w-2 rounded-t bg-emerald-500" style={{ height: `${(day.confirmed / maximum) * 100}%`, minHeight: day.confirmed ? '3px' : 0 }} title={`确认: ${day.confirmed}`} />
+                                  <div className="w-2 rounded-t bg-amber-500" style={{ height: `${(day.edited / maximum) * 100}%`, minHeight: day.edited ? '3px' : 0 }} title={`修改: ${day.edited}`} />
+                                  <div className="w-2 rounded-t bg-zinc-400" style={{ height: `${(day.ignored / maximum) * 100}%`, minHeight: day.ignored ? '3px' : 0 }} title={`忽略: ${day.ignored}`} />
+                                </div>
+                                <span className="text-xs text-muted-foreground">{new Date(day.date).toLocaleDateString('zh-CN', { month: 'numeric', day: 'numeric' })}</span>
+                              </div>
+                            );
+                          })}
+                        </div>
+                        <div className="mt-4 flex flex-wrap gap-4 text-xs text-muted-foreground">
+                          <span className="flex items-center gap-1"><span className="h-3 w-3 rounded bg-emerald-500" />确认</span>
+                          <span className="flex items-center gap-1"><span className="h-3 w-3 rounded bg-amber-500" />修改</span>
+                          <span className="flex items-center gap-1"><span className="h-3 w-3 rounded bg-zinc-400" />忽略</span>
+                        </div>
+                      </CardContent>
+                    </Card>
+
+                    <div className="grid gap-4 lg:grid-cols-2">
+                      <Card>
+                        <CardHeader>
+                          <CardTitle className="text-lg">字段高纠错榜</CardTitle>
+                          <CardDescription>按站点和字段语义聚合，优先处理修改率高且反馈量足够的映射。</CardDescription>
+                        </CardHeader>
+                        <CardContent>
+                          <div className="overflow-x-auto">
+                            <table className="w-full min-w-[520px] text-sm">
+                              <thead><tr className="border-b text-left text-muted-foreground"><th className="py-2 font-medium">站点</th><th className="py-2 font-medium">字段</th><th className="py-2 text-right font-medium">反馈</th><th className="py-2 text-right font-medium">修改率</th></tr></thead>
+                              <tbody>
+                                {prefillQuality.fieldQuality.map((item) => (
+                                  <tr key={`${item.domain}-${item.semanticKey}`} className="border-b last:border-0">
+                                    <td className="py-2.5">{item.domain}</td><td className="py-2.5 font-mono text-xs">{item.semanticKey}</td><td className="py-2.5 text-right">{item.totalFeedback}</td><td className="py-2.5 text-right">{item.correctionRate}%</td>
+                                  </tr>
+                                ))}
+                                {prefillQuality.fieldQuality.length === 0 && <tr><td colSpan={4} className="py-8 text-center text-muted-foreground">当前范围暂无字段反馈</td></tr>}
+                              </tbody>
+                            </table>
+                          </div>
+                        </CardContent>
+                      </Card>
+                      <Card>
+                        <CardHeader>
+                          <CardTitle className="text-lg">共享模板高纠错榜</CardTitle>
+                          <CardDescription>仅显示已启用的平台共享模板，计数为历史累计。</CardDescription>
+                        </CardHeader>
+                        <CardContent>
+                          <div className="overflow-x-auto">
+                            <table className="w-full min-w-[560px] text-sm">
+                              <thead><tr className="border-b text-left text-muted-foreground"><th className="py-2 font-medium">模板</th><th className="py-2 font-medium">ATS</th><th className="py-2 text-right font-medium">使用</th><th className="py-2 text-right font-medium">纠错率</th></tr></thead>
+                              <tbody>
+                                {prefillQuality.templateQuality.map((item) => (
+                                  <tr key={`${item.domainPattern}-${item.semanticKey}`} className="border-b last:border-0">
+                                    <td className="py-2.5"><div>{item.domainPattern}</div><div className="font-mono text-xs text-muted-foreground">{item.semanticKey}</div></td><td className="py-2.5">{item.atsType}</td><td className="py-2.5 text-right">{item.usageCount}</td><td className="py-2.5 text-right">{item.correctionRate}%</td>
+                                  </tr>
+                                ))}
+                                {prefillQuality.templateQuality.length === 0 && <tr><td colSpan={4} className="py-8 text-center text-muted-foreground">当前没有可评估的共享模板</td></tr>}
+                              </tbody>
+                            </table>
+                          </div>
+                        </CardContent>
+                      </Card>
+                    </div>
+                  </>
+                ) : (
+                  <div className="py-12 text-center text-muted-foreground">{prefillQualityError || '暂无网申预填质量数据'}</div>
+                )}
+              </div>
+            </TabsContent>
+
+            {/* AI Usage Tab */}
+            <TabsContent value="ai-usage">
+              <div className="space-y-4 md:space-y-6">
+                {canWriteConfig && <Card>
+                  <CardHeader className="pb-3">
+                    <div className="flex flex-col gap-3 md:flex-row md:items-center md:justify-between">
+                      <div>
+                        <CardTitle className="text-lg">模型价格</CardTitle>
+                        <CardDescription>新调用按生效时价格写入成本快照。价格变更请新增记录并停用旧记录。</CardDescription>
+                      </div>
+                      <Button size="sm" onClick={() => setAiPriceDialogOpen(true)}>
+                        <Plus className="mr-2 h-4 w-4" />添加价格
+                      </Button>
+                    </div>
+                  </CardHeader>
+                  <CardContent>
+                    <div className="overflow-x-auto">
+                      <table className="w-full min-w-[760px] text-sm">
+                        <thead>
+                          <tr className="border-b text-muted-foreground">
+                            <th className="py-2 text-left font-medium">供应商 / 模型</th>
+                            <th className="py-2 text-left font-medium">价格</th>
+                            <th className="py-2 text-left font-medium">生效时间</th>
+                            <th className="py-2 text-left font-medium">状态</th>
+                            <th className="py-2 text-right font-medium">操作</th>
+                          </tr>
+                        </thead>
+                        <tbody>
+                          {aiModelPrices.map((price) => (
+                            <tr key={price.id} className="border-b last:border-0">
+                              <td className="py-3">{price.provider} / {price.model}<span className="ml-2 text-xs text-muted-foreground">{price.currency}</span></td>
+                              <td className="py-3 text-xs">{formatModelPrice(price)}</td>
+                              <td className="py-3 text-xs text-muted-foreground">{new Date(price.effective_from).toLocaleString('zh-CN')}</td>
+                              <td className="py-3"><Badge variant={price.is_active ? 'secondary' : 'outline'}>{price.is_active ? '启用' : '已停用'}</Badge></td>
+                              <td className="py-3 text-right">
+                                <Button variant="outline" size="sm" onClick={() => void handleAiPriceStatus(price)}>
+                                  {price.is_active ? '停用' : '启用'}
+                                </Button>
+                              </td>
+                            </tr>
+                          ))}
+                          {aiModelPrices.length === 0 && (
+                            <tr><td colSpan={5} className="py-8 text-center text-muted-foreground">{aiPricesLoading ? '加载中...' : aiPricesError || '尚未配置模型价格，成本会显示为未定价'}</td></tr>
+                          )}
+                        </tbody>
+                      </table>
+                    </div>
+                  </CardContent>
+                </Card>}
+                <Card>
+                  <CardHeader className="pb-3">
+                    <div className="flex flex-col gap-3 md:flex-row md:items-center md:justify-between">
+                      <div>
+                        <CardTitle className="text-lg flex items-center gap-2">
+                          <Activity className="h-5 w-5 text-primary" />
+                          AI 用量看板
+                        </CardTitle>
+                        <CardDescription>
+                          按功能和调用状态核算 AI token。未知 token 不会被当作 0 计入。
+                        </CardDescription>
+                      </div>
+                      <div className="flex gap-2">
+                        {canExportUsage && <Button variant="outline" size="sm" onClick={() => void handleAiUsageExport()} disabled={aiUsageExporting}>
+                          <Download className={`mr-2 h-4 w-4 ${aiUsageExporting ? 'animate-pulse' : ''}`} />导出
+                        </Button>}
+                        <Button
+                          variant="outline"
+                          size="sm"
+                          onClick={() => void Promise.all([fetchAiUsage(), canReadUsers ? fetchAiUsageStudents() : Promise.resolve()])}
+                          disabled={aiUsageLoading}
+                        >
+                          <RefreshCw className={`h-4 w-4 mr-2 ${aiUsageLoading ? 'animate-spin' : ''}`} />
+                          刷新
+                        </Button>
+                      </div>
+                    </div>
+                  </CardHeader>
+                  <CardContent className="space-y-4">
+                    <div className="flex flex-wrap items-center gap-2">
+                      <span className="text-sm text-muted-foreground">时间：</span>
+                      {(['7d', '30d', '90d', 'all'] as const).map((range) => (
+                        <Button
+                          key={range}
+                          variant={aiUsageRange === range ? 'default' : 'outline'}
+                          size="sm"
+                          className="h-8 text-xs"
+                          onClick={() => setAiUsageRange(range)}
+                        >
+                          {range === '7d' ? '近7天' : range === '30d' ? '近30天' : range === '90d' ? '近90天' : '全部'}
+                        </Button>
+                      ))}
+                    </div>
+                    <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-4">
+                      <div>
+                        <Label className="text-xs text-muted-foreground">功能</Label>
+                        <Select value={aiUsageFeature} onValueChange={setAiUsageFeature}>
+                          <SelectTrigger className="mt-1 h-9"><SelectValue /></SelectTrigger>
+                          <SelectContent>
+                            <SelectItem value="all">全部功能</SelectItem>
+                            {aiFeatureOptions.map((feature) => (
+                              <SelectItem key={feature} value={feature}>{formatAiFeature(feature)}</SelectItem>
+                            ))}
+                          </SelectContent>
+                        </Select>
+                      </div>
+                      <div>
+                        <Label className="text-xs text-muted-foreground">供应商</Label>
+                        <Select value={aiUsageProvider} onValueChange={setAiUsageProvider}>
+                          <SelectTrigger className="mt-1 h-9"><SelectValue /></SelectTrigger>
+                          <SelectContent>
+                            <SelectItem value="all">全部供应商</SelectItem>
+                            <SelectItem value="alibaba">Alibaba</SelectItem>
+                            <SelectItem value="cartesia">Cartesia</SelectItem>
+                          </SelectContent>
+                        </Select>
+                      </div>
+                      <div>
+                        <Label className="text-xs text-muted-foreground">状态</Label>
+                        <Select value={aiUsageStatus} onValueChange={setAiUsageStatus}>
+                          <SelectTrigger className="mt-1 h-9"><SelectValue /></SelectTrigger>
+                          <SelectContent>
+                            <SelectItem value="all">全部状态</SelectItem>
+                            <SelectItem value="success">成功</SelectItem>
+                            <SelectItem value="error">失败</SelectItem>
+                          </SelectContent>
+                        </Select>
+                      </div>
+                      <div>
+                        <Label className="text-xs text-muted-foreground">Token 来源</Label>
+                        <Select value={aiUsageSource} onValueChange={setAiUsageSource}>
+                          <SelectTrigger className="mt-1 h-9"><SelectValue /></SelectTrigger>
+                          <SelectContent>
+                            <SelectItem value="all">全部来源</SelectItem>
+                            <SelectItem value="actual">实际返回</SelectItem>
+                            <SelectItem value="estimated">估算</SelectItem>
+                            <SelectItem value="unknown">未知</SelectItem>
+                          </SelectContent>
+                        </Select>
+                      </div>
+                    </div>
+                  </CardContent>
+                </Card>
+
+                {aiUsageLoading ? (
+                  <div className="text-center py-12">
+                    <Loader2 className="h-8 w-8 animate-spin mx-auto text-primary" />
+                    <p className="mt-2 text-muted-foreground">加载 AI 用量...</p>
+                  </div>
+                ) : aiUsageError ? (
+                  <Card>
+                    <CardContent className="py-10 text-center">
+                      <XCircle className="h-8 w-8 mx-auto text-destructive" />
+                      <p className="mt-2 text-sm text-destructive">{aiUsageError}</p>
+                      <Button className="mt-4" variant="outline" onClick={() => void fetchAiUsage()}>重试</Button>
+                    </CardContent>
+                  </Card>
+                ) : aiUsage ? (
+                  <>
+                    <div className="grid grid-cols-2 gap-3 md:grid-cols-4">
+                      <Card>
+                        <CardContent className="pt-5">
+                          <p className="text-xs text-muted-foreground">AI 调用次数</p>
+                          <p className="mt-1 text-2xl font-bold">{formatTokenCount(aiUsage.summary.call_count)}</p>
+                          <p className="mt-1 text-xs text-muted-foreground">成功 {formatTokenCount(aiUsage.summary.successful_calls)} / 失败 {formatTokenCount(aiUsage.summary.failed_calls)}</p>
+                        </CardContent>
+                      </Card>
+                      <Card>
+                        <CardContent className="pt-5">
+                          <p className="text-xs text-muted-foreground">总 Token</p>
+                          <p className="mt-1 text-2xl font-bold">{formatTokenCount(aiUsage.summary.total_tokens)}</p>
+                          <p className="mt-1 text-xs text-muted-foreground">输入 {formatTokenCount(aiUsage.summary.input_tokens)}</p>
+                        </CardContent>
+                      </Card>
+                      <Card>
+                        <CardContent className="pt-5">
+                          <p className="text-xs text-muted-foreground">输出 Token</p>
+                          <p className="mt-1 text-2xl font-bold">{formatTokenCount(aiUsage.summary.output_tokens)}</p>
+                          <p className="mt-1 text-xs text-muted-foreground">实际 {formatTokenCount(aiUsage.summary.actual_calls)} 次</p>
+                        </CardContent>
+                      </Card>
+                      <Card>
+                        <CardContent className="pt-5">
+                          <p className="text-xs text-muted-foreground">数据可信度</p>
+                          <p className="mt-1 text-2xl font-bold">{formatTokenCount(aiUsage.summary.actual_calls)}</p>
+                          <p className="mt-1 text-xs text-muted-foreground">估算 {formatTokenCount(aiUsage.summary.estimated_calls)} / 未知 {formatTokenCount(aiUsage.summary.unknown_calls)}</p>
+                        </CardContent>
+                      </Card>
+                      <Card>
+                        <CardContent className="pt-5">
+                          <p className="text-xs text-muted-foreground">预计成本</p>
+                          <p className="mt-1 text-lg font-bold" title={formatEstimatedCosts(aiUsage.summary.estimated_costs)}>{formatEstimatedCosts(aiUsage.summary.estimated_costs)}</p>
+                          <p className="mt-1 text-xs text-muted-foreground">已定价 {formatTokenCount(aiUsage.summary.priced_calls)} / 未定价 {formatTokenCount(aiUsage.summary.unpriced_calls)}</p>
+                        </CardContent>
+                      </Card>
+                      <Card>
+                        <CardContent className="pt-5">
+                          <p className="text-xs text-muted-foreground">音频调用</p>
+                          <p className="mt-1 text-2xl font-bold">{formatTokenCount(aiUsage.summary.audio_calls)}</p>
+                          <p className="mt-1 text-xs text-muted-foreground">音频 Token {formatTokenCount(aiUsage.summary.audio_tokens)}</p>
+                        </CardContent>
+                      </Card>
+                      <Card>
+                        <CardContent className="pt-5">
+                          <p className="text-xs text-muted-foreground">ASR 输入</p>
+                          <p className="mt-1 text-2xl font-bold">{formatAudioMinutes(aiUsage.summary.input_audio_seconds)} 分钟</p>
+                          <p className="mt-1 text-xs text-muted-foreground">{formatAudioBytes(aiUsage.summary.input_audio_bytes)}</p>
+                        </CardContent>
+                      </Card>
+                      <Card>
+                        <CardContent className="pt-5">
+                          <p className="text-xs text-muted-foreground">TTS 输出</p>
+                          <p className="mt-1 text-2xl font-bold">{formatAudioMinutes(aiUsage.summary.output_audio_seconds)} 分钟</p>
+                          <p className="mt-1 text-xs text-muted-foreground">{formatAudioBytes(aiUsage.summary.output_audio_bytes)}</p>
+                        </CardContent>
+                      </Card>
+                    </div>
+
+                    <div className="grid grid-cols-1 gap-4 lg:grid-cols-2">
+                      <Card>
+                        <CardHeader>
+                          <CardTitle className="text-base">功能用量分布</CardTitle>
+                          <CardDescription>文本显示 Token，音频显示 ASR/TTS 分钟数；成本仅统计已配置价格的调用</CardDescription>
+                        </CardHeader>
+                        <CardContent>
+                          {aiUsage.features.length > 0 ? (
+                            <div className="space-y-4">
+                              {aiUsage.features.slice(0, 10).map((feature) => {
+                                 const maxCalls = Math.max(...aiUsage.features.map((item) => item.call_count), 1);
+                                 const percent = Math.max(2, Math.round((feature.call_count / maxCalls) * 100));
+                                return (
+                                  <div key={feature.feature} className="space-y-1">
+                                    <div className="flex items-center justify-between gap-3 text-sm">
+                                      <span className="truncate">{formatAiFeature(feature.feature)}</span>
+                                       <span className="shrink-0 text-muted-foreground">{feature.audio_calls > 0 ? `${formatAudioMinutes(Number(feature.input_audio_seconds) + Number(feature.output_audio_seconds))} 分钟` : `${formatTokenCount(feature.total_tokens)} tokens`}</span>
+                                    </div>
+                                    <div className="h-2 overflow-hidden rounded-full bg-muted">
+                                      <div className="h-full rounded-full bg-primary transition-all" style={{ width: `${percent}%` }} />
+                                    </div>
+                                    <div className="flex justify-between text-xs text-muted-foreground">
+                                       <span>{formatTokenCount(feature.call_count)} 次调用，音频 {formatTokenCount(feature.audio_calls)} 次</span>
+                                      <span>{formatEstimatedCosts(feature.estimated_costs)}</span>
+                                    </div>
+                                  </div>
+                                );
+                              })}
+                            </div>
+                          ) : (
+                            <p className="py-8 text-center text-sm text-muted-foreground">暂无功能用量数据</p>
+                          )}
+                        </CardContent>
+                      </Card>
+
+                      {canReadUsers && <Card>
+                        <CardHeader>
+                          <CardTitle className="text-base">学生 AI 用量排行</CardTitle>
+                          <CardDescription>共 {formatTokenCount(aiUsageStudentTotal)} 名学生，文本按 Token，音频按分钟</CardDescription>
+                        </CardHeader>
+                        <CardContent>
+                          <div className="overflow-x-auto">
+                            <table className="w-full min-w-[760px] text-sm">
+                              <thead>
+                                <tr className="border-b text-muted-foreground">
+                                  <th className="py-2 text-left font-medium">学生</th>
+                                   <th className="py-2 text-right font-medium">文本 Token</th>
+                                  <th className="py-2 text-right font-medium">音频分钟</th>
+                                  <th className="py-2 text-right font-medium">预计成本</th>
+                                  <th className="py-2 text-right font-medium">调用</th>
+                                  <th className="py-2 text-right font-medium">实际/估算/未知</th>
+                                </tr>
+                              </thead>
+                              <tbody>
+                                {aiUsageStudents.map((student, index) => (
+                                  <tr key={student.user_id} className="border-b last:border-0">
+                                    <td className="max-w-[220px] truncate py-3 pr-3">
+                                      <span className="mr-2 text-xs text-muted-foreground">{(aiUsageStudentPage - 1) * aiUsageStudentPageSize + index + 1}</span>
+                                      <Link className="hover:text-primary hover:underline" href={`/admin/students/${student.user_id}`} title={student.user_id}>{student.display_name || '未命名用户'}</Link>
+                                    </td>
+                                     <td className="py-3 text-right font-medium">{formatTokenCount(student.total_tokens)}</td>
+                                     <td className="py-3 text-right">ASR {formatAudioMinutes(student.input_audio_seconds)} / TTS {formatAudioMinutes(student.output_audio_seconds)}</td>
+                                     <td className="py-3 text-right text-xs" title={`已定价 ${student.priced_calls} / 未定价 ${student.unpriced_calls}`}>{formatEstimatedCosts(student.estimated_costs)}</td>
+                                     <td className="py-3 text-right">{formatTokenCount(student.call_count)}</td>
+                                    <td className="py-3 text-right text-xs text-muted-foreground">{student.actual_calls}/{student.estimated_calls}/{student.unknown_calls}</td>
+                                  </tr>
+                                ))}
+                                {aiUsageStudents.length === 0 && (
+                                   <tr><td colSpan={6} className="py-8 text-center text-muted-foreground">暂无学生用量数据</td></tr>
+                                )}
+                              </tbody>
+                            </table>
+                          </div>
+                          {aiUsageStudentTotal > aiUsageStudentPageSize && (
+                            <div className="mt-3 flex items-center justify-between text-xs text-muted-foreground">
+                              <span>第 {aiUsageStudentPage} / {Math.ceil(aiUsageStudentTotal / aiUsageStudentPageSize)} 页</span>
+                              <div className="flex gap-1">
+                                <Button variant="outline" size="icon" className="h-7 w-7" disabled={aiUsageStudentPage <= 1} onClick={() => setAiUsageStudentPage((page) => page - 1)}><ChevronLeft className="h-4 w-4" /></Button>
+                                <Button variant="outline" size="icon" className="h-7 w-7" disabled={aiUsageStudentPage >= Math.ceil(aiUsageStudentTotal / aiUsageStudentPageSize)} onClick={() => setAiUsageStudentPage((page) => page + 1)}><ChevronRight className="h-4 w-4" /></Button>
+                              </div>
+                            </div>
+                          )}
+                        </CardContent>
+                      </Card>}
+                    </div>
+
+                    <Card>
+                      <CardHeader>
+                        <CardTitle className="text-base">最近 AI 调用</CardTitle>
+                        <CardDescription>当前筛选条件下的最新事件，共 {formatTokenCount(aiUsageTotal)} 条</CardDescription>
+                      </CardHeader>
+                      <CardContent>
+                        <div className="overflow-x-auto">
+                            <table className="w-full min-w-[1020px] text-sm">
+                            <thead>
+                              <tr className="border-b text-muted-foreground">
+                                <th className="py-2 text-left font-medium">时间</th>
+                                <th className="py-2 text-left font-medium">功能</th>
+                                <th className="py-2 text-left font-medium">供应商 / 模型</th>
+                                 <th className="py-2 text-right font-medium">文本 Token</th>
+                                 <th className="py-2 text-right font-medium">音频</th>
+                                 <th className="py-2 text-right font-medium">字节</th>
+                                <th className="py-2 text-right font-medium">预计成本</th>
+                                <th className="py-2 text-center font-medium">状态</th>
+                              </tr>
+                            </thead>
+                            <tbody>
+                              {aiUsage.events.map((event) => (
+                                <tr key={event.id} className="border-b last:border-0">
+                                  <td className="py-3 pr-3 text-xs text-muted-foreground">{new Date(event.created_at).toLocaleString('zh-CN')}</td>
+                                  <td className="py-3">{formatAiFeature(event.feature)}</td>
+                                  <td className="py-3 text-xs">{event.provider}{event.model ? ` / ${event.model}` : ''}</td>
+                                   <td className="py-3 text-right">{formatTokenCount(event.total_tokens)}</td>
+                                   <td className="py-3 text-right">{event.modality === 'audio' ? `ASR ${formatAudioMinutes(event.input_audio_seconds)} / TTS ${formatAudioMinutes(event.output_audio_seconds)}` : '文本'}</td>
+                                   <td className="py-3 text-right">{event.modality === 'audio' ? `${formatAudioBytes(event.input_audio_bytes)} / ${formatAudioBytes(event.output_audio_bytes)}` : '-'}</td>
+                                   <td className="py-3 text-right text-xs" title={event.cost_source === 'priced' ? `${event.currency} ${event.estimated_cost}` : '该调用尚无有效价格'}>{event.cost_source === 'priced' ? `${event.currency} ${Number(event.estimated_cost || 0).toFixed(4)}` : '未定价'}</td>
+                                  <td className="py-3 text-center">
+                                    <Badge variant={event.status === 'success' ? 'secondary' : 'destructive'}>
+                                      {event.status === 'success' ? '成功' : '失败'}
+                                    </Badge>
+                                  </td>
+                                </tr>
+                              ))}
+                              {aiUsage.events.length === 0 && (
+                                 <tr><td colSpan={8} className="py-8 text-center text-muted-foreground">暂无调用事件</td></tr>
+                              )}
+                            </tbody>
+                          </table>
+                        </div>
+                        {aiUsageTotal > aiUsagePageSize && (
+                          <div className="mt-3 flex items-center justify-between text-xs text-muted-foreground">
+                            <span>第 {aiUsagePage} / {Math.ceil(aiUsageTotal / aiUsagePageSize)} 页</span>
+                            <div className="flex gap-1">
+                              <Button variant="outline" size="icon" className="h-7 w-7" disabled={aiUsagePage <= 1} onClick={() => setAiUsagePage((page) => page - 1)}><ChevronLeft className="h-4 w-4" /></Button>
+                              <Button variant="outline" size="icon" className="h-7 w-7" disabled={aiUsagePage >= Math.ceil(aiUsageTotal / aiUsagePageSize)} onClick={() => setAiUsagePage((page) => page + 1)}><ChevronRight className="h-4 w-4" /></Button>
+                            </div>
+                          </div>
+                        )}
+                      </CardContent>
+                    </Card>
+                  </>
+                ) : (
+                  <Card><CardContent className="py-12 text-center text-muted-foreground">暂无 AI 用量数据</CardContent></Card>
+                )}
+              </div>
+            </TabsContent>
+
+            <TabsContent value="job-submissions">
+              <Card>
+                <CardHeader className="gap-4">
+                  <div className="flex flex-col gap-2 md:flex-row md:items-center md:justify-between">
+                    <div>
+                      <CardTitle className="text-lg">岗位投稿审核</CardTitle>
+                      <CardDescription>投稿人联系方式和提交者信息不会在后台列表中显示。批准操作以数据库事务创建岗位并更新审核状态。</CardDescription>
+                    </div>
+                    <Button variant="outline" size="sm" onClick={() => void fetchJobSubmissions()} disabled={jobSubmissionsLoading}>
+                      <RefreshCw className={`mr-2 h-4 w-4 ${jobSubmissionsLoading ? 'animate-spin' : ''}`} />刷新
+                    </Button>
+                  </div>
+                  <div className="flex flex-col gap-2 sm:flex-row">
+                    <Input
+                      className="sm:max-w-sm"
+                      value={jobSubmissionsSearch}
+                      onChange={(event) => { setJobSubmissionsSearch(event.target.value); setJobSubmissionsPage(1); }}
+                      placeholder="搜索岗位或公司"
+                    />
+                    <Select value={jobSubmissionsStatus} onValueChange={(value) => { setJobSubmissionsStatus(value); setJobSubmissionsPage(1); }}>
+                      <SelectTrigger className="sm:w-36"><SelectValue /></SelectTrigger>
+                      <SelectContent>
+                        <SelectItem value="pending">待审核</SelectItem>
+                        <SelectItem value="approved">已批准</SelectItem>
+                        <SelectItem value="rejected">已拒绝</SelectItem>
+                        <SelectItem value="all">全部状态</SelectItem>
+                      </SelectContent>
+                    </Select>
+                  </div>
+                </CardHeader>
+                <CardContent>
+                  {jobSubmissionsError ? (
+                    <div className="py-10 text-center"><XCircle className="mx-auto h-8 w-8 text-destructive" /><p className="mt-2 text-sm text-destructive">{jobSubmissionsError}</p></div>
+                  ) : jobSubmissionsLoading ? (
+                    <div className="py-10 text-center"><Loader2 className="mx-auto h-8 w-8 animate-spin text-primary" /><p className="mt-2 text-sm text-muted-foreground">加载岗位投稿...</p></div>
+                  ) : (
+                    <>
+                      <div className="overflow-x-auto">
+                        <table className="w-full min-w-[920px] text-sm">
+                          <thead><tr className="border-b text-left text-muted-foreground"><th className="py-2 font-medium">岗位</th><th className="py-2 font-medium">地区 / 方向</th><th className="py-2 font-medium">投稿时间</th><th className="py-2 font-medium">状态</th><th className="py-2 font-medium">审核备注</th><th className="py-2 text-right font-medium">操作</th></tr></thead>
+                          <tbody>
+                            {jobSubmissions.map((submission) => (
+                              <tr key={submission.id} className="border-b last:border-0 align-top">
+                                <td className="py-3 pr-3"><p className="font-medium">{submission.title}</p><p className="mt-1 text-xs text-muted-foreground">{submission.company}{submission.job_type ? ` · ${submission.job_type}` : ''}</p>{submission.job_url && <a className="mt-1 inline-flex items-center gap-1 text-xs text-primary hover:underline" href={submission.job_url} target="_blank" rel="noreferrer"><ExternalLink className="h-3 w-3" />岗位链接</a>}</td>
+                                <td className="py-3">{submission.region || '未标注'}<span className="text-muted-foreground"> / </span>{submission.direction || '未标注'}</td>
+                                <td className="py-3 text-xs text-muted-foreground">{new Date(submission.submitted_at || submission.created_at).toLocaleString('zh-CN')}</td>
+                                <td className="py-3"><Badge variant={submission.status === 'approved' ? 'secondary' : submission.status === 'rejected' ? 'destructive' : 'outline'}>{submission.status === 'approved' ? '已批准' : submission.status === 'rejected' ? '已拒绝' : '待审核'}</Badge></td>
+                                <td className="max-w-[220px] py-3 text-xs text-muted-foreground">{submission.notes || '-'}</td>
+                                <td className="py-3 text-right">
+                                  {canWriteJobs && <div className="flex justify-end gap-1">
+                                    {submission.status === 'pending' && <>
+                                      <Button size="sm" onClick={() => { setReviewingSubmission(submission); setReviewNotes(''); setSubmissionReviewAction('approve'); }}>批准</Button>
+                                      <Button size="sm" variant="outline" onClick={() => { setReviewingSubmission(submission); setReviewNotes(''); setSubmissionReviewAction('reject'); }}>拒绝</Button>
+                                    </>}
+                                    <Button size="icon" variant="ghost" className="h-8 w-8 text-destructive" title="删除投稿" onClick={() => void handleJobSubmissionDelete(submission)}><Trash2 className="h-4 w-4" /></Button>
+                                  </div>}
+                                </td>
+                              </tr>
+                            ))}
+                            {jobSubmissions.length === 0 && <tr><td colSpan={6} className="py-10 text-center text-muted-foreground">暂无符合条件的岗位投稿</td></tr>}
+                          </tbody>
+                        </table>
+                      </div>
+                      {jobSubmissionsTotal > jobSubmissionsPageSize && <div className="mt-4 flex items-center justify-between text-xs text-muted-foreground"><span>第 {jobSubmissionsPage} / {Math.ceil(jobSubmissionsTotal / jobSubmissionsPageSize)} 页，共 {jobSubmissionsTotal} 条</span><div className="flex gap-1"><Button variant="outline" size="icon" className="h-7 w-7" disabled={jobSubmissionsPage <= 1} onClick={() => setJobSubmissionsPage((page) => page - 1)}><ChevronLeft className="h-4 w-4" /></Button><Button variant="outline" size="icon" className="h-7 w-7" disabled={jobSubmissionsPage >= Math.ceil(jobSubmissionsTotal / jobSubmissionsPageSize)} onClick={() => setJobSubmissionsPage((page) => page + 1)}><ChevronRight className="h-4 w-4" /></Button></div></div>}
+                    </>
+                  )}
+                </CardContent>
+              </Card>
+            </TabsContent>
+
             {/* Jobs Tab */}
             <TabsContent value="jobs">
               <Card>
@@ -1768,21 +3164,34 @@ function AdminContent() {
                   <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
                     <div>
                       <CardTitle className="text-base md:text-lg">岗位管理</CardTitle>
-                      <CardDescription className="text-xs md:text-sm">添加、编辑和删除岗位信息</CardDescription>
+                      <CardDescription className="text-xs md:text-sm">{canWriteJobs ? '添加、编辑和删除岗位信息' : '查看当前可投递岗位信息'}</CardDescription>
                     </div>
                     <div className="flex gap-2">
-                      <Button
-                        variant="outline"
-                        size="sm"
-                        className="h-8 text-xs md:text-sm"
-                        onClick={handleFeedSync}
-                        disabled={feedSyncing}
-                      >
-                        {feedSyncing ? <Loader2 className="h-4 w-4 animate-spin md:mr-2" /> : <Globe className="h-4 w-4 md:mr-2" />}
-                        <span className="hidden md:inline">同步招聘数据</span>
-                        <span className="md:hidden">同步</span>
-                      </Button>
-                      <Button 
+                      {canWriteJobs && <>
+                        <Button
+                          variant="outline"
+                          size="sm"
+                          className="h-8 text-xs md:text-sm"
+                          onClick={() => void handleFeedSync()}
+                          disabled={feedSyncing}
+                        >
+                          {feedSyncing ? <Loader2 className="h-4 w-4 animate-spin md:mr-2" /> : <Globe className="h-4 w-4 md:mr-2" />}
+                          <span className="hidden md:inline">同步招聘数据</span>
+                          <span className="md:hidden">同步</span>
+                        </Button>
+                        <Button
+                          variant="outline"
+                          size="sm"
+                          className="h-8 text-xs md:text-sm"
+                          onClick={() => setReconcileConfirmOpen(true)}
+                          disabled={feedSyncing}
+                        >
+                          <RefreshCw className="h-4 w-4 md:mr-2" />
+                          <span className="hidden md:inline">完整对账</span>
+                          <span className="md:hidden">对账</span>
+                        </Button>
+                      </>}
+                      {canWriteJobs && <Button
                         variant="outline"
                         size="sm"
                         className="h-8 text-xs md:text-sm"
@@ -1795,8 +3204,8 @@ function AdminContent() {
                         <Upload className="h-4 w-4 md:mr-2" />
                         <span className="hidden md:inline">批量导入</span>
                         <span className="md:hidden">导入</span>
-                      </Button>
-                      <Dialog open={jobDialogOpen} onOpenChange={(open) => {
+                      </Button>}
+                      {canWriteJobs && <Dialog open={jobDialogOpen} onOpenChange={(open) => {
                         setJobDialogOpen(open);
                         if (!open) {
                           resetJobForm();
@@ -2042,7 +3451,7 @@ function AdminContent() {
                           </Button>
                         </DialogFooter>
                       </DialogContent>
-                    </Dialog>
+                    </Dialog>}
                     </div>
                   </div>
                 </CardHeader>
@@ -2061,7 +3470,7 @@ function AdminContent() {
                         className="pl-10 h-9 md:h-10"
                       />
                     </div>
-                    {selectedJobIds.size > 0 && (
+                    {canWriteJobs && selectedJobIds.size > 0 && (
                       <div className="flex items-center gap-2 flex-wrap">
                         <Badge variant="secondary" className="px-3 py-1 text-xs">
                           已选择 {selectedJobIds.size} 项
@@ -2090,6 +3499,34 @@ function AdminContent() {
                     <p className="mb-4 text-xs md:text-sm text-muted-foreground">{feedSyncMessage}</p>
                   )}
 
+                  {canWriteJobs && (
+                    <div className="mb-4 rounded-lg border bg-muted/20 p-3 text-sm">
+                      <div className="flex flex-wrap items-center justify-between gap-2">
+                        <div className="flex items-center gap-2">
+                          <span className="font-medium">招聘源状态</span>
+                          {jobFeedState && <Badge variant={jobFeedState.healthy ? 'secondary' : 'destructive'}>{jobFeedState.healthy ? '正常' : '需处理'}</Badge>}
+                          {jobFeedState?.state.lease_owner && <Badge variant="outline">同步中</Badge>}
+                        </div>
+                        <Button type="button" size="sm" variant="ghost" className="h-8" onClick={() => void fetchJobFeedState()} disabled={jobFeedStateLoading}>
+                          <RefreshCw className={`mr-2 h-4 w-4 ${jobFeedStateLoading ? 'animate-spin' : ''}`} />刷新状态
+                        </Button>
+                      </div>
+                      {jobFeedStateLoading && !jobFeedState ? (
+                        <p className="mt-2 text-xs text-muted-foreground">正在读取同步状态...</p>
+                      ) : jobFeedStateError ? (
+                        <p className="mt-2 text-xs text-destructive">{jobFeedStateError}</p>
+                      ) : jobFeedState ? (
+                        <div className="mt-3 grid gap-2 text-xs text-muted-foreground sm:grid-cols-2 lg:grid-cols-4">
+                          <p>数据源：<span className="text-foreground">{jobFeedState.state.source_system}</span></p>
+                          <p>上次增量成功：<span className="text-foreground">{jobFeedState.state.last_incremental_success_at ? new Date(jobFeedState.state.last_incremental_success_at).toLocaleString('zh-CN') : '暂无'}</span></p>
+                          <p>上次完整对账：<span className="text-foreground">{jobFeedState.state.last_reconcile_success_at ? new Date(jobFeedState.state.last_reconcile_success_at).toLocaleString('zh-CN') : '暂无'}</span></p>
+                          <p>连续失败：<span className={jobFeedState.state.consecutive_failures > 0 ? 'font-medium text-destructive' : 'text-foreground'}>{jobFeedState.state.consecutive_failures}</span></p>
+                          {jobFeedState.state.last_error && <p className="sm:col-span-2 lg:col-span-4 break-words text-destructive">最近错误：{jobFeedState.state.last_error}</p>}
+                        </div>
+                      ) : null}
+                    </div>
+                  )}
+
                   {jobsError && (
                     <div className="mb-4 flex flex-col sm:flex-row sm:items-center justify-between gap-3 rounded-lg border border-red-200 bg-red-50 px-3 py-2 text-sm text-red-700">
                       <span>{jobsError}</span>
@@ -2105,14 +3542,14 @@ function AdminContent() {
                       <table className="w-full min-w-[900px]">
                         <thead className="bg-muted/50">
                           <tr>
-                            <th className="px-3 md:px-4 py-2 md:py-3 w-10 md:w-12">
+                            {canWriteJobs && <th className="px-3 md:px-4 py-2 md:py-3 w-10 md:w-12">
                               <input
                                 type="checkbox"
                                 checked={filteredJobs.length > 0 && selectedJobIds.size === filteredJobs.length}
                                 onChange={toggleSelectAll}
                                 className="h-4 w-4 rounded border-gray-300"
                               />
-                            </th>
+                            </th>}
                             <th className="px-3 md:px-4 py-2 md:py-3 text-left text-xs md:text-sm font-medium">岗位</th>
                             <th className="px-3 md:px-4 py-2 md:py-3 text-left text-xs md:text-sm font-medium">公司</th>
                             <th className="px-3 md:px-4 py-2 md:py-3 text-left text-xs md:text-sm font-medium hidden md:table-cell">地区</th>
@@ -2165,17 +3602,17 @@ function AdminContent() {
                                       </a>
                                     </Button>
                                   )}
-                                  <Button size="sm" variant="ghost" onClick={() => openEditJob(job)}>
+                                  {canWriteJobs && <Button size="sm" variant="ghost" onClick={() => openEditJob(job)}>
                                     <Edit className="h-4 w-4" />
-                                  </Button>
-                                  <Button
+                                  </Button>}
+                                  {canWriteJobs && <Button
                                     size="sm"
                                     variant="ghost"
                                     className="text-destructive"
                                     onClick={() => setDeleteJobId(job.id)}
                                   >
                                     <Trash2 className="h-4 w-4" />
-                                  </Button>
+                                  </Button>}
                                 </div>
                               </td>
                             </tr>
@@ -2191,7 +3628,7 @@ function AdminContent() {
                   </div>
                   {jobsTotal > 0 && (
                     <div className="mt-4 flex flex-col sm:flex-row items-center justify-between gap-3 text-xs text-muted-foreground">
-                      <span>共 {jobsTotal} 个岗位，第 {jobsPage + 1} 页，每页 {jobsPageSize} 条</span>
+                      <span>共 {jobsTotal} 个可投递岗位，第 {jobsPage + 1} 页，每页 {jobsPageSize} 条</span>
                       <div className="flex items-center gap-2">
                         <Button
                           type="button"
@@ -2278,8 +3715,34 @@ function AdminContent() {
             <TabsContent value="resumes">
               <Card>
                 <CardHeader className="pb-3 md:pb-6">
-                  <CardTitle className="text-base md:text-lg">简历管理</CardTitle>
-                  <CardDescription className="text-xs md:text-sm">查看和管理已上传的简历</CardDescription>
+                  <div className="flex flex-col gap-3 md:flex-row md:items-end md:justify-between">
+                    <div>
+                      <CardTitle className="text-base md:text-lg">简历管理</CardTitle>
+                      <CardDescription className="text-xs md:text-sm">仅展示安全摘要；完整简历正文不在管理员列表返回</CardDescription>
+                    </div>
+                    <div className="flex flex-col gap-2 sm:flex-row">
+                      <Input
+                        value={resumeSearch}
+                        onChange={(event) => {
+                          setResumeSearch(event.target.value);
+                          setResumesPage(1);
+                        }}
+                        placeholder="搜索文件名、用户 ID 或简历 ID"
+                        className="h-8 w-full sm:w-64 text-xs"
+                      />
+                      <Select value={resumeStatus} onValueChange={(value) => { setResumeStatus(value); setResumesPage(1); }}>
+                        <SelectTrigger className="h-8 w-full sm:w-40 text-xs">
+                          <SelectValue placeholder="处理状态" />
+                        </SelectTrigger>
+                        <SelectContent>
+                          <SelectItem value="all">全部状态</SelectItem>
+                          {Object.entries(resumeStatusLabels).map(([value, label]) => (
+                            <SelectItem key={value} value={value}>{label}</SelectItem>
+                          ))}
+                        </SelectContent>
+                      </Select>
+                    </div>
+                  </div>
                 </CardHeader>
                 <CardContent>
                   <div className="border rounded-lg overflow-hidden">
@@ -2305,20 +3768,21 @@ function AdminContent() {
                               <td className="px-3 md:px-4 py-2 md:py-3 text-xs md:text-sm text-muted-foreground hidden sm:table-cell">
                                 {new Date(resume.created_at).toLocaleDateString()}
                               </td>
-                              <td className="px-3 md:px-4 py-2 md:py-3">
-                                <Badge variant={resume.parsed_content ? 'default' : 'secondary'} className="text-xs">
-                                  {resume.parsed_content ? '已解析' : '待解析'}
+                              {canWriteJobs && <td className="px-3 md:px-4 py-2 md:py-3">
+                                <Badge variant={resume.processing_status === 'failed' ? 'destructive' : resume.processing_status === 'ready' ? 'default' : 'secondary'} className="text-xs">
+                                  {resumeStatusLabels[resume.processing_status || 'uploaded'] || resume.processing_status || '未知'}
                                 </Badge>
-                              </td>
+                              </td>}
                               <td className="px-3 md:px-4 py-2 md:py-3 text-right">
-                                <Button 
+                                {resume.user_id && <Link href={`/admin/students/${resume.user_id}`} title="查看学生用量详情"><Button size="sm" variant="ghost" className="h-8 w-8 md:w-auto"><Users className="h-4 w-4" /></Button></Link>}
+                                {canWriteConfig && <Button
                                   size="sm" 
                                   variant="ghost" 
                                   className="h-8 w-8 md:w-auto text-destructive"
                                   onClick={() => handleDeleteResume(resume.id)}
                                 >
                                   <Trash2 className="h-4 w-4" />
-                                </Button>
+                                </Button>}
                               </td>
                             </tr>
                           ))}
@@ -2331,6 +3795,19 @@ function AdminContent() {
                       </div>
                     )}
                   </div>
+                  {resumesTotal > 0 && (
+                    <div className="mt-3 flex items-center justify-between text-xs text-muted-foreground">
+                      <span>共 {resumesTotal} 份，第 {resumesPage} / {Math.ceil(resumesTotal / resumesPageSize)} 页</span>
+                      <div className="flex gap-1">
+                        <Button variant="outline" size="icon" className="h-7 w-7" disabled={resumesPage <= 1} onClick={() => setResumesPage((page) => page - 1)}>
+                          <ChevronLeft className="h-4 w-4" />
+                        </Button>
+                        <Button variant="outline" size="icon" className="h-7 w-7" disabled={resumesPage >= Math.ceil(resumesTotal / resumesPageSize)} onClick={() => setResumesPage((page) => page + 1)}>
+                          <ChevronRight className="h-4 w-4" />
+                        </Button>
+                      </div>
+                    </div>
+                  )}
                 </CardContent>
               </Card>
             </TabsContent>
@@ -2339,8 +3816,34 @@ function AdminContent() {
             <TabsContent value="applications">
               <Card>
                 <CardHeader className="pb-3 md:pb-6">
-                  <CardTitle className="text-base md:text-lg">网申管理</CardTitle>
-                  <CardDescription className="text-xs md:text-sm">查看和管理网申记录</CardDescription>
+                  <div className="flex flex-col gap-3 md:flex-row md:items-end md:justify-between">
+                    <div>
+                      <CardTitle className="text-base md:text-lg">网申管理</CardTitle>
+                      <CardDescription className="text-xs md:text-sm">服务端分页显示，备注仅保留安全摘要</CardDescription>
+                    </div>
+                    <div className="flex flex-col gap-2 sm:flex-row">
+                      <Input
+                        value={applicationSearch}
+                        onChange={(event) => {
+                          setApplicationSearch(event.target.value);
+                          setApplicationsPage(1);
+                        }}
+                        placeholder="搜索备注、岗位 ID、简历 ID 或用户 ID"
+                        className="h-8 w-full sm:w-72 text-xs"
+                      />
+                      <Select value={applicationStatus} onValueChange={(value) => { setApplicationStatus(value); setApplicationsPage(1); }}>
+                        <SelectTrigger className="h-8 w-full sm:w-32 text-xs">
+                          <SelectValue placeholder="网申状态" />
+                        </SelectTrigger>
+                        <SelectContent>
+                          <SelectItem value="all">全部状态</SelectItem>
+                          {Object.entries(statusLabels).map(([value, label]) => (
+                            <SelectItem key={value} value={value}>{label}</SelectItem>
+                          ))}
+                        </SelectContent>
+                      </Select>
+                    </div>
+                  </div>
                 </CardHeader>
                 <CardContent>
                   <div className="border rounded-lg overflow-hidden">
@@ -2377,7 +3880,8 @@ function AdminContent() {
                                 {app.notes || '-'}
                               </td>
                               <td className="px-3 md:px-4 py-2 md:py-3 text-right">
-                                <Button 
+                                {app.user_id && <Link href={`/admin/students/${app.user_id}`} title="查看学生用量详情"><Button size="sm" variant="ghost" className="h-8 w-8 md:w-auto"><Users className="h-4 w-4" /></Button></Link>}
+                                {canWriteConfig && <Button
                                   size="sm" 
                                   variant="ghost"
                                   className="h-8 w-8 md:w-auto"
@@ -2387,7 +3891,7 @@ function AdminContent() {
                                   }}
                                 >
                                   <Edit className="h-4 w-4" />
-                                </Button>
+                                </Button>}
                               </td>
                             </tr>
                           ))}
@@ -2400,6 +3904,147 @@ function AdminContent() {
                       </div>
                     )}
                   </div>
+                  {applicationsTotal > 0 && (
+                    <div className="mt-3 flex items-center justify-between text-xs text-muted-foreground">
+                      <span>共 {applicationsTotal} 条，第 {applicationsPage} / {Math.ceil(applicationsTotal / applicationsPageSize)} 页</span>
+                      <div className="flex gap-1">
+                        <Button variant="outline" size="icon" className="h-7 w-7" disabled={applicationsPage <= 1} onClick={() => setApplicationsPage((page) => page - 1)}>
+                          <ChevronLeft className="h-4 w-4" />
+                        </Button>
+                        <Button variant="outline" size="icon" className="h-7 w-7" disabled={applicationsPage >= Math.ceil(applicationsTotal / applicationsPageSize)} onClick={() => setApplicationsPage((page) => page + 1)}>
+                          <ChevronRight className="h-4 w-4" />
+                        </Button>
+                      </div>
+                    </div>
+                  )}
+                </CardContent>
+              </Card>
+            </TabsContent>
+
+            {/* Audit Logs Tab */}
+            <TabsContent value="audit">
+              <Card>
+                <CardHeader className="pb-3 md:pb-6">
+                  <div className="flex flex-col gap-3 md:flex-row md:items-center md:justify-between">
+                    <div>
+                      <CardTitle className="text-base md:text-lg">管理员审计日志</CardTitle>
+                      <CardDescription className="text-xs md:text-sm">
+                        记录管理员写操作及结果；敏感字段和简历正文不会保存。
+                      </CardDescription>
+                    </div>
+                    <Button
+                      variant="outline"
+                      size="sm"
+                      onClick={() => void fetchAuditLogs()}
+                      disabled={auditLoading}
+                    >
+                      <RefreshCw className={`h-4 w-4 mr-2 ${auditLoading ? 'animate-spin' : ''}`} />
+                      刷新
+                    </Button>
+                  </div>
+                  <div className="flex flex-col gap-2 pt-2 sm:flex-row">
+                    <Select value={auditResourceType} onValueChange={setAuditResourceType}>
+                      <SelectTrigger className="w-full sm:w-48">
+                        <SelectValue placeholder="资源类型" />
+                      </SelectTrigger>
+                      <SelectContent>
+                        <SelectItem value="all">全部资源</SelectItem>
+                        <SelectItem value="job">岗位</SelectItem>
+                        <SelectItem value="job_config">岗位配置</SelectItem>
+                        <SelectItem value="company_config">企业配置</SelectItem>
+                        <SelectItem value="company_logo">企业 Logo</SelectItem>
+                        <SelectItem value="resume">简历</SelectItem>
+                        <SelectItem value="application">网申</SelectItem>
+                        <SelectItem value="company_dna">企业 DNA</SelectItem>
+                        <SelectItem value="interview_feedback">面试反馈</SelectItem>
+                        <SelectItem value="job_feed">岗位同步</SelectItem>
+                        <SelectItem value="admin_password">管理员密码</SelectItem>
+                      </SelectContent>
+                    </Select>
+                    <Select value={auditAction} onValueChange={setAuditAction}>
+                      <SelectTrigger className="w-full sm:w-56">
+                        <SelectValue placeholder="操作类型" />
+                      </SelectTrigger>
+                      <SelectContent>
+                        <SelectItem value="all">全部操作</SelectItem>
+                        <SelectItem value="job.create">创建岗位</SelectItem>
+                        <SelectItem value="job.update">编辑岗位</SelectItem>
+                        <SelectItem value="job.delete">删除岗位</SelectItem>
+                        <SelectItem value="job.batch_create">批量导入岗位</SelectItem>
+                        <SelectItem value="job.batch_delete">批量删除岗位</SelectItem>
+                        <SelectItem value="config.create">创建配置</SelectItem>
+                        <SelectItem value="config.update">更新配置</SelectItem>
+                        <SelectItem value="config.delete">删除配置</SelectItem>
+                        <SelectItem value="resume.delete">删除简历</SelectItem>
+                        <SelectItem value="application.update">更新网申</SelectItem>
+                        <SelectItem value="application.delete">删除网申</SelectItem>
+                        <SelectItem value="company_dna.update">更新企业 DNA</SelectItem>
+                        <SelectItem value="dna_feedback.review">审核面试反馈</SelectItem>
+                        <SelectItem value="job_feed.sync">同步岗位数据</SelectItem>
+                        <SelectItem value="admin_password.change">修改管理员密码</SelectItem>
+                      </SelectContent>
+                    </Select>
+                  </div>
+                </CardHeader>
+                <CardContent>
+                  {auditError && <p className="mb-3 text-sm text-destructive">{auditError}</p>}
+                  <div className="overflow-x-auto rounded-md border">
+                    <table className="w-full min-w-[1000px] text-sm">
+                      <thead className="bg-muted/50">
+                        <tr className="border-b">
+                          <th className="px-3 py-2 text-left font-medium">时间</th>
+                          <th className="px-3 py-2 text-left font-medium">操作</th>
+                          <th className="px-3 py-2 text-left font-medium">资源</th>
+                          <th className="px-3 py-2 text-left font-medium">学生</th>
+                          <th className="px-3 py-2 text-left font-medium">结果</th>
+                          <th className="px-3 py-2 text-left font-medium">审计摘要</th>
+                        </tr>
+                      </thead>
+                      <tbody>
+                        {auditLogs.map((log) => (
+                          <tr key={log.id} className="border-b last:border-0">
+                            <td className="whitespace-nowrap px-3 py-3 text-xs text-muted-foreground">
+                              {new Date(log.created_at).toLocaleString('zh-CN')}
+                            </td>
+                            <td className="px-3 py-3 font-medium">{log.action}</td>
+                            <td className="px-3 py-3 text-xs">
+                              {log.resource_type}{log.resource_id ? ` #${log.resource_id}` : ''}
+                            </td>
+                            <td className="px-3 py-3 text-xs text-muted-foreground">
+                              {log.subject_user_id ? `${log.subject_user_id.slice(0, 8)}...` : '-'}
+                            </td>
+                            <td className="px-3 py-3">
+                              <Badge variant={log.success ? 'secondary' : 'destructive'}>
+                                {log.success ? '成功' : '失败'}
+                              </Badge>
+                            </td>
+                            <td className="max-w-[420px] truncate px-3 py-3 text-xs text-muted-foreground" title={formatAuditPayload(log.after_data || log.metadata)}>
+                              {formatAuditPayload(log.after_data || log.metadata)}
+                            </td>
+                          </tr>
+                        ))}
+                        {auditLogs.length === 0 && !auditLoading && (
+                          <tr><td colSpan={6} className="py-10 text-center text-muted-foreground">暂无审计记录</td></tr>
+                        )}
+                        {auditLoading && (
+                          <tr><td colSpan={6} className="py-10 text-center text-muted-foreground">加载中...</td></tr>
+                        )}
+                      </tbody>
+                    </table>
+                  </div>
+                  {auditTotal > auditPageSize && (
+                    <div className="mt-3 flex items-center justify-between text-xs text-muted-foreground">
+                      <span>共 {auditTotal} 条，第 {auditPage} / {Math.ceil(auditTotal / auditPageSize)} 页</span>
+                      <div className="flex gap-1">
+                        <Button variant="outline" size="icon" className="h-7 w-7" disabled={auditPage <= 1} onClick={() => setAuditPage((page) => page - 1)}>
+                          <ChevronLeft className="h-4 w-4" />
+                        </Button>
+                        <Button variant="outline" size="icon" className="h-7 w-7" disabled={auditPage >= Math.ceil(auditTotal / auditPageSize)} onClick={() => setAuditPage((page) => page + 1)}>
+                          <ChevronRight className="h-4 w-4" />
+                        </Button>
+                      </div>
+                    </div>
+                  )}
                 </CardContent>
               </Card>
             </TabsContent>
@@ -2670,6 +4315,67 @@ function AdminContent() {
           </AlertDialogFooter>
         </AlertDialogContent>
       </AlertDialog>
+
+      <AlertDialog open={reconcileConfirmOpen} onOpenChange={(open) => {
+        if (!feedSyncing) setReconcileConfirmOpen(open);
+      }}>
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>确认执行完整岗位对账</AlertDialogTitle>
+            <AlertDialogDescription>
+              完整对账会逐页读取招聘源，并可能将源中已经消失的岗位标记为关闭。任务可以分批续跑，确定现在开始吗？
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel disabled={feedSyncing}>取消</AlertDialogCancel>
+            <AlertDialogAction
+              disabled={feedSyncing}
+              onClick={(event) => {
+                event.preventDefault();
+                setReconcileConfirmOpen(false);
+                void handleFeedSync('reconcile');
+              }}
+            >
+              开始对账
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
+
+      <Dialog open={!!reviewingSubmission} onOpenChange={(open) => {
+        if (!open && !submissionReviewSaving) {
+          setReviewingSubmission(null);
+          setReviewNotes('');
+          setSubmissionReviewAction(null);
+        }
+      }}>
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>{submissionReviewAction === 'approve' ? '批准岗位投稿' : '拒绝岗位投稿'}</DialogTitle>
+            <DialogDescription>
+              {reviewingSubmission ? `${reviewingSubmission.company} - ${reviewingSubmission.title}` : ''}
+            </DialogDescription>
+          </DialogHeader>
+          <div className="space-y-3 py-2">
+            <Label htmlFor="job-submission-review-notes">审核备注（可选）</Label>
+            <Textarea
+              id="job-submission-review-notes"
+              value={reviewNotes}
+              maxLength={2000}
+              onChange={(event) => setReviewNotes(event.target.value)}
+              placeholder={submissionReviewAction === 'approve' ? '可记录审核说明' : '可说明拒绝原因'}
+            />
+            {submissionReviewAction === 'approve' && <p className="text-xs text-muted-foreground">确认后会原子地创建正式岗位并将投稿标记为已批准。</p>}
+          </div>
+          <DialogFooter>
+            <Button variant="outline" disabled={submissionReviewSaving} onClick={() => { setReviewingSubmission(null); setReviewNotes(''); setSubmissionReviewAction(null); }}>取消</Button>
+            <Button variant={submissionReviewAction === 'reject' ? 'destructive' : 'default'} disabled={submissionReviewSaving} onClick={() => void handleJobSubmissionReview()}>
+              {submissionReviewSaving && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
+              {submissionReviewAction === 'approve' ? '确认批准' : '确认拒绝'}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
 
       {/* Batch Delete Confirmation */}
       <Dialog open={batchDeleteConfirmOpen} onOpenChange={setBatchDeleteConfirmOpen}>
@@ -3210,8 +4916,8 @@ function AdminContent() {
 
 export default function AdminPage() {
   return (
-    <AdminAuthGuard>
+    <Suspense fallback={<div className="min-h-screen" />}>
       <AdminContent />
-    </AdminAuthGuard>
+    </Suspense>
   );
 }

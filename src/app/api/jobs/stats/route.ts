@@ -1,5 +1,6 @@
 import { NextResponse } from 'next/server';
 import { getSupabaseClient } from '@/storage/database/supabase-client';
+import { targetRegionPostgrestClauses } from '@/lib/job-region-scope';
 
 // GET /api/jobs/stats - 获取岗位统计数据
 export async function GET() {
@@ -25,6 +26,7 @@ export async function GET() {
       .from('jobs')
       .select('*', { count: 'exact', head: true })
       .eq('is_active', true)
+      .or(targetRegionPostgrestClauses().join(','))
       .gte('created_at', todayStr);
     
     if (todayError) {
@@ -36,6 +38,7 @@ export async function GET() {
       .from('jobs')
       .select('*', { count: 'exact', head: true })
       .eq('is_active', true)
+      .or(targetRegionPostgrestClauses().join(','))
       .gte('created_at', weekStartStr);
     
     if (weekError) {
@@ -47,6 +50,7 @@ export async function GET() {
       .from('jobs')
       .select('*', { count: 'exact', head: true })
       .eq('is_active', true)
+      .or(targetRegionPostgrestClauses().join(','))
       .gte('created_at', monthStartStr);
     
     if (monthError) {
@@ -57,7 +61,8 @@ export async function GET() {
     const { count: totalCount, error: totalError } = await client
       .from('jobs')
       .select('*', { count: 'exact', head: true })
-      .eq('is_active', true);
+      .eq('is_active', true)
+      .or(targetRegionPostgrestClauses().join(','));
     
     if (totalError) {
       throw new Error(`查询总岗位失败: ${totalError.message}`);
@@ -68,6 +73,7 @@ export async function GET() {
       .from('jobs')
       .select('region')
       .eq('is_active', true)
+      .or(targetRegionPostgrestClauses().join(','))
       .gte('created_at', todayStr);
     
     const regionCount: Record<string, number> = {};

@@ -130,7 +130,10 @@ export async function processResume(input: ProcessResumeInput): Promise<{
       startedAt,
     });
 
-    const parsed = await parseResumeText(extracted.text, extracted.pages);
+    const parsed = await parseResumeText(extracted.text, extracted.pages, {
+      userId: input.userId,
+      resumeId: input.resumeId,
+    });
     if (!parsed.profile || !parsed.segmentation) {
       throw new ResumeProcessingError('简历文本已读取，但未能提取出有效求职画像，请检查内容后重试');
     }

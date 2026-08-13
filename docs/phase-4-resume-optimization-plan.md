@@ -47,6 +47,6 @@ POST /api/ai/optimize/score { optimizationId }
 
 ## 未完成与下一步
 
-1. 执行 `0011_resume_optimizations.sql`，使用真实 Coze、OpenAI 或 Alibaba 凭据完成生成和保存回归。
+1. 执行 `0011_resume_optimizations.sql`，使用真实 Alibaba 凭据完成生成和保存回归。
 2. 生成优化版本后由用户明确确认，才能用于投递。
 3. 增加 PDF/DOCX 导出版本的排版验收和移动端检查。
