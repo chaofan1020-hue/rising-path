@@ -229,6 +229,13 @@ export default function ApplicationList() {
                 </div>
                 <div className="flex items-center gap-2 md:pl-4">
                   <Button size="sm" variant="outline" asChild className="h-8 text-xs">
+                    <Link
+                      href={`/optimize?jobId=${app.job_id}&company=${encodeURIComponent(app.jobs?.company || '')}&position=${encodeURIComponent(app.jobs?.title || '')}&region=${encodeURIComponent(app.jobs?.region || '')}${app.resume_id ? `&resumeId=${app.resume_id}` : ''}`}
+                    >
+                      优化简历
+                    </Link>
+                  </Button>
+                  <Button size="sm" variant="outline" asChild className="h-8 text-xs">
                     <Link href={`/jobs/${app.job_id}`}>查看详情</Link>
                   </Button>
                   <Button

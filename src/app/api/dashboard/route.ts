@@ -31,6 +31,19 @@ interface DashboardPlan {
 interface DashboardResume {
   id?: number;
   profile?: {
+    personality?: {
+      dimensions?: Record<string, number>;
+      primaryDimension?: string;
+      summaryKey?: string;
+      recommendations?: Array<{
+        roleKey: string;
+        labelKey: string;
+        score: number;
+        fit: string;
+        reasons: string[];
+      }>;
+      completedAt?: string;
+    } | null;
     targetRegion?: string | null;
     inferredRegion?: string | null;
     targetRole?: string | null;
@@ -368,6 +381,18 @@ export async function GET(request: NextRequest) {
       return Date.now() - jobUpdated.getTime() < 7 * 24 * 60 * 60 * 1000;
     }).length ?? 0;
 
+  const personalityProfile = latestResume?.profile?.personality ?? null;
+  const personality = personalityProfile
+    ? {
+        hasAssessment: true,
+        resumeId: latestResumeId,
+        dimensions: personalityProfile.dimensions || {},
+        summaryKey: personalityProfile.summaryKey || '',
+        recommendations: personalityProfile.recommendations || [],
+        updatedAt: personalityProfile.completedAt || '',
+      }
+    : null;
+
   const now = Date.now();
   const daysSinceLogin = auth.user.last_sign_in_at
     ? Math.floor((now - new Date(auth.user.last_sign_in_at).getTime()) / 86400000)
@@ -553,6 +578,7 @@ export async function GET(request: NextRequest) {
     story,
     plan,
     diagnosis: plan?.diagnosis ?? null,
+    personality,
     interviewEvaluations,
     counts: {
       resumes: resumeCount,

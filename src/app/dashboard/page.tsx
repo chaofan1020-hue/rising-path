@@ -56,6 +56,29 @@ interface RegionOption {
   labelKey: string;
 }
 
+interface PersonalityRecommendation {
+  roleKey: string;
+  labelKey: string;
+  score: number;
+  fit: 'strong' | 'medium' | 'explore';
+  reasons: string[];
+  sponsorship?: {
+    level: 'high' | 'medium' | 'low' | 'unknown';
+    sponsorJobCount: number;
+    activeJobCount: number;
+    noteKey: string;
+  };
+}
+
+interface PersonalitySummary {
+  hasAssessment: boolean;
+  resumeId: number | null;
+  dimensions: Record<string, number>;
+  summaryKey: string;
+  recommendations: PersonalityRecommendation[];
+  updatedAt: string;
+}
+
 interface DashboardData {
   phase: string;
   phaseTitleKey: string;
@@ -110,6 +133,7 @@ interface DashboardData {
     items: PlanItem[];
   } | null;
   diagnosis?: CareerRouteDiagnosis | null;
+  personality?: PersonalitySummary | null;
   interviewEvaluations?: Array<{
     id: number;
     targetCompany: string;
@@ -289,7 +313,6 @@ export default function DashboardPage() {
       <div className="min-h-screen bg-white dark:bg-zinc-950">
         <Header1 />
         <main className="container mx-auto px-4 pt-16 md:pt-20 pb-16">
-        {/* Hero */}
         <div className="mb-8 md:mb-10">
           <p className="text-sm font-medium text-zinc-400 dark:text-zinc-500 mb-3">
             {t('dashboard.eyebrow')}
@@ -315,13 +338,43 @@ export default function DashboardPage() {
 
         {!loading && !error && data && (
           <div className="space-y-6 md:space-y-8">
+            <section>
+              <Card className="rounded-2xl border-zinc-200 dark:border-zinc-800 bg-gradient-to-br from-zinc-800 via-zinc-900 to-zinc-950 dark:from-zinc-200 dark:via-white dark:to-zinc-300 text-white dark:text-zinc-900 shadow-xl shadow-zinc-900/10">
+                <CardContent className="p-6 md:p-10">
+                  <div className="flex flex-col md:flex-row md:items-center md:justify-between gap-6">
+                    <div className="space-y-3">
+                      <div className="inline-flex items-center gap-2 text-xs font-medium tracking-widest uppercase opacity-70">
+                        <Target className="h-3.5 w-3.5" />
+                        {t('dashboard.phaseLabel')}
+                      </div>
+                      <h2 className="text-2xl md:text-3xl font-bold tracking-tight">
+                        {t(data.phaseTitleKey, data.phaseTitleParams)}
+                      </h2>
+                      <p className="text-sm md:text-base opacity-80 max-w-2xl leading-relaxed">
+                        {t(data.phaseDescriptionKey, data.phaseDescriptionParams)}
+                      </p>
+                    </div>
+                    <Button
+                      asChild
+                      variant="outline"
+                      className="self-start md:self-auto rounded-full border-white/30 bg-white/10 text-white hover:bg-white hover:text-zinc-900 dark:border-zinc-900/30 dark:bg-zinc-900/10 dark:text-zinc-900 dark:hover:bg-zinc-900 dark:hover:text-white"
+                    >
+                      <Link href={data.nextAction?.href || data.actions[0]?.href || '/resume'}>
+                        {t(data.nextAction?.titleKey || 'dashboard.nextAction')}
+                        <ArrowRight className="ml-2 h-4 w-4" />
+                      </Link>
+                    </Button>
+                  </div>
+                </CardContent>
+              </Card>
+            </section>
             {data.diagnosis && (
-              <section>
+              <section id="diagnosis">
                 <div className="flex items-center gap-2 mb-4">
-                  <span className="flex items-center justify-center w-6 h-6 rounded-lg bg-zinc-900 dark:bg-white text-white dark:text-zinc-900">
+                  <span className="flex items-center justify-center w-6 h-6 rounded-lg bg-zinc-900 text-white">
                     <Target className="h-3.5 w-3.5" />
                   </span>
-                  <h3 className="text-sm font-medium text-zinc-900 dark:text-zinc-100 tracking-wide">
+                  <h3 className="text-sm font-medium text-zinc-400 dark:text-zinc-500 tracking-widest uppercase">
                     {t('dashboard.diagnosis.title')}
                   </h3>
                 </div>
@@ -329,27 +382,27 @@ export default function DashboardPage() {
                   <Card className="rounded-2xl border-zinc-200 dark:border-zinc-800">
                     <CardContent className="p-5 space-y-3">
                       <div>
-                        <p className="text-xs font-medium text-zinc-400 dark:text-zinc-500 mb-1">
+                        <p className="text-xs font-medium text-zinc-500 mb-1">
                           {t('dashboard.diagnosis.window')}
                         </p>
-                        <p className="text-base font-semibold text-zinc-900 dark:text-zinc-100">
+                        <p className="text-base font-semibold text-zinc-900 dark:text-zinc-900">
                           {t(data.diagnosis.windowLabelKey)}
                         </p>
                       </div>
                       <div>
-                        <p className="text-xs font-medium text-zinc-400 dark:text-zinc-500 mb-1">
+                        <p className="text-xs font-medium text-zinc-500 mb-1">
                           {t('dashboard.diagnosis.mainRoute')}
                         </p>
-                        <p className="text-base font-semibold text-zinc-900 dark:text-zinc-100">
+                        <p className="text-base font-semibold text-zinc-900 dark:text-zinc-900">
                           {t(data.diagnosis.mainRouteLabelKey)}
                         </p>
                       </div>
                       {data.diagnosis.backupRoute && (
                         <div>
-                          <p className="text-xs font-medium text-zinc-400 dark:text-zinc-500 mb-1">
+                          <p className="text-xs font-medium text-zinc-500 mb-1">
                             {t('dashboard.diagnosis.backupRoute')}
                           </p>
-                          <p className="text-sm font-medium text-zinc-700 dark:text-zinc-300">
+                          <p className="text-sm font-medium text-zinc-700">
                             {t(data.diagnosis.backupRoute.labelKey)}
                           </p>
                           {getLocalizedText(data.diagnosis.llmBackupRoute, locale) && (
@@ -366,10 +419,10 @@ export default function DashboardPage() {
                       )}
                       {data.diagnosis.mainSeason && (
                         <div>
-                          <p className="text-xs font-medium text-zinc-400 dark:text-zinc-500 mb-1">
+                          <p className="text-xs font-medium text-zinc-500 mb-1">
                             {t('dashboard.diagnosis.mainSeason')}
                           </p>
-                          <p className="text-sm font-medium text-zinc-700 dark:text-zinc-300">
+                          <p className="text-sm font-medium text-zinc-700">
                             {t(data.diagnosis.mainSeason.labelKey)}
                           </p>
                           {data.diagnosis.mainSeason.noteKey && (
@@ -384,23 +437,23 @@ export default function DashboardPage() {
                   <Card className="rounded-2xl border-zinc-200 dark:border-zinc-800 lg:col-span-2">
                     <CardContent className="p-5">
                       {data.diagnosis.lowGradeFocus ? (
-                        <div className="mb-4 rounded-xl border border-zinc-200 dark:border-zinc-800 p-3">
+                        <div className="mb-4 rounded-lg border border-zinc-200 p-3">
                           <p className="text-xs text-zinc-500 leading-relaxed">
                             {t('dashboard.diagnosis.futureVisaPrep')}
                           </p>
                         </div>
                       ) : (
-                      <div className="mb-4 rounded-xl border border-zinc-200 dark:border-zinc-800 p-3">
+                      <div className="mb-4 rounded-lg border border-zinc-200 p-3">
                         <div className="flex flex-wrap items-center gap-x-4 gap-y-1">
                           <p className="text-xs text-zinc-500">
                             {t('dashboard.diagnosis.visaStatus')}
-                            <span className="ml-2 font-medium text-zinc-900 dark:text-zinc-100">
+                            <span className="ml-2 font-medium text-zinc-900 dark:text-zinc-900">
                               {t(`dashboard.visaStatus.${data.diagnosis.visaStatus}`)}
                             </span>
                           </p>
                           <p className="text-xs text-zinc-500">
                             {t('dashboard.diagnosis.visaFeasibility')}
-                            <span className="ml-2 font-medium text-zinc-900 dark:text-zinc-100">
+                            <span className="ml-2 font-medium text-zinc-900 dark:text-zinc-900">
                               {t(`dashboard.visaFeasibility.${data.diagnosis.visaFeasibility}`)}
                             </span>
                           </p>
@@ -416,10 +469,10 @@ export default function DashboardPage() {
                               <div key={entry.key} className="flex items-start gap-2 text-xs">
                                 <span className="mt-1.5 h-1.5 w-1.5 rounded-full bg-zinc-400 flex-shrink-0" />
                                 <div className="min-w-0">
-                                  <p className="text-zinc-600 dark:text-zinc-300">
+                                  <p className="text-zinc-700">
                                     {t(entry.labelKey)}
                                     {entry.estimatedDate && (
-                                      <span className="ml-1 text-zinc-400">
+                                      <span className="ml-1 text-zinc-500">
                                         {entry.estimatedDate}
                                       </span>
                                     )}
@@ -437,7 +490,7 @@ export default function DashboardPage() {
                         {data.diagnosis.visaStatus === 'unknown' && (
                           <Link
                             href="/resume"
-                            className="mt-2 inline-flex items-center gap-1 text-xs font-medium text-zinc-900 dark:text-zinc-100 hover:underline"
+                            className="mt-2 inline-flex items-center gap-1 text-xs font-medium text-zinc-900 dark:text-zinc-900 hover:underline"
                           >
                             {t('dashboard.diagnosis.confirmVisa')}
                             <ArrowRight className="h-3 w-3" />
@@ -445,7 +498,7 @@ export default function DashboardPage() {
                         )}
                       </div>
                       )}
-                      <p className="text-xs font-medium text-zinc-400 dark:text-zinc-500 mb-3">
+                      <p className="text-xs font-medium text-zinc-500 mb-3">
                         {t('dashboard.diagnosis.risks')}
                       </p>
                       {data.diagnosis.risks.length === 0 ? (
@@ -457,10 +510,10 @@ export default function DashboardPage() {
                           {data.diagnosis.risks.map((risk) => (
                             <div
                               key={risk.key}
-                              className="flex items-start gap-2 rounded-xl border border-zinc-200 dark:border-zinc-800 px-3 py-2"
+                              className="flex items-start gap-2 rounded-lg border border-zinc-200 px-3 py-2"
                             >
                               <span className={`mt-1.5 h-2 w-2 rounded-full flex-shrink-0 ${riskLevelColor[risk.level]}`} />
-                              <span className="text-sm text-zinc-700 dark:text-zinc-300">
+                              <span className="text-sm text-zinc-700">
                                 {t(risk.labelKey)}
                               </span>
                             </div>
@@ -468,251 +521,105 @@ export default function DashboardPage() {
                         </div>
                       )}
                       {getLocalizedText(data.diagnosis.llmNarrative, locale) && (
-                        <p className="mt-4 text-sm text-zinc-600 dark:text-zinc-300 leading-relaxed">
+                        <p className="mt-4 text-sm text-zinc-700 leading-relaxed">
                           {getLocalizedText(data.diagnosis.llmNarrative, locale)}
                         </p>
                       )}
                       {getLocalizedText(data.diagnosis.verificationNote, locale) && (
-                        <p className="mt-2 text-xs text-zinc-400 dark:text-zinc-500 leading-relaxed">
+                        <p className="mt-2 text-xs text-zinc-500 leading-relaxed">
                           {getLocalizedText(data.diagnosis.verificationNote, locale)}
                         </p>
                       )}
+                      {data.personality?.hasAssessment ? (
+                        <div className="mt-4 rounded-lg border border-zinc-200 p-3">
+                          <p className="text-xs font-medium text-zinc-500 mb-3">
+                            {t('dashboard.personalityTitle')}
+                          </p>
+                          {(() => {
+                            const core = (data.personality?.recommendations || []).slice(0, 3);
+                            const alternatives = (data.personality?.recommendations || []).slice(3, 5);
+                            const renderCard = (recommendation: typeof core[number]) => (
+                              <div key={recommendation.roleKey} className="rounded-lg border border-zinc-200 p-3">
+                                <div className="flex items-start justify-between gap-2 mb-1">
+                                  <p className="text-sm font-semibold text-zinc-900 dark:text-zinc-900">
+                                    {t(recommendation.labelKey)}
+                                  </p>
+                                  <Badge variant="secondary" className="text-[10px]">
+                                    {t(`personality.fit.${recommendation.fit}`)}
+                                  </Badge>
+                                </div>
+                                <p className="text-xs text-zinc-500 mb-2">{recommendation.score}%</p>
+                                <ul className="space-y-1">
+                                  {recommendation.reasons.map((reason) => (
+                                    <li key={reason} className="text-xs text-zinc-500 leading-relaxed">
+                                      {t(reason)}
+                                    </li>
+                                  ))}
+                                </ul>
+                                {recommendation.sponsorship && (
+                                  <div className="mt-2 flex flex-wrap items-center gap-1.5">
+                                    <Badge variant="outline" className="text-[10px]">
+                                      {t(`personality.sponsor.${recommendation.sponsorship.level}`)}
+                                    </Badge>
+                                    {recommendation.sponsorship.activeJobCount > 0 && (
+                                      <span className="text-[10px] text-zinc-500">
+                                        {recommendation.sponsorship.sponsorJobCount} / {recommendation.sponsorship.activeJobCount}
+                                      </span>
+                                    )}
+                                  </div>
+                                )}
+                              </div>
+                            );
+                            return (
+                              <>
+                                <p className="text-xs font-medium text-zinc-500 mb-2">
+                                  {t('personality.recommendationsCore')}
+                                </p>
+                                <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
+                                  {core.map(renderCard)}
+                                </div>
+                                {alternatives.length > 0 && (
+                                  <>
+                                    <p className="mt-3 text-xs font-medium text-zinc-500 mb-2">
+                                      {t('personality.recommendationsAlternatives')}
+                                    </p>
+                                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                                      {alternatives.map(renderCard)}
+                                    </div>
+                                  </>
+                                )}
+                              </>
+                            );
+                          })()}
+                        </div>
+                      ) : data.diagnosis.risks.some((risk) => risk.key === 'missing_direction') ? (
+                        <div className="mt-4 flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3 rounded-lg border border-zinc-200 p-3">
+                          <div>
+                            <p className="text-sm font-medium text-zinc-900 dark:text-zinc-900">
+                              {t('dashboard.personalityCtaTitle')}
+                            </p>
+                            <p className="mt-1 text-xs text-zinc-500 leading-relaxed">
+                              {t('dashboard.personalityCtaDesc')}
+                            </p>
+                          </div>
+                          <Button size="sm" asChild>
+                            <Link href="/resume?quiz=1">{t('dashboard.personalityStart')}</Link>
+                          </Button>
+                        </div>
+                      ) : null}
                     </CardContent>
                   </Card>
                 </div>
-              </section>
-            )}
-            {data.diagnosis?.window === 'preparation' && networkingError && (
-              <Card className="rounded-2xl border-zinc-200 dark:border-zinc-800 mb-4">
-                <CardContent className="p-6 text-center text-sm text-red-500">
-                  {networkingError}
-                </CardContent>
-              </Card>
-            )}
-            {data.diagnosis?.window === 'preparation' && networkingLoading && !networking && (
-              <Card className="rounded-2xl border-zinc-200 dark:border-zinc-800 mb-4">
-                <CardContent className="p-6 text-center text-sm text-zinc-500">
-                  <Loader2 className="h-5 w-5 animate-spin mx-auto mb-2" />
-                  {t('dashboard.networking.loading')}
-                </CardContent>
-              </Card>
-            )}
-            {data.diagnosis?.window === 'preparation' && networkingProgress && networking && (
-              <section>
-                <div className="flex items-center justify-between gap-3 mb-4">
-                  <div className="flex items-center gap-2">
-                    <span className="flex items-center justify-center w-6 h-6 rounded-lg bg-zinc-900 dark:bg-white text-white dark:text-zinc-900">
-                      <Briefcase className="h-3.5 w-3.5" />
-                    </span>
-                    <h3 className="text-sm font-medium text-zinc-900 dark:text-zinc-100 tracking-wide">
-                      {t('dashboard.networking.title')}
-                    </h3>
-                  </div>
-                  <Button variant="outline" size="sm" onClick={() => loadNetworking()} disabled={networkingLoading}>
-                    {networkingLoading ? (
-                      <><Loader2 className="h-3.5 w-3.5 mr-1 animate-spin" />{t('dashboard.networking.loading')}</>
-                    ) : (
-                      <><RefreshCw className="h-3.5 w-3.5 mr-1" />{t('dashboard.networking.regenerate')}</>
-                    )}
-                  </Button>
-                </div>
-                <Card className="rounded-2xl border-zinc-200 dark:border-zinc-800 overflow-hidden">
-                  <div className="grid grid-cols-1 lg:grid-cols-[220px_1fr]">
-                    <aside className="hidden lg:block border-r border-zinc-200 dark:border-zinc-800 p-3 space-y-1">
-                      {NETWORKING_STAGES.map((stage, index) => {
-                        const stageMilestones = stage.milestones;
-                        const done = stageMilestones.length > 0
-                          && stageMilestones.every((item) => networkingProgress?.completedMilestones.includes(item));
-                        return (
-                          <button
-                            key={stage.key}
-                            type="button"
-                            onClick={() => switchNetworkingStage(index + 1)}
-                            className={`w-full flex items-center gap-2 rounded-xl px-3 py-2 text-left text-xs transition-colors ${
-                              activeNetworkingStage === index + 1
-                                ? 'bg-zinc-900 text-white dark:bg-white dark:text-zinc-900'
-                                : 'text-zinc-600 hover:bg-zinc-100 dark:text-zinc-300 dark:hover:bg-zinc-800'
-                            }`}
-                          >
-                            <span className="w-5 h-5 rounded-full border flex items-center justify-center flex-shrink-0">
-                              {done ? <Check className="h-3 w-3" /> : index + 1}
-                            </span>
-                            <span className="truncate">{t(stage.titleKey)}</span>
-                          </button>
-                        );
-                      })}
-                    </aside>
-                    <div>
-                      <div className="lg:hidden flex gap-2 overflow-x-auto px-4 pt-3">
-                        {NETWORKING_STAGES.map((stage, index) => (
-                          <button
-                            key={stage.key}
-                            type="button"
-                            onClick={() => switchNetworkingStage(index + 1)}
-                            className={`shrink-0 rounded-full px-3 py-1 text-xs border ${
-                              activeNetworkingStage === index + 1
-                                ? 'bg-zinc-900 text-white border-zinc-900 dark:bg-white dark:text-zinc-900 dark:border-white'
-                                : 'border-zinc-200 dark:border-zinc-700 text-zinc-600 dark:text-zinc-300'
-                            }`}
-                          >
-                            {index + 1}. {t(stage.titleKey)}
-                          </button>
-                        ))}
-                      </div>
-                      <div className="p-4 md:p-5">
-                        {(() => {
-                          const viewingStage = NETWORKING_STAGES[activeNetworkingStage - 1] || NETWORKING_STAGES[0];
-                          const progressStage = NETWORKING_STAGES[networkingProgress?.stage - 1 || 0];
-                          const total = progressStage?.milestones.length || 0;
-                          const done = progressStage?.milestones.filter((item) =>
-                            networkingProgress?.completedMilestones.includes(item)).length || 0;
-                          const percent = total > 0 ? Math.round((done / total) * 100) : 0;
-                          return (
-                            <>
-                              <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-2">
-                                <div>
-                                  <p className="text-xs text-zinc-400 dark:text-zinc-500">
-                                    {t('dashboard.networking.currentStage')}
-                                  </p>
-                                  <p className="text-base font-semibold text-zinc-900 dark:text-zinc-100">
-                                    {t(viewingStage?.titleKey || 'dashboard.networking.stage.research')}
-                                  </p>
-                                </div>
-                                <p className="text-xs text-zinc-500">
-                                  {done} / {total}
-                                </p>
-                              </div>
-                              <div className="mt-3 h-1.5 rounded-full bg-zinc-100 dark:bg-zinc-800 overflow-hidden">
-                                <div className="h-full bg-zinc-900 dark:bg-white transition-all" style={{ width: `${percent}%` }} />
-                              </div>
-                              <div className="mt-3 flex flex-wrap gap-2">
-                                {progressStage?.milestones.map((milestone) => {
-                                  const checked = networkingProgress?.completedMilestones.includes(milestone);
-                                  return (
-                                    <label key={milestone} className="flex items-center gap-1.5 rounded-full border border-zinc-200 dark:border-zinc-700 px-2.5 py-1 text-xs text-zinc-600 dark:text-zinc-300 cursor-pointer">
-                                      <input
-                                        type="checkbox"
-                                        className="accent-zinc-900"
-                                        checked={Boolean(checked)}
-                                        onChange={() => handleToggleNetworkingMilestone(milestone)}
-                                      />
-                                      {t(milestone)}
-                                    </label>
-                                  );
-                                })}
-                              </div>
-                              <Tabs defaultValue="people" className="mt-5">
-                                <TabsList className="w-full justify-start overflow-x-auto">
-                                  <TabsTrigger value="people">{t('dashboard.networking.tabPeople')}</TabsTrigger>
-                                  <TabsTrigger value="talk">{t('dashboard.networking.tabTalk')}</TabsTrigger>
-                                  <TabsTrigger value="maintain">{t('dashboard.networking.tabMaintain')}</TabsTrigger>
-                                  <TabsTrigger value="rhythm">{t('dashboard.networking.tabRhythm')}</TabsTrigger>
-                                </TabsList>
-                                <TabsContent value="people" className="pt-4 space-y-4">
-                                  <div>
-                                    <p className="text-xs font-medium text-zinc-400 dark:text-zinc-500 mb-2">
-                                      {t('dashboard.networking.peopleTypes')}
-                                    </p>
-                                    <div className="space-y-2">
-                                      {networking.peopleTypes.map((item) => (
-                                        <div key={item.title} className="rounded-xl border border-zinc-200 dark:border-zinc-800 p-3">
-                                          <p className="text-sm font-medium text-zinc-900 dark:text-zinc-100">{item.title}</p>
-                                          <p className="mt-1 text-xs text-zinc-500 leading-relaxed">{item.why}</p>
-                                          <p className="mt-1 text-xs text-zinc-400">{item.keywords.join(' / ')}</p>
-                                        </div>
-                                      ))}
-                                    </div>
-                                  </div>
-                                  <div>
-                                    <p className="text-xs font-medium text-zinc-400 dark:text-zinc-500 mb-2">
-                                      {t('dashboard.networking.keywords')}
-                                    </p>
-                                    <div className="flex flex-wrap gap-1.5">
-                                      {networking.searchKeywords.map((keyword) => (
-                                        <Badge key={keyword} variant="outline" className="text-xs">{keyword}</Badge>
-                                      ))}
-                                    </div>
-                                  </div>
-                                </TabsContent>
-                                <TabsContent value="talk" className="pt-4 space-y-4">
-                                  <div>
-                                    <p className="text-xs font-medium text-zinc-400 dark:text-zinc-500 mb-2">
-                                      {t('dashboard.networking.outreach')}
-                                    </p>
-                                    <div className="space-y-2">
-                                      {networking.outreach.map((item) => (
-                                        <div key={item.scenario} className="rounded-xl border border-zinc-200 dark:border-zinc-800 p-3">
-                                          <p className="text-sm font-medium text-zinc-900 dark:text-zinc-100">{item.scenario}</p>
-                                          <p className="mt-1 text-xs text-zinc-500 leading-relaxed">{item.script}</p>
-                                        </div>
-                                      ))}
-                                    </div>
-                                  </div>
-                                  <div>
-                                    <p className="text-xs font-medium text-zinc-400 dark:text-zinc-500 mb-2">
-                                      {t('dashboard.networking.conversationQuestions')}
-                                    </p>
-                                    <ul className="space-y-1.5 text-xs text-zinc-600 dark:text-zinc-300">
-                                      {networking.conversationQuestions.map((question) => <li key={question}>- {question}</li>)}
-                                    </ul>
-                                  </div>
-                                </TabsContent>
-                                <TabsContent value="maintain" className="pt-4 space-y-4">
-                                  <div>
-                                    <p className="text-xs font-medium text-zinc-400 dark:text-zinc-500 mb-2">
-                                      {t('dashboard.networking.maintenanceContent')}
-                                    </p>
-                                    <div className="space-y-2">
-                                      {networking.maintenanceContent.map((item) => (
-                                        <div key={item.title} className="rounded-xl border border-zinc-200 dark:border-zinc-800 p-3">
-                                          <p className="text-sm font-medium text-zinc-900 dark:text-zinc-100">
-                                            {item.title} <span className="text-xs text-zinc-400">({item.channel})</span>
-                                          </p>
-                                          <p className="mt-1 text-xs text-zinc-500 leading-relaxed">{item.content}</p>
-                                        </div>
-                                      ))}
-                                    </div>
-                                  </div>
-                                  <div>
-                                    <p className="text-xs font-medium text-zinc-400 dark:text-zinc-500 mb-2">
-                                      {t('dashboard.networking.stageTips')}
-                                    </p>
-                                    <ul className="space-y-1.5 text-xs text-zinc-600 dark:text-zinc-300">
-                                      {networking.stageTips.map((tip) => <li key={tip}>- {tip}</li>)}
-                                    </ul>
-                                  </div>
-                                </TabsContent>
-                                <TabsContent value="rhythm" className="pt-4">
-                                  <p className="text-xs font-medium text-zinc-400 dark:text-zinc-500 mb-2">
-                                    {t('dashboard.networking.sequence')}
-                                  </p>
-                                  <div className="space-y-2">
-                                    {networking.sequence.map((item) => (
-                                      <div key={item.step} className="flex items-start gap-2 text-xs">
-                                        <span className="mt-0.5 font-medium text-zinc-700 dark:text-zinc-300">{item.step}</span>
-                                        <span className="text-zinc-500">{item.action}</span>
-                                      </div>
-                                    ))}
-                                  </div>
-                                </TabsContent>
-                              </Tabs>
-                            </>
-                          );
-                        })()}
-                      </div>
-                    </div>
-                  </div>
-                </Card>
               </section>
             )}
             {/* legacy networking block
               <section>
                 <div className="flex items-center justify-between gap-3 mb-4">
                   <div className="flex items-center gap-2">
-                    <span className="flex items-center justify-center w-6 h-6 rounded-lg bg-zinc-900 dark:bg-white text-white dark:text-zinc-900">
+                    <span className="flex items-center justify-center w-6 h-6 rounded-lg bg-zinc-900 text-white">
                       <Briefcase className="h-3.5 w-3.5" />
                     </span>
-                    <h3 className="text-sm font-medium text-zinc-900 dark:text-zinc-100 tracking-wide">
+                    <h3 className="text-sm font-medium text-zinc-400 dark:text-zinc-500 tracking-widest uppercase">
                       {t('dashboard.networking.title')}
                     </h3>
                   </div>
@@ -735,7 +642,7 @@ export default function DashboardPage() {
                           className={`shrink-0 rounded-full px-3 py-1 text-xs border transition-colors ${
                             networkingProgress.stage === index + 1
                               ? 'bg-zinc-900 text-white border-zinc-900 dark:bg-white dark:text-zinc-900 dark:border-white'
-                              : 'border-zinc-200 dark:border-zinc-700 text-zinc-600 dark:text-zinc-300'
+                              : 'border-zinc-200 text-zinc-700'
                           }`}
                         >
                           {index + 1}. {t(stage.titleKey)}
@@ -746,15 +653,15 @@ export default function DashboardPage() {
                       const currentStage = NETWORKING_STAGES[networkingProgress.stage - 1];
                       if (!currentStage) return null;
                       return (
-                        <div className="rounded-xl border border-zinc-200 dark:border-zinc-800 p-3">
-                          <p className="text-xs font-medium text-zinc-900 dark:text-zinc-100 mb-2">
+                        <div className="rounded-lg border border-zinc-200 p-3">
+                          <p className="text-xs font-medium text-zinc-900 dark:text-zinc-900 mb-2">
                             {t('dashboard.networking.currentStage')}：{t(currentStage.titleKey)}
                           </p>
                           <div className="space-y-1.5">
                             {currentStage.milestones.map((milestone) => {
                               const checked = networkingProgress.completedMilestones.includes(milestone);
                               return (
-                                <label key={milestone} className="flex items-center gap-2 text-xs text-zinc-600 dark:text-zinc-300">
+                                <label key={milestone} className="flex items-center gap-2 text-xs text-zinc-700">
                                   <input
                                     type="checkbox"
                                     className="accent-zinc-900"
@@ -787,15 +694,15 @@ export default function DashboardPage() {
                   <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
                     <Card className="rounded-2xl border-zinc-200 dark:border-zinc-800">
                       <CardContent className="p-5">
-                        <p className="text-xs font-medium text-zinc-400 dark:text-zinc-500 mb-3">
+                        <p className="text-xs font-medium text-zinc-500 mb-3">
                           {t('dashboard.networking.peopleTypes')}
                         </p>
                         <div className="space-y-3">
                           {networking.peopleTypes.map((item) => (
-                            <div key={item.title} className="rounded-xl border border-zinc-200 dark:border-zinc-800 p-3">
-                              <p className="text-sm font-medium text-zinc-900 dark:text-zinc-100">{item.title}</p>
+                            <div key={item.title} className="rounded-lg border border-zinc-200 p-3">
+                              <p className="text-sm font-medium text-zinc-900 dark:text-zinc-900">{item.title}</p>
                               <p className="mt-1 text-xs text-zinc-500 leading-relaxed">{item.why}</p>
-                              <p className="mt-1 text-xs text-zinc-400">{item.keywords.join(' / ')}</p>
+                              <p className="mt-1 text-xs text-zinc-500">{item.keywords.join(' / ')}</p>
                             </div>
                           ))}
                         </div>
@@ -804,7 +711,7 @@ export default function DashboardPage() {
                     <div className="space-y-4">
                       <Card className="rounded-2xl border-zinc-200 dark:border-zinc-800">
                         <CardContent className="p-5">
-                          <p className="text-xs font-medium text-zinc-400 dark:text-zinc-500 mb-3">
+                          <p className="text-xs font-medium text-zinc-500 mb-3">
                             {t('dashboard.networking.keywords')}
                           </p>
                           <div className="flex flex-wrap gap-1.5">
@@ -818,13 +725,13 @@ export default function DashboardPage() {
                       </Card>
                       <Card className="rounded-2xl border-zinc-200 dark:border-zinc-800">
                         <CardContent className="p-5">
-                          <p className="text-xs font-medium text-zinc-400 dark:text-zinc-500 mb-3">
+                          <p className="text-xs font-medium text-zinc-500 mb-3">
                             {t('dashboard.networking.outreach')}
                           </p>
                           <div className="space-y-3">
                             {networking.outreach.map((item) => (
                               <div key={item.scenario}>
-                                <p className="text-sm font-medium text-zinc-900 dark:text-zinc-100">{item.scenario}</p>
+                                <p className="text-sm font-medium text-zinc-900 dark:text-zinc-900">{item.scenario}</p>
                                 <p className="mt-1 text-xs text-zinc-500 leading-relaxed">{item.script}</p>
                               </div>
                             ))}
@@ -833,13 +740,13 @@ export default function DashboardPage() {
                       </Card>
                       <Card className="rounded-2xl border-zinc-200 dark:border-zinc-800">
                         <CardContent className="p-5">
-                          <p className="text-xs font-medium text-zinc-400 dark:text-zinc-500 mb-3">
+                          <p className="text-xs font-medium text-zinc-500 mb-3">
                             {t('dashboard.networking.sequence')}
                           </p>
                           <div className="space-y-2">
                             {networking.sequence.map((item) => (
                               <div key={item.step} className="flex items-start gap-2 text-xs">
-                                <span className="mt-0.5 font-medium text-zinc-700 dark:text-zinc-300">{item.step}</span>
+                                <span className="mt-0.5 font-medium text-zinc-700">{item.step}</span>
                                 <span className="text-zinc-500">{item.action}</span>
                               </div>
                             ))}
@@ -848,34 +755,34 @@ export default function DashboardPage() {
                       </Card>
                       <Card className="rounded-2xl border-zinc-200 dark:border-zinc-800">
                         <CardContent className="p-5">
-                          <p className="text-xs font-medium text-zinc-400 dark:text-zinc-500 mb-3">
+                          <p className="text-xs font-medium text-zinc-500 mb-3">
                             {t('dashboard.networking.stageTips')}
                           </p>
-                          <ul className="space-y-1.5 text-xs text-zinc-600 dark:text-zinc-300">
+                          <ul className="space-y-1.5 text-xs text-zinc-700">
                             {networking.stageTips.map((tip) => <li key={tip}>- {tip}</li>)}
                           </ul>
                         </CardContent>
                       </Card>
                       <Card className="rounded-2xl border-zinc-200 dark:border-zinc-800">
                         <CardContent className="p-5">
-                          <p className="text-xs font-medium text-zinc-400 dark:text-zinc-500 mb-3">
+                          <p className="text-xs font-medium text-zinc-500 mb-3">
                             {t('dashboard.networking.conversationQuestions')}
                           </p>
-                          <ul className="space-y-1.5 text-xs text-zinc-600 dark:text-zinc-300">
+                          <ul className="space-y-1.5 text-xs text-zinc-700">
                             {networking.conversationQuestions.map((question) => <li key={question}>- {question}</li>)}
                           </ul>
                         </CardContent>
                       </Card>
                       <Card className="rounded-2xl border-zinc-200 dark:border-zinc-800">
                         <CardContent className="p-5">
-                          <p className="text-xs font-medium text-zinc-400 dark:text-zinc-500 mb-3">
+                          <p className="text-xs font-medium text-zinc-500 mb-3">
                             {t('dashboard.networking.maintenanceContent')}
                           </p>
                           <div className="space-y-3">
                             {networking.maintenanceContent.map((item) => (
                               <div key={item.title}>
-                                <p className="text-sm font-medium text-zinc-900 dark:text-zinc-100">
-                                  {item.title} <span className="text-xs text-zinc-400">({item.channel})</span>
+                                <p className="text-sm font-medium text-zinc-900 dark:text-zinc-900">
+                                  {item.title} <span className="text-xs text-zinc-500">({item.channel})</span>
                                 </p>
                                 <p className="mt-1 text-xs text-zinc-500 leading-relaxed">{item.content}</p>
                               </div>
@@ -889,39 +796,9 @@ export default function DashboardPage() {
               </section>
             */}
             {/* 阶段定位 */}
-            <section>
-              <Card className="rounded-2xl border-zinc-200 dark:border-zinc-800 bg-gradient-to-br from-zinc-800 via-zinc-900 to-zinc-950 dark:from-zinc-200 dark:via-white dark:to-zinc-300 text-white dark:text-zinc-900 shadow-xl shadow-zinc-900/10">
-                <CardContent className="p-6 md:p-10">
-                  <div className="flex flex-col md:flex-row md:items-center md:justify-between gap-6">
-                    <div className="space-y-3">
-                      <div className="inline-flex items-center gap-2 text-xs font-medium tracking-widest uppercase opacity-70">
-                        <Target className="h-3.5 w-3.5" />
-                        {t('dashboard.phaseLabel')}
-                      </div>
-                      <h2 className="text-2xl md:text-3xl font-bold tracking-tight">
-                        {t(data.phaseTitleKey, data.phaseTitleParams)}
-                      </h2>
-                      <p className="text-sm md:text-base opacity-80 max-w-2xl leading-relaxed">
-                        {t(data.phaseDescriptionKey, data.phaseDescriptionParams)}
-                      </p>
-                    </div>
-                    <Button
-                      asChild
-                      variant="outline"
-                      className="self-start md:self-auto rounded-full border-white/30 bg-white/10 text-white hover:bg-white hover:text-zinc-900 dark:border-zinc-900/30 dark:bg-zinc-900/10 dark:text-zinc-900 dark:hover:bg-zinc-900 dark:hover:text-white"
-                    >
-                      <Link href={data.nextAction?.href || data.actions[0]?.href || '/resume'}>
-                        {t(data.nextAction?.titleKey || 'dashboard.nextAction')}
-                        <ArrowRight className="ml-2 h-4 w-4" />
-                      </Link>
-                    </Button>
-                  </div>
-                </CardContent>
-              </Card>
-            </section>
 
             {/* 三个核心数字 */}
-            <section>
+            <section id="metrics">
               <h3 className="text-sm font-medium text-zinc-400 dark:text-zinc-500 tracking-widest uppercase mb-4">
                 {t('dashboard.metricsTitle')}
               </h3>
@@ -958,7 +835,7 @@ export default function DashboardPage() {
 
             {/* 个性化求职规划 */}
             {data.plan && planGroups && (
-              <section>
+              <section id="plan">
                 <div className="flex flex-col md:flex-row md:items-center md:justify-between gap-4 mb-4">
                   <h3 className="text-sm font-medium text-zinc-400 dark:text-zinc-500 tracking-widest uppercase">
                     {t('dashboard.planTitle')}
@@ -966,7 +843,7 @@ export default function DashboardPage() {
                   <div className="flex flex-col sm:flex-row sm:items-center gap-3 sm:gap-4">
                     {data.latestResumeId ? (
                       <div className="flex items-center gap-2">
-                        <MapPin className="h-3.5 w-3.5 text-zinc-400" />
+                        <MapPin className="h-3.5 w-3.5 text-zinc-500" />
                         <span className="text-xs text-zinc-500">
                           {t('dashboard.regionLabel')}
                         </span>
@@ -975,15 +852,15 @@ export default function DashboardPage() {
                           onValueChange={handleRegionChange}
                           disabled={savingRegion}
                         >
-                          <SelectTrigger className="h-8 min-w-[10rem] rounded-full border-zinc-200 bg-white text-xs text-zinc-900 hover:border-zinc-400 focus:ring-zinc-400 dark:border-zinc-700 dark:bg-zinc-900 dark:text-zinc-100">
+                          <SelectTrigger className="h-8 min-w-[10rem] rounded-full border-zinc-200 bg-white text-xs text-zinc-900 hover:border-zinc-400 focus:ring-zinc-400 dark:border-zinc-200 dark:bg-zinc-900 dark:text-zinc-900">
                             <SelectValue placeholder={t('dashboard.regionPlaceholder')} />
                           </SelectTrigger>
-                          <SelectContent className="rounded-xl border-zinc-200 dark:border-zinc-800">
+                          <SelectContent className="rounded-2xl border-zinc-200 dark:border-zinc-800">
                             {data.regionOptions.map((option) => (
                               <SelectItem
                                 key={option.value}
                                 value={option.value}
-                                className="text-xs focus:bg-zinc-100 focus:text-zinc-900 dark:focus:bg-zinc-800 dark:focus:text-zinc-100"
+                                className="text-xs focus:bg-zinc-100 focus:text-zinc-900 dark:focus:bg-zinc-800 dark:focus:text-zinc-900"
                               >
                                 {t(option.labelKey)}
                               </SelectItem>
@@ -997,7 +874,7 @@ export default function DashboardPage() {
                       </span>
                     )}
                     <div className="flex items-center gap-2 text-xs text-zinc-500">
-                      <span className="hidden sm:inline text-zinc-300 dark:text-zinc-700">
+                      <span className="hidden sm:inline text-zinc-700 dark:text-zinc-700">
                         |
                       </span>
                       <span>
@@ -1054,7 +931,7 @@ export default function DashboardPage() {
               </section>
             )}
 
-            <div className="grid grid-cols-1 lg:grid-cols-3 gap-6 md:gap-8">
+            <div id="execution" className="grid grid-cols-1 lg:grid-cols-3 gap-6 md:gap-8">
               {/* 行动建议 */}
               <section className="lg:col-span-2">
                 <h3 className="text-sm font-medium text-zinc-400 dark:text-zinc-500 tracking-widest uppercase mb-4">
@@ -1066,7 +943,7 @@ export default function DashboardPage() {
                       <Link
                         key={`${action.titleKey}-${idx}`}
                         href={action.href}
-                        className="group flex items-center justify-between p-4 md:p-5 border-b border-zinc-100 dark:border-zinc-800 last:border-0 hover:bg-zinc-50 dark:hover:bg-zinc-900/50 transition-colors"
+                        className="group flex items-center justify-between p-4 md:p-5 border-b border-zinc-200 last:border-0 hover:bg-zinc-50 dark:hover:bg-zinc-900/50 transition-colors"
                       >
                         <div className="flex items-center gap-4">
                           <span
@@ -1074,11 +951,11 @@ export default function DashboardPage() {
                           >
                             {t(`dashboard.priority.${action.priority}`)}
                           </span>
-                          <span className="text-sm md:text-base font-medium text-zinc-900 dark:text-zinc-100">
+                          <span className="text-sm md:text-base font-medium text-zinc-900 dark:text-zinc-900">
                             {t(action.titleKey, action.titleParams)}
                           </span>
                         </div>
-                        <ArrowRight className="h-4 w-4 text-zinc-300 group-hover:text-zinc-900 dark:text-zinc-600 dark:group-hover:text-zinc-100 transition-colors" />
+                        <ArrowRight className="h-4 w-4 text-zinc-700 group-hover:text-zinc-900 dark:text-zinc-600 dark:group-hover:text-zinc-900 transition-colors" />
                       </Link>
                     ))}
                   </CardContent>
@@ -1086,7 +963,7 @@ export default function DashboardPage() {
               </section>
 
               {/* 智能提醒 */}
-              <section>
+              <section id="networking">
                 <h3 className="text-sm font-medium text-zinc-400 dark:text-zinc-500 tracking-widest uppercase mb-4">
                   {t('dashboard.remindersTitle')}
                 </h3>
@@ -1106,10 +983,10 @@ export default function DashboardPage() {
                       <CardContent className="p-4">
                         <div className="flex items-start gap-3">
                           <div className="mt-0.5">
-                            <Bell className="h-4 w-4 text-zinc-400" />
+                            <Bell className="h-4 w-4 text-zinc-500" />
                           </div>
                           <div>
-                            <p className="text-sm font-medium text-zinc-900 dark:text-zinc-100 mb-1">
+                            <p className="text-sm font-medium text-zinc-900 dark:text-zinc-900 mb-1">
                               {t(reminder.titleKey, reminder.titleParams)}
                             </p>
                             <p className="text-xs text-zinc-500 leading-relaxed">
@@ -1123,22 +1000,22 @@ export default function DashboardPage() {
                 </div>
               </section>
 
-              {/* 面试评估记录 — 简洁列表 */}
+              {/* Interview evaluations - compact list */}
               {data.interviewEvaluations && data.interviewEvaluations.length > 0 && (
                 <section>
                   <h3 className="text-sm font-medium text-zinc-400 dark:text-zinc-500 tracking-widest uppercase mb-4">
                     {t('dashboard.evaluationsTitle')}
                   </h3>
-                  <div className="rounded-2xl border border-zinc-200 dark:border-zinc-800 overflow-hidden divide-y divide-zinc-200 dark:divide-zinc-800">
+                  <div className="rounded-lg border border-zinc-200 overflow-hidden divide-y divide-white/10">
                     {data.interviewEvaluations.slice(0, 5).map((ev) => {
                       const scoreColor =
                         ev.overallScore != null
                           ? ev.overallScore >= 7
                             ? 'bg-zinc-900 text-white'
                             : ev.overallScore >= 4
-                            ? 'bg-zinc-200 dark:bg-zinc-700 text-zinc-900 dark:text-zinc-100'
-                            : 'bg-zinc-100 dark:bg-zinc-800 text-zinc-500'
-                          : 'bg-zinc-100 dark:bg-zinc-800 text-zinc-400';
+                            ? 'bg-zinc-200 dark:bg-zinc-700 text-zinc-900 dark:text-zinc-900'
+                            : 'bg-zinc-100 text-zinc-500'
+                          : 'bg-zinc-100 text-zinc-500';
                       return (
                         <div key={ev.id} className="px-4 py-3 flex items-center justify-between">
                           <div className="flex items-center gap-3 min-w-0">
@@ -1146,7 +1023,7 @@ export default function DashboardPage() {
                               <MessageSquare className="h-3.5 w-3.5 text-white" />
                             </div>
                             <div className="min-w-0">
-                              <p className="text-sm font-medium text-zinc-900 dark:text-zinc-100 truncate">
+                              <p className="text-sm font-medium text-zinc-900 dark:text-zinc-900 truncate">
                                 {ev.targetCompany || t('dashboard.unknownCompany')}
                               </p>
                               <p className="text-xs text-zinc-500">
@@ -1165,7 +1042,7 @@ export default function DashboardPage() {
                               </span>
                             )}
                             {ev.reportGrade && (
-                              <span className="text-xs font-medium text-zinc-400 dark:text-zinc-500">
+                              <span className="text-xs font-medium text-zinc-500">
                                 {ev.reportGrade}
                               </span>
                             )}
@@ -1179,8 +1056,232 @@ export default function DashboardPage() {
 
             </div>
 
+            {data.diagnosis?.window === 'preparation' && networkingError && (
+              <Card className="rounded-2xl border-zinc-200 dark:border-zinc-800 mb-4">
+                <CardContent className="p-6 text-center text-sm text-red-500">
+                  {networkingError}
+                </CardContent>
+              </Card>
+            )}
+            {data.diagnosis?.window === 'preparation' && networkingLoading && !networking && (
+              <Card className="rounded-2xl border-zinc-200 dark:border-zinc-800 mb-4">
+                <CardContent className="p-6 text-center text-sm text-zinc-500">
+                  <Loader2 className="h-5 w-5 animate-spin mx-auto mb-2" />
+                  {t('dashboard.networking.loading')}
+                </CardContent>
+              </Card>
+            )}
+            {data.diagnosis?.window === 'preparation' && networkingProgress && networking && (
+              <section>
+                <div className="flex items-center justify-between gap-3 mb-4">
+                  <div className="flex items-center gap-2">
+                    <span className="flex items-center justify-center w-6 h-6 rounded-lg bg-zinc-900 text-white">
+                      <Briefcase className="h-3.5 w-3.5" />
+                    </span>
+                    <h3 className="text-sm font-medium text-zinc-400 dark:text-zinc-500 tracking-widest uppercase">
+                      {t('dashboard.networking.title')}
+                    </h3>
+                  </div>
+                  <Button variant="outline" size="sm" onClick={() => loadNetworking()} disabled={networkingLoading}>
+                    {networkingLoading ? (
+                      <><Loader2 className="h-3.5 w-3.5 mr-1 animate-spin" />{t('dashboard.networking.loading')}</>
+                    ) : (
+                      <><RefreshCw className="h-3.5 w-3.5 mr-1" />{t('dashboard.networking.regenerate')}</>
+                    )}
+                  </Button>
+                </div>
+                <Card className="rounded-2xl border-zinc-200 dark:border-zinc-800 overflow-hidden">
+                  <div className="grid grid-cols-1 lg:grid-cols-[220px_1fr]">
+                    <aside className="hidden lg:block border-r border-zinc-200 p-3 space-y-1">
+                      {NETWORKING_STAGES.map((stage, index) => {
+                        const stageMilestones = stage.milestones;
+                        const done = stageMilestones.length > 0
+                          && stageMilestones.every((item) => networkingProgress?.completedMilestones.includes(item));
+                        return (
+                          <button
+                            key={stage.key}
+                            type="button"
+                            onClick={() => switchNetworkingStage(index + 1)}
+                            className={`w-full flex items-center gap-2 rounded-lg px-3 py-2 text-left text-xs transition-colors ${
+                              activeNetworkingStage === index + 1
+                                ? 'bg-white text-zinc-900 hover:bg-zinc-200'
+                                : 'text-zinc-600 hover:bg-zinc-100 dark:text-zinc-700 dark:hover:bg-zinc-800'
+                            }`}
+                          >
+                            <span className="w-5 h-5 rounded-full border flex items-center justify-center flex-shrink-0">
+                              {done ? <Check className="h-3 w-3" /> : index + 1}
+                            </span>
+                            <span className="truncate">{t(stage.titleKey)}</span>
+                          </button>
+                        );
+                      })}
+                    </aside>
+                    <div>
+                      <div className="lg:hidden flex gap-2 overflow-x-auto px-4 pt-3">
+                        {NETWORKING_STAGES.map((stage, index) => (
+                          <button
+                            key={stage.key}
+                            type="button"
+                            onClick={() => switchNetworkingStage(index + 1)}
+                            className={`shrink-0 rounded-full px-3 py-1 text-xs border ${
+                              activeNetworkingStage === index + 1
+                                ? 'bg-zinc-900 text-white border-zinc-900 dark:bg-white dark:text-zinc-900 dark:border-white'
+                                : 'border-zinc-200 text-zinc-700'
+                            }`}
+                          >
+                            {index + 1}. {t(stage.titleKey)}
+                          </button>
+                        ))}
+                      </div>
+                      <div className="p-4 md:p-5">
+                        {(() => {
+                          const viewingStage = NETWORKING_STAGES[activeNetworkingStage - 1] || NETWORKING_STAGES[0];
+                          const progressStage = NETWORKING_STAGES[networkingProgress?.stage - 1 || 0];
+                          const total = progressStage?.milestones.length || 0;
+                          const done = progressStage?.milestones.filter((item) =>
+                            networkingProgress?.completedMilestones.includes(item)).length || 0;
+                          const percent = total > 0 ? Math.round((done / total) * 100) : 0;
+                          return (
+                            <>
+                              <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-2">
+                                <div>
+                                  <p className="text-xs text-zinc-500">
+                                    {t('dashboard.networking.currentStage')}
+                                  </p>
+                                  <p className="text-base font-semibold text-zinc-900 dark:text-zinc-900">
+                                    {t(viewingStage?.titleKey || 'dashboard.networking.stage.research')}
+                                  </p>
+                                </div>
+                                <p className="text-xs text-zinc-500">
+                                  {done} / {total}
+                                </p>
+                              </div>
+                              <div className="mt-3 h-1.5 rounded-full bg-zinc-100 overflow-hidden">
+                                <div className="h-full bg-zinc-900 transition-all" style={{ width: `${percent}%` }} />
+                              </div>
+                              <div className="mt-3 flex flex-wrap gap-2">
+                                {progressStage?.milestones.map((milestone) => {
+                                  const checked = networkingProgress?.completedMilestones.includes(milestone);
+                                  return (
+                                    <label key={milestone} className="flex items-center gap-1.5 rounded-full border border-zinc-200 px-2.5 py-1 text-xs text-zinc-700 cursor-pointer">
+                                      <input
+                                        type="checkbox"
+                                        className="accent-zinc-900"
+                                        checked={Boolean(checked)}
+                                        onChange={() => handleToggleNetworkingMilestone(milestone)}
+                                      />
+                                      {t(milestone)}
+                                    </label>
+                                  );
+                                })}
+                              </div>
+                              <Tabs defaultValue="people" className="mt-5">
+                                <TabsList className="w-full justify-start overflow-x-auto">
+                                  <TabsTrigger value="people">{t('dashboard.networking.tabPeople')}</TabsTrigger>
+                                  <TabsTrigger value="talk">{t('dashboard.networking.tabTalk')}</TabsTrigger>
+                                  <TabsTrigger value="maintain">{t('dashboard.networking.tabMaintain')}</TabsTrigger>
+                                  <TabsTrigger value="rhythm">{t('dashboard.networking.tabRhythm')}</TabsTrigger>
+                                </TabsList>
+                                <TabsContent value="people" className="pt-4 space-y-4">
+                                  <div>
+                                    <p className="text-xs font-medium text-zinc-500 mb-2">
+                                      {t('dashboard.networking.peopleTypes')}
+                                    </p>
+                                    <div className="space-y-2">
+                                      {networking.peopleTypes.map((item) => (
+                                        <div key={item.title} className="rounded-lg border border-zinc-200 p-3">
+                                          <p className="text-sm font-medium text-zinc-900 dark:text-zinc-900">{item.title}</p>
+                                          <p className="mt-1 text-xs text-zinc-500 leading-relaxed">{item.why}</p>
+                                          <p className="mt-1 text-xs text-zinc-500">{item.keywords.join(' / ')}</p>
+                                        </div>
+                                      ))}
+                                    </div>
+                                  </div>
+                                  <div>
+                                    <p className="text-xs font-medium text-zinc-500 mb-2">
+                                      {t('dashboard.networking.keywords')}
+                                    </p>
+                                    <div className="flex flex-wrap gap-1.5">
+                                      {networking.searchKeywords.map((keyword) => (
+                                        <Badge key={keyword} variant="outline" className="text-xs">{keyword}</Badge>
+                                      ))}
+                                    </div>
+                                  </div>
+                                </TabsContent>
+                                <TabsContent value="talk" className="pt-4 space-y-4">
+                                  <div>
+                                    <p className="text-xs font-medium text-zinc-500 mb-2">
+                                      {t('dashboard.networking.outreach')}
+                                    </p>
+                                    <div className="space-y-2">
+                                      {networking.outreach.map((item) => (
+                                        <div key={item.scenario} className="rounded-lg border border-zinc-200 p-3">
+                                          <p className="text-sm font-medium text-zinc-900 dark:text-zinc-900">{item.scenario}</p>
+                                          <p className="mt-1 text-xs text-zinc-500 leading-relaxed">{item.script}</p>
+                                        </div>
+                                      ))}
+                                    </div>
+                                  </div>
+                                  <div>
+                                    <p className="text-xs font-medium text-zinc-500 mb-2">
+                                      {t('dashboard.networking.conversationQuestions')}
+                                    </p>
+                                    <ul className="space-y-1.5 text-xs text-zinc-700">
+                                      {networking.conversationQuestions.map((question) => <li key={question}>- {question}</li>)}
+                                    </ul>
+                                  </div>
+                                </TabsContent>
+                                <TabsContent value="maintain" className="pt-4 space-y-4">
+                                  <div>
+                                    <p className="text-xs font-medium text-zinc-500 mb-2">
+                                      {t('dashboard.networking.maintenanceContent')}
+                                    </p>
+                                    <div className="space-y-2">
+                                      {networking.maintenanceContent.map((item) => (
+                                        <div key={item.title} className="rounded-lg border border-zinc-200 p-3">
+                                          <p className="text-sm font-medium text-zinc-900 dark:text-zinc-900">
+                                            {item.title} <span className="text-xs text-zinc-500">({item.channel})</span>
+                                          </p>
+                                          <p className="mt-1 text-xs text-zinc-500 leading-relaxed">{item.content}</p>
+                                        </div>
+                                      ))}
+                                    </div>
+                                  </div>
+                                  <div>
+                                    <p className="text-xs font-medium text-zinc-500 mb-2">
+                                      {t('dashboard.networking.stageTips')}
+                                    </p>
+                                    <ul className="space-y-1.5 text-xs text-zinc-700">
+                                      {networking.stageTips.map((tip) => <li key={tip}>- {tip}</li>)}
+                                    </ul>
+                                  </div>
+                                </TabsContent>
+                                <TabsContent value="rhythm" className="pt-4">
+                                  <p className="text-xs font-medium text-zinc-500 mb-2">
+                                    {t('dashboard.networking.sequence')}
+                                  </p>
+                                  <div className="space-y-2">
+                                    {networking.sequence.map((item) => (
+                                      <div key={item.step} className="flex items-start gap-2 text-xs">
+                                        <span className="mt-0.5 font-medium text-zinc-700">{item.step}</span>
+                                        <span className="text-zinc-500">{item.action}</span>
+                                      </div>
+                                    ))}
+                                  </div>
+                                </TabsContent>
+                              </Tabs>
+                            </>
+                          );
+                        })()}
+                      </div>
+                    </div>
+                  </div>
+                </Card>
+              </section>
+            )}
+
             {/* 成长故事线 */}
-            <section>
+            <section id="story">
               <h3 className="text-sm font-medium text-zinc-400 dark:text-zinc-500 tracking-widest uppercase mb-4">
                 {t('dashboard.storyTitle')}
               </h3>
@@ -1223,13 +1324,13 @@ const priorityBadge: Record<
 > = {
   high: {
     className:
-      'bg-zinc-900 text-white dark:bg-white dark:text-zinc-900',
+      'bg-white text-zinc-900 hover:bg-zinc-200',
   },
   medium: {
     className: 'bg-zinc-100 text-zinc-700 dark:bg-zinc-800 dark:text-zinc-200',
   },
   low: {
-    className: 'bg-zinc-50 text-zinc-500 dark:bg-zinc-900 dark:text-zinc-400',
+    className: 'bg-zinc-50 text-zinc-500',
   },
 };
 
@@ -1295,10 +1396,7 @@ function PlanColumn({
           {items.map((item, idx) => (
             <div key={idx} className="group">
               {item.href ? (
-                <Link
-                  href={item.href}
-                  className="block hover:opacity-80 transition-opacity"
-                >
+                <Link href={item.href} className="block hover:opacity-80 transition-opacity">
                   <p className="text-sm font-medium text-zinc-900 dark:text-zinc-100 mb-1 flex items-center gap-1">
                     {translate(item.titleKey, item.params)}
                     <ArrowRight className="h-3 w-3 text-zinc-400 opacity-0 -translate-x-1 group-hover:opacity-100 group-hover:translate-x-0 transition-all" />
@@ -1356,20 +1454,20 @@ function StoryCard({
 function DashboardSkeleton() {
   return (
     <div className="space-y-6 md:space-y-8">
-      <Skeleton className="h-40 md:h-48 rounded-2xl" />
+      <Skeleton className="h-40 md:h-48 rounded-lg" />
       <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-        <Skeleton className="h-32 rounded-2xl" />
-        <Skeleton className="h-32 rounded-2xl" />
-        <Skeleton className="h-32 rounded-2xl" />
+        <Skeleton className="h-32 rounded-lg" />
+        <Skeleton className="h-32 rounded-lg" />
+        <Skeleton className="h-32 rounded-lg" />
       </div>
       <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-        <Skeleton className="h-64 rounded-2xl" />
-        <Skeleton className="h-64 rounded-2xl" />
-        <Skeleton className="h-64 rounded-2xl" />
+        <Skeleton className="h-64 rounded-lg" />
+        <Skeleton className="h-64 rounded-lg" />
+        <Skeleton className="h-64 rounded-lg" />
       </div>
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-6 md:gap-8">
-        <Skeleton className="h-64 lg:col-span-2 rounded-2xl" />
-        <Skeleton className="h-64 rounded-2xl" />
+        <Skeleton className="h-64 lg:col-span-2 rounded-lg" />
+        <Skeleton className="h-64 rounded-lg" />
       </div>
     </div>
   );

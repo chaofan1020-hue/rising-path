@@ -87,7 +87,7 @@ export async function POST(request: NextRequest) {
         field_stats: source,
         version,
         updated_at: now,
-      })
+      }, { onConflict: 'user_id' })
       .select()
       .maybeSingle();
     if (upsertError) throw new Error(`保存 AI 求职档案失败: ${upsertError.message}`);
