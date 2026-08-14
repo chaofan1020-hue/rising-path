@@ -7,7 +7,7 @@ const scoreBreakdownSchema = z.object({
   evidence: z.number().int().min(0).max(100),
   region: z.number().int().min(0).max(100),
   profile_fit: z.number().int().min(0).max(100),
-}).strict();
+});
 
 const matchSchema = z.object({
   job_id: z.number().int().positive(),
@@ -17,7 +17,7 @@ const matchSchema = z.object({
   evidence: z.array(z.string().trim().min(1).max(500)).max(8),
   key_gaps: z.array(z.string().trim().min(1).max(500)).max(8),
   suggestions: z.string().trim().min(1).max(2000),
-}).strict();
+});
 
 const matchResponseSchema = z.array(matchSchema).min(1);
 

@@ -5,7 +5,10 @@ import {
   parseOptimizedResume,
 } from '../src/lib/optimized-resume-contract';
 import { parseOptimizationScoreComparison } from '../src/lib/optimization-score-contract';
-import { applyOptimizationChangeReview } from '../src/lib/optimized-resume-review';
+import {
+  applyOptimizationChangeReapply,
+  applyOptimizationChangeReview,
+} from '../src/lib/optimized-resume-review';
 
 const minimalResume = {
   name: 'Alex Chen',
@@ -76,13 +79,58 @@ function testChangeReviewAppliesRejectionAndSupportsUndo() {
     { ...base, summary: change.after },
     [{ ...change, status: 'rejected' }],
   );
-  assert.equal(rejected.summary, change.before);
+  assert.equal(rejected.data.summary, change.before);
 
   const accepted = applyOptimizationChangeReview(
     { ...base, summary: change.after },
     [{ ...change, status: 'accepted' }],
   );
-  assert.equal(accepted.summary, change.after);
+  assert.equal(accepted.data.summary, change.after);
+}
+
+function testChangeReviewRevertsArraySections() {
+  const base = optimizedResumeSchema.parse({
+    ...minimalResume,
+    skills: ['SQL', 'Python', 'Excel'],
+    experience: [{
+      title: 'Data Intern',
+      company: 'Acme',
+      location: 'New York',
+      period: '2024',
+      highlights: ['Optimized SQL queries', 'Built Python dashboards'],
+    }],
+  });
+
+  const skillChange = {
+    id: 'change-skills',
+    section: 'skills',
+    title: 'Restructure skills',
+    before: 'SQL | Excel',
+    after: 'SQL | Python | Excel',
+    rationale: 'Align with target role',
+    status: 'rejected' as const,
+  };
+  const rejectedSkills = applyOptimizationChangeReview(base, [skillChange]);
+  assert.deepEqual(rejectedSkills.data.skills, ['SQL', 'Excel']);
+  assert.deepEqual(rejectedSkills.unmatched, []);
+
+  const restoredSkills = applyOptimizationChangeReapply(rejectedSkills.data, skillChange);
+  assert.deepEqual(restoredSkills.data.skills, ['SQL', 'Python', 'Excel']);
+
+  const experienceChange = {
+    id: 'change-experience',
+    section: 'experience',
+    title: 'Sharpen intern bullet',
+    before: 'Built SQL reports',
+    after: 'Optimized SQL queries',
+    rationale: 'Quantify impact',
+    status: 'rejected' as const,
+  };
+  const rejectedExperience = applyOptimizationChangeReview(base, [experienceChange]);
+  assert.deepEqual(
+    rejectedExperience.data.experience[0].highlights,
+    ['Built SQL reports', 'Built Python dashboards'],
+  );
 }
 
 testDefaultsNormalizeOptionalFields();
@@ -90,4 +138,5 @@ testCodeFenceOutput();
 testInvalidOutputFails();
 testScoreComparisonContract();
 testChangeReviewAppliesRejectionAndSupportsUndo();
+testChangeReviewRevertsArraySections();
 console.log('phase4 optimization contract tests passed');

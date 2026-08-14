@@ -16,8 +16,9 @@ import { createInterviewASRSocket, downsampleToPCM16 } from "@/lib/interview-asr
 import { createInterviewTTSSocket } from "@/lib/interview-tts-client";
 import {
   Bot, Loader2, RotateCcw, ClipboardList,
-  Mic, MicOff, VolumeX, PhoneOff, Video, VideoOff, User,
+  Mic, MicOff, VolumeX, PhoneOff, Video, VideoOff, User, Square,
   Building2, Briefcase, FileText, ChevronDown, Check, Timer,
+  ArrowRight,
 } from "lucide-react";
 import { startAmbience, stopAmbience } from "@/lib/interview-audio";
 import PageBackButton from "@/components/page-back-button";
@@ -142,6 +143,27 @@ interface Message {
   role: "interviewer" | "candidate";
   content: string;
   requestId?: string;
+  interviewerName?: string;
+  subtitleVisible?: boolean;
+  subtitleContent?: string;
+  subtitleSegments?: string[];
+}
+
+interface InterviewerView {
+  id: number;
+  name: string;
+  company: string;
+  personality: string;
+  voice?: string;
+  speechRate?: number;
+  loudnessRate?: number;
+  title?: { zh: string; en: string } | null;
+}
+
+interface InterviewerHandoff {
+  outgoing: InterviewerView | null;
+  incoming: InterviewerView | null;
+  nextRound: number;
 }
 
 interface ResumeItem {
@@ -158,12 +180,64 @@ interface JobItem {
 }
 
 const sleep = (ms: number) => new Promise<void>((resolve) => setTimeout(resolve, ms));
+const pcm16Wav = (samples: Float32Array): Blob => {
+  const bytes = new ArrayBuffer(44 + samples.length * 2);
+  const view = new DataView(bytes);
+  const write = (offset: number, value: string) => [...value].forEach((char, index) => view.setUint8(offset + index, char.charCodeAt(0)));
+  write(0, "RIFF");
+  view.setUint32(4, 36 + samples.length * 2, true);
+  write(8, "WAVEfmt ");
+  view.setUint32(16, 16, true);
+  view.setUint16(20, 1, true);
+  view.setUint16(22, 1, true);
+  view.setUint32(24, 16000, true);
+  view.setUint32(28, 32000, true);
+  view.setUint16(32, 2, true);
+  view.setUint16(34, 16, true);
+  write(36, "data");
+  view.setUint32(40, samples.length * 2, true);
+  samples.forEach((sample, index) => view.setInt16(44 + index * 2, Math.max(-1, Math.min(1, sample)) * 0x7fff, true));
+  return new Blob([bytes], { type: "audio/wav" });
+};
+const debugTextPreview = (text: string) => text.replace(/\s+/g, " ").trim().slice(0, 160);
 const ROUND_HANDOFF_DELAY_MS = 900;
 const TTS_START_BUFFER_SECONDS = 0.18;
-const ASR_SEND_RMS_THRESHOLD = 0.018;
-const ASR_MIN_TRANSCRIPT_CHARS = 3;
-const AUTO_SUBMIT_SETTLE_MS = 450;
+// RMS is now only an audio-level meter. It never accepts speech or ends a turn.
+const ASR_SEND_RMS_THRESHOLD = 0.009;
+const ASR_MIN_TRANSCRIPT_CHARS = 4;
+const ASR_MIN_SPEECH_MS = 280;
+// A provider final represents one acoustic segment, not necessarily a complete
+// interview answer. Keep a longer grace period so a natural thinking pause can
+// be merged into the same answer before submitting it to the interviewer.
+const AUTO_SUBMIT_SETTLE_MS = 1_650;
+const NEURAL_VAD_REDEMPTION_MS = 1_800;
+const NEURAL_VAD_ASR_SETTLE_MS = 850;
+const SEMANTIC_CONTINUATION_DELAY_MS = 900;
+const LIVE_TRANSCRIPT_UPDATE_MS = 80;
 const SUMMARY_CLIENT_TIMEOUT_MS = 38_000;
+
+function microphoneConstraints(deviceId?: string): MediaTrackConstraints {
+  return {
+    ...(deviceId ? { deviceId: { exact: deviceId } } : {}),
+    echoCancellation: true,
+    noiseSuppression: true,
+    autoGainControl: true,
+    channelCount: 1,
+  };
+}
+
+function microphoneDebugInfo(track: MediaStreamTrack) {
+  const settings = track.getSettings();
+  return {
+    label: track.label.slice(0, 96) || null,
+    hasDeviceId: Boolean(settings.deviceId),
+    sampleRate: settings.sampleRate ?? null,
+    channelCount: settings.channelCount ?? null,
+    echoCancellation: settings.echoCancellation ?? null,
+    noiseSuppression: settings.noiseSuppression ?? null,
+    autoGainControl: settings.autoGainControl ?? null,
+  };
+}
 
 // ===== 结构化面试报告 =====
 interface ReportVerdict {
@@ -245,10 +319,24 @@ const pickerJobsCache = new Map<string, JobItem[]>();
 function isSubstantiveTranscript(value: string): boolean {
   const text = value.replace(/\s+/g, "").trim();
   if (text.length < ASR_MIN_TRANSCRIPT_CHARS) return false;
-  if (/^(嗯+|啊+|哦+|噢+|呃+|hi+|hello+|noise|silence)$/i.test(text)) return false;
+  // ASR frequently returns short filler/noise tokens with punctuation. Treat
+  // them as non-speech evidence so a breath, mic bump, or "Hmm." can never
+  // become an answer or unlock the submit path.
+  const noiseKey = text.replace(/[.,!?;:'"，。！？；：、\-—_]/g, "").toLowerCase();
+  if (/^(嗯+|啊+|哦+|噢+|呃+|额+|唉+|h+m*|hmm+|uh+|um+|er+|ah+|oh+|hi+|hello+|noise|silence|谢谢聆听|感谢收听)$/.test(noiseKey)) return false;
   const chineseCharacters = text.match(/[\u4e00-\u9fff]/g)?.length || 0;
   const latinCharacters = text.match(/[a-z0-9]/gi)?.length || 0;
   return chineseCharacters >= ASR_MIN_TRANSCRIPT_CHARS || latinCharacters >= ASR_MIN_TRANSCRIPT_CHARS;
+}
+
+function mergeTranscript(previous: string, next: string): string {
+  const left = previous.trim();
+  const right = next.trim();
+  if (!left) return right;
+  if (!right) return left;
+  if (right.includes(left)) return right;
+  if (left.includes(right)) return left;
+  return `${left} ${right}`.replace(/\s+/g, " ").trim();
 }
 
 // SVG 雷达图（6 维）
@@ -368,6 +456,7 @@ function MockInterviewContent() {
   const [sessionId, setSessionId] = useState<number | null>(null);
   // React state 更新是异步的；语音链路必须立即拿到开场 SSE 返回的会话 ID。
   const sessionIdRef = useRef<number | null>(null);
+  const interviewTraceIdRef = useRef(`iv_${Math.random().toString(36).slice(2, 12)}_${Date.now().toString(36)}`);
   const [sessionRevision, setSessionRevision] = useState(0);
   const sessionRevisionRef = useRef(0);
   const [overallScore, setOverallScore] = useState<number | null>(null);
@@ -387,22 +476,14 @@ function MockInterviewContent() {
   // 自动真实流程状态：HR 初筛 → 业务深挖 → 跨部门交叉 → 高管终面
   const totalRounds = 4;
   const [currentRound, setCurrentRound] = useState(1);
-  const [currentInterviewer, setCurrentInterviewer] = useState<{
-    id: number;
-    name: string;
-    company: string;
-    personality: string;
-    voice?: string;
-    speechRate?: number;
-    loudnessRate?: number;
-    title?: { zh: string; en: string } | null;
-  } | null>(null);
+  const [currentInterviewer, setCurrentInterviewer] = useState<InterviewerView | null>(null);
   const [roundRoleLabel, setRoundRoleLabel] = useState<{ zh: string; en: string } | null>(null);
   // Completion is determined only by a structured server event, never model text.
   const [interviewCompleted, setInterviewCompleted] = useState(false);
 
   // 自然轮次交接：上一位收尾后整理记录，再由下一位开场
   const [organizing, setOrganizing] = useState(false);
+  const [handoff, setHandoff] = useState<InterviewerHandoff | null>(null);
   // 每轮倒计时（秒）
   const [roundSecondsLeft, setRoundSecondsLeft] = useState<number | null>(null);
 
@@ -428,22 +509,48 @@ function MockInterviewContent() {
   const [cameraError, setCameraError] = useState(false);
   const [recording, setRecording] = useState(false);
   const [recognizing, setRecognizing] = useState(false);
+  const [submittingAnswer, setSubmittingAnswer] = useState(false);
   const [noSpeech, setNoSpeech] = useState(false);
   const [liveTranscript, setLiveTranscript] = useState("");
   const [pendingTranscript, setPendingTranscript] = useState("");
   const [answerRetryRequired, setAnswerRetryRequired] = useState(false);
   const [realtimeFallback, setRealtimeFallback] = useState(false);
+  const [neuralVadReady, setNeuralVadReady] = useState(false);
   const [speaking, setSpeaking] = useState(false);
   const [showSubtitle, setShowSubtitle] = useState(true);
 
   const videoRef = useRef<HTMLVideoElement>(null);
+  // Camera preview and microphone capture must never share a MediaStream.
+  // Browsers can otherwise select a loopback/camera-associated input for ASR.
   const streamRef = useRef<MediaStream | null>(null);
+  const micStreamRef = useRef<MediaStream | null>(null);
+  const micDeviceIdRef = useRef<string | null>(null);
   const audioChunksRef = useRef<Blob[]>([]);
   const audioRef = useRef<HTMLAudioElement | null>(null);
   const realtimeItemRef = useRef<string | null>(null);
   const submittedAsrItemsRef = useRef(new Set<string>());
   const pendingTranscriptRef = useRef("");
   const pendingTranscriptSourceRef = useRef<"asr" | "asr_fallback">("asr");
+  const liveTranscriptPendingRef = useRef("");
+  const liveTranscriptTimerRef = useRef<number | null>(null);
+  const liveTranscriptUpdatedAtRef = useRef(0);
+  const candidateSpeechStartedAtRef = useRef<number | null>(null);
+  const candidateSpeechEvidenceRef = useRef(false);
+  // Realtime ASR can finalize before the local neural VAD reaches
+  // onSpeechRealStart. Those finals are acoustic fragments, not yet a valid
+  // candidate answer; keep them per epoch until VAD confirms real speech.
+  const deferredAsrFinalsRef = useRef(new Map<number, Array<{
+    itemId: string;
+    utteranceId?: string;
+    text: string;
+  }>>());
+  const candidateTurnEpochRef = useRef(0);
+  const activeCandidateEpochRef = useRef<number | null>(null);
+  const pendingTranscriptEpochRef = useRef<number | null>(null);
+  const providerUtteranceEpochsRef = useRef(new Map<string, number>());
+  const neuralVadRef = useRef<{ start: () => Promise<void>; pause: () => Promise<void>; destroy: () => Promise<void> } | null>(null);
+  const neuralVadReadyRef = useRef(false);
+  const neuralVadEndpointEpochRef = useRef<number | null>(null);
   const answerSubmittingRef = useRef(false);
   const pendingAnswerRequestRef = useRef<{ text: string; requestId: string } | null>(null);
   const autoSubmitTimerRef = useRef<number | null>(null);
@@ -452,12 +559,27 @@ function MockInterviewContent() {
   const summaryRunningRef = useRef(false);
   const turnPlanCacheRef = useRef(new Map<string, { plan: unknown; token: string }>());
   const realtimeSocketRef = useRef<WebSocket | null>(null);
+  const realtimeFallbackRef = useRef(false);
   const realtimeTtsSocketRef = useRef<WebSocket | null>(null);
   const realtimeTtsOpeningRef = useRef<Promise<WebSocket> | null>(null);
   const realtimeTtsHeartbeatRef = useRef<number | null>(null);
   const realtimeTtsRequestIdRef = useRef<string | null>(null);
   const realtimeAudioCtxRef = useRef<AudioContext | null>(null);
   const realtimeProcessorRef = useRef<ScriptProcessorNode | null>(null);
+  const realtimeSignalSampleRef = useRef({
+    windowStartedAt: 0,
+    sampleCount: 0,
+    squareSum: 0,
+    peak: 0,
+  });
+  // Do not send microphone noise to the provider. Frames are kept locally
+  // until Silero confirms speech, then the short prebuffer preserves the
+  // beginning of the candidate's first word.
+  const realtimeAsrPrebufferRef = useRef<ArrayBuffer[]>([]);
+  const realtimeAsrTransmittingRef = useRef(false);
+  const realtimeAsrCommandRef = useRef<(payload: Record<string, unknown>) => void>(() => {});
+  const manualAsrFinalizeTimerRef = useRef<number | null>(null);
+  const manualAsrFinalizingRef = useRef(false);
   const ttsNextTimeRef = useRef(0);
   const activeTTSStopRef = useRef<(() => void) | null>(null);
   const ttsSourcesRef = useRef<Set<AudioBufferSourceNode>>(new Set());
@@ -470,11 +592,14 @@ function MockInterviewContent() {
   const streamingRef = useRef(false);
   const recognizingRef = useRef(false);
   const candidateTurnRef = useRef(false);
+  const handoffRef = useRef(false);
+  const handoffRevealTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const audioQueueRef = useRef<Array<{
     text: string;
     speaker?: string;
     speechRate?: number;
     loudnessRate?: number;
+    onStart?: () => void;
   }>>([]);
   const audioDrainingRef = useRef(false);
   const audioWaitersRef = useRef<Array<() => void>>([]);
@@ -488,9 +613,64 @@ function MockInterviewContent() {
     && !speaking
     && !streaming
     && !recognizing
+    && !submittingAnswer
     && !organizing
+    && !handoff
     && !ending
     && !interviewCompleted;
+
+  // ASR callbacks can arrive between React renders. The derived state above
+  // is not sufficient during the hand-off from candidate -> interviewer;
+  // synchronous refs prevent late provider finals (including speaker echo)
+  // from becoming a new answer.
+  const canAcceptCandidateAsr = () => candidateTurnRef.current
+    && !speakingRef.current
+    && !streamingRef.current
+    && !recognizingRef.current
+    && !answerSubmittingRef.current
+    && !handoffRef.current;
+
+  const debugInterviewEvent = useCallback((event: string, payload: Record<string, unknown> = {}) => {
+    if (typeof window === "undefined") return;
+    const queryEnabled = new URLSearchParams(window.location.search).get("interviewDebug") === "1";
+    const buildEnabled = process.env.NEXT_PUBLIC_INTERVIEW_DEBUG_LOGGING === "true";
+    if (!queryEnabled && !buildEnabled) return;
+    const entry = {
+      traceId: interviewTraceIdRef.current,
+      sessionId: sessionIdRef.current,
+      event,
+      at: Date.now(),
+      payload,
+    };
+    console.info("[InterviewDebug]", entry);
+    void apiFetch("/api/interview/debug-events", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(entry),
+    }).catch(() => undefined);
+  }, []);
+
+  useEffect(() => {
+    debugInterviewEvent("ui.audio_state", {
+      stage,
+      listening,
+      ending,
+      interviewCompleted,
+      candidateTurn,
+      recording,
+      recognizing,
+      submittingAnswer,
+      speaking,
+      streaming,
+      voiceActive,
+      realtimeFallback,
+      neuralVadReady,
+    });
+  }, [stage, listening, ending, interviewCompleted, candidateTurn, recording, recognizing, submittingAnswer, speaking, streaming, voiceActive, realtimeFallback, neuralVadReady, debugInterviewEvent]);
+
+  useEffect(() => {
+    realtimeFallbackRef.current = realtimeFallback;
+  }, [realtimeFallback]);
 
   // 建立音频分析图（固定 audio 元素，只建一次）；失败则音波降级为伪动画
   const ensureAudioGraph = useCallback(() => {
@@ -550,12 +730,36 @@ function MockInterviewContent() {
     if (!sessionIdRef.current) interviewLanguageRef.current = language;
   }, [language]);
 
+  // Audio callbacks run between React renders. Keep this gate synchronous so
+  // the first frames of interviewer speech can never be captured as a
+  // candidate answer while an effect is waiting to run.
+  candidateTurnRef.current = candidateTurn;
+
+  // VAD must not continue analysing interviewer playback in the background.
+  // Pausing resets its internal speech state, so the next candidate turn
+  // cannot inherit a half-detected echo from the previous TTS segment.
   useEffect(() => {
-    candidateTurnRef.current = candidateTurn;
-  }, [candidateTurn]);
+    const vad = neuralVadRef.current;
+    if (!vad || !neuralVadReady) return;
+    if (candidateTurn) {
+      void vad.start().then(() => {
+        debugInterviewEvent("vad.candidate_gate_opened");
+      }).catch(() => {});
+      return;
+    }
+    realtimeAsrTransmittingRef.current = false;
+    realtimeAsrPrebufferRef.current = [];
+    void vad.pause().then(() => {
+      debugInterviewEvent("vad.candidate_gate_closed");
+    }).catch(() => {});
+  }, [candidateTurn, neuralVadReady, debugInterviewEvent]);
 
   useEffect(() => () => {
     if (autoSubmitTimerRef.current) window.clearTimeout(autoSubmitTimerRef.current);
+    if (liveTranscriptTimerRef.current) window.clearTimeout(liveTranscriptTimerRef.current);
+    if (handoffRevealTimerRef.current) window.clearTimeout(handoffRevealTimerRef.current);
+    if (manualAsrFinalizeTimerRef.current) window.clearTimeout(manualAsrFinalizeTimerRef.current);
+    deferredAsrFinalsRef.current.clear();
     summaryAbortRef.current?.abort();
   }, []);
 
@@ -728,7 +932,9 @@ function MockInterviewContent() {
     try {
       const stream = await navigator.mediaDevices.getUserMedia({
         video: { width: 1280, height: 720 },
-        audio: { echoCancellation: true },
+        // The camera is a local visual preview only. Its capture must not
+        // influence which input is sent to ASR.
+        audio: false,
       });
       streamRef.current = stream;
       if (videoRef.current) {
@@ -749,6 +955,12 @@ function MockInterviewContent() {
     streamRef.current?.getTracks().forEach((track) => track.stop());
     streamRef.current = null;
     setCameraOn(false);
+  }, []);
+
+  const stopMicrophone = useCallback(() => {
+    micStreamRef.current?.getTracks().forEach((track) => track.stop());
+    micStreamRef.current = null;
+    micDeviceIdRef.current = null;
   }, []);
 
   const stopRealtimeTts = useCallback((closeSocket = false) => {
@@ -782,6 +994,7 @@ function MockInterviewContent() {
   useEffect(() => {
     return () => {
       streamRef.current?.getTracks().forEach((track) => track.stop());
+      micStreamRef.current?.getTracks().forEach((track) => track.stop());
       audioRef.current?.pause();
       stopRealtimeTts(true);
       audioCtxRef.current?.close().catch(() => {});
@@ -912,7 +1125,15 @@ function MockInterviewContent() {
   }, [getRealtimeTicket]);
 
   const playSingleTts = useCallback(
-    async (item: { text: string; speaker?: string; speechRate?: number; loudnessRate?: number }) => {
+    async (item: { text: string; speaker?: string; speechRate?: number; loudnessRate?: number; onStart?: () => void }) => {
+      debugInterviewEvent("tts.segment_started", { chars: item.text.length, preview: debugTextPreview(item.text), speaker: item.speaker || null });
+      let subtitleRevealed = false;
+      const revealSubtitle = () => {
+        if (subtitleRevealed) return;
+        subtitleRevealed = true;
+        item.onStart?.();
+        debugInterviewEvent("tts.subtitle_revealed", { chars: item.text.length, preview: debugTextPreview(item.text) });
+      };
       try {
         const playRealtime = async (): Promise<void> => {
           ensureAudioGraph();
@@ -939,6 +1160,7 @@ function MockInterviewContent() {
           let playbackStarted = false;
           let bufferedSeconds = 0;
           let pendingBuffers: AudioBuffer[] = [];
+          let subtitleStartTimer: number | null = null;
           const scheduleBufferedAudio = (force = false) => {
             if (!ctx || pendingBuffers.length === 0) return;
             if (!force && !playbackStarted && bufferedSeconds < TTS_START_BUFFER_SECONDS && pendingBuffers.length < 2) {
@@ -948,6 +1170,7 @@ function MockInterviewContent() {
               ctx.currentTime + (playbackStarted ? 0.015 : 0.08),
               ttsNextTimeRef.current,
             );
+            const firstStartAt = startAt;
             for (const audioBuffer of pendingBuffers) {
               const source = ctx.createBufferSource();
               source.buffer = audioBuffer;
@@ -957,6 +1180,12 @@ function MockInterviewContent() {
               else source.connect(ctx.destination);
               source.start(startAt);
               startAt += audioBuffer.duration;
+            }
+            if (!playbackStarted && item.onStart) {
+              subtitleStartTimer = window.setTimeout(
+                revealSubtitle,
+                Math.max(0, (firstStartAt - ctx.currentTime) * 1000),
+              );
             }
             playbackStarted = true;
             ttsNextTimeRef.current = startAt;
@@ -982,6 +1211,12 @@ function MockInterviewContent() {
               if (finished) return;
               finished = true;
               if (timer !== null) window.clearTimeout(timer);
+              if (subtitleStartTimer !== null) window.clearTimeout(subtitleStartTimer);
+              // A short PCM segment can finish before its scheduled subtitle
+              // callback runs. The transcript must catch up once the audible
+              // segment has completed instead of remaining permanently partial.
+              if (playbackStarted) revealSubtitle();
+              debugInterviewEvent("tts.segment_finished", { chars: item.text.length, playbackStarted });
               if (realtimeTtsRequestIdRef.current === requestId) realtimeTtsRequestIdRef.current = null;
               resolve();
             };
@@ -1083,6 +1318,7 @@ function MockInterviewContent() {
             };
             activeTTSStopRef.current = stop;
             audio.src = blobUrl;
+            audio.onplay = revealSubtitle;
             audio.onended = done;
             audio.onerror = done;
             audio.play().catch(done);
@@ -1092,9 +1328,12 @@ function MockInterviewContent() {
         }
       } catch {
         // TTS 失败时保持原有静默兜底，面试流程仍可继续。
+        // Keep the transcript visible when both realtime and HTTP audio fail;
+        // otherwise the interviewer row would remain an empty placeholder.
+        revealSubtitle();
       }
     },
-    [ensureAudioGraph, fetchTtsAudio, getRealtimeTtsSocket, stopRealtimeTts]
+    [ensureAudioGraph, fetchTtsAudio, getRealtimeTtsSocket, stopRealtimeTts, debugInterviewEvent]
   );
 
   const drainAudioQueue = useCallback(async () => {
@@ -1104,16 +1343,26 @@ function MockInterviewContent() {
       while (audioQueueRef.current.length > 0 && !interruptRef.current) {
         const item = audioQueueRef.current.shift();
         if (!item) break;
+        debugInterviewEvent("tts.queue_dequeued", { queueDepth: audioQueueRef.current.length, chars: item.text.length });
+        speakingRef.current = true;
         setSpeaking(true);
         await playSingleTts(item);
       }
     } finally {
       audioDrainingRef.current = false;
+      // A streamed sentence can reach the queue just as the preceding drain
+      // finishes. Start a fresh drain before notifying turn waiters so the
+      // candidate never receives the floor while audio/subtitles are pending.
+      if (audioQueueRef.current.length > 0 && !interruptRef.current) {
+        void drainAudioQueue();
+        return;
+      }
+      speakingRef.current = false;
       setSpeaking(false);
       const waiters = audioWaitersRef.current.splice(0);
       waiters.forEach((resolve) => resolve());
     }
-  }, [playSingleTts]);
+  }, [playSingleTts, debugInterviewEvent]);
 
   const waitForAudioDrain = useCallback(async () => {
     while (audioDrainingRef.current && !interruptRef.current) {
@@ -1133,22 +1382,59 @@ function MockInterviewContent() {
       audio.pause();
       audio.onended?.call(audio, new Event("ended"));
     }
+    speakingRef.current = false;
     setSpeaking(false);
   }, [stopRealtimeTts]);
 
   const enqueueInterviewerAudio = useCallback(
-    (text: string, speaker?: string, speechRate?: number, loudnessRate?: number) => {
+    (text: string, speaker?: string, speechRate?: number, loudnessRate?: number, onStart?: () => void) => {
       if (!text.trim()) return;
       interruptRef.current = false;
-      audioQueueRef.current.push({ text, speaker, speechRate, loudnessRate });
+      audioQueueRef.current.push({ text, speaker, speechRate, loudnessRate, onStart });
+      debugInterviewEvent("tts.queued", { queueDepth: audioQueueRef.current.length, chars: text.length, preview: debugTextPreview(text) });
       if (audioDrainingRef.current) {
         setTimeout(() => void drainAudioQueue(), 0);
       } else {
         void drainAudioQueue();
       }
     },
-    [drainAudioQueue]
+    [drainAudioQueue, debugInterviewEvent]
   );
+
+  const finalizeInterviewerSubtitle = useCallback((requestId: string, content: string) => {
+    if (!content.trim()) return;
+    setMessages((prev) => prev.map((message) => {
+      if (message.role !== "interviewer" || message.requestId !== requestId) return message;
+      return {
+        ...message,
+        subtitleVisible: true,
+        subtitleContent: content,
+        subtitleSegments: [content],
+      };
+    }));
+  }, []);
+
+  const revealInterviewerSubtitleSegment = useCallback((requestId: string, segmentIndex: number, segment: string) => {
+    setMessages((prev) => prev.map((message) => {
+      if (message.role !== "interviewer" || message.requestId !== requestId) return message;
+      const segments = [...(message.subtitleSegments || [])];
+      // Audio callbacks are asynchronous. A delayed callback for an already
+      // visible segment must never replace a newer segment with stale text.
+      if (segments[segmentIndex] === segment) return message;
+      segments[segmentIndex] = segment;
+      const visible: string[] = [];
+      for (let index = 0; index < segments.length; index += 1) {
+        if (!segments[index]) break;
+        visible.push(segments[index]);
+      }
+      return {
+        ...message,
+        subtitleVisible: visible.length > 0,
+        subtitleSegments: segments,
+        subtitleContent: visible.join(" "),
+      };
+    }));
+  }, []);
 
   // 流式请求面试官（复用逻辑：开始面试 / 提交回答）
   const streamInterviewer = useCallback(
@@ -1160,6 +1446,7 @@ function MockInterviewContent() {
         ? payload.clientRequestId
         : isTurnRequest ? `${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 14)}` : undefined;
       const streamMessageId = clientRequestId || `system-${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 10)}`;
+      debugInterviewEvent("chat.stream_started", { requestId: streamMessageId, turnRequest: isTurnRequest });
       const res = await apiFetch("/api/interview/chat", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
@@ -1193,6 +1480,7 @@ function MockInterviewContent() {
       let roundEnded = false;
       let streamError: Error | null = null;
       let ttsPendingContent = "";
+      let streamedSegmentIndex = 0;
       const streamSpeaker = () => activeInterviewer ?? currentInterviewer;
       const flushStreamedAudio = (final = false) => {
         const normalized = ttsPendingContent.trim();
@@ -1210,14 +1498,31 @@ function MockInterviewContent() {
         const segment = normalized.slice(0, length).trim();
         ttsPendingContent = normalized.slice(length).trimStart();
         if (!segment) return;
+        const segmentIndex = streamedSegmentIndex++;
+        debugInterviewEvent("chat.tts_segment_ready", { requestId: streamMessageId, segmentIndex, chars: segment.length, preview: debugTextPreview(segment) });
         const speaker = streamSpeaker();
-        enqueueInterviewerAudio(segment, speaker?.voice, speaker?.speechRate, speaker?.loudnessRate);
+        enqueueInterviewerAudio(
+          segment,
+          speaker?.voice,
+          speaker?.speechRate,
+          speaker?.loudnessRate,
+          () => {
+            revealInterviewerSubtitleSegment(streamMessageId, segmentIndex, segment);
+          },
+        );
       };
 
       // A retry/replay must update the same placeholder. The last empty
       // interviewer row is request-owned while a stream is active; locating it
       // inside the state updater avoids a React concurrent-render race.
-      setMessages((prev) => [...prev, { role: "interviewer", content: "", requestId: streamMessageId }]);
+      setMessages((prev) => [...prev, {
+        role: "interviewer",
+        content: "",
+        subtitleVisible: false,
+        subtitleContent: "",
+        subtitleSegments: [],
+        requestId: streamMessageId,
+      }]);
       streamingRef.current = true;
       setStreaming(true);
 
@@ -1272,7 +1577,13 @@ function MockInterviewContent() {
               setMessages((prev) => {
                 const next = [...prev];
                 const index = next.findLastIndex((message) => message.role === "interviewer" && message.requestId === streamMessageId);
-                if (index >= 0) next[index] = { role: "interviewer", content: fullContent, requestId: streamMessageId };
+                if (index >= 0) next[index] = {
+                  ...next[index],
+                  content: fullContent,
+                  subtitleVisible: false,
+                  subtitleContent: next[index].subtitleContent || "",
+                  subtitleSegments: next[index].subtitleSegments || [],
+                };
                 return next;
               });
               continue;
@@ -1282,6 +1593,11 @@ function MockInterviewContent() {
               // 每次回复都刷新，保证 TTS 音色始终一致（修复同一面试官音色漂移）
               activeInterviewer = data.interviewer;
               setCurrentInterviewer(data.interviewer);
+              setMessages((prev) => prev.map((message) => (
+                message.role === "interviewer" && message.requestId === streamMessageId
+                  ? { ...message, interviewerName: data.interviewer.name }
+                  : message
+              )));
             }
             if (data.roundStart && data.interviewer) {
               setRoundRoleLabel(data.roundRoleLabel || null);
@@ -1289,16 +1605,29 @@ function MockInterviewContent() {
               if (timeoutEscalateRef.current) clearTimeout(timeoutEscalateRef.current);
               timeoutFiredRef.current = false;
               setCurrentRound(data.round || 1);
-              setOrganizing(false);
+              if (handoffRef.current) {
+                setHandoff((previous) => previous ? {
+                  ...previous,
+                  incoming: data.interviewer,
+                  nextRound: data.round || previous.nextRound,
+                } : previous);
+                if (handoffRevealTimerRef.current) clearTimeout(handoffRevealTimerRef.current);
+                // Keep the transition visible long enough to identify the
+                // incoming interviewer, then let their opening play normally.
+                handoffRevealTimerRef.current = setTimeout(() => {
+                  if (handoffRef.current) setOrganizing(false);
+                }, ROUND_HANDOFF_DELAY_MS);
+              }
             }
             if (data.content) {
               fullContent += data.content;
               ttsPendingContent += data.content;
+              debugInterviewEvent("chat.delta", { requestId: streamMessageId, chars: data.content.length, totalChars: fullContent.length });
               flushStreamedAudio();
               setMessages((prev) => {
                 const next = [...prev];
                 const index = next.findLastIndex((message) => message.role === "interviewer" && message.requestId === streamMessageId);
-                if (index >= 0) next[index] = { role: "interviewer", content: fullContent, requestId: streamMessageId };
+                if (index >= 0) next[index] = { ...next[index], content: fullContent };
                 return next;
               });
             }
@@ -1315,7 +1644,7 @@ function MockInterviewContent() {
       if (!interviewAliveRef.current) {
         streamingRef.current = false;
         setStreaming(false);
-        return { fullContent: "", newSessionId: null, activeInterviewer: null, completedInfo: null, roundEnded: false };
+        return { fullContent: "", newSessionId: null, activeInterviewer: null, completedInfo: null, roundEnded: false, messageId: streamMessageId };
       }
       if (streamError) {
         streamingRef.current = false;
@@ -1325,9 +1654,10 @@ function MockInterviewContent() {
       flushStreamedAudio(true);
       streamingRef.current = false;
       setStreaming(false);
-      return { fullContent, newSessionId, activeInterviewer, completedInfo, roundEnded };
+      debugInterviewEvent("chat.stream_finished", { requestId: streamMessageId, chars: fullContent.length, roundEnded, completed: !!completedInfo });
+      return { fullContent, newSessionId, activeInterviewer, completedInfo, roundEnded, messageId: streamMessageId };
     },
-    [startRoundTimer, enqueueInterviewerAudio, currentInterviewer, getRealtimeTtsSocket]
+    [startRoundTimer, enqueueInterviewerAudio, currentInterviewer, getRealtimeTtsSocket, revealInterviewerSubtitleSegment, debugInterviewEvent]
   );
 
   // 开始面试
@@ -1337,19 +1667,36 @@ function MockInterviewContent() {
       alert(t("mockInterview.companyRequired"));
       return;
     }
+    if (!selectedResumeId) {
+      alert(t("mockInterview.resumeRequired"));
+      return;
+    }
     // 进入面试间前先申请麦克风权限，被拒绝则留在设置页
     try {
-      const preflightStream = await navigator.mediaDevices.getUserMedia({ audio: { echoCancellation: true }, video: false });
-      preflightStream.getTracks().forEach((track) => track.stop());
+      stopMicrophone();
+      const preflightStream = await navigator.mediaDevices.getUserMedia({
+        audio: microphoneConstraints(),
+        video: false,
+      });
+      const track = preflightStream.getAudioTracks()[0];
+      if (!track) {
+        preflightStream.getTracks().forEach((item) => item.stop());
+        throw new Error("microphone audio track unavailable");
+      }
+      // Keep this exact verified stream alive for the whole interview. Asking
+      // for audio again while the camera is starting can silently switch the
+      // browser to another input device (including a loopback device).
+      micStreamRef.current = preflightStream;
+      micDeviceIdRef.current = track.getSettings().deviceId || null;
+      debugInterviewEvent("mic.acquired", {
+        source: "preflight_dedicated",
+        ...microphoneDebugInfo(track),
+      });
     } catch (err) {
       handleMicError(err);
       return;
     }
     interviewAliveRef.current = true;
-    if (!selectedResumeId) {
-      alert(t("mockInterview.resumeRequired"));
-      return;
-    }
     setMessages([]);
     setSummary("");
     setOverallScore(null);
@@ -1359,24 +1706,36 @@ function MockInterviewContent() {
     setSessionRevision(0);
     setCurrentRound(1);
     setCurrentInterviewer(null);
+    handoffRef.current = false;
+    if (handoffRevealTimerRef.current) clearTimeout(handoffRevealTimerRef.current);
+    setHandoff(null);
+    setOrganizing(false);
     setRealtimeFallback(false);
     setLiveTranscript("");
     realtimeItemRef.current = null;
     submittedAsrItemsRef.current.clear();
+    providerUtteranceEpochsRef.current.clear();
+    deferredAsrFinalsRef.current.clear();
+    activeCandidateEpochRef.current = null;
+    pendingTranscriptEpochRef.current = null;
     setStage("interview");
-    await startCamera();
+    // Camera acquisition is optional for the simulation and must not delay the
+    // interviewer opening. The microphone preflight above already verified the
+    // mandatory permission.
+    void startCamera();
     // 先创建会话并播放面试官开场白；拿到 sessionId 后再启动 ASR，避免
     // 首次 ticket/HTTP fallback 绑定到 null 会话。
     setListening(false);
     startAmbience();
     try {
-      await streamInterviewer({
+      const opening = await streamInterviewer({
         jobId: selectedJobId,
         resumeId: selectedResumeId || undefined,
         mode: "gauntlet",
         totalRounds,
       });
       await waitForAudioDrain();
+      finalizeInterviewerSubtitle(opening.messageId, opening.fullContent);
       if (interviewAliveRef.current && sessionIdRef.current) setListening(true);
     } catch {
       if (interviewAliveRef.current) {
@@ -1387,33 +1746,148 @@ function MockInterviewContent() {
         setSessionId(null);
         interruptInterviewer();
         stopCamera();
+        stopMicrophone();
       }
     }
   };
 
-  // 获取含活跃音轨的麦克风流（复用摄像头流；音轨缺失时重新请求并合并）
+  // Obtain a dedicated audio stream. Camera preview is intentionally excluded
+  // so the ASR never follows a camera/virtual-device input route.
   const getMicStream = async (): Promise<MediaStream> => {
-    let stream = streamRef.current;
+    let stream = micStreamRef.current;
     const hasLiveAudio = !!stream?.getAudioTracks().some((tr) => tr.readyState === "live");
     if (!stream || !hasLiveAudio) {
-      const audioStream = await navigator.mediaDevices.getUserMedia({ audio: { echoCancellation: true } });
-      if (stream && stream.getVideoTracks().some((tr) => tr.readyState === "live")) {
-        // 保留摄像头视频轨，替换音轨
-        stream.getAudioTracks().forEach((tr) => { tr.stop(); stream!.removeTrack(tr); });
-        audioStream.getAudioTracks().forEach((tr) => stream!.addTrack(tr));
-      } else {
-        stream?.getTracks().forEach((tr) => tr.stop());
-        stream = audioStream;
+      stream?.getTracks().forEach((track) => track.stop());
+      try {
+        stream = await navigator.mediaDevices.getUserMedia({
+          audio: microphoneConstraints(micDeviceIdRef.current || undefined),
+          video: false,
+        });
+      } catch (error) {
+        // A USB/Bluetooth microphone can disappear between preflight and the
+        // next turn. Only then fall back to the browser default input.
+        if (!micDeviceIdRef.current) throw error;
+        micDeviceIdRef.current = null;
+        stream = await navigator.mediaDevices.getUserMedia({
+          audio: microphoneConstraints(),
+          video: false,
+        });
       }
-      streamRef.current = stream;
+      const track = stream.getAudioTracks()[0];
+      if (!track) {
+        stream.getTracks().forEach((item) => item.stop());
+        throw new Error("microphone audio track unavailable");
+      }
+      micDeviceIdRef.current = track.getSettings().deviceId || null;
+      micStreamRef.current = stream;
+      debugInterviewEvent("mic.acquired", {
+        source: "dedicated_reacquired",
+        ...microphoneDebugInfo(track),
+      });
     }
     return stream;
   };
 
-  const stageRecognizedTranscript = (rawText: string, source: "asr" | "asr_fallback" = "asr") => {
-    if (answerSubmittingRef.current || streamingRef.current) return;
+  const publishLiveTranscript = (rawText: string) => {
+    // Provider partials are replacement hypotheses, not append-only tokens.
+    // Appending them was the source of ghost words and unrelated subtitles.
+    const next = rawText.replace(/\s+/g, " ").trim();
+    if (!next) return;
+    liveTranscriptPendingRef.current = next;
+    const now = Date.now();
+    const publish = () => {
+      liveTranscriptTimerRef.current = null;
+      liveTranscriptUpdatedAtRef.current = Date.now();
+      setLiveTranscript(liveTranscriptPendingRef.current);
+    };
+    if (now - liveTranscriptUpdatedAtRef.current >= LIVE_TRANSCRIPT_UPDATE_MS) {
+      publish();
+    } else if (liveTranscriptTimerRef.current === null) {
+      liveTranscriptTimerRef.current = window.setTimeout(
+        publish,
+        LIVE_TRANSCRIPT_UPDATE_MS - (now - liveTranscriptUpdatedAtRef.current),
+      );
+    }
+  };
+
+  const beginCandidateUtterance = (providerUtteranceId?: string) => {
+    if (autoSubmitTimerRef.current) {
+      window.clearTimeout(autoSubmitTimerRef.current);
+      autoSubmitTimerRef.current = null;
+    }
+    let epoch = activeCandidateEpochRef.current;
+    if (epoch === null) {
+      epoch = ++candidateTurnEpochRef.current;
+      activeCandidateEpochRef.current = epoch;
+      liveTranscriptPendingRef.current = "";
+      if (liveTranscriptTimerRef.current) {
+        window.clearTimeout(liveTranscriptTimerRef.current);
+        liveTranscriptTimerRef.current = null;
+      }
+      setLiveTranscript("");
+      debugInterviewEvent("candidate.epoch_opened", { epoch, providerUtteranceId: providerUtteranceId || null });
+    }
+    if (providerUtteranceId) {
+      providerUtteranceEpochsRef.current.set(providerUtteranceId, epoch);
+      // Provider item identifiers are short lived. Bound the client map in case
+      // an unusually long interview produces many VAD segments.
+      if (providerUtteranceEpochsRef.current.size > 32) {
+        const firstKey = providerUtteranceEpochsRef.current.keys().next().value;
+        if (firstKey) providerUtteranceEpochsRef.current.delete(firstKey);
+      }
+    }
+    return epoch;
+  };
+
+  const resolveCandidateEpoch = (providerUtteranceId?: string) => (
+    providerUtteranceId
+      ? providerUtteranceEpochsRef.current.get(providerUtteranceId) ?? null
+      : activeCandidateEpochRef.current
+  );
+
+  const scheduleCandidateSubmit = (epoch: number | null, delayMs = AUTO_SUBMIT_SETTLE_MS) => {
+    if (epoch === null) return;
+    if (autoSubmitTimerRef.current) window.clearTimeout(autoSubmitTimerRef.current);
+    debugInterviewEvent("submit.scheduled", { epoch, delayMs, transcriptChars: pendingTranscriptRef.current.length });
+    autoSubmitTimerRef.current = window.setTimeout(() => {
+      autoSubmitTimerRef.current = null;
+      // A delayed final from a previous provider segment must never submit a
+      // later answer. The pending draft and active capture must agree.
+      if (
+        activeCandidateEpochRef.current !== epoch ||
+        pendingTranscriptEpochRef.current !== epoch ||
+        !candidateTurnRef.current
+      ) {
+        debugInterviewEvent("submit.cancelled", { epoch, activeEpoch: activeCandidateEpochRef.current, pendingEpoch: pendingTranscriptEpochRef.current });
+        return;
+      }
+      debugInterviewEvent("submit.timer_fired", { epoch, transcriptChars: pendingTranscriptRef.current.length });
+      submitPendingTranscriptRef.current();
+    }, delayMs);
+  };
+
+  const scheduleSemanticCandidateSubmit = (epoch: number | null, baseDelayMs = NEURAL_VAD_ASR_SETTLE_MS) => {
+    if (epoch === null) return;
+    // A transcript ending in a connector is likely an unfinished thought.
+    // This local semantic guard adds one bounded beat without an extra model
+    // call or a second microphone recording.
+    const tail = pendingTranscriptRef.current.trim().toLowerCase();
+    const continues = /(?:\b(and|but|because|so|then|which|that|with|for)\s*|[，,、：:]|然后|但是|因为|所以|以及|比如|就是|如果|我想说)$/.test(tail);
+    scheduleCandidateSubmit(epoch, baseDelayMs + (continues ? SEMANTIC_CONTINUATION_DELAY_MS : 0));
+  };
+
+  const stageRecognizedTranscript = (
+    rawText: string,
+    source: "asr" | "asr_fallback" = "asr",
+    epoch = activeCandidateEpochRef.current,
+    submitDelayMs = AUTO_SUBMIT_SETTLE_MS,
+  ) => {
+    if (answerSubmittingRef.current || streamingRef.current || speakingRef.current) return;
+    if (epoch === null || epoch !== activeCandidateEpochRef.current || !candidateTurnRef.current) return;
     const text = rawText.trim();
-    if (!isSubstantiveTranscript(text)) {
+    if (!candidateSpeechEvidenceRef.current || !isSubstantiveTranscript(text)) {
+      candidateSpeechEvidenceRef.current = false;
+      candidateSpeechStartedAtRef.current = null;
       setNoSpeech(true);
       window.setTimeout(() => setNoSpeech(false), 1800);
       return;
@@ -1427,8 +1901,28 @@ function MockInterviewContent() {
           ? text
           : `${existing} ${text}`;
     pendingTranscriptRef.current = next;
+    if (manualAsrFinalizingRef.current && manualAsrFinalizeTimerRef.current) {
+      window.clearTimeout(manualAsrFinalizeTimerRef.current);
+      manualAsrFinalizeTimerRef.current = null;
+    }
+    pendingTranscriptEpochRef.current = epoch;
     pendingTranscriptSourceRef.current = source;
+    // With neural VAD enabled, an ASR final can arrive in the middle of one
+    // continuous utterance. It must not toggle recording or erase the VAD
+    // evidence for the rest of that utterance.
+    if (!neuralVadReadyRef.current) {
+      candidateSpeechEvidenceRef.current = false;
+      candidateSpeechStartedAtRef.current = null;
+    }
     setPendingTranscript(next);
+    debugInterviewEvent("asr.final_staged", {
+      epoch,
+      source,
+      incomingChars: text.length,
+      transcriptChars: next.length,
+      preview: debugTextPreview(next),
+      neuralEndpoint: neuralVadEndpointEpochRef.current === epoch,
+    });
     setAnswerRetryRequired(false);
     // Start planning while the candidate reviews the amber transcript. This
     // keeps the plan off the critical submit path; if it is not ready, the
@@ -1451,16 +1945,40 @@ function MockInterviewContent() {
         }).catch(() => undefined);
       }
     }
+    if (liveTranscriptTimerRef.current) window.clearTimeout(liveTranscriptTimerRef.current);
+    liveTranscriptTimerRef.current = null;
+    liveTranscriptPendingRef.current = "";
     setLiveTranscript("");
-    setVoiceActive(false);
-    setRecording(false);
-    if (autoSubmitTimerRef.current) window.clearTimeout(autoSubmitTimerRef.current);
-    // Adjacent ASR finals can belong to one spoken answer. Merge them briefly
-    // before the hands-free flow submits the complete response.
-    autoSubmitTimerRef.current = window.setTimeout(() => {
-      autoSubmitTimerRef.current = null;
-      submitPendingTranscriptRef.current();
-    }, AUTO_SUBMIT_SETTLE_MS);
+    if (!neuralVadReadyRef.current) {
+      setVoiceActive(false);
+      setRecording(false);
+    }
+    // With Silero available, endpoint ownership stays on the neural VAD. The
+    // ASR provider may finalize a segment mid-answer, so it can only update
+    // the draft until Silero confirms the end of the utterance.
+    if (neuralVadReadyRef.current) {
+      if (neuralVadEndpointEpochRef.current === epoch) {
+        scheduleSemanticCandidateSubmit(epoch, NEURAL_VAD_ASR_SETTLE_MS);
+      }
+    } else {
+      scheduleCandidateSubmit(epoch, submitDelayMs);
+    }
+  };
+
+  const releaseDeferredAsrFinals = (epoch: number) => {
+    const deferred = deferredAsrFinalsRef.current.get(epoch);
+    if (!deferred?.length) return;
+    deferredAsrFinalsRef.current.delete(epoch);
+    debugInterviewEvent("asr.deferred_released", {
+      epoch,
+      count: deferred.length,
+      chars: deferred.reduce((total, item) => total + item.text.length, 0),
+    });
+    for (const item of deferred) {
+      // VAD has already confirmed this epoch, so these finals can now enter
+      // the same transcript merge path as a normal provider final.
+      stageRecognizedTranscript(item.text, "asr", epoch, AUTO_SUBMIT_SETTLE_MS);
+    }
   };
 
   const submitPendingTranscript = async () => {
@@ -1470,23 +1988,42 @@ function MockInterviewContent() {
       window.clearTimeout(autoSubmitTimerRef.current);
       autoSubmitTimerRef.current = null;
     }
+    if (manualAsrFinalizeTimerRef.current) {
+      window.clearTimeout(manualAsrFinalizeTimerRef.current);
+      manualAsrFinalizeTimerRef.current = null;
+    }
+    const submittedEpoch = pendingTranscriptEpochRef.current;
+    if (submittedEpoch !== null && activeCandidateEpochRef.current !== submittedEpoch) return;
+    // Close the capture epoch synchronously, before React updates render the
+    // interviewer state. Any old ASR final that arrives afterwards is ignored.
+    if (submittedEpoch !== null) {
+      deferredAsrFinalsRef.current.delete(submittedEpoch);
+    }
+    realtimeAsrTransmittingRef.current = false;
+    realtimeAsrPrebufferRef.current = [];
+    manualAsrFinalizingRef.current = false;
+    activeCandidateEpochRef.current = null;
     answerSubmittingRef.current = true;
+    setSubmittingAnswer(true);
     setLiveTranscript("");
-    recognizingRef.current = true;
-    setRecognizing(true);
+    debugInterviewEvent("submit.started", { epoch: submittedEpoch, transcriptChars: text.length, preview: debugTextPreview(text) });
     const submitted = await submitAnswer(text, pendingTranscriptSourceRef.current);
     if (submitted) {
       pendingTranscriptRef.current = "";
+      pendingTranscriptEpochRef.current = null;
       setPendingTranscript("");
       setAnswerRetryRequired(false);
+      candidateSpeechEvidenceRef.current = false;
+      candidateSpeechStartedAtRef.current = null;
     } else {
       pendingTranscriptRef.current = text;
+      pendingTranscriptEpochRef.current = null;
       setPendingTranscript(text);
       setAnswerRetryRequired(true);
     }
     answerSubmittingRef.current = false;
-    recognizingRef.current = false;
-    setRecognizing(false);
+    setSubmittingAnswer(false);
+    debugInterviewEvent("submit.finished", { epoch: submittedEpoch, submitted, retryRequired: !submitted });
   };
 
   useEffect(() => {
@@ -1501,9 +2038,55 @@ function MockInterviewContent() {
       autoSubmitTimerRef.current = null;
     }
     pendingTranscriptRef.current = "";
+    pendingTranscriptEpochRef.current = null;
     setPendingTranscript("");
     setAnswerRetryRequired(false);
     setLiveTranscript("");
+  };
+
+  const finishCandidateResponseManually = () => {
+    if (!candidateTurnRef.current || answerSubmittingRef.current || streamingRef.current || manualAsrFinalizingRef.current) return;
+    const epoch = activeCandidateEpochRef.current;
+    const staged = pendingTranscriptRef.current.trim();
+    const confirmedPartial = (liveTranscriptPendingRef.current || liveTranscript).trim();
+    if (staged) {
+      debugInterviewEvent("submit.manual_requested", { epoch, source: "staged", transcriptChars: staged.length });
+      void submitPendingTranscript();
+      return;
+    }
+    if (epoch !== null && candidateSpeechEvidenceRef.current && isSubstantiveTranscript(confirmedPartial)) {
+      debugInterviewEvent("submit.manual_requested", { epoch, source: "partial", transcriptChars: confirmedPartial.length });
+      neuralVadEndpointEpochRef.current = epoch;
+      stageRecognizedTranscript(confirmedPartial, "asr", epoch, 0);
+      scheduleCandidateSubmit(epoch, 0);
+      return;
+    }
+
+    // The provider may still hold its final token while local VAD sees a
+    // pause. Commit the already-sent audio so the user can end a response
+    // explicitly without waiting for the automatic silence timer.
+    if (epoch === null || !candidateSpeechEvidenceRef.current) {
+      setNoSpeech(true);
+      window.setTimeout(() => setNoSpeech(false), 1800);
+      return;
+    }
+    manualAsrFinalizingRef.current = true;
+    neuralVadEndpointEpochRef.current = epoch;
+    realtimeAsrTransmittingRef.current = false;
+    void neuralVadRef.current?.pause().catch(() => {});
+    realtimeAsrCommandRef.current({ type: "commit" });
+    debugInterviewEvent("asr.manual_commit_requested", { epoch });
+    if (manualAsrFinalizeTimerRef.current) window.clearTimeout(manualAsrFinalizeTimerRef.current);
+    manualAsrFinalizeTimerRef.current = window.setTimeout(() => {
+      manualAsrFinalizeTimerRef.current = null;
+      if (!manualAsrFinalizingRef.current || activeCandidateEpochRef.current !== epoch || pendingTranscriptRef.current.trim()) return;
+      manualAsrFinalizingRef.current = false;
+      neuralVadEndpointEpochRef.current = null;
+      void neuralVadRef.current?.start().catch(() => {});
+      setNoSpeech(true);
+      window.setTimeout(() => setNoSpeech(false), 1800);
+      debugInterviewEvent("asr.manual_commit_timeout", { epoch });
+    }, 2_500);
   };
 
   // 处理麦克风错误（细分类型，给出可操作引导）
@@ -1520,6 +2103,7 @@ function MockInterviewContent() {
   const recognizeBlob = async (blob: Blob) => {
     recognizingRef.current = true;
     setRecognizing(true);
+    debugInterviewEvent("asr.http_started", { bytes: blob.size, mimeType: blob.type || null });
     try {
       const arrayBuffer = await blob.arrayBuffer();
       const base64 = btoa(
@@ -1533,20 +2117,181 @@ function MockInterviewContent() {
       if (!res.ok) throw new Error("ASR failed");
       const data = await res.json();
       const text = (data.text || "").trim();
+      debugInterviewEvent("asr.http_finished", { chars: text.length, preview: debugTextPreview(text) });
       if (text) {
-        stageRecognizedTranscript(text, "asr_fallback");
+        // MediaRecorder has already observed the full endpoint grace period,
+        // so avoid applying a second long wait after its one-shot transcript.
+        stageRecognizedTranscript(text, "asr_fallback", activeCandidateEpochRef.current, 240);
       } else {
         // 未检测到有效语音：轻提示，不当作失败
         setNoSpeech(true);
         setTimeout(() => setNoSpeech(false), 3000);
       }
     } catch {
+      debugInterviewEvent("asr.http_error");
       alert(t("mockInterview.sendFailed"));
     } finally {
       recognizingRef.current = false;
       setRecognizing(false);
     }
   };
+
+  // Silero VAD owns endpointing for both realtime ASR and the HTTP fallback.
+  // It receives a cloned audio track, so pausing or destroying VAD can never
+  // stop the shared mic stream used by the camera and ASR websocket.
+  useEffect(() => {
+    if (!listening || stage !== "interview") return;
+    let cancelled = false;
+    let clonedTrack: MediaStreamTrack | null = null;
+    let vadStream: MediaStream | null = null;
+
+    const startNeuralVad = async () => {
+      try {
+        const micStream = await getMicStream();
+        if (cancelled) return;
+        const sourceTrack = micStream.getAudioTracks()[0];
+        if (!sourceTrack) throw new Error("microphone audio track unavailable");
+        clonedTrack = sourceTrack.clone();
+        vadStream = new MediaStream([clonedTrack]);
+        const { MicVAD } = await import("@ricky0123/vad-web");
+        if (cancelled) return;
+        const vad = await MicVAD.new({
+          model: "v5",
+          baseAssetPath: "/vad/",
+          onnxWASMBasePath: "/vad/",
+          getStream: async () => vadStream!,
+          // The VAD only owns a clone. The original track remains alive for
+          // continuous ASR and is cleaned up by the interview lifecycle.
+          pauseStream: async () => {},
+          resumeStream: async () => vadStream!,
+          startOnLoad: false,
+          // Keep Silero sensitive enough for normal laptop/headset speech.
+          // ASR receives audio only after this gate confirms speech, so this
+          // threshold can favor normal spoken voices without letting ambient
+          // noise enter the provider stream.
+          positiveSpeechThreshold: 0.42,
+          negativeSpeechThreshold: 0.27,
+          redemptionMs: NEURAL_VAD_REDEMPTION_MS,
+          preSpeechPadMs: 400,
+          minSpeechMs: 300,
+          submitUserSpeechOnPause: false,
+          onSpeechStart: () => {
+            if (!candidateTurnRef.current || manualAsrFinalizingRef.current || speakingRef.current || streamingRef.current || recognizingRef.current || answerSubmittingRef.current) return;
+            const epoch = beginCandidateUtterance();
+            debugInterviewEvent("vad.speech_start", { epoch });
+            neuralVadEndpointEpochRef.current = null;
+            candidateSpeechStartedAtRef.current = Date.now();
+            candidateSpeechEvidenceRef.current = false;
+          },
+          onSpeechRealStart: () => {
+            if (!candidateTurnRef.current || manualAsrFinalizingRef.current || activeCandidateEpochRef.current === null) return;
+            const epoch = activeCandidateEpochRef.current;
+            candidateSpeechEvidenceRef.current = true;
+            realtimeAsrTransmittingRef.current = true;
+            debugInterviewEvent("vad.speech_confirmed", { epoch });
+            debugInterviewEvent("asr.capture_transmitting", {
+              epoch,
+              bufferedFrames: realtimeAsrPrebufferRef.current.length,
+            });
+            setVoiceActive(true);
+            setRecording(true);
+            // Release provider finals only after Silero confirms that this is
+            // genuine speech. This closes the race seen in production logs
+            // where ASR finalized several seconds before local VAD.
+            releaseDeferredAsrFinals(epoch);
+          },
+          onSpeechEnd: (audio) => {
+            const epoch = activeCandidateEpochRef.current;
+            if (!candidateTurnRef.current || manualAsrFinalizingRef.current || epoch === null) return;
+            candidateSpeechEvidenceRef.current = true;
+            candidateSpeechStartedAtRef.current = null;
+            neuralVadEndpointEpochRef.current = epoch;
+            realtimeAsrTransmittingRef.current = false;
+            realtimeAsrPrebufferRef.current = [];
+            debugInterviewEvent("vad.speech_end", { epoch, audioMs: Math.round(audio.length / 16) });
+            setVoiceActive(false);
+            setRecording(false);
+            if (realtimeFallbackRef.current) {
+              void recognizeBlob(pcm16Wav(audio));
+              return;
+            }
+            scheduleSemanticCandidateSubmit(epoch);
+          },
+          onVADMisfire: () => {
+            if (!manualAsrFinalizingRef.current && !candidateSpeechEvidenceRef.current) {
+              const epoch = activeCandidateEpochRef.current;
+              debugInterviewEvent("vad.misfire", { epoch });
+              if (epoch !== null) {
+                deferredAsrFinalsRef.current.delete(epoch);
+              }
+              if (autoSubmitTimerRef.current) {
+                window.clearTimeout(autoSubmitTimerRef.current);
+                autoSubmitTimerRef.current = null;
+              }
+              pendingTranscriptRef.current = "";
+              pendingTranscriptEpochRef.current = null;
+              pendingTranscriptSourceRef.current = "asr";
+              liveTranscriptPendingRef.current = "";
+              if (liveTranscriptTimerRef.current) {
+                window.clearTimeout(liveTranscriptTimerRef.current);
+                liveTranscriptTimerRef.current = null;
+              }
+              setPendingTranscript("");
+              setLiveTranscript("");
+              setAnswerRetryRequired(false);
+              activeCandidateEpochRef.current = null;
+              neuralVadEndpointEpochRef.current = null;
+              candidateSpeechStartedAtRef.current = null;
+              realtimeAsrTransmittingRef.current = false;
+              realtimeAsrPrebufferRef.current = [];
+              setVoiceActive(false);
+              setRecording(false);
+              // Keep the session in the candidate phase after a rejected
+              // acoustic segment. No submit is attempted and the next real
+              // VAD speech_start can open a fresh epoch normally.
+              debugInterviewEvent("vad.ready_for_next_utterance", {
+                epoch,
+                listening,
+                sessionId: sessionIdRef.current,
+              });
+            }
+          },
+        });
+        if (cancelled) {
+          await vad.destroy();
+          return;
+        }
+        neuralVadRef.current = vad;
+        await vad.start();
+        if (cancelled) return;
+        neuralVadReadyRef.current = true;
+        setNeuralVadReady(true);
+        debugInterviewEvent("vad.ready", { model: "silero-v5" });
+      } catch (error) {
+        // The server VAD remains a compatibility fallback when WASM is
+        // unavailable (older browsers, blocked worklets, offline first load).
+        console.warn("[mock-interview] neural VAD unavailable", error);
+        neuralVadReadyRef.current = false;
+        setNeuralVadReady(false);
+        debugInterviewEvent("vad.unavailable", { message: error instanceof Error ? error.message.slice(0, 160) : "unknown" });
+      }
+    };
+
+    void startNeuralVad();
+    return () => {
+      cancelled = true;
+      neuralVadReadyRef.current = false;
+      neuralVadEndpointEpochRef.current = null;
+      setNeuralVadReady(false);
+      const vad = neuralVadRef.current;
+      neuralVadRef.current = null;
+      void vad?.destroy().catch(() => {});
+      clonedTrack?.stop();
+    };
+    // The callbacks intentionally read refs to avoid recreating an ONNX model
+    // every time the interviewer or transcript state changes.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [listening, stage]);
 
   // 实时模式：浏览器持续发送 PCM16，服务端 VAD 返回中间结果和最终结果。
   // 最终结果只会填入候选人的待提交稿。用户确认后才调用面试模型，
@@ -1563,13 +2308,11 @@ function MockInterviewContent() {
     let ready = false;
     let intentionalClose = false;
     let heartbeat: number | null = null;
-    let localSpeechOpen = false;
-    let localLastVoiceAt = 0;
-    let localLoudFrames = 0;
 
     const sendClientEvent = (payload: Record<string, unknown>) => {
       if (socket?.readyState === WebSocket.OPEN) socket.send(JSON.stringify(payload));
     };
+    realtimeAsrCommandRef.current = sendClientEvent;
 
     const stopCapture = () => {
       processor?.disconnect();
@@ -1613,7 +2356,11 @@ function MockInterviewContent() {
             let data: {
               type?: string;
               itemId?: string;
+              utteranceId?: string;
               text?: string;
+              confirmedText?: string;
+              draftText?: string;
+              language?: string;
               error?: string;
             };
             try {
@@ -1625,39 +2372,136 @@ function MockInterviewContent() {
               settled = true;
               window.clearTimeout(timeout);
               ready = true;
+              debugInterviewEvent("asr.socket_ready", {
+                fallback: false,
+                configuredLanguage: data.language || interviewLanguageRef.current,
+              });
               heartbeat = window.setInterval(() => sendClientEvent({ type: "ping" }), 25_000);
               resolve();
               return;
             }
             if (data.type === "speech_started") {
-              if (!candidateTurnRef.current) return;
+              if (manualAsrFinalizingRef.current) return;
+              if (!canAcceptCandidateAsr()) {
+                debugInterviewEvent("asr.dropped", { type: data.type, utteranceId: data.utteranceId || null, reason: "interviewer_or_submit_phase" });
+                return;
+              }
+              if (neuralVadReadyRef.current) {
+                beginCandidateUtterance(data.utteranceId);
+                return;
+              }
+              const epoch = beginCandidateUtterance(data.utteranceId);
+              debugInterviewEvent("asr.provider_speech_start", { epoch, utteranceId: data.utteranceId || null });
+              if (candidateSpeechStartedAtRef.current === null) {
+                candidateSpeechStartedAtRef.current = Date.now();
+                candidateSpeechEvidenceRef.current = false;
+              }
+              if (epoch === null) return;
               setVoiceActive(true);
               setRecording(true);
               return;
             }
             if (data.type === "speech_stopped") {
-              if (!candidateTurnRef.current) return;
+              if (manualAsrFinalizingRef.current) return;
+              if (!canAcceptCandidateAsr()) return;
+              if (neuralVadReadyRef.current) return;
+              const epoch = resolveCandidateEpoch(data.utteranceId);
+              if (epoch === null || epoch !== activeCandidateEpochRef.current) return;
+              const startedAt = candidateSpeechStartedAtRef.current;
+              if (startedAt !== null && Date.now() - startedAt >= ASR_MIN_SPEECH_MS) {
+                candidateSpeechEvidenceRef.current = true;
+              }
               setVoiceActive(false);
               setRecording(false);
+              scheduleCandidateSubmit(epoch);
+              debugInterviewEvent("asr.provider_speech_end", { epoch, utteranceId: data.utteranceId || null });
               return;
             }
             if (data.type === "partial") {
-              if (!candidateTurnRef.current) return;
-              setLiveTranscript(data.text || "");
+              if (manualAsrFinalizingRef.current) return;
+              if (!canAcceptCandidateAsr()) {
+                debugInterviewEvent("asr.dropped", { type: data.type, utteranceId: data.utteranceId || null, reason: "interviewer_or_submit_phase" });
+                return;
+              }
+              const epoch = resolveCandidateEpoch(data.utteranceId);
+              if (epoch === null || epoch !== activeCandidateEpochRef.current) return;
+              if (!candidateSpeechEvidenceRef.current) return;
+              // Only the provider's confirmed prefix is candidate-visible.
+              // The draft suffix is deliberately not shown because it changes
+              // aggressively with keyboard noise and echo cancellation.
+              publishLiveTranscript(data.confirmedText || data.text || "");
+              debugInterviewEvent("asr.partial", {
+                epoch,
+                utteranceId: data.utteranceId || null,
+                confirmedChars: (data.confirmedText || data.text || "").length,
+                preview: debugTextPreview(data.confirmedText || data.text || ""),
+                providerLanguage: data.language || null,
+              });
               return;
             }
             if (data.type === "final") {
-              if (!candidateTurnRef.current) return;
+              if (!canAcceptCandidateAsr()) {
+                debugInterviewEvent("asr.dropped", { type: data.type, itemId: data.itemId || null, utteranceId: data.utteranceId || null, reason: "interviewer_or_submit_phase" });
+                return;
+              }
+              const epoch = resolveCandidateEpoch(data.utteranceId);
+              if (epoch === null || epoch !== activeCandidateEpochRef.current) return;
               const text = (data.text || "").trim();
               const itemId = data.itemId || `final:${text}`;
               if (!text || submittedAsrItemsRef.current.has(itemId)) return;
               submittedAsrItemsRef.current.add(itemId);
               realtimeItemRef.current = data.itemId || null;
-              stageRecognizedTranscript(text);
+              debugInterviewEvent("asr.final", {
+                epoch,
+                utteranceId: data.utteranceId || null,
+                itemId,
+                chars: text.length,
+                preview: debugTextPreview(text),
+                providerLanguage: data.language || null,
+              });
+              if (!isSubstantiveTranscript(text)) {
+                debugInterviewEvent("asr.final_ignored", {
+                  epoch,
+                  itemId,
+                  chars: text.length,
+                  preview: debugTextPreview(text),
+                  reason: "non_substantive_noise",
+                });
+                return;
+              }
+              // The provider final can arrive before Silero's real-speech
+              // confirmation. Do not let it create a draft/subtitle yet: a
+              // later VAD misfire must be able to discard it cleanly.
+              if (neuralVadReadyRef.current && !candidateSpeechEvidenceRef.current && neuralVadEndpointEpochRef.current !== epoch) {
+                const deferred = deferredAsrFinalsRef.current.get(epoch) || [];
+                if (!deferred.some((item) => item.itemId === itemId)) {
+                  deferred.push({ itemId, utteranceId: data.utteranceId, text });
+                  deferredAsrFinalsRef.current.set(epoch, deferred);
+                }
+                debugInterviewEvent("asr.final_deferred", {
+                  epoch,
+                  itemId,
+                  chars: text.length,
+                  preview: debugTextPreview(text),
+                  reason: "awaiting_neural_vad_confirmation",
+                });
+                return;
+              }
+              candidateSpeechEvidenceRef.current = true;
+              stageRecognizedTranscript(text, "asr", epoch);
+              if (!neuralVadReadyRef.current) candidateSpeechStartedAtRef.current = null;
               return;
             }
-            if (data.type === "error" && !ready) {
-              fail(new Error(data.error || "实时 ASR 失败"));
+            if (data.type === "upstream_closed" || data.type === "error") {
+              if (!ready) {
+                fail(new Error(data.error || "实时 ASR 失败"));
+              } else if (!cancelled) {
+                // The browser socket can stay open while the provider socket
+                // has died. Switch immediately to HTTP ASR instead of leaving
+                // the microphone in a silent, stuck state for the next turn.
+                setRealtimeFallback(true);
+                debugInterviewEvent("asr.fallback_enabled", { reason: data.type, message: data.error || null });
+              }
             }
           };
           socket!.onerror = () => {
@@ -1680,6 +2524,19 @@ function MockInterviewContent() {
         realtimeAudioCtxRef.current = localCtx;
         if (localCtx.state === "suspended") await localCtx.resume();
         const audioOnlyStream = new MediaStream(micStream.getAudioTracks());
+        const captureTrack = audioOnlyStream.getAudioTracks()[0];
+        if (!captureTrack) throw new Error("microphone audio track unavailable");
+        realtimeSignalSampleRef.current = {
+          windowStartedAt: Date.now(),
+          sampleCount: 0,
+          squareSum: 0,
+          peak: 0,
+        };
+        debugInterviewEvent("asr.capture_started", {
+          configuredLanguage: interviewLanguageRef.current,
+          processingSampleRate: localCtx.sampleRate,
+          ...microphoneDebugInfo(captureTrack),
+        });
         source = localCtx.createMediaStreamSource(audioOnlyStream);
         processor = localCtx.createScriptProcessor(4096, 1, 1);
         muteGain = localCtx.createGain();
@@ -1688,36 +2545,48 @@ function MockInterviewContent() {
         source.connect(processor);
         processor.connect(muteGain);
         muteGain.connect(localCtx.destination);
-          processor.onaudioprocess = (event) => {
+        processor.onaudioprocess = (event) => {
           if (
             cancelled ||
             socket?.readyState !== WebSocket.OPEN ||
+            manualAsrFinalizingRef.current ||
             !candidateTurnRef.current ||
             speakingRef.current ||
             streamingRef.current ||
-            recognizingRef.current
+            recognizingRef.current ||
+            answerSubmittingRef.current
           ) return;
           const input = event.inputBuffer.getChannelData(0);
-          let power = 0;
-          for (let index = 0; index < input.length; index += 1) power += input[index] * input[index];
-          const rms = Math.sqrt(power / input.length);
+          const signal = realtimeSignalSampleRef.current;
+          for (let index = 0; index < input.length; index += 1) {
+            const sample = input[index];
+            const absolute = Math.abs(sample);
+            signal.squareSum += sample * sample;
+            signal.peak = Math.max(signal.peak, absolute);
+          }
+          signal.sampleCount += input.length;
           const now = Date.now();
-          if (rms >= ASR_SEND_RMS_THRESHOLD) {
-            localLoudFrames += 1;
-            if (localLoudFrames >= 2) {
-              localSpeechOpen = true;
-              localLastVoiceAt = now;
-            }
-          } else {
-            localLoudFrames = 0;
+          if (now - signal.windowStartedAt >= 1_000 && signal.sampleCount > 0) {
+            debugInterviewEvent("asr.audio_level", {
+              epoch: activeCandidateEpochRef.current,
+              rms: Number(Math.sqrt(signal.squareSum / signal.sampleCount).toFixed(4)),
+              peak: Number(signal.peak.toFixed(4)),
+              sampleRate: localCtx?.sampleRate || 16_000,
+            });
+            realtimeSignalSampleRef.current = {
+              windowStartedAt: now,
+              sampleCount: 0,
+              squareSum: 0,
+              peak: 0,
+            };
           }
-          if (!localSpeechOpen) return;
-          if (now - localLastVoiceAt > 1200) {
-            localSpeechOpen = false;
-            return;
-          }
+          // Stream the whole candidate window. The provider needs trailing
+          // silence to produce a stable final; cutting upload at local VAD
+          // end left real speech without a final transcript. Local neural VAD
+          // still decides whether any provider result may be accepted.
           const pcm = downsampleToPCM16(input, localCtx?.sampleRate || 16000, 16000);
-          if (pcm.byteLength > 0) socket.send(pcm);
+          if (pcm.byteLength === 0) return;
+          socket.send(pcm);
         };
       } catch (error) {
         if (!cancelled) {
@@ -1737,6 +2606,7 @@ function MockInterviewContent() {
         sendClientEvent({ type: "stop" });
         socket.close(1000, "capture stopped");
       }
+      if (realtimeAsrCommandRef.current === sendClientEvent) realtimeAsrCommandRef.current = () => {};
       if (realtimeSocketRef.current === socket) realtimeSocketRef.current = null;
       setVoiceActive(false);
       setRecording(false);
@@ -1748,7 +2618,7 @@ function MockInterviewContent() {
   // Fallback keeps one VAD graph for the session. Non-answer phases only gate
   // recording, so a render transition cannot repeatedly acquire the microphone.
   useEffect(() => {
-    if (!listening || stage !== "interview" || !realtimeFallback) return;
+    if (!listening || stage !== "interview" || !realtimeFallback || neuralVadReady) return;
     let cancelled = false;
     let localCtx: AudioContext | null = null;
     let vadSource: MediaStreamAudioSourceNode | null = null;
@@ -1786,10 +2656,13 @@ function MockInterviewContent() {
 
         const loop = () => {
           if (cancelled) return;
-          if (!candidateTurnRef.current) {
+          if (!candidateTurnRef.current || speakingRef.current || streamingRef.current || recognizingRef.current || answerSubmittingRef.current) {
             hasVoice = false;
             silenceStart = null;
             voiceOnset = null;
+            candidateSpeechStartedAtRef.current = null;
+            candidateSpeechEvidenceRef.current = false;
+            activeCandidateEpochRef.current = null;
             if (recorder && recorder.state === "recording") {
               recorder.onstop = null;
               recorder.stop();
@@ -1811,6 +2684,12 @@ function MockInterviewContent() {
           if (rms > ASR_SEND_RMS_THRESHOLD) {
             // 检测到语音：开始/继续录音
             hasVoice = true;
+            if (candidateSpeechStartedAtRef.current === null) {
+              candidateSpeechStartedAtRef.current = now;
+              candidateSpeechEvidenceRef.current = false;
+              beginCandidateUtterance();
+            }
+            candidateSpeechEvidenceRef.current = now - candidateSpeechStartedAtRef.current >= ASR_MIN_SPEECH_MS;
             silenceStart = null;
             voiceOnset = null;
             setVoiceActive(true);
@@ -1843,9 +2722,10 @@ function MockInterviewContent() {
             setVoiceActive(false);
             if (hasVoice && recorder && recorder.state === "recording") {
               if (silenceStart === null) silenceStart = now;
-              if (now - silenceStart > 1200) {
+              if (now - silenceStart > AUTO_SUBMIT_SETTLE_MS) {
                 // 停顿超时：说完一段话，停止录音并送识别
                 hasVoice = false;
+                candidateSpeechStartedAtRef.current = null;
                 silenceStart = null;
                 setRecording(false);
                 const rec = recorder;
@@ -1889,16 +2769,37 @@ function MockInterviewContent() {
       setRecording(false);
     };
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [listening, stage, realtimeFallback]);
+  }, [listening, stage, realtimeFallback, neuralVadReady]);
 
   const switchToNextInterviewer = useCallback(async () => {
+    const activeSessionId = sessionIdRef.current;
+    if (!activeSessionId) throw new Error("missing interview session for handoff");
+
+    // Close the microphone gate synchronously. An ASR final may otherwise
+    // arrive between the old interviewer finishing and React committing the
+    // transition view, incorrectly becoming an answer for the next round.
+    handoffRef.current = true;
+    candidateTurnRef.current = false;
+    realtimeAsrTransmittingRef.current = false;
+    realtimeAsrPrebufferRef.current = [];
+    setHandoff({ outgoing: currentInterviewer, incoming: null, nextRound: currentRound + 1 });
     setOrganizing(true);
-    await sleep(ROUND_HANDOFF_DELAY_MS);
-    setOrganizing(false);
-    const next = await streamInterviewer({ sessionId, switchNext: true });
-    await waitForAudioDrain();
-    return next;
-  }, [sessionId, streamInterviewer, waitForAudioDrain]);
+    try {
+      await sleep(ROUND_HANDOFF_DELAY_MS);
+      const next = await streamInterviewer({ sessionId: activeSessionId, switchNext: true });
+      await waitForAudioDrain();
+      finalizeInterviewerSubtitle(next.messageId, next.fullContent);
+      return next;
+    } finally {
+      if (handoffRevealTimerRef.current) {
+        clearTimeout(handoffRevealTimerRef.current);
+        handoffRevealTimerRef.current = null;
+      }
+      handoffRef.current = false;
+      setOrganizing(false);
+      setHandoff(null);
+    }
+  }, [currentInterviewer, currentRound, streamInterviewer, waitForAudioDrain, finalizeInterviewerSubtitle]);
 
   // 提交回答
   const submitAnswer = async (text: string, inputSource: "asr" | "asr_fallback"): Promise<boolean> => {
@@ -1911,6 +2812,13 @@ function MockInterviewContent() {
       ? existingRequest.requestId
       : `${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 14)}`;
     pendingAnswerRequestRef.current = { text, requestId };
+    debugInterviewEvent("chat.submit_request", {
+      requestId,
+      revision: previousRevision,
+      inputSource,
+      transcriptChars: text.length,
+      planWarm: turnPlanCacheRef.current.has(`${sessionIdRef.current}:${previousRevision}:${text}`),
+    });
     setMessages((prev) => prev.some((message) => message.role === "candidate" && message.requestId === requestId)
       ? prev
       : [...prev, { role: "candidate", content: text, requestId }]);
@@ -1940,24 +2848,42 @@ function MockInterviewContent() {
         setSessionRevision(typed.revision);
         result = await streamInterviewer({ ...requestPayload, revision: typed.revision });
       }
-      const { completedInfo, roundEnded } = result;
+      const { completedInfo, roundEnded, messageId, fullContent } = result;
+      debugInterviewEvent("chat.submit_response", { requestId, chars: fullContent.length, roundEnded, completed: !!completedInfo });
       pendingAnswerRequestRef.current = null;
-      setMessages((prev) => prev.map((message) => (
-        message.requestId === requestId ? { ...message, requestId: undefined } : message
-      )));
+      // Model/SSE generation is complete at this point. TTS may still be
+      // draining, but that is a separate speaking phase; keeping
+      // `submittingAnswer` true until audio ends made the UI show a spinner
+      // and "thinking" while the interviewer was already talking.
+      answerSubmittingRef.current = false;
+      setSubmittingAnswer(false);
+      // Keep the request marker until every queued TTS segment has revealed
+      // its subtitle. Clearing it as soon as SSE ends made only the first
+      // sentence visible: later audio callbacks could no longer find the
+      // request-owned interviewer row, even though playback succeeded.
+      const releaseRequestMarker = () => {
+        setMessages((prev) => prev.map((message) => (
+          message.requestId === requestId ? { ...message, requestId: undefined } : message
+        )));
+      };
       if (completedInfo) {
         setInterviewCompleted(true);
         setListening(false);
         stopCamera();
+        stopMicrophone();
         clearPressure();
         // Generate in the background while the final closing sentence plays;
         // wait only to switch views so the closing audio is never cut off.
         void generateSummary(false);
         await waitForAudioDrain();
+        finalizeInterviewerSubtitle(messageId, fullContent);
+        releaseRequestMarker();
         setStage("summary");
         return true;
       }
       await waitForAudioDrain();
+      finalizeInterviewerSubtitle(messageId, fullContent);
+      releaseRequestMarker();
       if (roundEnded) {
         // 面试官主动结束本轮：自然停顿后由下一位开场
         await switchToNextInterviewer();
@@ -1971,6 +2897,7 @@ function MockInterviewContent() {
         return prev.filter((message) => message.requestId !== requestId);
       });
       const typed = error as Error & { code?: string };
+      debugInterviewEvent("chat.submit_error", { requestId, code: typed.code || null, message: typed.message.slice(0, 160) });
       if (typed.code !== "REQUEST_IN_FLIGHT") alert(t("mockInterview.sendFailed"));
       return false;
     }
@@ -2051,18 +2978,22 @@ function MockInterviewContent() {
     if (!sessionId || ending || timeoutFiredRef.current) return;
     timeoutFiredRef.current = true;
     try {
-      const { completedInfo, roundEnded } = await streamInterviewer({ sessionId, timeout: true });
+      const result = await streamInterviewer({ sessionId, timeout: true });
+      const { completedInfo, roundEnded, messageId, fullContent } = result;
       if (completedInfo) {
         setInterviewCompleted(true);
         setListening(false);
         stopCamera();
+        stopMicrophone();
         clearPressure();
         void generateSummary(false);
         await waitForAudioDrain();
+        finalizeInterviewerSubtitle(messageId, fullContent);
         setStage("summary");
         return;
       }
       await waitForAudioDrain();
+      finalizeInterviewerSubtitle(messageId, fullContent);
       if (roundEnded) {
         await switchToNextInterviewer();
         return;
@@ -2074,7 +3005,7 @@ function MockInterviewContent() {
     } catch {
       timeoutFiredRef.current = false;
     }
-  }, [sessionId, ending, streamInterviewer, waitForAudioDrain, switchToNextInterviewer, generateSummary, clearPressure, stopCamera]);
+  }, [sessionId, ending, streamInterviewer, waitForAudioDrain, switchToNextInterviewer, generateSummary, clearPressure, stopCamera, stopMicrophone, finalizeInterviewerSubtitle]);
 
   useEffect(() => {
     if (roundSecondsLeft !== 0 || !sessionId || stage !== "interview" || streaming || ending || organizing) return;
@@ -2090,8 +3021,13 @@ function MockInterviewContent() {
     if (!confirm(t("mockInterview.endConfirm"))) return;
     interviewAliveRef.current = false;
     setEnding(true);
+    handoffRef.current = false;
+    if (handoffRevealTimerRef.current) clearTimeout(handoffRevealTimerRef.current);
+    setHandoff(null);
+    setOrganizing(false);
     setListening(false);
     stopCamera();
+    stopMicrophone();
     clearPressure();
     audioRef.current?.pause();
     setSpeaking(false);
@@ -2178,6 +3114,9 @@ function MockInterviewContent() {
     setCurrentRound(1);
     setCurrentInterviewer(null);
     setOrganizing(false);
+    handoffRef.current = false;
+    if (handoffRevealTimerRef.current) clearTimeout(handoffRevealTimerRef.current);
+    setHandoff(null);
     setRoundRoleLabel(null);
     setInterviewCompleted(false);
     setFeedbackOpen(false);
@@ -2185,6 +3124,8 @@ function MockInterviewContent() {
     setRealismScore(null);
     setFeedbackText("");
     setListening(false);
+    stopCamera();
+    stopMicrophone();
     setSetupOpen(true);
     clearPressure();
   };
@@ -2379,11 +3320,13 @@ function MockInterviewContent() {
       ? t("mockInterview.organizing")
       : speaking
         ? t("mockInterview.speaking")
-        : streaming
-          ? t("mockInterview.thinking")
-          : recognizing
-            ? t("mockInterview.recognizing")
-            : candidateTurn
+          : streaming
+            ? t("mockInterview.thinking")
+            : recognizing
+              ? t("mockInterview.recognizing")
+              : submittingAnswer
+                ? t("mockInterview.thinking")
+              : candidateTurn
               ? t("mockInterview.micAlwaysOn")
               : t("mockInterview.thinking");
     return (
@@ -2499,6 +3442,24 @@ function MockInterviewContent() {
                   ? `${currentInterviewer.title ? (language.startsWith("zh") ? currentInterviewer.title.zh : currentInterviewer.title.en) + " · " : ""}${currentInterviewer.name} · ${currentInterviewer.company}`
                   : t("mockInterview.interviewer")}
               </div>
+              {organizing && handoff && (
+                <div className="absolute inset-0 z-20 flex flex-col items-center justify-center bg-zinc-950/90 px-6 text-center backdrop-blur-sm animate-in fade-in duration-300">
+                  <p className="text-[11px] uppercase tracking-[0.18em] text-zinc-500">
+                    {language === "en" ? `Round ${handoff.nextRound} handoff` : `第 ${handoff.nextRound} 轮面试官交接`}
+                  </p>
+                  <div className="mt-5 flex w-full max-w-md items-center justify-center gap-3 text-sm md:text-base">
+                    <div className="min-w-0 text-right">
+                      <p className="truncate font-medium text-zinc-300">{handoff.outgoing?.name || (language === "en" ? "Previous interviewer" : "上一位面试官")}</p>
+                      <p className="mt-1 text-xs text-zinc-500">{language === "en" ? "Round complete" : "本轮结束"}</p>
+                    </div>
+                    <ArrowRight className="h-5 w-5 shrink-0 text-[#C46A4A] animate-pulse" aria-hidden="true" />
+                    <div className="min-w-0 text-left">
+                      <p className="truncate font-medium text-white">{handoff.incoming?.name || (language === "en" ? "Connecting interviewer" : "正在接入下一位面试官")}</p>
+                      <p className="mt-1 text-xs text-[#C46A4A]">{handoff.incoming ? (language === "en" ? "Ready to begin" : "即将开始") : (language === "en" ? "Connecting" : "正在连接")}</p>
+                    </div>
+                  </div>
+                </div>
+              )}
 
             </div>
 
@@ -2554,9 +3515,13 @@ function MockInterviewContent() {
                     {messages.slice(-4).map((m, i) => (
                       <p key={i} className="text-sm">
                         <span className={`font-medium mr-2 ${m.role === "interviewer" ? "text-[#C46A4A]" : "text-[#B5BEB0]"}`}>
-                          {m.role === "interviewer" ? (currentInterviewer?.name || t("mockInterview.interviewer")) : t("mockInterview.you")}:
+                          {m.role === "interviewer" ? (m.interviewerName || currentInterviewer?.name || t("mockInterview.interviewer")) : t("mockInterview.you")}:
                         </span>
-                        <span className="text-zinc-300">{m.content || (streaming && i === messages.slice(-4).length - 1 ? "..." : "")}</span>
+                        <span className="text-zinc-300">
+                          {m.role === "interviewer"
+                            ? (m.subtitleVisible ? (m.subtitleContent || "") : (streaming && i === messages.slice(-4).length - 1 ? "..." : ""))
+                            : m.content}
+                        </span>
                       </p>
                     ))}
                     {liveTranscript && (
@@ -2616,17 +3581,19 @@ function MockInterviewContent() {
                 onClick={() => {
                   if (answerRetryRequired && pendingTranscript) {
                     void submitPendingTranscript();
+                  } else if (candidateTurn) {
+                    finishCandidateResponseManually();
                   } else if (speaking) {
                     interruptInterviewer();
                   }
                 }}
-                disabled={(!speaking && !answerRetryRequired) || recognizing}
+                disabled={(!speaking && !answerRetryRequired && !candidateTurn) || recognizing || submittingAnswer}
                 title={speaking
                   ? (language === "zh" ? "打断面试官" : "Interrupt interviewer")
                   : answerRetryRequired
                     ? (interviewLanguageRef.current === "en" ? "Retry answer" : "重试发送")
                   : candidateTurn
-                    ? t("mockInterview.micAlwaysOn")
+                    ? (language === "zh" ? "结束作答并提交" : "Finish answer and submit")
                     : t("mockInterview.thinking")}
                 className={`h-16 w-16 md:h-20 md:w-20 rounded-full flex items-center justify-center transition-all select-none ${
                   answerRetryRequired
@@ -2635,17 +3602,17 @@ function MockInterviewContent() {
                     ? voiceActive
                       ? "bg-red-500 scale-110 shadow-lg shadow-red-500/40"
                       : "bg-red-500/80 shadow-lg shadow-red-500/30 animate-pulse"
-                    : streaming || recognizing || speaking || organizing
+                    : streaming || recognizing || submittingAnswer || speaking || organizing
                       ? "bg-zinc-800 cursor-not-allowed"
                       : "bg-zinc-800"
                 }`}
               >
-                {recognizing ? (
+                {recognizing || submittingAnswer ? (
                   <Loader2 className="h-7 w-7 text-white animate-spin" />
                 ) : answerRetryRequired ? (
                   <RotateCcw className="h-7 w-7 text-white" />
                 ) : candidateTurn ? (
-                  <Mic className="h-7 w-7 text-white" />
+                  <Square className="h-6 w-6 text-white fill-white" />
                 ) : speaking ? (
                   <VolumeX className="h-7 w-7 text-white" />
                 ) : (
@@ -2656,11 +3623,11 @@ function MockInterviewContent() {
                 {answerRetryRequired
                   ? (interviewLanguageRef.current === "en" ? "Retry sending" : "重试发送")
                   : candidateTurn
-                  ? voiceActive
-                    ? t("mockInterview.voiceDetected")
-                    : t("mockInterview.micAlwaysOn")
+                  ? (language === "zh" ? "点击结束作答并提交" : "Click to finish and submit")
                   : recognizing
                     ? t("mockInterview.recognizing")
+                    : submittingAnswer
+                      ? t("mockInterview.thinking")
                     : speaking
                       ? t("mockInterview.tapToSpeak")
                       : t("mockInterview.thinking")}

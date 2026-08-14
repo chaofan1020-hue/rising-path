@@ -3,6 +3,65 @@ import type { RegionKey } from '@/lib/region-dna';
 export type CareerStage = 'junior' | 'senior' | 'experienced' | 'returning_intern';
 export type SchoolTier = 1 | 2 | 3;
 export type MajorMatch = 'aligned' | 'related' | 'unrelated';
+export type CodingPreference = 'likes_coding' | 'neutral' | 'avoids_coding' | 'unknown';
+export type CommunicationPreference =
+  | 'likes_communication'
+  | 'neutral'
+  | 'avoids_communication'
+  | 'unknown';
+export type TargetSchoolBand = 'target' | 'semi_target' | 'non_target' | 'unknown';
+export type PlanLocale = 'zh-CN' | 'zh-TW' | 'en';
+export type LocalizedPlanText = Partial<Record<PlanLocale, string>>;
+export type VisaStatusCategory = 'none' | 'student' | 'work_visa' | 'permanent' | 'unknown';
+
+export interface VisaDates {
+  programEndDate?: string;
+  visaStartDate?: string;
+  visaEndDate?: string;
+  stemEligible?: boolean;
+}
+
+export interface CareerSignals {
+  codingPreference?: CodingPreference;
+  communicationPreference?: CommunicationPreference;
+  targetIndustries?: string[];
+  targetSchoolBand?: TargetSchoolBand;
+  coop?: boolean;
+}
+
+export interface PlanRefinement {
+  narrative?: string;
+  backupRoute?: string;
+  verificationNote?: string;
+  visaNote?: string;
+  narratives?: LocalizedPlanText;
+  backupRoutes?: LocalizedPlanText;
+  verificationNotes?: LocalizedPlanText;
+  visaNotes?: LocalizedPlanText;
+}
+
+export interface ResumePersonalityProfile {
+  model: 'career_fit';
+  dimensions: Record<string, number>;
+  primaryDimension: string;
+  summaryKey: string;
+  recommendations: Array<{
+    roleKey: string;
+    labelKey: string;
+    score: number;
+    fit: 'strong' | 'medium' | 'explore';
+    reasons: string[];
+    sponsorship?: {
+      level: 'high' | 'medium' | 'low' | 'unknown';
+      sponsorJobCount: number;
+      activeJobCount: number;
+      noteKey: string;
+    };
+  }>;
+  completedAt: string;
+}
+
+export const RESUME_PROFILE_SCHEMA_VERSION = 6;
 
 export interface EducationEntry {
   school: string;
@@ -41,12 +100,20 @@ export interface ResumeProfile {
   projects: ProjectEntry[];
   skills: string[];
   certificates: string[];
+  careerSignals?: CareerSignals;
+  personality?: ResumePersonalityProfile;
+  planRefinement?: PlanRefinement;
+  networkingProgress?: unknown;
+  schemaVersion?: number;
   languages?: string[];
   intention?: {
     roles?: string[];
     locations?: string[];
     industries?: string[];
+    targetCompanies?: string[];
     workAuthorization?: string;
+    visaStatus?: string;
+    visaDates?: VisaDates;
     availableFrom?: string;
     salaryExpectation?: string;
   };
@@ -66,6 +133,7 @@ export interface UserSegmentation {
   targetSchoolHits: string[];
   majorMatch?: MajorMatch;
   majorMatchNote?: string;
+  targetRole?: string | null;
   regions: RegionKey[];
   regionSource: 'intention' | 'inferred' | 'default';
   experienceQuality: {

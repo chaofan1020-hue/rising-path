@@ -108,6 +108,56 @@ interface Resume {
   profile_confirmed_at?: string | null;
 }
 
+interface CompanyLogoCatalogEntry {
+  id: number | null;
+  company_name: string;
+  logo_url: string | null;
+  fallback_logo_url: string | null;
+  source: 'uploaded' | 'imported' | 'configured' | 'automatic';
+  job_count: number;
+  updated_at: string | null;
+}
+
+function getCompanyInitial(company: string): string {
+  const words = company.trim().split(/[\s&-]+/).filter(Boolean);
+  if (/[^\x00-\x7F]/.test(company)) return company.trim().charAt(0) || '?';
+  return words.length > 1
+    ? `${words[0].charAt(0)}${words[1].charAt(0)}`.toUpperCase()
+    : (words[0]?.charAt(0) || '?').toUpperCase();
+}
+
+function AdminLogoPreview({ logo }: { logo: CompanyLogoCatalogEntry }) {
+  const [source, setSource] = useState<'primary' | 'fallback' | 'initial'>(logo.logo_url ? 'primary' : 'fallback');
+
+  useEffect(() => {
+    setSource(logo.logo_url ? 'primary' : logo.fallback_logo_url ? 'fallback' : 'initial');
+  }, [logo.logo_url, logo.fallback_logo_url]);
+
+  const imageUrl = source === 'primary'
+    ? logo.logo_url
+    : source === 'fallback'
+      ? logo.fallback_logo_url
+      : null;
+
+  if (imageUrl) {
+    return (
+      <img
+        src={imageUrl}
+        alt={`${logo.company_name} logo`}
+        className="h-16 w-16 object-contain"
+        loading="lazy"
+        onError={() => setSource(source === 'primary' && logo.fallback_logo_url ? 'fallback' : 'initial')}
+      />
+    );
+  }
+
+  return (
+    <span className="flex h-16 w-16 items-center justify-center rounded-lg bg-zinc-900 text-base font-semibold text-white dark:bg-white dark:text-zinc-900">
+      {getCompanyInitial(logo.company_name)}
+    </span>
+  );
+}
+
 interface Application {
   id: number;
   job_id: number;
@@ -644,10 +694,19 @@ function AdminContent() {
   const [editingCompany, setEditingCompany] = useState<CompanyConfig | null>(null);
 
   // Company logos state
-  const [companyLogos, setCompanyLogos] = useState<{ id: number; company_name: string; logo_url: string }[]>([]);
+  const [companyLogos, setCompanyLogos] = useState<CompanyLogoCatalogEntry[]>([]);
   const [logoDialogOpen, setLogoDialogOpen] = useState(false);
+  const [logoDialogCompanyName, setLogoDialogCompanyName] = useState('');
   const [logoForm, setLogoForm] = useState({ company_name: '', logo: null as File | null });
   const [logoUploading, setLogoUploading] = useState(false);
+  const [logosLoading, setLogosLoading] = useState(false);
+  const [logosError, setLogosError] = useState('');
+  const [logoSearch, setLogoSearch] = useState('');
+
+  const openLogoEditor = (companyName = '') => {
+    setLogoDialogCompanyName(companyName);
+    setLogoDialogOpen(true);
+  };
 
 
 
@@ -702,14 +761,22 @@ function AdminContent() {
 
   // Fetch company logos
   const fetchLogos = async () => {
+    setLogosLoading(true);
+    setLogosError('');
     try {
       const response = await fetch('/api/admin/company-logos');
       const data = await response.json();
-      if (data.logos) {
+      if (!response.ok) {
+        throw new Error(data.error || '获取图标库失败');
+      }
+      if (Array.isArray(data.logos)) {
         setCompanyLogos(data.logos);
       }
     } catch (error) {
       console.error('Error fetching logos:', error);
+      setLogosError(error instanceof Error ? error.message : '获取图标库失败');
+    } finally {
+      setLogosLoading(false);
     }
   };
 
@@ -1885,6 +1952,14 @@ function AdminContent() {
       // 然后按创建时间排序：最新排在前面
       return new Date(b.created_at).getTime() - new Date(a.created_at).getTime();
     });
+
+  const filteredCompanyLogos = companyLogos.filter((logo) =>
+    !logoSearch.trim() || logo.company_name.toLowerCase().includes(logoSearch.trim().toLowerCase()),
+  );
+  const uploadedLogoCount = companyLogos.filter((logo) => logo.source === 'uploaded').length;
+  const importedLogoCount = companyLogos.filter((logo) => logo.source === 'imported').length;
+  const configuredLogoCount = companyLogos.filter((logo) => logo.source === 'configured').length;
+  const automaticLogoCount = companyLogos.filter((logo) => logo.source === 'automatic').length;
 
   return (
       <div className="min-h-screen bg-muted/30">
@@ -3659,50 +3734,98 @@ function AdminContent() {
             <TabsContent value="logos">
               <Card>
                 <CardHeader className="pb-3 md:pb-6">
-                  <div className="flex items-center justify-between">
+                  <div className="flex flex-col gap-3 md:flex-row md:items-center md:justify-between">
                     <div>
-                      <CardTitle className="text-base md:text-lg">企业 Logo 管理</CardTitle>
-                      <CardDescription className="text-xs md:text-sm">上传自定义企业 Logo，岗位列表页优先显示</CardDescription>
+                      <CardTitle className="text-base md:text-lg">企业图标库</CardTitle>
+                      <CardDescription className="text-xs md:text-sm">查看当前岗位使用的图标，并上传自定义图标覆盖自动图标</CardDescription>
                     </div>
-                    <Button size="sm" className="h-8 text-xs md:text-sm" onClick={() => setLogoDialogOpen(true)}>
-                      <Plus className="h-4 w-4 md:mr-2" />
-                      <span className="hidden md:inline">上传 Logo</span>
-                    </Button>
+                    <div className="flex items-center gap-2">
+                      <Button size="sm" variant="outline" className="h-8 text-xs md:text-sm" onClick={() => void fetchLogos()} disabled={logosLoading}>
+                        <RefreshCw className={`h-4 w-4 md:mr-2 ${logosLoading ? 'animate-spin' : ''}`} />
+                        <span className="hidden md:inline">刷新</span>
+                      </Button>
+                      <Button size="sm" className="h-8 text-xs md:text-sm" onClick={() => openLogoEditor()}>
+                        <Plus className="h-4 w-4 md:mr-2" />
+                        <span className="hidden md:inline">上传图标</span>
+                      </Button>
+                    </div>
                   </div>
                 </CardHeader>
                 <CardContent>
-                  {companyLogos.length === 0 ? (
-                    <div className="text-center py-8 text-muted-foreground">
-                      <ImageIcon className="h-12 w-12 mx-auto mb-3 opacity-50" />
-                      <p>暂无自定义 Logo</p>
-                      <p className="text-sm">点击上方按钮上传企业 Logo</p>
+                  <div className="mb-4 flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+                    <Input
+                      value={logoSearch}
+                      onChange={(event) => setLogoSearch(event.target.value)}
+                      placeholder="搜索公司名称"
+                      className="h-9 w-full sm:max-w-xs"
+                    />
+                    <div className="flex flex-wrap items-center gap-2 text-xs text-muted-foreground">
+                      <Badge variant="secondary">共 {companyLogos.length} 家</Badge>
+                      <Badge variant="outline">自定义 {uploadedLogoCount}</Badge>
+                      <Badge variant="outline">已导入 {importedLogoCount}</Badge>
+                      <Badge variant="outline">企业配置 {configuredLogoCount}</Badge>
+                      <Badge variant="outline">自动 {automaticLogoCount}</Badge>
+                    </div>
+                  </div>
+
+                  {logosError ? (
+                    <div className="rounded-md border border-destructive/30 bg-destructive/5 px-4 py-6 text-center text-sm text-destructive">
+                      <p>{logosError}</p>
+                      <Button variant="outline" size="sm" className="mt-3" onClick={() => void fetchLogos()}>重新加载</Button>
+                    </div>
+                  ) : logosLoading && companyLogos.length === 0 ? (
+                    <div className="flex items-center justify-center gap-2 py-12 text-sm text-muted-foreground">
+                      <Loader2 className="h-4 w-4 animate-spin" />正在读取当前图标...
+                    </div>
+                  ) : filteredCompanyLogos.length === 0 ? (
+                    <div className="py-12 text-center text-muted-foreground">
+                      <ImageIcon className="mx-auto mb-3 h-12 w-12 opacity-50" />
+                      <p>{companyLogos.length === 0 ? '暂无公司图标数据' : '没有匹配的公司'}</p>
                     </div>
                   ) : (
-                    <div className="grid grid-cols-2 md:grid-cols-4 lg:grid-cols-6 gap-4">
-                      {companyLogos.map((logo) => (
+                    <div className="grid grid-cols-2 gap-3 md:grid-cols-4 lg:grid-cols-6">
+                      {filteredCompanyLogos.map((logo) => (
                         <div
-                          key={logo.id}
-                          className="relative group border rounded-lg p-4 bg-card hover:bg-accent/50 transition-colors"
+                          key={logo.company_name}
+                          role="button"
+                          tabIndex={0}
+                          onClick={() => openLogoEditor(logo.company_name)}
+                          onKeyDown={(event) => {
+                            if (event.key === 'Enter' || event.key === ' ') {
+                              event.preventDefault();
+                              openLogoEditor(logo.company_name);
+                            }
+                          }}
+                          className="group relative cursor-pointer rounded-lg border bg-card p-3 transition-colors hover:bg-accent/50 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
                         >
-                          <div className="aspect-square flex items-center justify-center">
-                            <img
-                              src={logo.logo_url}
-                              alt={logo.company_name}
-                              className="max-h-12 max-w-full object-contain"
-                              onError={(e) => {
-                                (e.target as HTMLImageElement).style.display = 'none';
-                              }}
-                            />
+                          <div className="flex aspect-square items-center justify-center rounded-md bg-white dark:bg-zinc-950">
+                            <AdminLogoPreview logo={logo} />
                           </div>
-                          <p className="text-center text-sm mt-2 truncate">{logo.company_name}</p>
-                          <Button
-                            variant="destructive"
-                            size="sm"
-                            className="absolute top-1 right-1 h-6 w-6 p-0 opacity-0 group-hover:opacity-100 transition-opacity"
-                            onClick={() => handleLogoDelete(logo.company_name)}
-                          >
-                            <X className="h-3 w-3" />
-                          </Button>
+                          <div className="mt-2 min-w-0">
+                            <p className="truncate text-center text-sm font-medium" title={logo.company_name}>{logo.company_name}</p>
+                            <div className="mt-1 flex items-center justify-center gap-1">
+                              <Badge variant="outline" className="h-5 px-1.5 text-[10px]">
+                                {logo.source === 'uploaded' ? '自定义' : logo.source === 'imported' ? '已导入' : logo.source === 'configured' ? '企业配置' : '自动'}
+                              </Badge>
+                              {logo.job_count > 0 && <span className="text-[10px] text-muted-foreground">{logo.job_count} 岗位</span>}
+                            </div>
+                          </div>
+                          {logo.source === 'uploaded' && (
+                            <Button
+                              variant="destructive"
+                              size="sm"
+                              aria-label={`删除 ${logo.company_name} 自定义图标`}
+                              title="删除自定义图标"
+                              className="absolute right-1 top-1 h-7 w-7 p-0 opacity-0 transition-opacity group-hover:opacity-100"
+                              onClick={(event) => {
+                                event.stopPropagation();
+                                handleLogoDelete(logo.company_name);
+                              }}
+                            >
+                              <X className="h-3.5 w-3.5" />
+                            </Button>
+                          )}
+                          <Pencil className="pointer-events-none absolute bottom-2 right-2 h-3.5 w-3.5 text-muted-foreground opacity-0 transition-opacity group-hover:opacity-100" />
                         </div>
                       ))}
                     </div>
@@ -4599,8 +4722,10 @@ function AdminContent() {
                     </SelectTrigger>
                     <SelectContent>
                       <SelectItem value="__custom__">+ 自定义URL</SelectItem>
-                      {companyLogos.map(logo => (
-                        <SelectItem key={logo.id} value={logo.logo_url}>
+                      {companyLogos
+                        .filter((logo): logo is CompanyLogoCatalogEntry & { logo_url: string } => Boolean(logo.logo_url))
+                        .map(logo => (
+                        <SelectItem key={`${logo.company_name}-${logo.source}`} value={logo.logo_url}>
                           <div className="flex items-center gap-2">
                             <img src={logo.logo_url} alt="" className="h-4 w-4 rounded" />
                             {logo.company_name}
@@ -4615,7 +4740,7 @@ function AdminContent() {
                 <Input
                   value={companyForm.logo_url}
                   onChange={(e) => setCompanyForm({ ...companyForm, logo_url: e.target.value })}
-                  placeholder="https://logo.clearbit.com/example.com"
+                  placeholder="https://example.com/logo.png"
                   className="flex-1"
                 />
                 {companyForm.logo_url && (
@@ -4623,7 +4748,7 @@ function AdminContent() {
                     type="button"
                     variant="ghost"
                     size="sm"
-                    onClick={() => setLogoDialogOpen(true)}
+                    onClick={() => openLogoEditor(companyForm.company_name)}
                     className="px-2"
                   >
                     <Upload className="h-4 w-4" />
@@ -4907,7 +5032,11 @@ function AdminContent() {
 
         <LogoUploadDialog
           open={logoDialogOpen}
-          onOpenChange={setLogoDialogOpen}
+          initialCompanyName={logoDialogCompanyName}
+          onOpenChange={(open) => {
+            setLogoDialogOpen(open);
+            if (!open) setLogoDialogCompanyName('');
+          }}
           onSuccess={fetchLogos}
         />
       </div>

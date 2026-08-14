@@ -134,7 +134,7 @@ function createCartesiaClient(timeoutMs: number): TTSProviderClient {
           model_id: model,
           transcript: request.text.slice(0, 1000),
           voice: { mode: 'id', id: getCartesiaVoiceId(language, request.speaker) },
-          output_format: { container: 'mp3', bit_rate: 128000 },
+          output_format: { container: 'mp3', bit_rate: 128000, sample_rate: 44100 },
           language,
           generation_config: {
             volume: 1,

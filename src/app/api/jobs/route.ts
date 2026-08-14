@@ -5,53 +5,7 @@ import { ADMIN_PERMISSIONS, requireAdminPermission } from '@/lib/admin-permissio
 import { sanitizeJobContent } from '@/lib/job-content';
 import { targetRegionPostgrestClauses } from '@/lib/job-region-scope';
 import { recordAdminAuditEvent, recordAdminAuditFailure } from '@/lib/admin-audit';
-
-// 公司域名映射
-const companyDomains: Record<string, string> = {
-  'Stripe': 'stripe.com',
-  'Airbnb': 'airbnb.com',
-  'Uber': 'uber.com',
-  'Lyft': 'lyft.com',
-  'DoorDash': 'doordash.com',
-  'Dropbox': 'dropbox.com',
-  'Coinbase': 'coinbase.com',
-  'Robinhood': 'robinhood.com',
-  'Figma': 'figma.com',
-  'Notion': 'notion.so',
-  'Palantir': 'palantir.com',
-  'Databricks': 'databricks.com',
-  'Snowflake': 'snowflake.com',
-  'Twilio': 'twilio.com',
-  'Zoom': 'zoom.us',
-  'Atlassian': 'atlassian.com',
-  'Confluent': 'confluent.io',
-  'MongoDB': 'mongodb.com',
-  'Cloudflare': 'cloudflare.com',
-  'Rubrik': 'rubrik.com',
-  'Scale AI': 'scale.com',
-  'OpenAI': 'openai.com',
-  'Anthropic': 'anthropic.com',
-  'Instacart': 'instacart.com',
-  'Discord': 'discord.com',
-  'Plaid': 'plaid.com',
-  'Brex': 'brex.com',
-  'Datadog': 'datadoghq.com',
-  'GitLab': 'gitlab.com',
-  'Google': 'google.com',
-  'Meta': 'meta.com',
-  'Apple': 'apple.com',
-  'Microsoft': 'microsoft.com',
-  'Amazon': 'amazon.com',
-  'Netflix': 'netflix.com',
-  'Tesla': 'tesla.com',
-  'NVIDIA': 'nvidia.com',
-  'Adobe': 'adobe.com',
-  'Oracle': 'oracle.com',
-  'Salesforce': 'salesforce.com',
-  'Snap': 'snap.com',
-  'Pinterest': 'pinterest.com',
-  'LinkedIn': 'linkedin.com',
-};
+import { getCompanyFaviconUrl, getCompanyLogoUrl } from '@/lib/company-logo';
 
 // 本地 logo 缓存
 let localLogosCache: Record<string, string> = {};
@@ -170,13 +124,6 @@ function getDirectionCategory(direction: string): string {
   return directionMapping[direction] || direction;
 }
 
-function getLogoFallback(company: string): string | null {
-  const domain = companyDomains[company];
-  if (domain) return `https://logo.clearbit.com/${domain}`;
-  const cleanName = company.toLowerCase().replace(/\s+/g, '');
-  return cleanName ? `https://logo.clearbit.com/${cleanName}.com` : null;
-}
-
 function expandMappedValues(values: string[], mapping: Record<string, string>): string[] {
   const expanded = new Set(values);
   for (const [specific, category] of Object.entries(mapping)) {
@@ -208,6 +155,7 @@ export async function GET(request: NextRequest) {
     const status = searchParams.get('status') || 'active';
     const regionScope = searchParams.get('region_scope') || 'target';
     const search = searchParams.get('search')?.trim() || '';
+    const exactCompanies = searchParams.getAll('company_exact').map((value) => value.trim()).filter(Boolean);
     const limit = searchParams.get('limit');
     const offsetParam = searchParams.get('offset');
     const requestedLimit = Number.parseInt(limit || '100', 10);
@@ -241,6 +189,10 @@ export async function GET(request: NextRequest) {
 
     if (sponsorship && sponsorship !== '全部') {
       query = query.eq('sponsorship', sponsorship);
+    }
+
+    if (exactCompanies.length > 0) {
+      query = query.in('company', exactCompanies);
     }
 
     const company = searchParams.get('company')?.trim() || '';
@@ -314,7 +266,9 @@ export async function GET(request: NextRequest) {
       ...sanitizeJobContent(job),
       region_category: getRegionCategory(job.region),
       direction_category: getDirectionCategory(job.direction),
-      logo_url: localLogosCache[job.company] || getLogoFallback(job.company),
+      logo_url: localLogosCache[job.company]
+        || getCompanyLogoUrl(job.company, typeof job.job_url === 'string' ? job.job_url : null),
+      logo_fallback_url: getCompanyFaviconUrl(job.company, typeof job.job_url === 'string' ? job.job_url : null),
     }));
 
     return NextResponse.json({

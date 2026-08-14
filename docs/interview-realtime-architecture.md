@@ -6,6 +6,7 @@
 
 ```text
 浏览器麦克风
+  -> 克隆音轨 -> Silero 神经 VAD / 语义端点
   -> PCM16 / 16kHz / mono
   -> Rising Path WebSocket 代理
   -> qwen3-asr-flash-realtime
@@ -15,7 +16,7 @@
   -> Web Audio 播放队列
 ```
 
-ASR 的中间结果只用于字幕预览，只有 `final` 事件可以调用 `submitAnswer`。这样可以避免模型在用户还没有说完时被重复触发。
+ASR 的中间结果只用于字幕预览，并以 80ms 节流合并，避免 React 重绘导致字幕抖动。Provider `final` 只追加到当前回答草稿；Silero VAD 在独立的克隆音轨上判定真实语音边界，只有其 1.8 秒静音赎回窗口结束、ASR 结果追平并通过句尾语义缓冲后才调用 `submitAnswer`。
 
 ## 服务入口
 
@@ -48,6 +49,8 @@ CARTESIA_VOICE_ZH=...
 CARTESIA_VOICE_EN=...
 ```
 
+服务端的内置 Cartesia catalog 会按 `语言 + 企业 DNA 风格 + 面试官人格 + 性别 + 轮次` 分配实际 voice ID；同一场内同一面试官保持一致，不同轮次优先使用不同声音。可选环境变量 `CARTESIA_VOICE_{ZH|EN}_{STYLE}_{FEMALE|MALE}` 用于覆盖某个组合，例如 `CARTESIA_VOICE_EN_EXECUTIVE_MALE`。不要再把非 Cartesia UUID 的旧供应商音色别名填入这些变量。
+
 ## 本地启动
 
 必须使用自定义服务器，因为普通 `next dev` 不会加载本项目的 WebSocket upgrade 处理：
@@ -67,12 +70,12 @@ pnpm start
 
 ## 运行策略
 
-1. 服务端先创建并返回 `sessionId`。浏览器立刻预热会话绑定的 TTS 和 ASR WebSocket；ASR 整场复用，但只在候选人作答窗口发送音频。面试官播报、模型生成、识别提交和轮次交接均会关掉采样闸门，不会重建麦克风连接。开场只读取已有企业 DNA，最长等待 1.5 秒；未知公司直接按岗位 JD 开始，不在用户等待路径生成 DNA。
-2. 服务端 VAD 负责判断说话开始与结束，前端不再用第二套 VAD 决定提交时机。
-3. `partial` 事件更新临时字幕。唯一 `itemId` 的 `final` 事件进入 450ms 合并窗口后自动提交；重复 final 会被客户端和服务端幂等链路忽略。只有自动提交失败时，页面才展示识别稿的“重试发送 / 丢弃”紧急操作。
+1. 浏览器复用麦克风预检权限并并行启动可选摄像头与开场请求。服务端并行读取确认简历、岗位、已有 DNA 与题目历史；创建并返回 `sessionId` 后，浏览器立即预热会话绑定的 TTS 和 ASR WebSocket。ASR 整场复用，但只在候选人作答窗口发送音频。开场只读取已有企业 DNA，最长等待 1.5 秒；未知公司直接按岗位 JD 开始，不在用户等待路径生成 DNA。
+2. 服务端 VAD 继续产生 ASR 声学片段，但不拥有面试提交边界。浏览器使用 Silero v5 神经 VAD，在共享麦克风轨道的克隆上运行，`positive=0.60`、`negative=0.45`、`redemption=1800ms`、`minSpeech=420ms`。因此环境杂音和短促呼吸不会提交，用户在自然思考停顿后重新开口也会继续属于同一回答。
+3. `partial` 事件只在本次语音片段达到至少 280ms 后更新临时字幕，并以 80ms 节流合并。服务端为每个 ASR 片段发出 `utteranceId`，客户端把它绑定到当前 `candidateEpoch`；旧 epoch 的 partial/final 一律丢弃，避免迟到识别稿进入下一题。神经 VAD 结束后额外等待 ASR 追平 850ms；文本以连接词、逗号或未完句结尾时增加最多 900ms 语义缓冲。只有自动提交失败时，页面才展示识别稿的“重试发送 / 丢弃”紧急操作。
 4. 用户回答期间暂停 ASR，面试官思考或说话期间停止采集，避免回声和重复提交。
-5. 实时 ASR 连接失败时自动切换到原有 MediaRecorder + Base64 HTTP ASR。
-6. Cartesia TTS 每场面试复用一条浏览器 WebSocket；每个 `speak` 带唯一 `requestId`，`cancel` 只取消当前播放任务。流式字幕只用于显示，完整的一条面试官话术只合成一次。客户端先缓冲至少约 180ms 的 PCM，再在同一 AudioContext 时钟上连续排程，避免按标点拆分合成造成的断续。实时连接或合成失败后才切换到完整 MP3 HTTP TTS，同一段文字不会并行预取两路音频。
+5. 实时 ASR 连接失败时，Silero 仍负责分段，浏览器将该段 16kHz WAV 送至 HTTP ASR fallback；只有不支持 WASM / AudioWorklet 的旧浏览器才回退到旧的 MediaRecorder 能量检测。
+6. Cartesia TTS 每场面试复用一条浏览器 WebSocket；每个 `speak` 带唯一 `requestId`，`cancel` 只取消当前播放任务。完整的一条面试官话术只合成一次，字幕片段绑定到对应音频片段的实际开始播放回调，不提前展示模型流式文本。每个 PCM 分段在播放完成时都会进行字幕追平，整轮音频排空后以完整文本最终校正，避免漏回调后字幕永久停在半句。客户端先缓冲至少约 180ms 的 PCM，再在同一 AudioContext 时钟上连续排程，避免按标点拆分合成造成的断续。实时连接或合成失败后才切换到完整 MP3 HTTP TTS，同一段文字不会并行预取两路音频。
 7. 面试文本模型调用明确关闭推理输出。创建会话时，服务端把完整 JD、DNA、确认后的简历画像编译为 `context_digest`；每轮维护 `facts_ledger`（已考察意图、候选人事实主张、未验证缺口和上一轮内容）。续答只传递摘要、当前回答、最近对话和按当前意图召回的 4 条以内原始简历证据。完整 JD、简历版本和所有 `interview_turns` 仍保存在数据库，报告引用原始对话，绝不以截断代替保存。每次调用记录 `phase`、`ttfb_ms`、`total_ms`、`fallback` 和 `retry_count`，用于定位首 token 与语音链路瓶颈。
 8. 底部麦克风不再是会反复开关采集的按钮：候选人作答窗口显示采集状态，面试官播报时唯一可执行动作是打断当前播报。其余阶段只显示当前语音状态，避免 UI 状态与实际采样状态不一致。
 9. 会话结束时，报告请求在面试官结束语播放期间并行启动；音频播完后才切到总结页。报告使用紧凑上下文、关闭模型推理、32 秒服务端超时与 38 秒客户端超时，超时或失败进入可重试状态，不允许无限加载。
@@ -92,6 +95,7 @@ pnpm start
 - [ ] 服务器配置了 `ALIBABA_ASR_WORKSPACE_ID` 或完整的 `ALIBABA_ASR_REALTIME_URL`。
 - [ ] 阿里 API Key 与 Workspace 所在地域一致。
 - [ ] Cartesia 的中文/英文 Voice ID 已配置。
+- [ ] `public/vad/` 已随 `pnpm dev` 或 `pnpm build` 生成，且浏览器可请求 Silero 模型和 ONNX WASM 文件。
 - [ ] 生产反向代理开启 WebSocket upgrade 和足够长的 idle timeout。
 - [ ] `pnpm start` 使用的是本项目构建出的 `dist/server.js`。
 - [ ] 浏览器控制台能看到实时字幕，且一段回答只产生一次 `/api/interview/chat` 请求。
@@ -112,4 +116,4 @@ pnpm start
 
 ### 识别结果被拆得太碎
 
-实时 ASR 的服务端 VAD 当前使用 `silence_duration_ms=400`。面试回答中自然停顿较多时，可调整到 `800` 或更高；不要同时让前端静音计时器和服务端 VAD 都决定一句话结束。
+实时 ASR 的服务端 VAD 默认使用 `silence_duration_ms=850`，只负责产生声学分段。面试回答的提交边界由 Silero 1.8 秒赎回窗口、ASR 追平和句尾语义缓冲共同决定，因此不能把 provider `final` 直接当作一次完整作答。

@@ -60,6 +60,7 @@ interface Job {
   salary_range: string;
   job_url: string;
   logo_url?: string;
+  logo_fallback_url?: string;
   sponsorship?: 'yes' | 'no' | 'unknown';
   created_at: string;
   application_deadline?: string;
@@ -118,9 +119,12 @@ const scoreBreakdownLabels: Array<{ key: string; label: string }> = [
 ];
 
 // Company Logo Component
-function CompanyLogo({ company, logoUrl, size = 'md' }: { company: string; logoUrl?: string; size?: 'sm' | 'md' | 'lg' }) {
-  const [logoError, setLogoError] = useState(false);
-  const [clearbitUrl, setClearbitUrl] = useState<string | null>(null);
+function CompanyLogo({ company, logoUrl, fallbackLogoUrl, size = 'md' }: { company: string; logoUrl?: string; fallbackLogoUrl?: string; size?: 'sm' | 'md' | 'lg' }) {
+  const [failedSource, setFailedSource] = useState<'primary' | 'fallback' | null>(null);
+
+  useEffect(() => {
+    setFailedSource(null);
+  }, [logoUrl, fallbackLogoUrl]);
   
   const sizeClasses = {
     sm: 'w-8 h-8',
@@ -128,25 +132,20 @@ function CompanyLogo({ company, logoUrl, size = 'md' }: { company: string; logoU
     lg: 'w-16 h-16',
   };
 
-  useEffect(() => {
-    if (!logoUrl && company) {
-      const domain = company.toLowerCase()
-        .replace(/[^a-z0-9]/g, '')
-        .replace(/\s+/g, '');
-      setClearbitUrl(`https://logo.clearbit.com/${domain}.com?size=128`);
-    }
-  }, [company, logoUrl]);
-
-  const logoSource = logoUrl || clearbitUrl;
+  const logoSource = failedSource === 'primary'
+    ? fallbackLogoUrl
+    : failedSource === 'fallback'
+      ? null
+      : logoUrl;
   
-  if (logoSource && !logoError) {
+  if (logoSource) {
     return (
       <div className={`${sizeClasses[size]} rounded-xl border border-zinc-200 dark:border-zinc-700 overflow-hidden bg-white flex-shrink-0`}>
         <img
           src={logoSource}
           alt={`${company} logo`}
           className="w-full h-full object-contain p-1.5"
-          onError={() => setLogoError(true)}
+          onError={() => setFailedSource(logoSource === logoUrl && fallbackLogoUrl ? 'primary' : 'fallback')}
         />
       </div>
     );
@@ -434,7 +433,7 @@ function JobDetailContent() {
           <CardContent className="pt-4 md:pt-6">
             {/* Header: Logo + Title */}
             <div className="flex items-start gap-3 md:gap-4 mb-4">
-              <CompanyLogo company={job.company} logoUrl={job.logo_url} size="lg" />
+              <CompanyLogo company={job.company} logoUrl={job.logo_url} fallbackLogoUrl={job.logo_fallback_url} size="lg" />
               <div className="flex-1 min-w-0">
                 <div className="flex items-start justify-between gap-2">
                   <div className="flex-1">
@@ -688,7 +687,12 @@ function JobDetailContent() {
           <Card className="mb-4 rounded-2xl border-zinc-200 dark:border-zinc-800 shadow-none">
             <CardContent className="pt-4">
               <div className="flex items-start gap-3">
-                <CompanyLogo company={job.company_info.company_name} logoUrl={job.company_info.logo_url} size="md" />
+                <CompanyLogo
+                  company={job.company_info.company_name}
+                  logoUrl={job.company_info.logo_url || job.logo_url}
+                  fallbackLogoUrl={job.logo_fallback_url}
+                  size="md"
+                />
                 <div className="flex-1">
                   <h3 className="font-semibold text-base mb-1 text-zinc-900 dark:text-zinc-50">{job.company_info.company_name}</h3>
                   {job.company_info.short_desc && (

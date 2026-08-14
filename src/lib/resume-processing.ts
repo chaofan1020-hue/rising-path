@@ -9,7 +9,15 @@ import {
   type ResumeParseResult,
   type ResumeUserInfo,
 } from '@/lib/resume-parser';
-import type { ResumeProcessingStage, ResumeProcessingStatus } from '@/lib/resume-types';
+import {
+  RESUME_PROFILE_SCHEMA_VERSION,
+  type ResumeProcessingStage,
+  type ResumeProcessingStatus,
+  type SegmentationOverrides,
+} from '@/lib/resume-types';
+import { refineCareerPlan } from '@/lib/career-plan-refiner';
+import { resolveRegionKey } from '@/lib/region-dna';
+import { applyOverrides } from '@/lib/user-segmentation';
 
 export type ResumeProcessingSource = 'initial_parse' | 'reparse';
 
@@ -31,6 +39,7 @@ interface ProcessResumeInput {
 
 interface ResumeProcessingRow {
   user_info?: unknown;
+  segmentation_overrides?: unknown;
   profile_version?: number | null;
   processing_attempts?: number | null;
   processing_status?: ResumeProcessingStatus | null;
@@ -79,7 +88,7 @@ export async function processResume(input: ProcessResumeInput): Promise<{
   const client = getSupabaseClient();
   const { data: current, error: currentError } = await client
     .from('resumes')
-    .select('user_info, profile_version, processing_attempts, processing_status')
+    .select('user_info, segmentation_overrides, profile_version, processing_attempts, processing_status')
     .eq('id', input.resumeId)
     .eq('user_id', input.userId)
     .single<ResumeProcessingRow>();
@@ -138,6 +147,26 @@ export async function processResume(input: ProcessResumeInput): Promise<{
       throw new ResumeProcessingError('简历文本已读取，但未能提取出有效求职画像，请检查内容后重试');
     }
 
+    const storedOverrides = isRecord(current.segmentation_overrides)
+      ? current.segmentation_overrides as SegmentationOverrides
+      : null;
+    const nextSegmentation = storedOverrides
+      ? applyOverrides(parsed.segmentation, storedOverrides)
+      : parsed.segmentation;
+    const region = parsed.segmentation.regions[0]
+      ?? resolveRegionKey(parsed.profile.intention?.locations?.[0])
+      ?? null;
+    const planRefinement = await refineCareerPlan({
+      profile: parsed.profile,
+      segmentation: nextSegmentation,
+      region,
+    });
+    const profile = {
+      ...parsed.profile,
+      schemaVersion: RESUME_PROFILE_SCHEMA_VERSION,
+      ...(planRefinement ? { planRefinement } : {}),
+    };
+
     await updateProcessingState(client, input.resumeId, input.userId, {
       status: 'deriving_segmentation',
       stage: 'segmentation',
@@ -157,9 +186,9 @@ export async function processResume(input: ProcessResumeInput): Promise<{
       user_id: input.userId,
       version,
       source: input.source,
-      profile: parsed.profile,
-      segmentation: parsed.segmentation,
-      overrides: {},
+      profile,
+      segmentation: nextSegmentation,
+      overrides: storedOverrides ?? {},
       evidence: parsed.profile_evidence,
       confidence: parsed.profile_confidence,
       status: 'draft',
@@ -171,8 +200,8 @@ export async function processResume(input: ProcessResumeInput): Promise<{
       .update({
         parsed_content: parsed.parsed_content,
         user_info: userInfo,
-        profile: parsed.profile,
-        segmentation: parsed.segmentation,
+        profile,
+        segmentation: nextSegmentation,
         profile_evidence: parsed.profile_evidence,
         profile_confidence: parsed.profile_confidence,
         profile_version: version,

@@ -69,7 +69,7 @@ begin
     sql := sql || ' and jobs.direction = any($3)';
   end if;
   sql := sql || '
-        limit 160
+        limit 48
       ) as candidate
     ),
     ranked as (

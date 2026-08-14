@@ -15,7 +15,7 @@ import {
   SheetTrigger,
   SheetTitle,
 } from '@/components/ui/sheet';
-import { Search, MapPin, Briefcase, Users, SlidersHorizontal, RotateCcw, ExternalLink, ChevronLeft, ChevronRight, X, Plus, Check, Loader2, Heart } from 'lucide-react';
+import { Search, MapPin, Briefcase, Building2, Users, SlidersHorizontal, RotateCcw, ExternalLink, ChevronLeft, ChevronRight, X, Plus, Check, Loader2, Heart } from 'lucide-react';
 import Link from 'next/link';
 import { AuthGuard } from '@/components/auth-guard';
 import { apiFetch } from '@/lib/api-client';
@@ -34,6 +34,7 @@ interface Job {
   salary_range: string;
   job_url: string;
   logo_url?: string;
+  logo_fallback_url?: string;
   sponsorship?: 'yes' | 'no' | 'unknown';
   is_active?: boolean;
   created_at: string;
@@ -45,6 +46,13 @@ interface JobConfig {
   config_value: string;
   sort_order: number;
   is_active: boolean;
+}
+
+interface CompanyOption {
+  company_name: string;
+  logo_url: string | null;
+  fallback_logo_url: string | null;
+  job_count: number;
 }
 
 // 获取公司首字母
@@ -62,43 +70,35 @@ function getCompanyInitial(company: string): string {
 }
 
 // 公司Logo组件
-function CompanyLogo({ company, logoUrl }: { company: string; logoUrl?: string }) {
-  const [imgError, setImgError] = useState(false);
-  
-  // 如果有logo_url且图片加载成功
-  if (logoUrl && !imgError) {
+function CompanyLogo({ company, logoUrl, fallbackLogoUrl }: { company: string; logoUrl?: string; fallbackLogoUrl?: string }) {
+  const [failedSource, setFailedSource] = useState<'primary' | 'fallback' | null>(null);
+
+  useEffect(() => {
+    setFailedSource(null);
+  }, [logoUrl, fallbackLogoUrl]);
+
+  const logoSource = failedSource === 'primary'
+    ? fallbackLogoUrl
+    : failedSource === 'fallback'
+      ? null
+      : logoUrl;
+
+  if (logoSource) {
     return (
       <div className="w-12 h-12 rounded-xl overflow-hidden bg-white border border-zinc-200 dark:border-zinc-700 flex-shrink-0">
         <img
-          src={logoUrl}
+          src={logoSource}
           alt={company}
           className="w-full h-full object-contain p-1"
           onError={() => {
-            console.log('Logo load error:', logoUrl);
-            setImgError(true);
+            setFailedSource(logoSource === logoUrl && fallbackLogoUrl ? 'primary' : 'fallback');
           }}
         />
       </div>
     );
   }
 
-  // 尝试使用 Clearbit Logo API
-  const clearbitUrl = `https://logo.clearbit.com/${company.toLowerCase().replace(/\s+/g, '')}.com?size=96`;
-
-  if (!imgError) {
-    return (
-      <div className="w-12 h-12 rounded-xl overflow-hidden bg-white border border-zinc-200 dark:border-zinc-700 flex-shrink-0">
-        <img
-          src={clearbitUrl}
-          alt={company}
-          className="w-full h-full object-contain p-1.5"
-          onError={() => setImgError(true)}
-        />
-      </div>
-    );
-  }
-
-  // 使用首字母占位符（黑色圆角方块语言）
+  // Logo unavailable or failed: use a stable company initial placeholder.
   return (
     <div className="w-12 h-12 rounded-xl bg-zinc-900 dark:bg-white flex items-center justify-center flex-shrink-0 shadow-lg shadow-zinc-900/15 dark:shadow-black/30">
       <span className="text-white dark:text-zinc-900 font-bold text-lg">
@@ -233,6 +233,91 @@ function RadioOptions({
   );
 }
 
+function BrandOptions({
+  options,
+  selected,
+  search,
+  loading,
+  onSearchChange,
+  onChange,
+}: {
+  options: CompanyOption[];
+  selected: string[];
+  search: string;
+  loading: boolean;
+  onSearchChange: (value: string) => void;
+  onChange: (values: string[]) => void;
+}) {
+  const toggle = (company: string) => {
+    onChange(selected.includes(company)
+      ? selected.filter((item) => item !== company)
+      : [...selected, company]);
+  };
+
+  const normalizedSearch = search.trim().toLowerCase();
+  const matchingOptions = options.filter((option) =>
+    !normalizedSearch || option.company_name.toLowerCase().includes(normalizedSearch),
+  );
+  const selectedOptions = options.filter((option) => selected.includes(option.company_name));
+  const visibleOptions = [...selectedOptions, ...matchingOptions.filter((option) => !selected.includes(option.company_name))].slice(0, 120);
+
+  return (
+    <div className="space-y-3">
+      <div className="relative">
+        <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-zinc-400" />
+        <Input
+          value={search}
+          onChange={(event) => onSearchChange(event.target.value)}
+          placeholder="搜索品牌名称"
+          className="h-10 border-zinc-200 pl-9 dark:border-zinc-700"
+        />
+      </div>
+      {loading ? (
+        <div className="flex items-center justify-center gap-2 py-8 text-sm text-zinc-400">
+          <Loader2 className="h-4 w-4 animate-spin" />正在加载品牌
+        </div>
+      ) : visibleOptions.length === 0 ? (
+        <p className="py-6 text-center text-sm text-zinc-400">没有匹配的品牌</p>
+      ) : (
+        <div className="grid max-h-[22rem] grid-cols-1 gap-2 overflow-y-auto pr-1 sm:grid-cols-2">
+          {visibleOptions.map((option) => {
+            const checked = selected.includes(option.company_name);
+            return (
+              <button
+                key={option.company_name}
+                type="button"
+                aria-pressed={checked}
+                onClick={() => toggle(option.company_name)}
+                className={`flex min-w-0 items-center gap-3 rounded-xl border p-2.5 text-left transition-all ${
+                  checked
+                    ? 'border-zinc-900 bg-zinc-900 text-white shadow-sm dark:border-white dark:bg-white dark:text-zinc-900'
+                    : 'border-zinc-200 bg-white hover:border-zinc-400 hover:shadow-sm dark:border-zinc-800 dark:bg-zinc-950 dark:hover:border-zinc-600'
+                }`}
+              >
+                <CompanyLogo
+                  company={option.company_name}
+                  logoUrl={option.logo_url || undefined}
+                  fallbackLogoUrl={option.fallback_logo_url || undefined}
+                />
+                <span className="min-w-0 flex-1">
+                  <span className="block truncate text-sm font-medium">{option.company_name}</span>
+                  <span className={`block text-xs ${checked ? 'text-white/70 dark:text-zinc-500' : 'text-zinc-400'}`}>
+                    {option.job_count} 个岗位
+                  </span>
+                </span>
+                {checked && <Check className="h-4 w-4 shrink-0" />}
+              </button>
+            );
+          })}
+        </div>
+      )}
+      {matchingOptions.length > visibleOptions.length && (
+        <p className="text-xs text-zinc-400">请输入品牌名称继续缩小范围</p>
+      )}
+    </div>
+  );
+}
+
 // 内部组件
 function JobsContent() {
   const [jobs, setJobs] = useState<Job[]>([]);
@@ -243,15 +328,18 @@ function JobsContent() {
   const [totalJobs, setTotalJobs] = useState(0);
   const [selectedRegions, setSelectedRegions] = useState<string[]>([]);
   const [selectedDirections, setSelectedDirections] = useState<string[]>([]);
-  const [selectedAudience, setSelectedAudience] = useState('');
   const [selectedJobType, setSelectedJobType] = useState('');
   const [selectedSponsorship, setSelectedSponsorship] = useState('');
+  const [selectedCompanies, setSelectedCompanies] = useState<string[]>([]);
   const [filterOpen, setFilterOpen] = useState(false);
   const [draftRegions, setDraftRegions] = useState<string[]>([]);
   const [draftDirections, setDraftDirections] = useState<string[]>([]);
-  const [draftAudience, setDraftAudience] = useState('');
   const [draftJobType, setDraftJobType] = useState('');
   const [draftSponsorship, setDraftSponsorship] = useState('');
+  const [draftCompanies, setDraftCompanies] = useState<string[]>([]);
+  const [brandSearch, setBrandSearch] = useState('');
+  const [companyOptions, setCompanyOptions] = useState<CompanyOption[]>([]);
+  const [companyOptionsLoading, setCompanyOptionsLoading] = useState(true);
   const [applyingJobId, setApplyingJobId] = useState<number | null>(null);
   const [appliedJobIds, setAppliedJobIds] = useState<Set<number>>(new Set());
   const [favoriteJobIds, setFavoriteJobIds] = useState<Set<number>>(new Set());
@@ -266,52 +354,45 @@ function JobsContent() {
 
   const { t } = useLanguage();
 
-  // 初始化受众为"全部"
-  useEffect(() => {
-    if (!selectedAudience) {
-      setSelectedAudience(t('page.all'));
-    }
-  }, [t, selectedAudience]);
-
   useEffect(() => {
     if (filterOpen) {
       setDraftRegions(selectedRegions);
       setDraftDirections(selectedDirections);
-      setDraftAudience(selectedAudience || t('page.all'));
       setDraftJobType(selectedJobType);
       setDraftSponsorship(selectedSponsorship);
+      setDraftCompanies(selectedCompanies);
     }
-  }, [filterOpen, selectedRegions, selectedDirections, selectedAudience, selectedJobType, selectedSponsorship, t]);
+  }, [filterOpen, selectedRegions, selectedDirections, selectedJobType, selectedSponsorship, selectedCompanies]);
 
   const clearFilters = useCallback(() => {
     setSelectedRegions([]);
     setSelectedDirections([]);
-    setSelectedAudience(t('page.all'));
     setSelectedJobType('');
     setSelectedSponsorship('');
+    setSelectedCompanies([]);
     setPage(0);
-  }, [t]);
+  }, []);
 
   const applyDraftFilters = () => {
     setSelectedRegions(draftRegions);
     setSelectedDirections(draftDirections);
-    setSelectedAudience(draftAudience || t('page.all'));
     setSelectedJobType(draftJobType);
     setSelectedSponsorship(draftSponsorship);
+    setSelectedCompanies(draftCompanies);
     setPage(0);
     setFilterOpen(false);
   };
 
   const activeFilterCount = selectedRegions.length
     + selectedDirections.length
-    + (selectedAudience && selectedAudience !== t('page.all') ? 1 : 0)
     + (selectedJobType ? 1 : 0)
-    + (selectedSponsorship ? 1 : 0);
+    + (selectedSponsorship ? 1 : 0)
+    + selectedCompanies.length;
 
   const activeFilterSummaries = [
     selectedRegions.length > 0 ? { id: 'region', label: `地区：${selectedRegions.join('、')}` } : null,
     selectedDirections.length > 0 ? { id: 'direction', label: `${t('jobs.direction')}：${selectedDirections.join('、')}` } : null,
-    selectedAudience && selectedAudience !== t('page.all') ? { id: 'audience', label: `${t('jobs.audience')}：${selectedAudience}` } : null,
+    selectedCompanies.length > 0 ? { id: 'company', label: `品牌：${selectedCompanies.join('、')}` } : null,
     selectedJobType ? { id: 'job-type', label: `岗位类型：${selectedJobType}` } : null,
     selectedSponsorship ? {
       id: 'sponsorship',
@@ -329,7 +410,9 @@ function JobsContent() {
       if (selectedDirections.length > 0) {
         selectedDirections.forEach(d => params.append('direction', d));
       }
-      if (selectedAudience !== t('page.all')) params.append('audience', selectedAudience);
+      if (selectedCompanies.length > 0) {
+        selectedCompanies.forEach(company => params.append('company_exact', company));
+      }
       if (selectedJobType) params.append('job_type', selectedJobType);
       if (selectedSponsorship) params.append('sponsorship', selectedSponsorship);
       if (searchTerm.trim()) params.set('search', searchTerm.trim());
@@ -345,11 +428,11 @@ function JobsContent() {
     } finally {
       setLoading(false);
     }
-  }, [page, pageSize, searchTerm, selectedRegions, selectedDirections, selectedAudience, selectedJobType, selectedSponsorship, t]);
+  }, [page, pageSize, searchTerm, selectedRegions, selectedDirections, selectedCompanies, selectedJobType, selectedSponsorship]);
 
   useEffect(() => {
     setPage(0);
-  }, [searchTerm, selectedRegions, selectedDirections, selectedAudience, selectedJobType, selectedSponsorship]);
+  }, [searchTerm, selectedRegions, selectedDirections, selectedCompanies, selectedJobType, selectedSponsorship]);
 
   // 获取已投递的岗位ID列表
   const fetchAppliedJobIds = useCallback(async () => {
@@ -376,7 +459,7 @@ function JobsContent() {
   }, []);
 
   useEffect(() => {
-    // 获取配置
+    // 获取配置。筛选变化只触发岗位请求，不重复拉取静态配置。
     apiFetch('/api/configs')
       .then(res => res.json())
       .then(data => {
@@ -406,11 +489,33 @@ function JobsContent() {
         }
       })
       .catch(console.error);
-    
-    fetchJobs();
     fetchAppliedJobIds();
     fetchFavoriteJobIds();
-  }, [fetchJobs, fetchAppliedJobIds, fetchFavoriteJobIds]);
+  }, [fetchAppliedJobIds, fetchFavoriteJobIds]);
+
+  useEffect(() => {
+    fetchJobs();
+  }, [fetchJobs]);
+
+  useEffect(() => {
+    let cancelled = false;
+    setCompanyOptionsLoading(true);
+    apiFetch('/api/jobs/companies')
+      .then((response) => response.json())
+      .then((data) => {
+        if (!cancelled) setCompanyOptions(data.companies || []);
+      })
+      .catch((error) => {
+        console.error('Failed to fetch company options:', error);
+        if (!cancelled) setCompanyOptions([]);
+      })
+      .finally(() => {
+        if (!cancelled) setCompanyOptionsLoading(false);
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, []);
 
   const handleFavorite = async (jobId: number) => {
     const isFavorite = favoriteJobIds.has(jobId);
@@ -530,14 +635,21 @@ function JobsContent() {
                       <SheetDescription>组合多个条件，结果将在应用后按页加载。</SheetDescription>
                     </SheetHeader>
                     <div className="flex-1 space-y-6 overflow-y-auto px-5 py-5">
-                      <FilterSection label="地区" icon={MapPin}>
+                      <FilterSection label={t('jobs.region')} icon={MapPin}>
                         <CheckboxOptions options={configs.region || []} selected={draftRegions} onChange={setDraftRegions} />
                       </FilterSection>
                       <FilterSection label={t('jobs.direction')} icon={Briefcase}>
                         <CheckboxOptions options={configs.direction || []} selected={draftDirections} onChange={setDraftDirections} />
                       </FilterSection>
-                      <FilterSection label={t('jobs.audience')} icon={Users}>
-                        <RadioOptions value={draftAudience || t('page.all')} options={configs.audience || []} allLabel={t('page.all')} onChange={setDraftAudience} />
+                      <FilterSection label="品牌" icon={Building2}>
+                        <BrandOptions
+                          options={companyOptions}
+                          selected={draftCompanies}
+                          search={brandSearch}
+                          loading={companyOptionsLoading}
+                          onSearchChange={setBrandSearch}
+                          onChange={setDraftCompanies}
+                        />
                       </FilterSection>
                       <FilterSection label="岗位类型" icon={Briefcase}>
                         <RadioOptions value={draftJobType} options={jobTypeOptions} allLabel="不限" onChange={setDraftJobType} />
@@ -547,7 +659,7 @@ function JobsContent() {
                       </FilterSection>
                     </div>
                     <SheetFooter className="border-t border-zinc-100 px-5 py-4 dark:border-zinc-800 sm:flex-row sm:justify-between">
-                      <Button type="button" variant="ghost" onClick={() => { setDraftRegions([]); setDraftDirections([]); setDraftAudience(t('page.all')); setDraftJobType(''); setDraftSponsorship(''); }}>
+                      <Button type="button" variant="ghost" onClick={() => { setDraftRegions([]); setDraftDirections([]); setDraftJobType(''); setDraftSponsorship(''); setDraftCompanies([]); setBrandSearch(''); }}>
                         <RotateCcw className="mr-2 h-4 w-4" />重置
                       </Button>
                       <Button type="button" onClick={applyDraftFilters} className="bg-zinc-900 text-white hover:bg-zinc-800 dark:bg-white dark:text-zinc-900 dark:hover:bg-zinc-200">应用筛选</Button>
@@ -594,7 +706,7 @@ function JobsContent() {
                     <div className="flex-1 min-w-0 flex flex-col gap-2 md:gap-3">
                       {/* 岗位信息 - 横向布局 */}
                       <div className="flex items-start gap-3 md:gap-4">
-                        <CompanyLogo company={job.company} logoUrl={job.logo_url} />
+                        <CompanyLogo company={job.company} logoUrl={job.logo_url} fallbackLogoUrl={job.logo_fallback_url} />
                         <div className="flex-1 min-w-0">
                           <h3 className="font-semibold tracking-tight text-base md:text-lg text-zinc-900 dark:text-zinc-50 line-clamp-1">
                             {job.title}

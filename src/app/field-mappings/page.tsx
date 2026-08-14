@@ -5,6 +5,13 @@ import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Textarea } from '@/components/ui/textarea';
 import { Badge } from '@/components/ui/badge';
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from '@/components/ui/select';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import {
   Card,
@@ -13,7 +20,7 @@ import {
   CardHeader,
   CardTitle,
 } from '@/components/ui/card';
-import { Loader2, Save, Download, ClipboardList, MapPin } from 'lucide-react';
+import { Loader2, Save, Download, ClipboardList, MapPin, Sparkles } from 'lucide-react';
 import { AuthGuard } from '@/components/auth-guard';
 import { apiFetch } from '@/lib/api-client';
 import { Header1 } from '@/components/header1';
@@ -38,6 +45,12 @@ interface PrefillMetrics {
   correctionRate: number;
   editHistoryCount: number;
   activeFields: number;
+}
+
+interface ResumeOption {
+  id: number;
+  file_name: string;
+  processing_status?: string;
 }
 
 interface ApplicationProfile {
@@ -106,6 +119,9 @@ function AutoApplicationContent() {
   const [saveDone, setSaveDone] = useState(false);
   const [activeTab, setActiveTab] = useState('profile');
   const [metrics, setMetrics] = useState<PrefillMetrics | null>(null);
+  const [resumes, setResumes] = useState<ResumeOption[]>([]);
+  const [selectedResumeId, setSelectedResumeId] = useState<number | null>(null);
+  const [aiFilling, setAiFilling] = useState(false);
 
   useEffect(() => {
     const tab = new URLSearchParams(window.location.search).get('tab');
@@ -120,6 +136,7 @@ function AutoApplicationContent() {
       setProfile(data.profile);
       setSource(data.fieldStats || data.source || {});
       setProfileVersion(typeof data.version === 'number' ? data.version : 0);
+      setSelectedResumeId(typeof data.resumeId === 'number' ? data.resumeId : null);
     } catch (error) {
       console.error('Failed to load application profile:', error);
     } finally {
@@ -130,6 +147,19 @@ function AutoApplicationContent() {
   useEffect(() => {
     void loadProfile();
   }, [loadProfile]);
+
+  useEffect(() => {
+    apiFetch('/api/resume')
+      .then((res) => (res.ok ? res.json() : { resumes: [] }))
+      .then((data) => setResumes(data.resumes || []))
+      .catch(() => setResumes([]));
+  }, []);
+
+  useEffect(() => {
+    if (selectedResumeId === null && resumes.length > 0) {
+      setSelectedResumeId(resumes[0].id);
+    }
+  }, [resumes, selectedResumeId]);
 
   useEffect(() => {
     apiFetch('/api/application/prefill-metrics')
@@ -148,6 +178,49 @@ function AutoApplicationContent() {
     if (!profile) return;
     setProfile({ ...profile, links: { ...profile.links, [key]: value } });
     setSaveDone(false);
+  };
+
+  const updateEducation = (index: number, value: string) => {
+    if (!profile) return;
+    const education = profile.education.map((entry, entryIndex) =>
+      entryIndex === index ? { ...entry, raw: value } : entry,
+    );
+    setProfile({ ...profile, education });
+    setSaveDone(false);
+  };
+
+  const updateExperience = (index: number, value: string) => {
+    if (!profile) return;
+    const experience = profile.experience.map((entry, entryIndex) =>
+      entryIndex === index ? { ...entry, raw: value } : entry,
+    );
+    setProfile({ ...profile, experience });
+    setSaveDone(false);
+  };
+
+  const handleAiFill = async () => {
+    if (!selectedResumeId || aiFilling) return;
+    setAiFilling(true);
+    try {
+      const res = await apiFetch('/api/application-profile/ai-fill', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ resumeId: selectedResumeId }),
+      });
+      const data = await res.json();
+      if (!res.ok || !data.profile) {
+        throw new Error(data.error || 'AI 填写失败');
+      }
+      setProfile(data.profile);
+      setSource(data.fieldStats || data.source || {});
+      setProfileVersion(typeof data.version === 'number' ? data.version : profileVersion + 1);
+      setSelectedResumeId(typeof data.resumeId === 'number' ? data.resumeId : selectedResumeId);
+      setSaveDone(false);
+    } catch (error) {
+      alert(error instanceof Error ? error.message : 'AI 填写失败');
+    } finally {
+      setAiFilling(false);
+    }
   };
 
   const handleSave = async () => {
@@ -218,13 +291,37 @@ function AutoApplicationContent() {
                       来源标记会同步到扩展的确认列表；手动修改后来源变为“手动”。还有 {pendingFields} 个字段待补充。
                     </CardDescription>
                   </div>
-                  <Button onClick={handleSave} disabled={saving || !profile}>
-                    {saving ? (
-                      <><Loader2 className="h-4 w-4 mr-2 animate-spin" />保存中...</>
-                    ) : (
-                      <><Save className="h-4 w-4 mr-2" />{saveDone ? '已保存' : '保存档案'}</>
-                    )}
-                  </Button>
+                  <div className="flex flex-col items-stretch gap-2 sm:flex-row sm:items-center">
+                    <Select
+                      value={selectedResumeId ? String(selectedResumeId) : undefined}
+                      onValueChange={(value) => setSelectedResumeId(Number(value))}
+                    >
+                      <SelectTrigger className="w-full sm:w-56">
+                        <SelectValue placeholder="选择简历" />
+                      </SelectTrigger>
+                      <SelectContent>
+                        {resumes.map((resume) => (
+                          <SelectItem key={resume.id} value={String(resume.id)}>
+                            {resume.file_name}
+                          </SelectItem>
+                        ))}
+                      </SelectContent>
+                    </Select>
+                    <Button onClick={handleAiFill} disabled={!selectedResumeId || aiFilling}>
+                      {aiFilling ? (
+                        <><Loader2 className="mr-2 h-4 w-4 animate-spin" />AI 填写中...</>
+                      ) : (
+                        <><Sparkles className="mr-2 h-4 w-4" />AI 自动填写</>
+                      )}
+                    </Button>
+                    <Button onClick={handleSave} disabled={saving || !profile}>
+                      {saving ? (
+                        <><Loader2 className="mr-2 h-4 w-4 animate-spin" />保存中...</>
+                      ) : (
+                        <><Save className="mr-2 h-4 w-4" />{saveDone ? '已保存' : '保存档案'}</>
+                      )}
+                    </Button>
+                  </div>
                 </div>
               </CardHeader>
               <CardContent>
@@ -235,6 +332,42 @@ function AutoApplicationContent() {
                   </div>
                 ) : (
                   <div className="space-y-8">
+                    <section>
+                      <h3 className="mb-3 text-sm font-medium">教育经历</h3>
+                      {profile.education.length === 0 ? (
+                        <p className="text-sm text-muted-foreground">暂无教育经历，点击 AI 自动填写。</p>
+                      ) : (
+                        <div className="space-y-3">
+                          {profile.education.map((entry, index) => (
+                            <Textarea
+                              key={index}
+                              rows={2}
+                              value={entry.raw || ''}
+                              onChange={(event) => updateEducation(index, event.target.value)}
+                            />
+                          ))}
+                        </div>
+                      )}
+                    </section>
+
+                    <section>
+                      <h3 className="mb-3 text-sm font-medium">工作 / 实习经历</h3>
+                      {profile.experience.length === 0 ? (
+                        <p className="text-sm text-muted-foreground">暂无经历，点击 AI 自动填写。</p>
+                      ) : (
+                        <div className="space-y-3">
+                          {profile.experience.map((entry, index) => (
+                            <Textarea
+                              key={index}
+                              rows={3}
+                              value={entry.raw || ''}
+                              onChange={(event) => updateExperience(index, event.target.value)}
+                            />
+                          ))}
+                        </div>
+                      )}
+                    </section>
+
                     <section>
                       <h3 className="text-sm font-medium mb-3">个人信息</h3>
                       <div className="grid md:grid-cols-2 gap-4">

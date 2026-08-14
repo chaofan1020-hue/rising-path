@@ -90,10 +90,11 @@ export function buildRealtimeSessionUpdate(language?: string): string {
         : {},
       turn_detection: {
         type: 'server_vad',
-        // The previous values treated keyboard clicks and room noise as speech.
-        // The browser has a matching local gate; both sides now favor a stable
-        // answer boundary over aggressively splitting a sentence.
-        threshold: readNumberEnv('ALIBABA_ASR_REALTIME_VAD_THRESHOLD', 0.42, 0.1, 0.95),
+        // Browser audio is now sent continuously during a candidate turn, so
+        // server VAD is the authoritative speech detector. 0.42 missed normal
+        // laptop-microphone speech; 0.28 still leaves enough headroom for the
+        // provider's noise suppression and the 850ms end-of-turn boundary.
+        threshold: readNumberEnv('ALIBABA_ASR_REALTIME_VAD_THRESHOLD', 0.28, 0.1, 0.95),
         silence_duration_ms: readNumberEnv('ALIBABA_ASR_REALTIME_SILENCE_MS', 850, 300, 3000),
       },
     },

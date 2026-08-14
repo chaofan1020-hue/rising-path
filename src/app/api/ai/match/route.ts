@@ -37,7 +37,7 @@ const MATCH_RETRIEVAL_LIMIT = 80;
 // Only the highest-signal skills, target roles and technical terms should
 // drive lexical retrieval. Broad profile text can match thousands of jobs and
 // make PostgreSQL rank a large result set before returning the top 80.
-const MATCH_RETRIEVAL_TERM_LIMIT = 12;
+const MATCH_RETRIEVAL_TERM_LIMIT = 8;
 const MATCH_RESUME_CONTEXT_MAX_CHARS = 7_000;
 const MATCH_PROFILE_CONTEXT_MAX_CHARS = 2_500;
 const MATCH_JOB_DESCRIPTION_MAX_CHARS = 1_200;
@@ -173,7 +173,7 @@ export async function POST(request: NextRequest) {
         : targetRegionScopeKeys();
       stage = 'retrieval';
       const retrievalStartedAt = performance.now();
-      const { data, error } = await client.rpc('search_ai_match_candidates_v5', {
+      const { data, error } = await client.rpc('search_ai_match_candidates_v7', {
         p_terms: retrievalTerms,
         p_directions: directions,
         p_region_scopes: regionScopes,
@@ -245,27 +245,29 @@ ${untrustedBusinessDataBlock('confirmed_candidate_profile', profileContext)}
 
 ${untrustedBusinessDataBlock('job_list', jobsList)}
 
-请严格返回 JSON。通常使用数组格式；如果系统要求对象格式，则使用 {"matches":[...]}。每个岗位一个结果，不能遗漏、重复或新增岗位。格式如下：
-[
-  {
-    "job_id": 岗位ID,
-    "match_score": 匹配分数(0-100),
-    "score_breakdown": {
-      "ats": 0,
-      "keywords": 0,
-      "experience": 0,
-      "evidence": 0,
-      "region": 0,
-      "profile_fit": 0
-    },
-    "match_reason": "不超过180字的匹配原因",
-    "evidence": ["最多2条具体证据"],
-    "key_gaps": ["最多2条关键差距"],
-    "suggestions": "不超过180字的下一步建议"
-  }
-]
+请严格返回 JSON。使用 {"matches":[...]} 格式。每个岗位一个结果，不能遗漏、重复或新增岗位。不得返回任何未列出的字段，例如 match_score_note。格式如下：
+{
+  "matches": [
+    {
+      "job_id": 岗位ID,
+      "match_score": 匹配分数(0-100),
+      "score_breakdown": {
+        "ats": 0,
+        "keywords": 0,
+        "experience": 0,
+        "evidence": 0,
+        "region": 0,
+        "profile_fit": 0
+      },
+      "match_reason": "不超过180字的匹配原因",
+      "evidence": ["最多2条具体证据"],
+      "key_gaps": ["最多2条关键差距"],
+      "suggestions": "不超过180字的下一步建议"
+    }
+  ]
+}
 
-只返回JSON数组，不要其他说明文字。`;
+只返回 JSON 对象，不要其他说明文字。`;
 
     stage = 'model';
     const modelStartedAt = performance.now();

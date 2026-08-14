@@ -2,7 +2,7 @@
 // 分层第一权重：不同地区的招聘逻辑差异，比不同公司之间的差异还要大。
 // 一个面字节北京的学生，和面字节新加坡的学生——简历写法、面试语言、考察重点全都不一样。
 
-export type RegionKey = 'us' | 'uk' | 'sg' | 'cn_t1' | 'cn_t2';
+export type RegionKey = 'us' | 'uk' | 'sg' | 'cn_t1' | 'cn_t2' | 'ca' | 'hk' | 'au';
 
 export interface RegionDNA {
   key: RegionKey;
@@ -90,6 +90,75 @@ export const REGION_DNA: Record<RegionKey, RegionDNA> = {
     visaNotes: 'EP 签证依赖学历+薪资门槛，名校+高薪 offer 才稳',
     keySignals: ['新加坡本地经验', '英文水平', '东南亚市场理解', 'EP 工签匹配度'],
   },
+  ca: {
+    key: 'ca',
+    name: '加拿大',
+    nameEn: 'Canada',
+    atsPreferences: [
+      '金融业为主，东部城市与香港、大陆联动求职',
+      'co-op 项目是重要实习入口，看重成绩与申请',
+      '8 个月以上正规项目可获得工签，2 年项目通常可获 3 年工签',
+      '本地实习与跨文化适应能力加分',
+    ],
+    resumeStyle: [
+      '中英双语或纯英文',
+      '强调 co-op、项目制学习和本地经历',
+      '排版国际化为佳',
+    ],
+    interviewRhythm: [
+      '金融前台岗位看重行为面试和沟通能力',
+      'co-op 申请常要求成绩、简历和在线申请',
+      '商科合作雇主常见于四大、投行和跨国公司',
+    ],
+    visaNotes: '毕业后 90 天内申请工签，只有一次机会；工签时长与项目时长相关。',
+    keySignals: ['工签状态', 'co-op 经历', '加拿大本地项目', '成绩门槛'],
+  },
+  hk: {
+    key: 'hk',
+    name: '香港',
+    nameEn: 'Hong Kong',
+    atsPreferences: [
+      '投行、销售交易、私人理财是主流方向',
+      '优先有大陆背景的海外留学生或清北学生',
+      '本科占多数，但研究生也有机会',
+      '目标校与校友资源影响显著',
+    ],
+    resumeStyle: [
+      '英文简历为主，可附中文版本',
+      '强调大陆业务理解与跨境经验',
+      '排版专业、紧凑',
+    ],
+    interviewRhythm: [
+      '金融岗位以行为面试和商业认知为主',
+      '申请时间线早于美国，通常前一年 7-8 月开始',
+      '12 月底前完成主要录取，1-2 月零星补招',
+    ],
+    visaNotes: '海外学生需考虑工作签证支持；金融雇主通常有成熟签证流程。',
+    keySignals: ['大陆背景', '目标校', '投行/金融实习', '中英文能力'],
+  },
+  au: {
+    key: 'au',
+    name: '澳大利亚',
+    nameEn: 'Australia',
+    atsPreferences: [
+      '金融业为主，集中在悉尼、墨尔本、珀斯',
+      '商科和法律是投行优先专业',
+      '招聘人数少，建议同步申请亚太地区',
+      'Networking 对拿面试作用明显',
+    ],
+    resumeStyle: [
+      '英文简历',
+      '强调金融方向相关经历',
+      '按当地招聘习惯控制长度',
+    ],
+    interviewRhythm: [
+      '全职申请 3/4 月截止，实习 6/7 月截止',
+      '面试到录取周期短，通常一周内结束',
+      '香港投行会为澳洲学生提供 12 月开始的暑期实习',
+    ],
+    visaNotes: '南半球季节与北半球相反，招聘时间线需单独判断。',
+    keySignals: ['澳洲本地经历', '金融实习', 'Networking', '亚太双申'],
+  },
   cn_t1: {
     key: 'cn_t1',
     name: '国内一线（北上深杭）',
@@ -154,6 +223,9 @@ export const HIRING_SEASONS: Record<RegionKey, HiringSeason> = {
   us:     { fallStart: 8,  fallEnd: 11, springStart: 1,  springEnd: 3  },
   uk:     { fallStart: 9,  fallEnd: 12, springStart: 1,  springEnd: 4  },
   sg:     { fallStart: 8,  fallEnd: 11, springStart: 1,  springEnd: 3  },
+  ca:     { fallStart: 9,  fallEnd: 11, springStart: 1,  springEnd: 4  },
+  hk:     { fallStart: 7,  fallEnd: 12, springStart: 1,  springEnd: 3  },
+  au:     { fallStart: 3,  fallEnd: 4,  springStart: 6,  springEnd: 7  },
   cn_t1:  { fallStart: 8,  fallEnd: 11, springStart: 2,  springEnd: 4  },
   cn_t2:  { fallStart: 8,  fallEnd: 11, springStart: 2,  springEnd: 4  },
 };
@@ -214,14 +286,34 @@ const REGION_ALIAS: Record<string, RegionKey> = {
 };
 
 // 归一化地区输入 → RegionKey。无法识别时返回 null（由调用方决定默认值）
+const REGION_ALIAS_OVERRIDES: Record<string, RegionKey> = {
+  '\u52a0\u62ff\u5927': 'ca',
+  '\u591a\u4f26\u591a': 'ca',
+  '\u6e29\u54e5\u534e': 'ca',
+  'canada': 'ca',
+  'ca': 'ca',
+  '\u9999\u6e2f': 'hk',
+  'hk': 'hk',
+  'hong kong': 'hk',
+  'hongkong': 'hk',
+  '\u6fb3\u5927\u5229\u4e9a': 'au',
+  '\u6fb3\u6d32': 'au',
+  '\u6069\u5c3c': 'au',
+  '\u58a8\u5c14\u672c': 'au',
+  'australia': 'au',
+  'au': 'au',
+};
+
 export function resolveRegionKey(input?: string | null): RegionKey | null {
   if (!input) return null;
   const norm = input.trim().toLowerCase().replace(/\s+/g, ' ');
   if (!norm) return null;
   if (norm in REGION_DNA) return norm as RegionKey;
+  if (REGION_ALIAS_OVERRIDES[norm]) return REGION_ALIAS_OVERRIDES[norm];
   if (REGION_ALIAS[norm]) return REGION_ALIAS[norm];
   // 双向包含匹配（如"美国纽约"、"上海市"）
-  for (const [alias, key] of Object.entries(REGION_ALIAS)) {
+  const aliasTable = { ...REGION_ALIAS, ...REGION_ALIAS_OVERRIDES };
+  for (const [alias, key] of Object.entries(aliasTable)) {
     if (norm.includes(alias) || alias.includes(norm)) return key;
   }
   return null;

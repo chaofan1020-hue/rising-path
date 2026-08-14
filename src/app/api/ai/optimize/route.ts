@@ -37,6 +37,53 @@ function textValue(value: unknown): string {
   return typeof value === 'string' ? value.trim() : '';
 }
 
+function buildOriginalResumeData(resume: Record<string, unknown>): OptimizedResumeData {
+  const info = (resume.user_info && typeof resume.user_info === 'object' ? resume.user_info : {}) as Record<string, unknown>;
+  const profile = (resume.profile && typeof resume.profile === 'object' ? resume.profile : {}) as Record<string, unknown>;
+  const experiences = [
+    ...(Array.isArray(profile.workExperience) ? profile.workExperience : []),
+    ...(Array.isArray(profile.internships) ? profile.internships : []),
+  ] as Array<Record<string, unknown>>;
+  const education = Array.isArray(profile.education) ? profile.education as Array<Record<string, unknown>> : [];
+  const projects = Array.isArray(profile.projects) ? profile.projects as Array<Record<string, unknown>> : [];
+  const skills = Array.isArray(profile.skills) ? profile.skills : Array.isArray(info.skills) ? info.skills : [];
+
+  return {
+    name: typeof info.name === 'string' ? info.name : '',
+    contact: {
+      email: typeof info.email === 'string' ? info.email : '',
+      phone: typeof info.phone === 'string' ? info.phone : '',
+      location: typeof info.region === 'string' ? info.region : '',
+      linkedin: '',
+    },
+    summary: '',
+    skills: skills.map((item) => String(item)),
+    experience: experiences.map((item) => ({
+      title: typeof item.role === 'string' ? item.role : '',
+      company: typeof item.company === 'string' ? item.company : '',
+      location: '',
+      period: [item.startDate, item.endDate].filter(Boolean).map(String).join(' - '),
+      highlights: Array.isArray(item.highlights) ? item.highlights.map(String) : [],
+    })),
+    education: education.map((item) => ({
+      degree: typeof item.degree === 'string' ? item.degree : '',
+      school: typeof item.school === 'string' ? item.school : '',
+      major: typeof item.major === 'string' ? item.major : '',
+      period: [item.startYear, item.endYear].filter(Boolean).map(String).join(' - '),
+      gpa: typeof item.gpa === 'string' ? item.gpa : '',
+    })),
+    projects: projects.map((item) => ({
+      name: typeof item.name === 'string' ? item.name : '',
+      role: typeof item.role === 'string' ? item.role : '',
+      period: '',
+      description: Array.isArray(item.techStack) ? item.techStack.map(String).join(', ') : '',
+      highlights: Array.isArray(item.outcomes) ? item.outcomes.map(String) : [],
+    })),
+    certifications: Array.isArray(profile.certificates) ? profile.certificates.map(String) : [],
+    change_items: [],
+  };
+}
+
 export async function POST(request: NextRequest) {
   try {
     const auth = await getAuthContext(request);
@@ -95,6 +142,7 @@ export async function POST(request: NextRequest) {
     const llmClient = createTextProviderClient({ requestHeaders: request.headers });
     
     const resumeContent = resume.parsed_content || JSON.stringify(resume.user_info);
+    const originalData = buildOriginalResumeData(resume);
 
     // 构建地区信息：深度地区招聘逻辑（ATS 偏好/简历写法/关键信号），
     // 优先用户指定地区，其次用简历分层推导的地区（地区为分层第一权重）
@@ -263,6 +311,7 @@ ${suggestionsSection}
         target_position: targetPosition,
         target_region: targetRegion || null,
         original_content: resumeContent,
+        original_data: originalData,
         optimized_content: resumeData,
         reviewed_content: resumeData,
         change_items: changeItems,
@@ -279,6 +328,7 @@ ${suggestionsSection}
       resume_data: resumeData,
       change_items: changeItems,
       original_content: resumeContent,
+      original_data: originalData,
       is_english: isEnglish,
       optimization_id: optimization.id,
       resume_profile_version: Number(resume.profile_version),
@@ -308,7 +358,7 @@ export async function GET(request: NextRequest) {
 
     let query = auth.client
       .from('resume_optimizations')
-      .select('id, resume_id, job_id, resume_profile_version, target_company, target_position, target_region, original_content, optimized_content, reviewed_content, edited_content, change_items, score_comparison, original_score, optimized_score, is_english, created_at, updated_at')
+      .select('id, resume_id, job_id, resume_profile_version, target_company, target_position, target_region, original_content, original_data, optimized_content, reviewed_content, edited_content, change_items, score_comparison, original_score, optimized_score, is_english, created_at, updated_at')
       .eq('user_id', auth.user.id)
       .order('created_at', { ascending: false })
       .limit(20);
@@ -317,7 +367,35 @@ export async function GET(request: NextRequest) {
 
     const { data, error } = await query;
     if (error) throw new Error(`读取简历优化历史失败: ${error.message}`);
-    return NextResponse.json({ optimizations: data || [] });
+
+    const resumeCache = new Map<number, Record<string, unknown>>();
+    const optimizations = await Promise.all((data || []).map(async (item) => {
+      const hasOriginalData = item.original_data
+        && typeof item.original_data === 'object'
+        && !Array.isArray(item.original_data)
+        && Object.keys(item.original_data as Record<string, unknown>).length > 0;
+      if (hasOriginalData || !item.resume_id) return item;
+
+      let resume = resumeCache.get(item.resume_id);
+      if (!resume) {
+        const { data: resumeData, error: resumeError } = await auth.client
+          .from('resumes')
+          .select('*')
+          .eq('id', item.resume_id)
+          .eq('user_id', auth.user.id)
+          .maybeSingle();
+        if (!resumeError && resumeData) {
+          resume = resumeData as Record<string, unknown>;
+          resumeCache.set(item.resume_id, resume);
+        }
+      }
+
+      return resume
+        ? { ...item, original_data: buildOriginalResumeData(resume) }
+        : item;
+    }));
+
+    return NextResponse.json({ optimizations });
   } catch (error) {
     console.error('Error fetching resume optimizations:', error);
     return NextResponse.json({ error: '读取简历优化历史失败' }, { status: 500 });

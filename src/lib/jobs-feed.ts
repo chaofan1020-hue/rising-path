@@ -136,7 +136,10 @@ function normalizeItem(item: JobsFeedItem): JobSyncRecord | null {
     audience: '留学生',
     job_type: inferJobType(item).substring(0, 50),
     description: (description || evidence || title).substring(0, 50000),
-    overview: description ? description.substring(0, 50000) : null,
+    // The feed has no separate overview field. Persisting the same body in
+    // both columns doubles storage for every job; the detail view falls back
+    // to description when no curated overview is available.
+    overview: null,
     responsibilities: null,
     requirements: requirements.substring(0, 50000) || null,
     nice_to_have: niceToHave.substring(0, 50000) || null,
@@ -280,21 +283,37 @@ export async function syncJobsFeed(
       is_active: false,
       is_closed: true,
       source_system: JOBS_FEED_SOURCE,
-      last_verified_at: verifiedAt,
       updated_at: new Date().toISOString(),
     };
     for (const batch of chunks(closeSources, 100)) {
-      const { error } = await client
+      const { data, error } = await client
         .from('jobs')
         .update(closePayload)
-        .in('job_url', batch);
+        .eq('is_active', true)
+        .in('job_url', batch)
+        .select('id');
       if (error) result.failed += batch.length;
-      else result.closed += batch.length;
+      else {
+        const closedJobIds = ((data || []) as Array<{ id: number }>).map((job) => job.id);
+        result.closed += closedJobIds.length;
+        if (closedJobIds.length > 0) {
+          const { error: syncStateError } = await client
+            .from('job_sync_records')
+            .update({
+              last_verified_at: verifiedAt,
+              missing_from_feed_at: null,
+              missing_feed_checks: 0,
+              updated_at: new Date().toISOString(),
+            })
+            .in('job_id', closedJobIds);
+          if (syncStateError) result.failed += closedJobIds.length;
+        }
+      }
     }
 
     if (openItems.length > 0) {
       const synced = await syncJobRecords(client, openItems, 'sync', { verifiedAt });
-      result.upserted += synced.created + synced.updated;
+      result.upserted += synced.created + synced.updated + synced.unchanged;
       result.open_seen += openItems.length;
       result.failed += synced.failed;
       result.skipped += synced.skipped + synced.invalidJobs.length;

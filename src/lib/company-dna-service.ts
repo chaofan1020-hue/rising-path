@@ -151,13 +151,27 @@ export async function getCompanyDNA(
   const norm = normalizeCompanyName(name);
   const client = getSupabaseClient();
 
-  // 查 DB（公司名/别名在应用层规范化匹配；表量级小，全表可接受）
+  // Query the requested company directly. The old implementation downloaded
+  // every DNA row on each interview opening, which became visible latency as
+  // the shared company library grew.
   type DNARow = { id: number; dna: CompanyDNA; hit_count: number; version: number; manually_edited: boolean };
   let dbRow: DNARow | null = null;
   try {
-    const { data: rows } = await client
-      .from('company_dna')
-      .select('id, company_name, aliases, dna, hit_count, version, manually_edited');
+    const selectColumns = 'id, company_name, aliases, dna, hit_count, version, manually_edited';
+    const [{ data: companyRows }, { data: aliasRows }] = await Promise.all([
+      client
+        .from('company_dna')
+        .select(selectColumns)
+        .ilike('company_name', name)
+        .limit(4),
+      client
+        .from('company_dna')
+        .select(selectColumns)
+        .contains('aliases', [name])
+        .limit(4),
+    ]);
+    const rows = [...(companyRows || []), ...(aliasRows || [])]
+      .filter((row, index, all) => all.findIndex((candidate) => candidate.id === row.id) === index);
     const hit = (rows || []).find((row) => {
       const names = [row.company_name as string, ...((row.aliases as string[]) || [])].map(normalizeCompanyName);
       return names.some((n) => n === norm || (n.length >= 2 && norm.includes(n)) || (norm.length >= 2 && n.includes(norm)));

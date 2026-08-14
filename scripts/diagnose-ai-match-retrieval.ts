@@ -65,41 +65,45 @@ async function main() {
     `);
 
     const outcomes: Array<Record<string, unknown>> = [];
+    const scopesToTest = [
+      ['us', 'canada', 'uk', 'australia', 'hong_kong', 'singapore'],
+      ['us'],
+      ['uk'],
+    ];
     for (const resume of resumes.rows) {
       const terms = collectResumeTerms({ profile: resume.profile });
-      const startedAt = performance.now();
-      await client.query('begin');
-      try {
-        await client.query("set local role authenticated");
-        await client.query("set local request.jwt.claim.role = 'authenticated'");
-        await client.query('set local request.jwt.claim.sub = $1', [resume.user_id]);
-        await client.query("set local statement_timeout = '10s'");
-        const result = await client.query<{ count: number }>(`
-          select count(*)::int as count
-          from public.search_ai_match_candidates_v5(
-            $1::text[],
-            array[]::text[],
-            array['us', 'canada', 'uk', 'australia', 'hong_kong', 'singapore']::text[],
-            80
-          )
-        `, [terms]);
-        outcomes.push({
-          resumeId: resume.id,
-          termCount: terms.length,
-          candidateCount: result.rows[0]?.count ?? 0,
-          durationMs: Math.round(performance.now() - startedAt),
-          status: 'ok',
-        });
-      } catch (error) {
-        outcomes.push({
-          resumeId: resume.id,
-          termCount: terms.length,
-          durationMs: Math.round(performance.now() - startedAt),
-          status: 'failed',
-          error: error instanceof Error ? error.message : String(error),
-        });
-      } finally {
-        await client.query('rollback');
+      for (const scopes of scopesToTest) {
+        const startedAt = performance.now();
+        await client.query('begin');
+        try {
+          await client.query("set local role authenticated");
+          await client.query("select set_config('request.jwt.claim.role', 'authenticated', true)");
+          await client.query("select set_config('request.jwt.claim.sub', $1, true)", [resume.user_id]);
+          await client.query("set local statement_timeout = '10s'");
+          const result = await client.query<{ count: number }>(`
+            select count(*)::int as count
+          from public.search_ai_match_candidates_v7($1::text[], array[]::text[], $2::text[], 80)
+          `, [terms, scopes]);
+          outcomes.push({
+            resumeId: resume.id,
+            scopes,
+            termCount: terms.length,
+            candidateCount: result.rows[0]?.count ?? 0,
+            durationMs: Math.round(performance.now() - startedAt),
+            status: 'ok',
+          });
+        } catch (error) {
+          outcomes.push({
+            resumeId: resume.id,
+            scopes,
+            termCount: terms.length,
+            durationMs: Math.round(performance.now() - startedAt),
+            status: 'failed',
+            error: error instanceof Error ? error.message : String(error),
+          });
+        } finally {
+          await client.query('rollback');
+        }
       }
     }
     console.log(JSON.stringify({ tested: outcomes.length, outcomes }, null, 2));

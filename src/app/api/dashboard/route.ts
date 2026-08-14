@@ -1,10 +1,12 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { resolveRegionKey, type RegionKey, REGION_DNA, shouldBeApplying } from '@/lib/region-dna';
 import { getAuthContext, unauthorizedResponse } from '@/lib/auth-server';
+import { buildCareerRoutePlan, type CareerRouteDiagnosis } from '@/lib/career-route-planner';
+import type { ResumeProfile, UserSegmentation } from '@/lib/resume-types';
 
 type Timeframe = 'now' | 'week' | 'month';
 type CareerStage = 'junior' | 'senior' | 'experienced' | 'returning_intern';
-type MajorMatch = 'aligned' | 'related' | 'general';
+type MajorMatch = 'aligned' | 'related' | 'general' | 'unrelated';
 
 interface PlanItem {
   timeframe: Timeframe;
@@ -23,25 +25,69 @@ interface PlanContext {
 interface DashboardPlan {
   context: PlanContext;
   items: PlanItem[];
+  diagnosis: CareerRouteDiagnosis | null;
 }
 
 interface DashboardResume {
   id?: number;
   profile?: {
+    personality?: {
+      dimensions?: Record<string, number>;
+      primaryDimension?: string;
+      summaryKey?: string;
+      recommendations?: Array<{
+        roleKey: string;
+        labelKey: string;
+        score: number;
+        fit: string;
+        reasons: string[];
+      }>;
+      completedAt?: string;
+    } | null;
     targetRegion?: string | null;
     inferredRegion?: string | null;
     targetRole?: string | null;
     intention?: {
+      roles?: string[] | null;
       locations?: string[] | null;
+      industries?: string[] | null;
+      targetCompanies?: string[] | null;
+      workAuthorization?: string | null;
+      visaStatus?: string | null;
+      visaDates?: {
+        programEndDate?: string | null;
+        visaStartDate?: string | null;
+        visaEndDate?: string | null;
+        stemEligible?: boolean | null;
+      } | null;
     } | null;
-    education?: Array<{ endYear?: number | null }> | null;
+    education?: Array<{
+      school?: string | null;
+      degree?: string | null;
+      major?: string | null;
+      startYear?: number | null;
+      endYear?: number | null;
+      gpa?: string | null;
+      qsEstimate?: number | null;
+    }> | null;
+    skills?: string[] | null;
+    internships?: Array<{
+      company?: string | null;
+      role?: string | null;
+      months?: number | null;
+      isInternship?: boolean | null;
+    }> | null;
+    workExperience?: Array<{
+      company?: string | null;
+      role?: string | null;
+      months?: number | null;
+      isInternship?: boolean | null;
+    }> | null;
+    projects?: Array<{ name?: string | null; role?: string | null }> | null;
+    careerSignals?: ResumeProfile['careerSignals'];
+    planRefinement?: ResumeProfile['planRefinement'];
   } | null;
-  segmentation?: {
-    regions?: RegionKey[] | null;
-    careerStage?: CareerStage;
-    majorMatch?: MajorMatch;
-    targetRole?: string | null;
-  } | null;
+  segmentation?: UserSegmentation | null;
   segmentation_overrides?: {
     regions?: RegionKey[] | null;
   } | null;
@@ -57,6 +103,9 @@ const REGION_LABEL_KEYS: Record<RegionKey, string> = {
   sg: 'region.sg',
   cn_t1: 'region.cn_t1',
   cn_t2: 'region.cn_t2',
+  ca: 'region.ca',
+  hk: 'region.hk',
+  au: 'region.au',
 };
 
 const STAGE_LABEL_KEYS: Record<CareerStage, string> = {
@@ -104,7 +153,7 @@ function resolveRegion(resume: DashboardResume | null | undefined): RegionKey | 
   return null;
 }
 
-function buildPlan(resume: DashboardResume | null, regionKey: RegionKey): DashboardPlan {
+function buildLegacyPlan(resume: DashboardResume | null, regionKey: RegionKey): DashboardPlan {
   const stage: CareerStage = resume?.segmentation?.careerStage ?? 'senior';
   const targetRole: string = resume?.profile?.targetRole ?? resume?.segmentation?.targetRole ?? '';
   const roleKey = getRoleCategory(targetRole);
@@ -170,7 +219,7 @@ function buildPlan(resume: DashboardResume | null, regionKey: RegionKey): Dashbo
     href: '/jobs',
   });
 
-  if (majorMatch === 'related' || majorMatch === 'general') {
+  if (majorMatch === 'related' || majorMatch === 'unrelated') {
     items.push({
       timeframe: 'week',
       titleKey: 'dashboard.plan.weekProjects.title',
@@ -210,7 +259,32 @@ function buildPlan(resume: DashboardResume | null, regionKey: RegionKey): Dashbo
     href: '/dashboard',
   });
 
-  return { context, items };
+  return { context, items, diagnosis: null };
+}
+
+function buildPlan(
+  resume: DashboardResume | null,
+  regionKey: RegionKey,
+  now = new Date(),
+): DashboardPlan {
+  const routePlan = buildCareerRoutePlan(
+    (resume?.profile ?? null) as ResumeProfile | null | undefined,
+    resume?.segmentation ?? null,
+    regionKey,
+    now,
+    resume?.profile?.planRefinement,
+  );
+  const stage: CareerStage = resume?.segmentation?.careerStage ?? 'senior';
+  const targetRole = resume?.profile?.targetRole ?? resume?.segmentation?.targetRole ?? '';
+  return {
+    context: {
+      region: REGION_LABEL_KEYS[regionKey],
+      stage: STAGE_LABEL_KEYS[stage] ?? STAGE_LABEL_KEYS.senior,
+      role: getRoleCategory(targetRole),
+    },
+    items: routePlan.items,
+    diagnosis: routePlan.diagnosis,
+  };
 }
 
 function getWeekStart(date: Date): Date {
@@ -226,9 +300,21 @@ export async function GET(request: NextRequest) {
   const auth = await getAuthContext(request);
   if (!auth) return unauthorizedResponse();
   const supabase = auth.client;
+  const weekStart = getWeekStart(new Date());
 
-  // 最新简历（含画像与分层）
-  const [{ data: resumes }, { count: resumeCountResult }] = await Promise.all([
+  // 这些数据互相独立，必须并行读取，避免 dashboard 首屏耗时叠加。
+  const [
+    { data: resumes },
+    { count: resumeCountResult },
+    { data: aiMatches },
+    { data: interviews },
+    { count: interviewCountResult },
+    { count: weeklyApplicationCountResult },
+    { count: applicationCountResult },
+    { data: interviewEvaluationsData },
+    { data: favorites },
+    { count: favoriteCountResult },
+  ] = await Promise.all([
     supabase
       .from('resumes')
       .select('id, created_at, updated_at, file_name, profile, segmentation, segmentation_overrides')
@@ -239,66 +325,63 @@ export async function GET(request: NextRequest) {
       .from('resumes')
       .select('id', { count: 'exact', head: true })
       .eq('user_id', auth.user.id),
-  ]);
-
-  const latestResume = (resumes?.[0] as DashboardResume | undefined) ?? null;
-  const latestResumeId = latestResume?.id ?? null;
-  const resumeCount = resumeCountResult ?? 0;
-
-  // AI 匹配
-  const { data: aiMatches } = await supabase
-    .from('ai_matches')
-    .select('match_score, job_id')
-    .eq('user_id', auth.user.id)
-    .order('created_at', { ascending: false })
-    .limit(50);
-
-  const avgMatchScore = aiMatches?.length
-    ? Math.round(aiMatches.reduce((s, m) => s + (m.match_score || 0), 0) / aiMatches.length)
-    : 0;
-
-  // 模拟面试
-  const [{ data: interviews }, { count: interviewCountResult }] = await Promise.all([
     supabase
-      .from('interview_sessions')
-      .select('id, status, current_round, total_rounds, updated_at, created_at, target_company, interview_type, overall_score, report_grade, report')
+      .from('ai_matches')
+      .select('match_score, job_id')
       .eq('user_id', auth.user.id)
       .order('created_at', { ascending: false })
       .limit(50),
     supabase
       .from('interview_sessions')
+      .select('id, status, updated_at, created_at')
+      .eq('user_id', auth.user.id)
+      .order('created_at', { ascending: false })
+      .limit(1),
+    supabase
+      .from('interview_sessions')
       .select('id', { count: 'exact', head: true })
       .eq('user_id', auth.user.id),
-  ]);
-
-  const interviewCount = interviewCountResult ?? 0;
-  const latestInterview = interviews?.[0] ?? null;
-
-  // 投递记录
-  const weekStart = getWeekStart(new Date());
-  const [{ data: applications }, { count: applicationCountResult }] = await Promise.all([
     supabase
       .from('applications')
-      .select('id, status, created_at, updated_at')
+      .select('id', { count: 'exact', head: true })
       .eq('user_id', auth.user.id)
       .gte('created_at', weekStart.toISOString()),
     supabase
       .from('applications')
       .select('id', { count: 'exact', head: true })
       .eq('user_id', auth.user.id),
+    supabase
+      .from('interview_sessions')
+      .select('id, target_company, interview_type, overall_score, report_grade, updated_at, created_at, report')
+      .eq('user_id', auth.user.id)
+      .eq('status', 'completed')
+      .order('created_at', { ascending: false })
+      .limit(10),
+    supabase
+      .from('favorites')
+      .select('jobs!inner(updated_at)')
+      .eq('user_id', auth.user.id),
+    supabase
+      .from('favorites')
+      .select('id', { count: 'exact', head: true })
+      .eq('user_id', auth.user.id),
   ]);
 
+  const latestResume = (resumes?.[0] as DashboardResume | undefined) ?? null;
+  const latestResumeId = latestResume?.id ?? null;
+  const resumeCount = resumeCountResult ?? 0;
+
+  const avgMatchScore = aiMatches?.length
+    ? Math.round(aiMatches.reduce((s, m) => s + (m.match_score || 0), 0) / aiMatches.length)
+    : 0;
+
+  const interviewCount = interviewCountResult ?? 0;
+  const latestInterview = interviews?.[0] ?? null;
+
   const applicationCount = applicationCountResult ?? 0;
-  // 本周投递数
-  const weeklyApplications = applications?.length ?? 0;
+  const weeklyApplications = weeklyApplicationCountResult ?? 0;
 
-  // 收藏岗位
-  const { data: favorites } = await supabase
-    .from('favorites')
-    .select('id, job_id, created_at, jobs!inner(id, updated_at)')
-    .eq('user_id', auth.user.id);
-
-  const favoriteCount = favorites?.length ?? 0;
+  const favoriteCount = favoriteCountResult ?? 0;
   const favoriteRows = (favorites ?? []) as FavoriteRow[];
   const recentlyUpdatedFavorites =
     favoriteRows.filter((f) => {
@@ -306,6 +389,18 @@ export async function GET(request: NextRequest) {
       const jobUpdated = new Date(job?.updated_at || 0);
       return Date.now() - jobUpdated.getTime() < 7 * 24 * 60 * 60 * 1000;
     }).length ?? 0;
+
+  const personalityProfile = latestResume?.profile?.personality ?? null;
+  const personality = personalityProfile
+    ? {
+        hasAssessment: true,
+        resumeId: latestResumeId,
+        dimensions: personalityProfile.dimensions || {},
+        summaryKey: personalityProfile.summaryKey || '',
+        recommendations: personalityProfile.recommendations || [],
+        updatedAt: personalityProfile.completedAt || '',
+      }
+    : null;
 
   const now = Date.now();
   const daysSinceLogin = auth.user.last_sign_in_at
@@ -453,8 +548,8 @@ export async function GET(request: NextRequest) {
   };
 
   // 面试评估记录（仅 completed 且有分数的）
-  const interviewEvaluations = (interviews ?? [])
-    .filter((iv) => iv.status === 'completed' && (iv.overall_score != null || iv.report_grade != null))
+  const interviewEvaluations = (interviewEvaluationsData ?? [])
+    .filter((iv) => iv.overall_score != null || iv.report_grade != null)
     .slice(0, 10)
     .map((iv) => ({
       id: iv.id,
@@ -491,6 +586,8 @@ export async function GET(request: NextRequest) {
     reminders,
     story,
     plan,
+    diagnosis: plan?.diagnosis ?? null,
+    personality,
     interviewEvaluations,
     counts: {
       resumes: resumeCount,

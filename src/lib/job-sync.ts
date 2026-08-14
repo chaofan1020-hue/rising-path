@@ -1,7 +1,10 @@
+import { createHash } from 'node:crypto';
 import type { SupabaseClient } from '@supabase/supabase-js';
 
 type Sponsorship = 'yes' | 'no' | 'unknown';
 const EXISTING_JOB_LOOKUP_BATCH_SIZE = 20;
+const EXISTING_SYNC_RECORD_LOOKUP_BATCH_SIZE = 500;
+const WRITE_BATCH_SIZE = 500;
 
 export interface JobSyncRecord {
   title: string;
@@ -37,6 +40,7 @@ export interface JobSyncRejection {
 export interface JobSyncResult {
   created: number;
   updated: number;
+  unchanged: number;
   skipped: number;
   failed: number;
   invalidJobs: JobSyncRejection[];
@@ -45,6 +49,26 @@ export interface JobSyncResult {
 interface ExistingJob {
   id: number;
   job_url: string | null;
+}
+
+interface ExistingJobSyncRecord {
+  job_id: number;
+  content_hash: string;
+}
+
+interface PendingJobWrite {
+  id: number;
+  job: JobSyncRecord;
+  contentHash: string;
+}
+
+interface PendingSyncRecord {
+  job_id: number;
+  source_system: string;
+  content_hash: string;
+  last_verified_at: string;
+  missing_from_feed_at: null;
+  missing_feed_checks: number;
 }
 
 function chunks<T>(values: T[], size: number): T[][] {
@@ -96,14 +120,97 @@ function key(url: string | null): string | null {
   }
 }
 
+function timestampForHash(value: string | null | undefined): string {
+  if (!value) return '';
+  const parsed = new Date(value);
+  return Number.isNaN(parsed.getTime()) ? value : parsed.toISOString();
+}
+
+function hashPart(value: string | boolean | null | undefined): string {
+  const normalized = typeof value === 'boolean' ? String(value) : value || '';
+  return `${Buffer.byteLength(normalized, 'utf8')}:${normalized}`;
+}
+
+/**
+ * This is intentionally a change detector, not a security primitive. The SQL
+ * backfill uses the same length-prefixed MD5 input so existing jobs do not get
+ * rewritten merely because this storage optimization is deployed.
+ */
+export function jobContentHash(job: JobSyncRecord): string {
+  const overview = job.overview === job.description ? null : job.overview;
+  const fields: Array<string | boolean | null | undefined> = [
+    job.title,
+    job.company,
+    job.region,
+    job.direction,
+    job.audience,
+    job.job_type,
+    job.description,
+    overview,
+    job.responsibilities,
+    job.requirements,
+    job.nice_to_have,
+    job.salary_range,
+    job.job_url,
+    job.source_url,
+    job.sponsorship,
+    job.is_active,
+    job.is_closed,
+    job.source_system,
+    job.external_job_id,
+    timestampForHash(job.valid_through),
+  ];
+  return createHash('md5').update(fields.map(hashPart).join('|'), 'utf8').digest('hex');
+}
+
+function makeSyncRecord(jobId: number, job: JobSyncRecord, contentHash: string, verifiedAt: string): PendingSyncRecord {
+  return {
+    job_id: jobId,
+    source_system: job.source_system || 'manual',
+    content_hash: contentHash,
+    last_verified_at: verifiedAt,
+    missing_from_feed_at: null,
+    missing_feed_checks: 0,
+  };
+}
+
+async function saveSyncRecords(client: SupabaseClient, records: PendingSyncRecord[]): Promise<void> {
+  // Feeds occasionally repeat a job URL in the same page. PostgreSQL rejects
+  // an upsert batch that targets the same conflict key twice, so retain the
+  // final observation for each job before writing sync metadata.
+  const deduplicatedRecords = [...new Map(records.map((record) => [record.job_id, record])).values()];
+  for (const batch of chunks(deduplicatedRecords, WRITE_BATCH_SIZE)) {
+    const { error } = await retryDatabaseOperation(
+      () => client.from('job_sync_records').upsert(batch, { onConflict: 'job_id' }),
+      '保存岗位同步状态',
+    );
+    if (error) throw new Error(`保存岗位同步状态失败: ${error.message}`);
+  }
+}
+
 export async function syncJobRecords(
   client: SupabaseClient,
   jobs: JobSyncRecord[],
   _mode: 'create' | 'sync' = 'sync',
   options: { verifiedAt?: string } = {},
 ): Promise<JobSyncResult> {
-  const result: JobSyncResult = { created: 0, updated: 0, skipped: 0, failed: 0, invalidJobs: [] };
-  const urls = [...new Set(jobs.map((job) => job.job_url).filter((url): url is string => Boolean(url)))];
+  const result: JobSyncResult = {
+    created: 0,
+    updated: 0,
+    unchanged: 0,
+    skipped: 0,
+    failed: 0,
+    invalidJobs: [],
+  };
+  const distinctJobs = new Map<string, JobSyncRecord>();
+  for (const job of jobs) {
+    // Invalid records remain independent so the validation branch can report
+    // them. Valid entries use the normalized URL as their stable feed key.
+    const jobKey = key(job.job_url) || `invalid-${distinctJobs.size}`;
+    distinctJobs.set(jobKey, job);
+  }
+  const jobsToSync = [...distinctJobs.values()];
+  const urls = [...new Set(jobsToSync.map((job) => job.job_url).filter((url): url is string => Boolean(url)))];
   const existing = new Map<string, ExistingJob>();
 
   // job_url can be very long for ATS portals. Keep each PostgREST `in()`
@@ -121,50 +228,93 @@ export async function syncJobRecords(
     }
   }
 
-  const inserts: JobSyncRecord[] = [];
-  const updates: Array<{ id: number; job: JobSyncRecord }> = [];
-  for (const job of jobs) {
+  const existingSyncRecords = new Map<number, ExistingJobSyncRecord>();
+  const existingIds = [...new Set([...existing.values()].map((job) => job.id))];
+  for (const batch of chunks(existingIds, EXISTING_SYNC_RECORD_LOOKUP_BATCH_SIZE)) {
+    const { data, error } = await retryDatabaseOperation(
+      () => client.from('job_sync_records').select('job_id, content_hash').in('job_id', batch),
+      '查询岗位同步状态',
+    );
+    if (error) throw new Error(`查询岗位同步状态失败: ${error.message}`);
+    for (const row of (data ?? []) as ExistingJobSyncRecord[]) {
+      existingSyncRecords.set(row.job_id, row);
+    }
+  }
+
+  const inserts: Array<{ job: JobSyncRecord; contentHash: string }> = [];
+  const updates: PendingJobWrite[] = [];
+  const unchanged: PendingSyncRecord[] = [];
+  const timestamp = options.verifiedAt || new Date().toISOString();
+
+  for (const job of jobsToSync) {
     if (!job.title || !job.company || !job.region || !job.direction || !job.audience || !job.job_url) {
       result.skipped += 1;
       result.invalidJobs.push({ index: result.invalidJobs.length + 1, reason: '岗位缺少必填字段或官网链接', data: job as unknown as Record<string, unknown> });
       continue;
     }
+    const contentHash = jobContentHash(job);
     const found = existing.get(key(job.job_url) || '');
-    if (found) updates.push({ id: found.id, job });
-    else inserts.push(job);
+    if (!found) {
+      inserts.push({ job, contentHash });
+      continue;
+    }
+    if (existingSyncRecords.get(found.id)?.content_hash === contentHash) {
+      unchanged.push(makeSyncRecord(found.id, job, contentHash, timestamp));
+      continue;
+    }
+    updates.push({ id: found.id, job, contentHash });
   }
 
-  const timestamp = options.verifiedAt || new Date().toISOString();
-  for (const batch of chunks(inserts, 500)) {
-    const { error } = await retryDatabaseOperation(
-      () => client.from('jobs').insert(batch.map((job) => ({ ...job, last_verified_at: timestamp }))),
+  const savedSyncRecords: PendingSyncRecord[] = [...unchanged];
+  for (const batch of chunks(inserts, WRITE_BATCH_SIZE)) {
+    const { data, error } = await retryDatabaseOperation(
+      () => client
+        .from('jobs')
+        .insert(batch.map(({ job }) => ({ ...job, last_verified_at: timestamp })))
+        .select('id, job_url'),
       '创建岗位',
     );
-    if (error) {
+    if (error || !data) {
       result.failed += batch.length;
-      result.invalidJobs.push({ index: result.invalidJobs.length + 1, reason: `写入岗位失败: ${error.message}`, data: { count: batch.length } });
-    } else {
-      result.created += batch.length;
+      result.invalidJobs.push({ index: result.invalidJobs.length + 1, reason: `写入岗位失败: ${error?.message || '未返回已创建岗位'}`, data: { count: batch.length } });
+      continue;
+    }
+    const createdByUrl = new Map((data as ExistingJob[]).map((row) => [key(row.job_url), row.id]));
+    for (const item of batch) {
+      const jobId = createdByUrl.get(key(item.job.job_url));
+      if (!jobId) {
+        result.failed += 1;
+        result.invalidJobs.push({ index: result.invalidJobs.length + 1, reason: '创建岗位后未返回岗位 ID', data: { job_url: item.job.job_url } });
+        continue;
+      }
+      result.created += 1;
+      savedSyncRecords.push(makeSyncRecord(jobId, item.job, item.contentHash, timestamp));
     }
   }
 
   for (const batch of chunks(updates, 25)) {
-    const outcomes = await Promise.all(batch.map(async ({ id, job }) => retryDatabaseOperation(
-      () => client
-        .from('jobs')
-        .update({ ...job, last_verified_at: timestamp, updated_at: timestamp })
-        .eq('id', id),
-      '更新岗位',
-    )));
-    for (const outcome of outcomes) {
+    const outcomes = await Promise.all(batch.map(async (pending) => ({
+      pending,
+      outcome: await retryDatabaseOperation(
+        () => client
+          .from('jobs')
+          .update({ ...pending.job, updated_at: timestamp })
+          .eq('id', pending.id),
+        '更新岗位',
+      ),
+    })));
+    for (const { pending, outcome } of outcomes) {
       if (outcome.error) {
         result.failed += 1;
         result.invalidJobs.push({ index: result.invalidJobs.length + 1, reason: `更新岗位失败: ${outcome.error.message}`, data: {} });
       } else {
         result.updated += 1;
+        savedSyncRecords.push(makeSyncRecord(pending.id, pending.job, pending.contentHash, timestamp));
       }
     }
   }
 
+  await saveSyncRecords(client, savedSyncRecords);
+  result.unchanged = unchanged.length;
   return result;
 }

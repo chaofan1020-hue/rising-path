@@ -1,4 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server';
+import { getCompanyFaviconUrl, getCompanyLogoUrl } from '@/lib/company-logo';
 import { getSupabaseClient } from '@/storage/database/supabase-client';
 import { sanitizeJobContent } from '@/lib/job-content';
 import { ADMIN_PERMISSIONS, requireAdminPermission } from '@/lib/admin-permissions';
@@ -9,55 +10,8 @@ let localLogosCache: Record<string, string> = {};
 let lastCacheTime = 0;
 const CACHE_DURATION = 5 * 60 * 1000; // 5 分钟
 
-// 公司域名映射
-const companyDomains: Record<string, string> = {
-  'Stripe': 'stripe.com',
-  'Airbnb': 'airbnb.com',
-  'Uber': 'uber.com',
-  'Lyft': 'lyft.com',
-  'DoorDash': 'doordash.com',
-  'Dropbox': 'dropbox.com',
-  'Coinbase': 'coinbase.com',
-  'Robinhood': 'robinhood.com',
-  'Figma': 'figma.com',
-  'Notion': 'notion.so',
-  'Palantir': 'palantir.com',
-  'Databricks': 'databricks.com',
-  'Snowflake': 'snowflake.com',
-  'Twilio': 'twilio.com',
-  'Zoom': 'zoom.us',
-  'Atlassian': 'atlassian.com',
-  'Confluent': 'confluent.io',
-  'MongoDB': 'mongodb.com',
-  'Cloudflare': 'cloudflare.com',
-  'Rubrik': 'rubrik.com',
-  'Scale AI': 'scale.com',
-  'OpenAI': 'openai.com',
-  'Anthropic': 'anthropic.com',
-  'Instacart': 'instacart.com',
-  'Discord': 'discord.com',
-  'Plaid': 'plaid.com',
-  'Brex': 'brex.com',
-  'Datadog': 'datadoghq.com',
-  'GitLab': 'gitlab.com',
-  'Google': 'google.com',
-  'Meta': 'meta.com',
-  'Apple': 'apple.com',
-  'Microsoft': 'microsoft.com',
-  'Amazon': 'amazon.com',
-  'Netflix': 'netflix.com',
-  'Tesla': 'tesla.com',
-  'NVIDIA': 'nvidia.com',
-  'Adobe': 'adobe.com',
-  'Oracle': 'oracle.com',
-  'Salesforce': 'salesforce.com',
-  'Snap': 'snap.com',
-  'Pinterest': 'pinterest.com',
-  'LinkedIn': 'linkedin.com',
-};
-
-// 获取公司 logo URL（优先本地，fallback 到 Clearbit）
-async function getCompanyLogo(company: string): Promise<string | null> {
+// 获取公司 logo URL（优先本地，fallback 到 Iconify Simple Icons）
+async function getCompanyLogo(company: string, jobUrl?: string | null): Promise<string | null> {
   // 先检查缓存
   if (localLogosCache[company]) {
     return localLogosCache[company];
@@ -77,16 +31,10 @@ async function getCompanyLogo(company: string): Promise<string | null> {
       return data.logo_url;
     }
   } catch (error) {
-    // 忽略错误，继续使用 Clearbit
+    // Ignore lookup failures and use the deterministic remote fallback.
   }
   
-  // 使用 Clearbit API
-  const domain = companyDomains[company];
-  if (domain) {
-    return `https://logo.clearbit.com/${domain}`;
-  }
-  const cleanName = company.toLowerCase().replace(/\s+/g, '');
-  return `https://logo.clearbit.com/${cleanName}.com`;
+  return getCompanyLogoUrl(company, jobUrl);
 }
 
 // 刷新 logo 缓存
@@ -138,12 +86,15 @@ export async function GET(
     }
 
     // 获取 company logo
-    const logo_url = data.company ? await getCompanyLogo(data.company) : null;
+    const configuredLogo = data.company_info?.logo_url || null;
+    const logo_url = configuredLogo || (data.company ? await getCompanyLogo(data.company, data.job_url) : null);
+    const logo_fallback_url = data.company ? getCompanyFaviconUrl(data.company, data.job_url) : null;
 
     return NextResponse.json({
       job: sanitizeJobContent({
         ...data,
         logo_url,
+        logo_fallback_url,
       }),
     });
   } catch (error) {

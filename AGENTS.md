@@ -77,8 +77,13 @@
 - review_notes, created_at, updated_at
 
 ### applications (网申记录表)
-- id, job_id, resume_id, status, notes
+- id, job_id, resume_id (可为空), status, notes
 - user_id (UUID), submitted_at, created_at, updated_at
+
+### personality_assessments (求职方向测评表)
+- id, user_id (UUID, unique), resume_id, model, answers, result
+- recommendations (JSONB), version, created_at, updated_at
+- 每个用户保留最新测评结果；完整建议同步写入 `resumes.profile.personality`
 
 ### application_fields (网申字段映射表)
 - id, job_id, field_name, field_value, field_type
@@ -123,7 +128,9 @@
 5. **ATS简历优化** - 针对ATS系统优化简历（按地区招聘逻辑+用户分层差异化）
 6. **模拟面试** - 企业面试基因库 + 分层评估标尺 + 真实度反馈闭环
 7. **自动网申** - 学习记录网申字段，自动填写表单
-8. **账号体系** - Google OAuth、邮箱密码、邮箱验证码、邮箱验证和密码重置
+8. **职业路径与 Networking** - 基于简历画像、签证和地区规则生成求职路线、行动计划与人脉建议
+9. **求职方向测评** - 12 题测评结合简历画像生成岗位方向和 Sponsor 友好备选
+10. **账号体系** - Google OAuth、邮箱密码、邮箱验证码、邮箱验证和密码重置
 
 ## 关键库文件
 
@@ -153,6 +160,10 @@
 | /api/applications | GET/POST | 获取/创建网申记录 |
 | /api/ai/match | POST | AI岗位匹配 |
 | /api/ai/optimize | POST | AI简历优化（注入地区规则+分层上下文） |
+| /api/personality/assessment | GET/POST | 获取/提交求职方向测评并更新简历画像 |
+| /api/networking/recommend | GET | 获取分层化 Networking 建议 |
+| /api/networking/progress | GET/PATCH | 获取/更新 Networking 进度 |
+| /api/application-profile/ai-fill | POST | 基于指定简历生成求职档案 |
 | /api/interview/chat | POST | 模拟面试（流式；新会话/继续/轮次切换） |
 | /api/interview/feedback | POST | 面试真实度反馈（<6分进人工审查） |
 | /api/company-dna | GET/PATCH | 获取企业基因摘要/人工更新基因（version+1） |

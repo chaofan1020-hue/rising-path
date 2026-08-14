@@ -58,6 +58,10 @@ import { untrustedBusinessDataBlock, untrustedBusinessDataPolicy } from '@/lib/p
 import { targetRegionPostgrestClauses } from '@/lib/job-region-scope';
 import { buildInterviewTurnPlanPrompt, verifyInterviewTurnPlan } from '@/lib/interview-turn-plan';
 import { getAppendedInterviewTurns } from '@/lib/interview-turn-commit';
+import {
+  buildInterviewRoundClosing,
+  decideInterviewTurnAction,
+} from '@/lib/interview-round-flow';
 
 interface ChatMessage {
   role: 'interviewer' | 'candidate';
@@ -115,25 +119,6 @@ async function getExistingCompanyDNA(
   } finally {
     if (timer) clearTimeout(timer);
   }
-}
-
-type TurnAction = 'continue' | 'round_end' | 'session_complete';
-
-function decideTurnAction({
-  isTimeout,
-  isLastRound,
-  answersThisRound,
-  questionQuota,
-}: {
-  isTimeout: boolean;
-  isLastRound: boolean;
-  answersThisRound: number;
-  questionQuota: number;
-}): TurnAction {
-  if (isTimeout || answersThisRound >= questionQuota) {
-    return isLastRound ? 'session_complete' : 'round_end';
-  }
-  return 'continue';
 }
 
 // Historical providers may still emit an obsolete uppercase protocol marker.
@@ -394,7 +379,21 @@ export async function POST(request: NextRequest) {
         return new Response(JSON.stringify({ error: '请先选择已确认求职画像的简历' }), { status: 409 });
       }
 
-      const resumeAccess = await requireConfirmedResume(client, resumeId, auth.user.id);
+      // Resume ownership and the catalog job are independent reads. Keeping
+      // them serial made every opening wait for two database round trips before
+      // it could create a session or warm the realtime sockets.
+      const resumeAccessPromise = requireConfirmedResume(client, resumeId, auth.user.id);
+      const jobPromise = client
+        .from('jobs')
+        .select('id, title, company, description, requirements, region, direction')
+        .eq('id', jobId)
+        .eq('is_active', true)
+        .or(targetRegionPostgrestClauses().join(','))
+        .single();
+      const [resumeAccess, { data: job, error: jobError }] = await Promise.all([
+        resumeAccessPromise,
+        jobPromise,
+      ]);
       if (!resumeAccess.ok) {
         return new Response(JSON.stringify({ error: resumeAccess.error }), { status: resumeAccess.status });
       }
@@ -405,13 +404,6 @@ export async function POST(request: NextRequest) {
       let jdText = '';
       let selectedJobId: number | null = null;
       let jobCompany = '';
-      const { data: job, error: jobError } = await client
-        .from('jobs')
-        .select('id, title, company, description, requirements, region, direction')
-        .eq('id', jobId)
-        .eq('is_active', true)
-        .or(targetRegionPostgrestClauses().join(','))
-        .single();
       if (jobError || !job || !job.company?.trim()) {
         return new Response(JSON.stringify({ error: '所选岗位已下线、已过期或不属于当前地区，请重新选择岗位', code: 'JOB_NOT_AVAILABLE' }), { status: 409 });
       }
@@ -423,7 +415,14 @@ export async function POST(request: NextRequest) {
       // targetCompany value change the company attached to that job.
       const company = jobCompany;
 
-      const dnaResult = await getExistingCompanyDNA(company, request.headers, { userId: auth.user.id });
+      const dnaResultPromise = getExistingCompanyDNA(company, request.headers, { userId: auth.user.id });
+      const recentQuestionsPromise = resolvedPracticeMode === 'review'
+        ? Promise.resolve([])
+        : getRecentInterviewQuestions(client, auth.user.id, company, selectedJobId);
+      const [dnaResult, recentQuestions] = await Promise.all([
+        dnaResultPromise,
+        recentQuestionsPromise,
+      ]);
       const companyContext = resolveInterviewCompanyContext({
         company,
         region: job.region,
@@ -453,9 +452,6 @@ export async function POST(request: NextRequest) {
       const firstRole: RoundRole | null = script ? script[0] : null;
 
       const dnaBlock = dnaResult ? buildDNABlock(dnaResult.dna) : '';
-      const recentQuestions = resolvedPracticeMode === 'review'
-        ? []
-        : await getRecentInterviewQuestions(client, auth.user.id, company, selectedJobId);
       const questionHistoryNote = buildQuestionHistoryNote(recentQuestions, language);
       const segmentBlock = buildSegmentationBlock(resumeSegmentation, language);
       const contextDigest = buildInterviewContextDigest({
@@ -933,7 +929,7 @@ export async function POST(request: NextRequest) {
     const questionQuota = activeRole ? ROUND_QUESTION_QUOTA[activeRole] : QUESTIONS_PER_ROUND + 1;
     const turnAction = isSwitchNext
       ? 'continue'
-      : decideTurnAction({ isTimeout, isLastRound, answersThisRound, questionQuota });
+      : decideInterviewTurnAction({ isTimeout, isLastRound, answersThisRound, questionQuota });
     const closeNote = turnAction !== 'continue'
       ? (language === 'en'
           ? 'The server is closing this stage now. Do NOT ask a new question. Give only a natural candidate-visible closing sentence or two. Do not use brackets, markers, scores, or hiring decisions.'
@@ -994,48 +990,65 @@ export async function POST(request: NextRequest) {
             }
           }
 
-          // Provider protocol remnants are compatibility-filtered and never influence state.
-          let pendingTail = '';
-          const generation = await consumeTrackedTextStream(llmClient, llmMessages, { temperature: 0.6, thinking: 'disabled' }, {
-            userId: auth.user.id,
-            feature: 'interview_chat',
-            resumeId: session.resume_id,
-            interviewSessionId: sessionId,
-            phase: isSwitchNext ? 'round_opening' : isTimeout ? 'round_closing' : 'follow_up',
-            metadata: {
-              mode: 'continuation',
-              round: currentRound,
-              switch_next: isSwitchNext,
-              timeout: isTimeout,
-              turn_plan: verifiedTurnPlan ? {
-                action: verifiedTurnPlan.action,
-                intent_key: verifiedTurnPlan.intentKey,
-                dimension: verifiedTurnPlan.dimension,
-              } : null,
-              strategy_fallback: !verifiedTurnPlan,
-            },
-            }, (text) => {
-              pendingTail += text;
-              const [emit, rest] = splitProtocolSafe(pendingTail);
-            pendingTail = rest;
-            if (emit) {
-              fullContent += emit;
-              sendSseEvent(controller, encoder, 'interviewer.delta', { content: emit }, { requestId: clientRequestId, revision: currentRevision });
-            }
-          });
+          let generationTiming = { ttfbMs: 0, totalMs: 0 };
+          if (turnAction !== 'continue') {
+            // A terminal turn must never carry a new question. This is server
+            // authored rather than merely prompted, so a model cannot orphan a
+            // question by emitting it immediately before a round transition.
+            fullContent = buildInterviewRoundClosing({
+              language,
+              action: turnAction,
+              timedOut: isTimeout,
+            });
+            sendSseEvent(controller, encoder, 'interviewer.delta', { content: fullContent }, { requestId: clientRequestId, revision: currentRevision });
+          } else {
+            // Provider protocol remnants are compatibility-filtered and never influence state.
+            let pendingTail = '';
+            const generation = await consumeTrackedTextStream(llmClient, llmMessages, { temperature: 0.6, thinking: 'disabled' }, {
+              userId: auth.user.id,
+              feature: 'interview_chat',
+              resumeId: session.resume_id,
+              interviewSessionId: sessionId,
+              phase: isSwitchNext ? 'round_opening' : 'follow_up',
+              metadata: {
+                mode: 'continuation',
+                round: currentRound,
+                switch_next: isSwitchNext,
+                timeout: isTimeout,
+                turn_plan: verifiedTurnPlan ? {
+                  action: verifiedTurnPlan.action,
+                  intent_key: verifiedTurnPlan.intentKey,
+                  dimension: verifiedTurnPlan.dimension,
+                } : null,
+                strategy_fallback: !verifiedTurnPlan,
+              },
+              }, (text) => {
+                pendingTail += text;
+                const [emit, rest] = splitProtocolSafe(pendingTail);
+              pendingTail = rest;
+              if (emit) {
+                fullContent += emit;
+                sendSseEvent(controller, encoder, 'interviewer.delta', { content: emit }, { requestId: clientRequestId, revision: currentRevision });
+              }
+            });
+            generationTiming = { ttfbMs: generation.ttfbMs ?? 0, totalMs: generation.totalMs };
 
-          // Flush the final candidate-visible text; turnAction is server-derived.
-          const tailText = cleanProtocolTail(pendingTail);
-          if (tailText) {
-            fullContent += tailText;
-            sendSseEvent(controller, encoder, 'interviewer.delta', { content: tailText }, { requestId: clientRequestId, revision: currentRevision });
+            // Flush the final candidate-visible text.
+            const tailText = cleanProtocolTail(pendingTail);
+            if (tailText) {
+              fullContent += tailText;
+              sendSseEvent(controller, encoder, 'interviewer.delta', { content: tailText }, { requestId: clientRequestId, revision: currentRevision });
+            }
           }
           const newMessages: ChatMessage[] = [...messages];
           if (fullContent.trim()) {
             newMessages.push({
               role: 'interviewer',
               content: fullContent,
-              questionHash: hashInterviewQuestion(fullContent),
+              // A deterministic stage close is candidate-visible speech, not
+              // an interview question. Keeping it out of the question ledger
+              // prevents it from polluting repetition checks and future plans.
+              questionHash: turnAction === 'continue' ? hashInterviewQuestion(fullContent) : undefined,
               round: currentRound,
               interviewerId: activeInterviewer?.id,
               ts: Date.now(),
@@ -1055,8 +1068,23 @@ export async function POST(request: NextRequest) {
               interviewer_id: message.interviewerId ?? null,
               question_hash: message.role === 'interviewer' ? message.questionHash ?? null : null,
             }));
+          if (process.env.INTERVIEW_DEBUG_LOGGING === 'true') {
+            console.info('[InterviewCommitDebug]', JSON.stringify({
+              sessionId,
+              requestId: clientRequestId,
+              persistedMessageCount,
+              messageCount: newMessages.length,
+              appendedTurnCount: turnRows.length,
+              turnIndexes: turnRows.map((turn) => turn.turn_index),
+              turnRoles: turnRows.map((turn) => turn.role),
+              answerChars: String(answer || '').trim().length,
+              interviewerChars: fullContent.trim().length,
+              switchNext: isSwitchNext,
+              timeout: isTimeout,
+            }));
+          }
           const latestInterviewer = newMessages.at(-1);
-          const questionRows = latestInterviewer?.role === 'interviewer' && latestInterviewer.content?.trim()
+          const questionRows = latestInterviewer?.role === 'interviewer' && latestInterviewer.questionHash && latestInterviewer.content?.trim()
             ? (() => {
               const classification = classifyInterviewQuestion(latestInterviewer.content);
               return [{
@@ -1078,7 +1106,7 @@ export async function POST(request: NextRequest) {
               }];
             })()
             : [];
-          const latestQuestionClassification = latestInterviewer?.role === 'interviewer' && latestInterviewer.content?.trim()
+          const latestQuestionClassification = latestInterviewer?.role === 'interviewer' && latestInterviewer.questionHash && latestInterviewer.content?.trim()
             ? classifyInterviewQuestion(latestInterviewer.content)
             : null;
           const candidateTurnIndex = !isSwitchNext && !isTimeout
@@ -1093,7 +1121,7 @@ export async function POST(request: NextRequest) {
                   currentIntent: currentQuestionClassification?.intentKey,
                 }
               : {},
-            latestInterviewer?.role === 'interviewer'
+            latestInterviewer?.role === 'interviewer' && latestInterviewer.questionHash
               ? {
                   question: latestInterviewer.content,
                   intentKey: latestQuestionClassification?.intentKey,
@@ -1115,6 +1143,19 @@ export async function POST(request: NextRequest) {
             p_facts_ledger: nextLedger,
           });
           if (commitError || typeof nextRevision !== 'number') {
+            if (process.env.INTERVIEW_DEBUG_LOGGING === 'true') {
+              console.error('[InterviewCommitDebug]', JSON.stringify({
+                phase: 'commit_error',
+                sessionId,
+                requestId: clientRequestId,
+                error: commitError?.message || 'missing revision',
+                persistedMessageCount,
+                messageCount: newMessages.length,
+                appendedTurnCount: turnRows.length,
+                turnIndexes: turnRows.map((turn) => turn.turn_index),
+                turnRoles: turnRows.map((turn) => turn.role),
+              }));
+            }
             throw new Error(`保存面试消息失败: ${commitError?.message || '未返回版本'}`);
           }
 
@@ -1128,7 +1169,7 @@ export async function POST(request: NextRequest) {
               controller,
               encoder,
               'turn.completed',
-              { done: true, timing: { preflightMs: continuationPreflightMs, ttfbMs: generation.ttfbMs, totalMs: generation.totalMs } },
+              { done: true, timing: { preflightMs: continuationPreflightMs, ...generationTiming } },
               { requestId: clientRequestId, revision: nextRevision },
             );
           controller.close();

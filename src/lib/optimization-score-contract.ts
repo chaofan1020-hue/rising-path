@@ -67,11 +67,67 @@ export function parseOptimizationScoreComparison(raw: string): OptimizationScore
     .trim();
 
   try {
-    return optimizationScoreComparisonSchema.parse(JSON.parse(normalized));
+    return parseCandidate(JSON.parse(normalized));
   } catch (firstError) {
     const start = normalized.indexOf('{');
     const end = normalized.lastIndexOf('}');
     if (start < 0 || end <= start) throw firstError;
-    return optimizationScoreComparisonSchema.parse(JSON.parse(normalized.slice(start, end + 1)));
+    return parseCandidate(JSON.parse(normalized.slice(start, end + 1)));
   }
+}
+
+function parseCandidate(parsed: unknown): OptimizationScoreComparison {
+  if (!parsed || typeof parsed !== 'object' || Array.isArray(parsed)) {
+    throw new Error('AI 评分对比返回的不是 JSON 对象');
+  }
+  const record = parsed as Record<string, unknown>;
+  const originalResume = isRecord(record.original_resume) ? record.original_resume : undefined;
+  const optimizedResume = isRecord(record.optimized_resume) ? record.optimized_resume : undefined;
+  const summary = String(
+    record.summary
+    ?? record.summary_text
+    ?? record.analysis
+    ?? optimizedResume?.summary
+    ?? originalResume?.summary
+    ?? 'AI 已完成评分'
+  ).trim() || 'AI 已完成评分';
+  const keyChanges = Array.isArray(record.key_changes)
+    ? record.key_changes
+    : Array.isArray(optimizedResume?.key_changes)
+      ? optimizedResume.key_changes
+      : Array.isArray(originalResume?.key_changes)
+        ? originalResume.key_changes
+        : [];
+  const candidate = {
+    original: normalizeEvaluation(record.original ?? originalResume),
+    optimized: normalizeEvaluation(record.optimized ?? optimizedResume),
+    summary,
+    key_changes: keyChanges.map((item) => String(item).trim()).filter(Boolean).slice(0, 8),
+  };
+  return optimizationScoreComparisonSchema.parse(candidate);
+}
+
+function isRecord(value: unknown): value is Record<string, unknown> {
+  return typeof value === 'object' && value !== null && !Array.isArray(value);
+}
+
+function toScore(value: unknown): number | undefined {
+  const parsed = Number(value);
+  return Number.isInteger(parsed) ? Math.min(100, Math.max(0, parsed)) : undefined;
+}
+
+function normalizeEvaluation(value: unknown): { match_score: number; score_breakdown: Record<string, number> } | undefined {
+  if (!isRecord(value)) return undefined;
+  const score_breakdown = {
+    ats: toScore(value.ats) ?? 0,
+    keywords: toScore(value.keywords) ?? 0,
+    experience: toScore(value.experience) ?? 0,
+    evidence: toScore(value.evidence) ?? 0,
+    region: toScore(value.region) ?? 0,
+    profile_fit: toScore(value.profile_fit) ?? 0,
+  };
+  const total = toScore(value.total)
+    ?? toScore(value.match_score)
+    ?? Math.round(Object.values(score_breakdown).reduce((a, b) => a + b, 0) / 6);
+  return { match_score: total, score_breakdown };
 }

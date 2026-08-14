@@ -46,6 +46,12 @@ interface ClientStartMessage {
   sessionId?: number | string | null;
 }
 
+interface UpstreamUtteranceState {
+  sequence: number;
+  activeId: string | null;
+  itemIds: Map<string, string>;
+}
+
 function sendJSON(socket: WebSocket, value: Record<string, unknown>): void {
   if (socket.readyState === WebSocket.OPEN) socket.send(JSON.stringify(value));
 }
@@ -127,7 +133,11 @@ async function ownsInterviewSession(userId: string, sessionId: unknown): Promise
   }
 }
 
-function forwardAlibabaEvent(client: WebSocket, raw: WebSocket.RawData): void {
+function forwardAlibabaEvent(
+  client: WebSocket,
+  raw: WebSocket.RawData,
+  utteranceState: UpstreamUtteranceState,
+): void {
   let event: AlibabaASREvent;
   try {
     event = JSON.parse(raw.toString()) as AlibabaASREvent;
@@ -143,32 +153,53 @@ function forwardAlibabaEvent(client: WebSocket, raw: WebSocket.RawData): void {
     case 'session.updated':
       sendJSON(client, { type: 'ready', session: event.session });
       return;
-    case 'input_audio_buffer.speech_started':
-      sendJSON(client, { type: 'speech_started', eventId: event.event_id });
+    case 'input_audio_buffer.speech_started': {
+      const utteranceId = `utterance_${++utteranceState.sequence}`;
+      utteranceState.activeId = utteranceId;
+      sendJSON(client, { type: 'speech_started', eventId: event.event_id, utteranceId });
       return;
+    }
     case 'input_audio_buffer.speech_stopped':
-      sendJSON(client, { type: 'speech_stopped', eventId: event.event_id });
+      sendJSON(client, {
+        type: 'speech_stopped',
+        eventId: event.event_id,
+        utteranceId: utteranceState.activeId,
+      });
       return;
-    case 'conversation.item.input_audio_transcription.text':
+    case 'conversation.item.input_audio_transcription.text': {
+      const utteranceId = event.item_id
+        ? utteranceState.itemIds.get(event.item_id) || utteranceState.activeId
+        : utteranceState.activeId;
+      if (event.item_id && utteranceId) utteranceState.itemIds.set(event.item_id, utteranceId);
       sendJSON(client, {
         type: 'partial',
         itemId: event.item_id,
-        text: `${event.text || ''}${event.stash || ''}`.trim(),
-        confirmedText: event.text || '',
+        utteranceId,
+        // `stash` is an unstable hypothesis. The browser receives it as a
+        // separate field and only renders the confirmed prefix.
+        text: String(event.text || '').trim(),
+        confirmedText: String(event.text || '').trim(),
         draftText: event.stash || '',
         language: event.language,
         emotion: event.emotion,
       });
       return;
-    case 'conversation.item.input_audio_transcription.completed':
+    }
+    case 'conversation.item.input_audio_transcription.completed': {
+      const utteranceId = event.item_id
+        ? utteranceState.itemIds.get(event.item_id) || null
+        : utteranceState.activeId;
       sendJSON(client, {
         type: 'final',
         itemId: event.item_id,
+        utteranceId,
         text: String(event.transcript || '').trim(),
         language: event.language,
         emotion: event.emotion,
       });
+      if (event.item_id) utteranceState.itemIds.delete(event.item_id);
       return;
+    }
     case 'conversation.item.input_audio_transcription.failed':
       sendJSON(client, {
         type: 'error',
@@ -203,6 +234,11 @@ function setupConnection(client: WebSocket, userId: string, ticketSessionId: num
   let interviewSessionId: number | null = null;
   let usageRecorded = false;
   let lastError: string | null = null;
+  const utteranceState: UpstreamUtteranceState = {
+    sequence: 0,
+    activeId: null,
+    itemIds: new Map(),
+  };
   const usageRequestId = createAiUsageRequestId();
   const startedAt = Date.now();
   let idleTimer: ReturnType<typeof setTimeout> | null = null;
@@ -289,10 +325,12 @@ function setupConnection(client: WebSocket, userId: string, ticketSessionId: num
       }
       if (event?.type === 'session.updated') {
         upstreamReady = true;
-        sendJSON(client, { type: 'ready', session: event.session });
+        // Echo the server-authorized language so test diagnostics can prove
+        // which recognition language reached the provider for this ticket.
+        sendJSON(client, { type: 'ready', session: event.session, language });
         flushAudio();
       } else {
-        forwardAlibabaEvent(client, raw);
+        forwardAlibabaEvent(client, raw, utteranceState);
       }
       if (event?.type === 'session.created') upstreamSessionId = event.session?.id || null;
       if (typeof event?.usage?.duration === 'number' && Number.isFinite(event.usage.duration) && event.usage.duration >= 0) {

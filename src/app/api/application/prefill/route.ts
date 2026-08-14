@@ -124,26 +124,29 @@ export async function POST(request: NextRequest) {
     const body = parsed.data;
     const fields = body.fields as PrefillField[];
 
-    const resumeQuery = client
-      .from('resumes')
-      .select('id, user_info, profile')
-      .eq('user_id', auth.user.id);
-    const { data: resume } = body.resumeId
-      ? await resumeQuery.eq('id', body.resumeId).maybeSingle()
-      : await resumeQuery.order('created_at', { ascending: false }).limit(1).maybeSingle();
-    if (body.resumeId && !resume) return NextResponse.json({ error: '简历不存在或无权使用' }, { status: 404 });
-
     const { data: profileRow } = await client
       .from('application_profiles')
       .select('profile, resume_id, source')
       .eq('user_id', auth.user.id)
       .maybeSingle();
 
+    const resumeQuery = client
+      .from('resumes')
+      .select('id, user_info, profile')
+      .eq('user_id', auth.user.id);
+    const selectedResumeId = body.resumeId || profileRow?.resume_id || null;
+    const { data: resume } = selectedResumeId
+      ? await resumeQuery.eq('id', selectedResumeId).maybeSingle()
+      : await resumeQuery.order('created_at', { ascending: false }).limit(1).maybeSingle();
+    if (body.resumeId && !resume) {
+      return NextResponse.json({ error: '简历不存在或无权使用' }, { status: 404 });
+    }
+
     let profile: ApplicationProfile = DEFAULT_PROFILE;
     let sourceMap: ProfileSourceMap | undefined;
-    const profileMatchesLatestResume = profileRow
+    const profileMatchesSelectedResume = profileRow
       && (profileRow.resume_id === resume?.id || (!profileRow.resume_id && !resume?.id));
-    if (profileMatchesLatestResume && profileRow.profile) {
+    if (profileMatchesSelectedResume && profileRow.profile) {
       profile = profileRow.profile as ApplicationProfile;
       sourceMap = (profileRow.source || {}) as ProfileSourceMap;
     } else {
