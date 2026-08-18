@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { getAuthContext, unauthorizedResponse } from '@/lib/auth-server';
+import { consumeFeatureAccess, entitlementErrorResponse } from '@/lib/entitlements';
 import { createTextProviderClient } from '@/lib/ai/text-provider';
 import { configuredRegionScopeKeys, targetRegionScopeKeys } from '@/lib/job-region-scope';
 import { consumeTrackedTextStream } from '@/lib/ai-usage';
@@ -215,6 +216,9 @@ export async function POST(request: NextRequest) {
         target_job_id: targetJobId,
       });
     }
+
+    const access = await consumeFeatureAccess(client, auth.user.id, 'ai_match');
+    if (!access.allowed) return entitlementErrorResponse(access);
 
     // AI matching
     const llmClient = createTextProviderClient({ requestHeaders: request.headers });

@@ -5,6 +5,7 @@ import { useRouter } from 'next/navigation';
 import { Loader2 } from 'lucide-react';
 import type { EmailOtpType } from '@supabase/supabase-js';
 import { getSupabaseBrowserClient } from '@/lib/supabase-browser';
+import { getPostLoginDestination } from '@/lib/onboarding';
 
 const EMAIL_OTP_TYPES = new Set<EmailOtpType>([
   'signup',
@@ -79,7 +80,10 @@ export default function AuthCallbackPage() {
           if (!data.session) throw new Error('验证链接无效或已过期');
         }
         const next = searchParams.get('next') || hashParams.get('next');
-        const safeNext = next && next.startsWith('/') && !next.startsWith('//') ? next : '/home';
+        let safeNext = next && next.startsWith('/') && !next.startsWith('//') ? next : '';
+        if (!safeNext || safeNext === '/home') {
+          safeNext = await getPostLoginDestination();
+        }
         if (mounted) router.replace(safeNext);
       } catch (callbackError) {
         if (mounted) setError(getCallbackErrorMessage(callbackError));

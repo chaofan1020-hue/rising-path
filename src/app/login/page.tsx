@@ -6,6 +6,7 @@ import { getSupabaseBrowserClient } from '@/lib/supabase-browser';
 import LoginSignup, { type RegisterData } from '@/components/ui/login-signup';
 import RegistrationSuccess from '@/components/RegistrationSuccess';
 import { isEmailVerified, validatePassword } from '@/lib/auth-shared';
+import { getPostLoginDestination } from '@/lib/onboarding';
 
 type AuthMode = 'login' | 'signup' | 'otp' | 'reset' | 'password' | 'verify' | 'update-password';
 
@@ -40,7 +41,7 @@ export default function LoginPage() {
         setVerificationEmail(data.session.user.email ?? '');
         setMode('verify');
       } else if (data.session) {
-        router.replace('/home');
+        void getPostLoginDestination().then((destination) => router.replace(destination));
       } else if (verificationRequested) {
         setMode('verify');
       }
@@ -75,7 +76,7 @@ export default function LoginPage() {
       const supabase = await getSupabaseBrowserClient();
       const { error: sessionError } = await supabase.auth.setSession(result.session);
       if (sessionError) throw sessionError;
-      router.replace('/home');
+      router.replace(await getPostLoginDestination());
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Sign in failed');
     } finally {
@@ -196,7 +197,7 @@ export default function LoginPage() {
       const supabase = await getSupabaseBrowserClient();
       const { error: sessionError } = await supabase.auth.setSession(result.session);
       if (sessionError) throw sessionError;
-      router.replace('/home');
+      router.replace(await getPostLoginDestination());
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Invalid code');
     } finally {
@@ -249,7 +250,7 @@ export default function LoginPage() {
       const supabase = await getSupabaseBrowserClient();
       const { error: updateError } = await supabase.auth.updateUser({ password });
       if (updateError) throw updateError;
-      router.replace('/home');
+      router.replace(await getPostLoginDestination());
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Failed to update password');
     } finally {
@@ -351,7 +352,7 @@ export default function LoginPage() {
         <RegistrationSuccess
           onContinue={() => {
             setShowRegistrationSuccess(false);
-            router.replace('/home');
+            void getPostLoginDestination().then((destination) => router.replace(destination));
           }}
         />
       )}

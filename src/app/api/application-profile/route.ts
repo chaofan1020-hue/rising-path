@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { getAuthContext, unauthorizedResponse } from '@/lib/auth-server';
+import { entitlementErrorResponse, requirePlanFeature } from '@/lib/entitlements';
 import {
   buildProfileFromResume,
   DEFAULT_PROFILE,
@@ -14,6 +15,8 @@ export async function GET(request: NextRequest) {
     const auth = await getAuthContext(request);
     if (!auth) return unauthorizedResponse();
     const client = auth.client;
+    const access = await requirePlanFeature(client, auth.user.id, 'auto_apply');
+    if (!access.allowed) return entitlementErrorResponse(access);
 
     const { data: resume } = await client
       .from('resumes')
@@ -75,6 +78,8 @@ export async function PUT(request: NextRequest) {
     const auth = await getAuthContext(request);
     if (!auth) return unauthorizedResponse();
     const client = auth.client;
+    const access = await requirePlanFeature(client, auth.user.id, 'auto_apply');
+    if (!access.allowed) return entitlementErrorResponse(access);
     const parsed = applicationProfilePatchSchema.safeParse(await request.json());
     if (!parsed.success) return NextResponse.json({ error: '无效的档案数据' }, { status: 400 });
     const { profile: updates, version: expectedVersion } = parsed.data as {

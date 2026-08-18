@@ -1,6 +1,7 @@
 import { createHash, randomBytes } from 'node:crypto';
 import { NextRequest, NextResponse } from 'next/server';
 import { getAuthContext, unauthorizedResponse } from '@/lib/auth-server';
+import { entitlementErrorResponse, requirePlanFeature } from '@/lib/entitlements';
 import { realtimeTicketRequestSchema } from '@/lib/interview-contracts';
 
 const TICKET_TTL_MS = 60_000;
@@ -8,6 +9,8 @@ const TICKET_TTL_MS = 60_000;
 export async function POST(request: NextRequest) {
   const auth = await getAuthContext(request);
   if (!auth) return unauthorizedResponse();
+  const access = await requirePlanFeature(auth.client, auth.user.id, 'mock_interview');
+  if (!access.allowed) return entitlementErrorResponse(access);
 
   try {
     const parsed = realtimeTicketRequestSchema.safeParse(await request.json());
