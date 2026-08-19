@@ -40,6 +40,27 @@ export interface PlanRefinement {
   visaNotes?: LocalizedPlanText;
 }
 
+export interface ResumePersonalityProfile {
+  model: 'career_fit';
+  dimensions: Record<string, number>;
+  primaryDimension: string;
+  summaryKey: string;
+  recommendations: Array<{
+    roleKey: string;
+    labelKey: string;
+    score: number;
+    fit: 'strong' | 'medium' | 'explore';
+    reasons: string[];
+    sponsorship?: {
+      level: 'high' | 'medium' | 'low' | 'unknown';
+      sponsorJobCount: number;
+      activeJobCount: number;
+      noteKey: string;
+    };
+  }>;
+  completedAt: string;
+}
+
 export const RESUME_PROFILE_SCHEMA_VERSION = 6;
 
 export interface EducationEntry {
@@ -80,6 +101,7 @@ export interface ResumeProfile {
   skills: string[];
   certificates: string[];
   careerSignals?: CareerSignals;
+  personality?: ResumePersonalityProfile;
   planRefinement?: PlanRefinement;
   networkingProgress?: unknown;
   schemaVersion?: number;

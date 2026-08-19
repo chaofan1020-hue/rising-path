@@ -45,6 +45,7 @@ import {
   Trash2,
   Pencil,
   Eye,
+  Plus,
 } from 'lucide-react';
 import Link from 'next/link';
 import { Document, Packer, Paragraph, TextRun, HeadingLevel, AlignmentType } from 'docx';
@@ -53,7 +54,10 @@ import { AuthGuard } from '@/components/auth-guard';
 import { apiFetch } from '@/lib/api-client';
 import { Header1 } from '@/components/header1';
 import { useLanguage } from '@/lib/language-context';
-import { applyOptimizationChangeReview } from '@/lib/optimized-resume-review';
+import {
+  applyOptimizationChangeReapply,
+  applyOptimizationChangeReview,
+} from '@/lib/optimized-resume-review';
 import PageBackButton from '@/components/page-back-button';
 
 interface Resume {
@@ -64,6 +68,17 @@ interface Resume {
   processing_status?: string;
   segmentation_confirmed?: boolean;
   profile_version?: number;
+}
+
+interface AddedApplication {
+  id: number;
+  job_id: number;
+  resume_id?: number | null;
+  jobs?: {
+    title: string;
+    company: string;
+    region: string;
+  };
 }
 
 // 优化记录历史
@@ -78,7 +93,7 @@ interface OptimizedRecord {
   jobId?: number | null;
   profileVersion?: number;
   originalContent?: string;
-  editedContent?: string;
+  originalData?: ResumeData | null;
   scoreComparison?: ScoreComparison | null;
   changeItems?: ChangeItem[];
   generatedResumeData?: ResumeData;
@@ -154,63 +169,53 @@ const scoreBreakdownLabels: Record<string, string> = {
   profile_fit: '画像适配',
 };
 
-// 将 ResumeData 转换为可读的纯文本
-const resumeDataToText = (data: ResumeData, isEnglish?: boolean): string => {
-  const labels = {
-    summary: isEnglish ? 'Summary' : '个人简介',
-    skills: isEnglish ? 'Skills' : '专业技能',
-    experience: isEnglish ? 'Experience' : '工作经历',
-    education: isEnglish ? 'Education' : '教育背景',
-    projects: isEnglish ? 'Projects' : '项目经历',
-    certifications: isEnglish ? 'Certifications' : '证书资质',
-  };
-  
-  let text = '';
-  text += `${data.name}\n`;
-  const contacts: string[] = [];
-  if (data.contact.email) contacts.push(data.contact.email);
-  if (data.contact.phone) contacts.push(data.contact.phone);
-  if (data.contact.location) contacts.push(data.contact.location);
-  if (data.contact.linkedin) contacts.push(data.contact.linkedin);
-  if (contacts.length > 0) text += `${contacts.join(' | ')}\n`;
-  text += '\n';
+const hasResumeContent = (data: unknown): data is ResumeData => {
+  if (!data || typeof data !== 'object' || Array.isArray(data)) return false;
+  const resume = data as ResumeData;
+  return Boolean(
+    resume.name
+    || resume.summary
+    || (resume.skills && resume.skills.length > 0)
+    || (resume.experience && resume.experience.length > 0)
+    || (resume.education && resume.education.length > 0)
+    || (resume.projects && resume.projects.length > 0)
+    || (resume.certifications && resume.certifications.length > 0)
+  );
+};
 
-  if (data.summary) {
-    text += `【${labels.summary}】\n${data.summary}\n\n`;
-  }
-  if (data.skills && data.skills.length > 0) {
-    text += `【${labels.skills}】\n${data.skills.join('、')}\n\n`;
-  }
-  if (data.experience && data.experience.length > 0) {
-    text += `【${labels.experience}】\n`;
-    data.experience.forEach(exp => {
-      text += `${exp.title} | ${exp.company}${exp.location ? ` | ${exp.location}` : ''} | ${exp.period}\n`;
-      exp.highlights.forEach(h => { text += `  • ${h}\n`; });
-      text += '\n';
-    });
-  }
-  if (data.education && data.education.length > 0) {
-    text += `【${labels.education}】\n`;
-    data.education.forEach(edu => {
-      text += `${edu.degree} | ${edu.school}${edu.major ? ` | ${edu.major}` : ''} | ${edu.period}`;
-      if (edu.gpa) text += ` | GPA: ${edu.gpa}`;
-      text += '\n';
-    });
-    text += '\n';
-  }
-  if (data.projects && data.projects.length > 0) {
-    text += `【${labels.projects}】\n`;
-    data.projects.forEach(proj => {
-      text += `${proj.name}${proj.role ? ` | ${proj.role}` : ''}${proj.period ? ` | ${proj.period}` : ''}\n`;
-      if (proj.description) text += `  ${proj.description}\n`;
-      proj.highlights.forEach(h => { text += `  • ${h}\n`; });
-      text += '\n';
-    });
-  }
-  if (data.certifications && data.certifications.length > 0) {
-    text += `【${labels.certifications}】\n${data.certifications.join('\n')}\n`;
-  }
-  return text.trim();
+const detectTextLanguage = (text: string, fallback: boolean): boolean => {
+  const letters = (text.match(/[A-Za-z]/g) || []).length;
+  const chinese = (text.match(/[\u4e00-\u9fa5]/g) || []).length;
+  if (letters + chinese === 0) return fallback;
+  return letters > chinese;
+};
+
+const getOriginalResumeLanguage = (data: ResumeData | null, raw: string, fallback: boolean): boolean => {
+  if (!data) return detectTextLanguage(raw, fallback);
+  const text = [
+    data.name,
+    data.summary || '',
+    ...(data.skills || []),
+    ...(data.experience || []).flatMap((item) => [
+      item.title,
+      item.company,
+      item.location || '',
+      ...(item.highlights || []),
+    ]),
+    ...(data.education || []).flatMap((item) => [
+      item.degree,
+      item.school,
+      item.major || '',
+    ]),
+    ...(data.projects || []).flatMap((item) => [
+      item.name,
+      item.role || '',
+      item.description || '',
+      ...(item.highlights || []),
+    ]),
+    ...(data.certifications || []),
+  ].join(' ');
+  return detectTextLanguage(text, fallback);
 };
 
 // 简历预览组件
@@ -374,11 +379,345 @@ const ResumePreview = ({ data, isEnglish }: { data: ResumeData; isEnglish?: bool
   );
 };
 
+type ExperienceItem = NonNullable<ResumeData['experience']>[number];
+type EducationItem = NonNullable<ResumeData['education']>[number];
+type ProjectItem = NonNullable<ResumeData['projects']>[number];
+
+const ResumeEditor = ({
+  data,
+  isEnglish,
+  onChange,
+}: {
+  data: ResumeData;
+  isEnglish?: boolean;
+  onChange: (data: ResumeData) => void;
+}) => {
+  const labels = {
+    summary: isEnglish ? 'Summary' : '个人简介',
+    skills: isEnglish ? 'Skills' : '专业技能',
+    experience: isEnglish ? 'Experience' : '工作经历',
+    education: isEnglish ? 'Education' : '教育背景',
+    projects: isEnglish ? 'Projects' : '项目经历',
+    certifications: isEnglish ? 'Certifications' : '证书资质',
+  };
+  const contact = data.contact || {
+    email: '',
+    phone: '',
+    location: '',
+    linkedin: '',
+  };
+
+  const inputClass = 'w-full rounded border border-gray-300 bg-white px-2 py-1 text-xs md:text-sm text-gray-900 focus:outline-none focus:ring-2 focus:ring-gray-300';
+  const textareaClass = `${inputClass} min-h-[72px] leading-relaxed resize-y`;
+  const sectionTitleClass = 'text-xs md:text-sm font-bold text-gray-800 uppercase tracking-wide border-b border-gray-300 pb-1 mb-1.5 md:mb-2';
+
+  const updateExperience = (index: number, patch: Partial<ExperienceItem>) => {
+    const next = (data.experience || []).map((item, itemIndex) => (
+      itemIndex === index ? { ...item, ...patch } : item
+    ));
+    onChange({ ...data, experience: next });
+  };
+
+  const updateEducation = (index: number, patch: Partial<EducationItem>) => {
+    const next = (data.education || []).map((item, itemIndex) => (
+      itemIndex === index ? { ...item, ...patch } : item
+    ));
+    onChange({ ...data, education: next });
+  };
+
+  const updateProject = (index: number, patch: Partial<ProjectItem>) => {
+    const next = (data.projects || []).map((item, itemIndex) => (
+      itemIndex === index ? { ...item, ...patch } : item
+    ));
+    onChange({ ...data, projects: next });
+  };
+
+  const textToList = (value: string) => value
+    .split('\n')
+    .map((item) => item.trim())
+    .filter(Boolean);
+
+  return (
+    <div className="bg-white text-black p-4 md:p-8 shadow-lg rounded-lg">
+      <div className="text-center border-b-2 border-gray-800 pb-3 md:pb-4 mb-3 md:mb-4">
+        <input
+          className={`${inputClass} text-center text-lg md:text-2xl font-bold text-gray-900 mb-1 md:mb-2`}
+          value={data.name}
+          onChange={(event) => onChange({ ...data, name: event.target.value })}
+          placeholder={isEnglish ? 'Name' : '姓名'}
+        />
+        <div className="grid grid-cols-1 sm:grid-cols-2 gap-1.5 md:gap-2">
+          {(['email', 'phone', 'location', 'linkedin'] as const).map((field) => (
+            <input
+              key={field}
+              className={`${inputClass} text-center text-xs md:text-sm text-gray-600`}
+              value={contact[field] || ''}
+              onChange={(event) => onChange({
+                ...data,
+                contact: { ...contact, [field]: event.target.value },
+              })}
+              placeholder={field}
+            />
+          ))}
+        </div>
+      </div>
+
+      <div className="mb-3 md:mb-4">
+        <h2 className={sectionTitleClass}>{labels.summary}</h2>
+        <textarea
+          className={textareaClass}
+          value={data.summary || ''}
+          onChange={(event) => onChange({ ...data, summary: event.target.value })}
+        />
+      </div>
+
+      <div className="mb-3 md:mb-4">
+        <h2 className={sectionTitleClass}>{labels.skills}</h2>
+        <textarea
+          className={textareaClass}
+          value={(data.skills || []).join('\n')}
+          onChange={(event) => onChange({ ...data, skills: textToList(event.target.value) })}
+          placeholder={isEnglish ? 'One skill per line' : '每行一个技能'}
+        />
+      </div>
+
+      <div className="mb-3 md:mb-4">
+        <div className="flex items-center justify-between">
+          <h2 className={sectionTitleClass}>{labels.experience}</h2>
+          <Button
+            type="button"
+            size="sm"
+            variant="outline"
+            className="h-7 px-2 text-[10px]"
+            onClick={() => onChange({
+              ...data,
+              experience: [
+                ...(data.experience || []),
+                { title: '', company: '', location: '', period: '', highlights: [] },
+              ],
+            })}
+          >
+            <Plus className="h-3.5 w-3.5" />
+          </Button>
+        </div>
+        <div className="space-y-3">
+          {(data.experience || []).map((exp, index) => (
+            <div key={index} className="rounded border border-gray-200 p-2">
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-1.5 mb-1.5">
+                <input
+                  className={inputClass}
+                  value={exp.title}
+                  onChange={(event) => updateExperience(index, { title: event.target.value })}
+                  placeholder={isEnglish ? 'Title' : '职位名称'}
+                />
+                <input
+                  className={inputClass}
+                  value={exp.company}
+                  onChange={(event) => updateExperience(index, { company: event.target.value })}
+                  placeholder={isEnglish ? 'Company' : '公司'}
+                />
+                <input
+                  className={inputClass}
+                  value={exp.location || ''}
+                  onChange={(event) => updateExperience(index, { location: event.target.value })}
+                  placeholder={isEnglish ? 'Location' : '地点'}
+                />
+                <input
+                  className={inputClass}
+                  value={exp.period}
+                  onChange={(event) => updateExperience(index, { period: event.target.value })}
+                  placeholder={isEnglish ? 'Period' : '时间'}
+                />
+              </div>
+              <textarea
+                className={textareaClass}
+                value={(exp.highlights || []).join('\n')}
+                onChange={(event) => updateExperience(index, {
+                  highlights: textToList(event.target.value),
+                })}
+                placeholder={isEnglish ? 'One achievement per line' : '每行一个成就'}
+              />
+              <Button
+                type="button"
+                size="sm"
+                variant="ghost"
+                className="mt-1 h-6 px-2 text-[10px] text-red-600"
+                onClick={() => onChange({
+                  ...data,
+                  experience: (data.experience || []).filter((_, itemIndex) => itemIndex !== index),
+                })}
+              >
+                {isEnglish ? 'Remove' : '删除'}
+              </Button>
+            </div>
+          ))}
+        </div>
+      </div>
+
+      <div className="mb-3 md:mb-4">
+        <div className="flex items-center justify-between">
+          <h2 className={sectionTitleClass}>{labels.education}</h2>
+          <Button
+            type="button"
+            size="sm"
+            variant="outline"
+            className="h-7 px-2 text-[10px]"
+            onClick={() => onChange({
+              ...data,
+              education: [
+                ...(data.education || []),
+                { degree: '', school: '', major: '', period: '', gpa: '' },
+              ],
+            })}
+          >
+            <Plus className="h-3.5 w-3.5" />
+          </Button>
+        </div>
+        <div className="space-y-2">
+          {(data.education || []).map((edu, index) => (
+            <div key={index} className="rounded border border-gray-200 p-2">
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-1.5 mb-1.5">
+                <input
+                  className={inputClass}
+                  value={edu.degree}
+                  onChange={(event) => updateEducation(index, { degree: event.target.value })}
+                  placeholder={isEnglish ? 'Degree' : '学位'}
+                />
+                <input
+                  className={inputClass}
+                  value={edu.school}
+                  onChange={(event) => updateEducation(index, { school: event.target.value })}
+                  placeholder={isEnglish ? 'School' : '学校'}
+                />
+                <input
+                  className={inputClass}
+                  value={edu.major || ''}
+                  onChange={(event) => updateEducation(index, { major: event.target.value })}
+                  placeholder={isEnglish ? 'Major' : '专业'}
+                />
+                <input
+                  className={inputClass}
+                  value={edu.period}
+                  onChange={(event) => updateEducation(index, { period: event.target.value })}
+                  placeholder={isEnglish ? 'Period' : '时间'}
+                />
+                <input
+                  className={inputClass}
+                  value={edu.gpa || ''}
+                  onChange={(event) => updateEducation(index, { gpa: event.target.value })}
+                  placeholder="GPA"
+                />
+              </div>
+              <Button
+                type="button"
+                size="sm"
+                variant="ghost"
+                className="h-6 px-2 text-[10px] text-red-600"
+                onClick={() => onChange({
+                  ...data,
+                  education: (data.education || []).filter((_, itemIndex) => itemIndex !== index),
+                })}
+              >
+                {isEnglish ? 'Remove' : '删除'}
+              </Button>
+            </div>
+          ))}
+        </div>
+      </div>
+
+      <div className="mb-3 md:mb-4">
+        <div className="flex items-center justify-between">
+          <h2 className={sectionTitleClass}>{labels.projects}</h2>
+          <Button
+            type="button"
+            size="sm"
+            variant="outline"
+            className="h-7 px-2 text-[10px]"
+            onClick={() => onChange({
+              ...data,
+              projects: [
+                ...(data.projects || []),
+                { name: '', role: '', period: '', description: '', highlights: [] },
+              ],
+            })}
+          >
+            <Plus className="h-3.5 w-3.5" />
+          </Button>
+        </div>
+        <div className="space-y-3">
+          {(data.projects || []).map((project, index) => (
+            <div key={index} className="rounded border border-gray-200 p-2">
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-1.5 mb-1.5">
+                <input
+                  className={inputClass}
+                  value={project.name}
+                  onChange={(event) => updateProject(index, { name: event.target.value })}
+                  placeholder={isEnglish ? 'Project name' : '项目名称'}
+                />
+                <input
+                  className={inputClass}
+                  value={project.role || ''}
+                  onChange={(event) => updateProject(index, { role: event.target.value })}
+                  placeholder={isEnglish ? 'Role' : '角色'}
+                />
+                <input
+                  className={inputClass}
+                  value={project.period || ''}
+                  onChange={(event) => updateProject(index, { period: event.target.value })}
+                  placeholder={isEnglish ? 'Period' : '时间'}
+                />
+              </div>
+              <textarea
+                className={textareaClass}
+                value={project.description || ''}
+                onChange={(event) => updateProject(index, { description: event.target.value })}
+                placeholder={isEnglish ? 'Description' : '项目描述'}
+              />
+              <textarea
+                className={`${textareaClass} mt-1.5`}
+                value={(project.highlights || []).join('\n')}
+                onChange={(event) => updateProject(index, {
+                  highlights: textToList(event.target.value),
+                })}
+                placeholder={isEnglish ? 'One outcome per line' : '每行一个成果'}
+              />
+              <Button
+                type="button"
+                size="sm"
+                variant="ghost"
+                className="mt-1 h-6 px-2 text-[10px] text-red-600"
+                onClick={() => onChange({
+                  ...data,
+                  projects: (data.projects || []).filter((_, itemIndex) => itemIndex !== index),
+                })}
+              >
+                {isEnglish ? 'Remove' : '删除'}
+              </Button>
+            </div>
+          ))}
+        </div>
+      </div>
+
+      <div className="mb-3 md:mb-4">
+        <h2 className={sectionTitleClass}>{labels.certifications}</h2>
+        <textarea
+          className={textareaClass}
+          value={(data.certifications || []).join('\n')}
+          onChange={(event) => onChange({ ...data, certifications: textToList(event.target.value) })}
+          placeholder={isEnglish ? 'One certification per line' : '每行一个证书'}
+        />
+      </div>
+    </div>
+  );
+};
+
 // 内部组件
 function OptimizeContent() {
   const searchParams = useSearchParams();
   const [resumes, setResumes] = useState<Resume[]>([]);
+  const [applications, setApplications] = useState<AddedApplication[]>([]);
   const [selectedResumeId, setSelectedResumeId] = useState<string>('');
+  const [selectedApplicationId, setSelectedApplicationId] = useState('');
   const [targetCompany, setTargetCompany] = useState('');
   const [targetPosition, setTargetPosition] = useState('');
   const [targetRegion, setTargetRegion] = useState('');
@@ -389,6 +728,7 @@ function OptimizeContent() {
   const [optimizedContent, setOptimizedContent] = useState('');
   const [resumeData, setResumeData] = useState<ResumeData | null>(null);
   const [generatedResumeData, setGeneratedResumeData] = useState<ResumeData | null>(null);
+  const [originalResumeData, setOriginalResumeData] = useState<ResumeData | null>(null);
   const [originalContent, setOriginalContent] = useState('');
   const [showResult, setShowResult] = useState(false);
   const [translating, setTranslating] = useState(false);
@@ -401,8 +741,8 @@ function OptimizeContent() {
   const [scoreError, setScoreError] = useState('');
   const [changeItems, setChangeItems] = useState<ChangeItem[]>([]);
   const [changeSavingId, setChangeSavingId] = useState<string | null>(null);
+  const [reviewWarning, setReviewWarning] = useState('');
   const [isEditing, setIsEditing] = useState(false);
-  const [editedContent, setEditedContent] = useState('');
   const [showSavedToast, setShowSavedToast] = useState(false);
   const [optimizeError, setOptimizeError] = useState('');
   const { t } = useLanguage();
@@ -430,7 +770,7 @@ function OptimizeContent() {
         body: JSON.stringify({
           optimizationId: activeOptimizationId,
           resumeData,
-          editedContent: editedContent || null,
+          editedContent: null,
           changeItems,
           isEnglish: isEnglishVersion,
         }),
@@ -476,12 +816,34 @@ function OptimizeContent() {
   };
 
   const updateChangeStatus = async (changeId: string, status: ChangeStatus) => {
-    if (!activeOptimizationId || !generatedResumeData) return;
+    if (!activeOptimizationId || !resumeData) return;
+
+    const currentChange = changeItems.find((item) => item.id === changeId);
+    if (!currentChange) return;
 
     const nextItems = changeItems.map((item) => (
       item.id === changeId ? { ...item, status } : item
     ));
-    const nextResumeData = applyOptimizationChangeReview(generatedResumeData, nextItems);
+    let nextResumeData = resumeData;
+    let unmatched: string[] = [];
+    if (status === 'rejected') {
+      const result = applyOptimizationChangeReview(
+        resumeData,
+        [{ ...currentChange, status: 'rejected' }],
+      );
+      nextResumeData = result.data;
+      unmatched = result.unmatched;
+    } else if (currentChange.status === 'rejected') {
+      const result = applyOptimizationChangeReapply(resumeData, {
+        ...currentChange,
+        status,
+      });
+      nextResumeData = result.data;
+      unmatched = result.unmatched;
+    }
+    setReviewWarning(unmatched.length > 0
+      ? `部分修改未能精确匹配原文：${unmatched.join('、')}`
+      : '');
     setChangeSavingId(changeId);
     try {
       const response = await apiFetch('/api/ai/optimize', {
@@ -490,7 +852,7 @@ function OptimizeContent() {
         body: JSON.stringify({
           optimizationId: activeOptimizationId,
           resumeData: nextResumeData,
-          editedContent: editedContent || null,
+          editedContent: null,
           changeItems: nextItems,
           isEnglish: isEnglishVersion,
         }),
@@ -553,6 +915,23 @@ function OptimizeContent() {
     }
   };
 
+  const handleSelectApplication = (value: string) => {
+    setSelectedApplicationId(value);
+    const app = applications.find((a) => a.id === Number(value));
+    if (!app) return;
+    setTargetJobId(app.job_id);
+    setTargetCompany(app.jobs?.company || '');
+    setTargetPosition(app.jobs?.title || '');
+    setTargetRegion(app.jobs?.region || '');
+  };
+
+  useEffect(() => {
+    apiFetch('/api/applications')
+      .then((response) => (response.ok ? response.json() : null))
+      .then((data) => setApplications((data?.applications || []).filter((app: AddedApplication) => app.job_id)))
+      .catch((error) => console.error('Failed to fetch applications:', error));
+  }, []);
+
   // 加载历史记录
   const loadRecord = (record: OptimizedRecord) => {
     setSelectedResumeId(record.resumeId);
@@ -564,13 +943,15 @@ function OptimizeContent() {
     setResumeData(record.resumeData);
     setGeneratedResumeData(record.generatedResumeData || record.resumeData);
     setIsEnglishVersion(record.isEnglish);
-    setEditedContent(record.editedContent || '');
-    setOptimizedContent(record.editedContent || JSON.stringify(record.resumeData, null, 2));
+    setOptimizedContent(JSON.stringify(record.resumeData, null, 2));
     setOriginalContent(record.originalContent || '');
+    setOriginalResumeData(record.originalData || null);
     setScoreComparison(record.scoreComparison || null);
     setScoreError('');
+    setReviewWarning('');
     setChangeItems(record.changeItems || []);
     setOptimizeError('');
+    setIsEditing(false);
     setShowResult(true);
   };
 
@@ -645,6 +1026,7 @@ function OptimizeContent() {
         target_position: string;
         target_region?: string | null;
         original_content?: string;
+        original_data?: ResumeData | null;
         edited_content?: string | null;
         change_items?: ChangeItem[];
         score_comparison?: ScoreComparison | null;
@@ -663,7 +1045,7 @@ function OptimizeContent() {
         jobId: item.job_id || null,
         profileVersion: item.resume_profile_version,
         originalContent: item.original_content || '',
-        editedContent: item.edited_content || '',
+        originalData: hasResumeContent(item.original_data) ? item.original_data : null,
         changeItems: item.change_items || [],
         scoreComparison: item.score_comparison || null,
         generatedResumeData: item.optimized_content,
@@ -683,11 +1065,13 @@ function OptimizeContent() {
     setOptimizing(true);
     setOptimizeProgress(0);
     setOptimizedContent('');
-    setEditedContent('');
     setOptimizeError('');
     setScoreComparison(null);
     setScoreError('');
+    setReviewWarning('');
     setChangeItems([]);
+    setOriginalResumeData(null);
+    setIsEditing(false);
 
     try {
       const progressInterval = setInterval(() => {
@@ -717,6 +1101,7 @@ function OptimizeContent() {
       setResumeData(data.resume_data || null);
       setGeneratedResumeData(data.resume_data || null);
       setOriginalContent(data.original_content || '');
+      setOriginalResumeData(hasResumeContent(data.original_data) ? data.original_data : null);
       setChangeItems(data.change_items || []);
       setIsEnglishVersion(data.is_english || false);
       setShowResult(true);
@@ -733,10 +1118,11 @@ function OptimizeContent() {
           targetRegion,
           jobId: data.job_id || targetJobId,
           profileVersion: data.resume_profile_version,
+          originalContent: data.original_content || '',
+          originalData: hasResumeContent(data.original_data) ? data.original_data : null,
           resumeData: data.resume_data,
           generatedResumeData: data.resume_data,
           isEnglish: data.is_english || false,
-          editedContent: '',
           scoreComparison: null,
           changeItems: data.change_items || [],
           createdAt: new Date().toISOString(),
@@ -757,11 +1143,6 @@ function OptimizeContent() {
   };
 
   const handleCopy = () => {
-    if (editedContent) {
-      navigator.clipboard.writeText(editedContent.trim());
-      return;
-    }
-
     // 生成纯文本格式的简历内容
     if (resumeData) {
       let text = '';
@@ -820,7 +1201,7 @@ function OptimizeContent() {
       
       navigator.clipboard.writeText(text.trim());
     } else {
-      navigator.clipboard.writeText(isEditing ? editedContent : optimizedContent);
+      navigator.clipboard.writeText(optimizedContent);
     }
   };
 
@@ -829,21 +1210,6 @@ function OptimizeContent() {
     
     setDownloading(true);
     try {
-      if (editedContent) {
-        const editedDocument = new Document({
-          sections: [{
-            properties: {},
-            children: editedContent.split(/\r?\n/).map((line) => new Paragraph({
-              children: [new TextRun({ text: line, size: 22 })],
-              spacing: { after: 80 },
-            })),
-          }],
-        });
-        const editedBlob = await Packer.toBlob(editedDocument);
-        saveAs(editedBlob, `resume_${targetPosition || 'optimized'}_${new Date().toISOString().slice(0, 10)}.docx`);
-        return;
-      }
-
       const children: Paragraph[] = [];
       
       // 姓名 - 标题样式
@@ -1102,8 +1468,8 @@ function OptimizeContent() {
         <div className="relative mb-8 md:mb-10">
           <p className="text-sm font-medium text-zinc-400 dark:text-zinc-500 mb-3">{t('optimize.eyebrow')}</p>
           <PageBackButton fallbackHref="/resume" className="mb-3" />
-          <h1 className="text-2xl md:text-4xl font-bold tracking-tight text-zinc-900 dark:text-zinc-50 mb-4">{t('optimize.title')}</h1>
-          <p className="text-zinc-500 dark:text-zinc-400 max-w-2xl md:text-lg leading-relaxed">{t('optimize.subtitle')}</p>
+          <h1 className="text-xl md:text-2xl font-bold tracking-tight text-zinc-900 dark:text-zinc-50 mb-3">{t('optimize.title')}</h1>
+          <p className="text-zinc-500 dark:text-zinc-400 max-w-2xl text-sm md:text-base leading-relaxed">{t('optimize.subtitle')}</p>
         </div>
 
         {/* 历史记录 */}
@@ -1182,6 +1548,23 @@ function OptimizeContent() {
             </CardDescription>
           </CardHeader>
           <CardContent className="space-y-3 md:space-y-4">
+            <div>
+              <label className="text-xs md:text-sm font-medium mb-1.5 md:mb-2 block">
+                从已添加岗位选择（可选）
+              </label>
+              <Select value={selectedApplicationId} onValueChange={handleSelectApplication}>
+                <SelectTrigger className="h-9 md:h-10">
+                  <SelectValue placeholder={applications.length > 0 ? '选择已添加岗位' : '暂无已添加岗位'} />
+                </SelectTrigger>
+                <SelectContent>
+                  {applications.map((app) => (
+                    <SelectItem key={app.id} value={String(app.id)}>
+                      {app.jobs?.company || '未知公司'} · {app.jobs?.title || '未知岗位'}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            </div>
             <div className="grid grid-cols-1 md:grid-cols-3 gap-3 md:gap-4">
               <div>
                 <label className="text-xs md:text-sm font-medium mb-1.5 md:mb-2 block">{t('optimize.selectResume')}</label>
@@ -1414,7 +1797,7 @@ function OptimizeContent() {
 
       {/* Result Dialog */}
       <Dialog open={showResult} onOpenChange={setShowResult}>
-        <DialogContent className="!max-w-none w-[95vw] md:w-[90vw] max-h-[90vh] md:h-[85vh] overflow-hidden flex flex-col p-3 md:p-4">
+        <DialogContent className="!max-w-none w-[95vw] md:w-[90vw] max-h-[90vh] overflow-y-auto p-3 md:p-4">
           <DialogHeader className="flex-shrink-0">
             <DialogTitle className="flex items-center gap-2.5 text-base md:text-lg tracking-tight text-zinc-900 dark:text-zinc-50">
               <span className="w-7 h-7 rounded-lg bg-zinc-900 dark:bg-white flex items-center justify-center">
@@ -1432,19 +1815,7 @@ function OptimizeContent() {
             <Button
               variant={isEditing ? "default" : "outline"}
               size="sm"
-              onClick={() => {
-                if (isEditing) {
-                  // 保存编辑内容
-                  setOptimizedContent(editedContent);
-                } else {
-                  // 进入编辑模式 - 使用可读文本格式
-                  const readableText = resumeData
-                    ? resumeDataToText(resumeData, isEnglishVersion)
-                    : optimizedContent;
-                  setEditedContent(readableText);
-                }
-                setIsEditing(!isEditing);
-              }}
+              onClick={() => setIsEditing(!isEditing)}
               className={`h-9 text-xs items-center ${isEditing ? 'bg-zinc-900 text-white hover:bg-zinc-800 dark:bg-white dark:text-zinc-900 dark:hover:bg-zinc-200' : 'border-zinc-200 dark:border-zinc-700 text-zinc-600 dark:text-zinc-300 hover:bg-zinc-100 hover:text-zinc-900 dark:hover:bg-zinc-800 dark:hover:text-zinc-100'}`}
             >
               {isEditing ? (
@@ -1542,14 +1913,21 @@ function OptimizeContent() {
             </Button>
           </div>
 
-          {scoreError && (
-            <div className="mb-3 flex items-start gap-2 rounded-xl border border-red-200 bg-red-50 px-3 py-2.5 text-sm text-red-700 dark:border-red-900/60 dark:bg-red-950/30 dark:text-red-300">
-              <AlertCircle className="mt-0.5 h-4 w-4 flex-shrink-0" />
-              <span>{scoreError}</span>
-            </div>
-          )}
+            {scoreError && (
+              <div className="mb-3 flex items-start gap-2 rounded-xl border border-red-200 bg-red-50 px-3 py-2.5 text-sm text-red-700 dark:border-red-900/60 dark:bg-red-950/30 dark:text-red-300">
+                <AlertCircle className="mt-0.5 h-4 w-4 flex-shrink-0" />
+                <span>{scoreError}</span>
+              </div>
+            )}
 
-          {scoreComparison && (
+            {reviewWarning && (
+              <div className="mb-3 flex items-start gap-2 rounded-xl border border-amber-200 bg-amber-50 px-3 py-2.5 text-sm text-amber-800 dark:border-amber-900/60 dark:bg-amber-950/30 dark:text-amber-200">
+                <AlertCircle className="mt-0.5 h-4 w-4 flex-shrink-0" />
+                <span>{reviewWarning}</span>
+              </div>
+            )}
+
+            {scoreComparison && (
             <div className="mb-4 rounded-xl border border-zinc-200 bg-zinc-50/70 p-3 md:p-4 dark:border-zinc-800 dark:bg-zinc-900/50">
               <div className="mb-3 flex flex-wrap items-end justify-between gap-3">
                 <div>
@@ -1686,9 +2064,20 @@ function OptimizeContent() {
                 <h3 className="font-medium text-zinc-500 dark:text-zinc-400 text-xs md:text-sm">{t('optimize.originalResume')}</h3>
               </div>
               <div className="bg-zinc-100 dark:bg-zinc-800/60 p-2 md:p-3 rounded-lg flex-1 overflow-y-auto min-h-[150px] md:min-h-0">
-                <div className="bg-white p-3 md:p-6 shadow rounded-lg text-xs md:text-sm text-gray-700 whitespace-pre-wrap leading-relaxed">
-                  {originalContent}
-                </div>
+                {originalResumeData ? (
+                  <ResumePreview
+                    data={originalResumeData}
+                    isEnglish={getOriginalResumeLanguage(originalResumeData, originalContent, isEnglishVersion)}
+                  />
+                ) : originalContent ? (
+                  <div className="bg-white p-3 md:p-6 shadow rounded-lg text-xs md:text-sm text-gray-700 whitespace-pre-wrap leading-relaxed">
+                    {originalContent}
+                  </div>
+                ) : (
+                  <div className="bg-white p-3 md:p-6 shadow rounded-lg text-xs md:text-sm text-gray-400">
+                    {t('optimize.noOriginal')}
+                  </div>
+                )}
               </div>
             </div>
 
@@ -1700,16 +2089,8 @@ function OptimizeContent() {
                 <Badge variant="secondary" className="ml-0.5 text-[10px] md:text-xs h-4 md:h-5 bg-zinc-900 text-white dark:bg-white dark:text-zinc-900 hover:bg-zinc-900">{t('optimize.atsBadge')}</Badge>
               </div>
               <div className="bg-zinc-100 dark:bg-zinc-800/60 p-2 md:p-3 rounded-lg flex-1 overflow-y-auto min-h-[200px] md:min-h-0">
-                {isEditing ? (
-                  <textarea
-                    className="w-full h-full min-h-[300px] bg-white p-3 md:p-6 rounded-lg text-xs md:text-sm text-gray-700 leading-relaxed resize-none focus:outline-none focus:ring-2 focus:ring-zinc-300 dark:focus:ring-zinc-600"
-                    value={editedContent}
-                    onChange={(e) => setEditedContent(e.target.value)}
-                  />
-                ) : editedContent ? (
-                  <div className="bg-white p-3 md:p-6 shadow rounded-lg text-xs md:text-sm text-gray-700 whitespace-pre-wrap leading-relaxed">
-                    {editedContent}
-                  </div>
+                {isEditing && resumeData ? (
+                  <ResumeEditor data={resumeData} isEnglish={isEnglishVersion} onChange={setResumeData} />
                 ) : resumeData ? (
                   <div className="md:scale-100 w-full">
                     <ResumePreview data={resumeData} isEnglish={isEnglishVersion} />

@@ -7,6 +7,9 @@ import { isApplicationStatus } from '@/lib/application-status';
 export async function GET(request: NextRequest) {
   try {
     const isAdmin = hasValidAdminSession(request);
+    if (isAdmin) {
+      return NextResponse.json({ error: '管理员请使用 /api/admin/applications 获取脱敏分页数据' }, { status: 403 });
+    }
     const auth = isAdmin ? null : await getAuthContext(request);
     if (!isAdmin && !auth) return unauthorizedResponse();
     const client = isAdmin ? getSupabaseClient() : auth!.client;

@@ -20,11 +20,11 @@
 | P1 | 上传接口缺少统一大小和类型限制 | 已修复（待外部验证） | 阶段 2 回归、`ts-check`、`lint:build` 通过 |
 | P1 | 简历异步处理失败不可见且存在并发竞态 | 部分修复 | 条件抢占、重试互斥和文件校验已通过类型检查；队列持久化待做 |
 | P1 | AI Provider 链路分裂 | 未处理 | 需在真实配置下验证 |
-| P1 | 面试消息、实时音频和 AI 接口的并发/额度控制不足 | 部分修复 | 面试 schema/用户限流、消息时间戳 CAS 和 WS 生命周期已加入；ticket 鉴权待做 |
+| P1 | 面试消息、实时音频和 AI 接口的并发/额度控制不足 | 部分修复 | 纯语音 schema、session ticket、request claim、revision、原子 turn commit、SSE event id 已加入；会话级复用和每日额度待做 |
 | P1 | 网申及配置接口的数据隔离边界不完整 | 已修复（待外部验证） | `ts-check`、`lint:build` 通过；待真实 RLS 验证 |
-| P1 | Dashboard/analytics 全量或截断统计 | 部分修复 | Dashboard 总数改为 exact count；analytics 和 AI 平均分仍待优化 |
-| P2 | AI 匹配、岗位列表、网申预填和 JSON 解析的长期一致性问题 | 部分修复 | AI 匹配幂等、最新简历预填选择和 JSON 提取已加入；岗位分页和版本绑定待做 |
-| P2 | 批量写入、IP 获取、公司名校验和文档品牌漂移 | 部分修复 | 公司 DNA 输入/限流已收紧；事务、可信代理 IP 和品牌统一待做 |
+| P1 | Dashboard/analytics 全量或截断统计 | 已修复（待外部验证） | 管理员 analytics 已迁移到受限数据库聚合；`0022` 和 staging 性能验证待完成 |
+| P2 | AI 匹配、岗位列表、网申预填和 JSON 解析的长期一致性问题 | 部分修复 | AI 匹配幂等、最新简历预填选择、JSON 提取和岗位分页已加入；网申预填版本绑定待做 |
+| P2 | 批量写入、IP 获取、公司名校验和文档品牌漂移 | 部分修复 | 字段映射/预填反馈/面试 turn 已原子化；可信代理 IP 待做 |
 | P3 | 关闭 `reactStrictMode` 掩盖副作用 | 未处理 | 需在开发环境开启并清理副作用 |
 
 ## P0 问题
@@ -78,13 +78,13 @@
 - 状态：`部分修复`
 - 验证方式：类型检查、lint、阶段 2 回归已通过；仍需把 `processResume` 从 fire-and-forget 改为持久化任务表/worker，并用事务或数据库函数保证画像版本与主表写入原子性。
 
-### P1-4 AI Provider 选择分裂
+### P1-4 AI Provider 选择分裂（已处理）
 
 - 位置：AI 匹配、简历优化、网申预填相关 API 与 `docs/ai-provider-architecture.md`
-- 问题：部分文本链路走 Alibaba，网申预填仍走 Coze，Provider 配置、错误语义和超时策略不完全一致。
+- 问题：历史版本中部分文本链路走 Alibaba，网申预填走另一套 Provider，配置、错误语义和超时策略不完全一致。
 - 影响：同一用户在不同功能得到不同能力、延迟、JSON 可靠性和额度行为；切换供应商时容易漏改。
 - 修复方向：建立统一 Provider 接口、模型配置、超时/重试/结构化输出契约和可观测字段；功能只依赖抽象接口。
-- 状态：`未处理`
+- 状态：`已修复`
 - 验证方式：模拟成功、超时、限流、无效 JSON、Provider 不可用和 fallback。
 
 ### P1-5 面试输入、AI 接口和实时音频缺少完整的并发、额度和生命周期控制
@@ -92,9 +92,9 @@
 - 位置：`src/app/api/interview/chat/route.ts`、ASR/TTS WebSocket、AI API 路由
 - 问题：面试输入缺少严格长度和枚举校验；AI 接口缺少用户级限流；实时连接缺少连接时长、并发和额度限制；Bearer token 放在 WebSocket subprotocol 中。
 - 影响：单个用户或恶意客户端可放大 LLM、ASR、TTS 成本；长连接泄漏资源；token 可能出现在代理或日志中。
-- 修复：面试 chat 使用严格 zod schema，限制回答/JD/公司名/轮次数并加入用户级限流；会话写回增加 `user_id + updated_at` 条件，避免并发请求静默覆盖消息；ASR/TTS 增加连接最长 5 分钟、60 秒空闲超时、50 个并发连接上限，ASR 单连接 20MB 音频额度和 TTS 2,000 字符上限。
+- 修复：面试 chat 使用严格纯语音 Zod schema，限制回答/JD/公司名/轮次数并加入用户级限流；`clientRequestId + revision` 先通过 `claim_interview_request` 原子占位，`commit_interview_turn` 在单个事务内写兼容消息、turn、question、状态、revision 和 claim 清理。ASR/TTS 使用短期 session ticket 并在 WebSocket 首帧校验 session；TTS WebSocket 支持会话复用的 `speak/cancel + requestId`。
 - 状态：`部分修复`
-- 验证方式：`test:interview-validation`、类型检查和 lint 已通过；仍需把时间戳 CAS 升级为显式 revision/数据库函数，并将 WebSocket 长期 Bearer token 从 subprotocol 改为短期 ticket/首条消息鉴权，再做浏览器实时压测。
+- 验证方式：`test:interview-validation`、类型检查和 lint 已通过；仍需在 staging 验证 migration、并发续答回放、过期 ticket、浏览器实时 ASR/TTS 与连接压测。
 
 ### P1-6 网申创建和配置读取的隔离边界不完整
 
@@ -110,9 +110,9 @@
 - 位置：Dashboard 统计页面、analytics API
 - 问题：简历总数统计使用了错误的来源；其他统计存在 200/50 条上限；analytics 全量拉取多张表并在 Node.js 中聚合。
 - 影响：用户看到错误数量；数据量增长后响应变慢、内存升高，甚至超时。
-- 修复：Dashboard 的简历、面试、网申总数改为 Supabase exact count；本周投递只拉取本周明细，避免 200 条截断导致周统计错误。
-- 状态：`部分修复`
-- 验证方式：类型检查和 lint 已通过；仍需优化 analytics、AI 平均分和收藏统计的大数据量查询，并验证超过原截断阈值的数据集。
+- 修复：Dashboard 的简历、面试、网申总数改为 Supabase exact count；本周投递只拉取本周明细，避免 200 条截断导致周统计错误。管理员后台进一步新增 `0022_admin_analytics_aggregates.sql` 和 `/api/admin/analytics`，将聚合下沉到 PostgreSQL，并只返回固定大小 JSON：总量/区间新增量、有效岗位分布、区间网申状态、7 日 UTC 趋势和前 10 活跃学生。旧 `/api/analytics` 已退役，不再把全表加载到 Node.js；简历学校/学历等半结构化画像图已移除，待画像字段规范化后以独立聚合重新引入。
+- 状态：`已修复（待外部验证）`
+- 验证方式：类型检查、lint、构建和 staging 数据库函数调用；需用超过原截断阈值的数据验证结果、执行计划和响应时间。
 
 ## P2 问题
 
@@ -130,8 +130,19 @@
 - 位置：`src/app/api/jobs/route.ts`、岗位页面
 - 问题：岗位列表可能全量读取，部分筛选在应用层执行。
 - 影响：岗位量增长后首屏和数据库连接占用恶化。
-- 修复方向：统一 cursor/offset 分页，筛选、排序和全文搜索下推数据库并建立索引。
-- 状态：`未处理`
+- 修复：岗位接口已使用 offset 分页，搜索、状态、地区、方向和受众筛选下推数据库；管理员岗位列表使用服务端分页并返回 exact count。
+- 状态：`已修复（待外部验证）`
+- 验证方式：`pnpm run ts-check`、`pnpm run lint:build`、`pnpm run build`；staging 需用超过一页的岗位数据验证筛选、排序、总数和索引表现。
+- 剩余风险：岗位页面仍使用 offset，数据频繁插入时跨页可能出现轻微漂移；超大规模数据再升级 cursor 分页。
+
+### P2-2a 管理员后台读取接口复用普通用户 API
+
+- 位置：`src/app/admin/page.tsx`、`src/app/api/admin/resumes/route.ts`、`src/app/api/admin/applications/route.ts`、`src/app/api/admin/configs/route.ts`
+- 问题：后台曾直接读取 `/api/resume`、`/api/applications`、`/api/configs`；这些接口混合用户权限、管理员权限和业务返回字段，且列表没有后台专用分页与汇总口径。
+- 修复：新增管理员专用 GET 接口，统一管理员会话校验，限制返回字段，支持搜索、状态筛选、服务端分页、exact count 和状态汇总；后台前端已迁移读取链路。
+- 状态：`已修复（待外部验证）`
+- 验证方式：顺序运行 `pnpm exec next typegen`、`pnpm run ts-check`、`pnpm run lint:build`、`pnpm run build`；staging 验证未授权 401、跨用户数据不泄露、分页总数和关联岗位摘要。
+- 剩余风险：管理员仍使用共享会话密码，角色权限矩阵和敏感内容二次授权尚未完成；`0021_admin_audit_logs.sql` 必须在目标 Supabase 执行后审计写入才生效。
 
 ### P2-3 网申预填长期读取旧 `application_profiles`
 
@@ -147,7 +158,7 @@
 - 位置：AI Provider 调用和各 AI API 的 JSON 解析逻辑
 - 问题：调用方声明了 schema，但未始终以 provider 支持的结构化格式下发；部分接口用贪婪正则从文本中截取 JSON。
 - 影响：模型输出包含额外文本、嵌套对象或多个 JSON 时解析失败，用户只得到笼统错误。
-- 修复：新增字符串/转义感知的括号扫描 JSON 提取器，已替换简历解析、翻译、企业 DNA 和 Coze JSON 链路；翻译解析或保存失败不再伪装成功。
+- 修复：新增字符串/转义感知的括号扫描 JSON 提取器，已替换简历解析、翻译、企业 DNA 和网申预填链路；翻译解析或保存失败不再伪装成功。
 - 状态：`部分修复`
 - 验证方式：`test:json-extract` 已通过；仍需把所有 Provider 的结构化 response schema 做成统一契约，并覆盖截断 JSON。
 
@@ -156,16 +167,16 @@
 - 位置：TTS HTTP/WebSocket 客户端与面试页面
 - 问题：同一语音可能同时走 HTTP 预取和实时 WebSocket；打断、切换轮次或卸载时清理不完整。
 - 影响：重复计费、音频重叠、连接泄漏和移动端资源占用。
-- 修复方向：为每次播放建立 abort/session id；同一阶段只允许一个音频源；在 stop、error、unmount 和 round change 全部释放连接、AudioContext、ObjectURL 和队列。
-- 状态：`未处理`
+- 修复：实时 TTS 改为每场会话复用 WebSocket，连续 `speak/cancel` 由 `requestId` 分隔；HTTP MP3 仅在实时连接或合成失败后调用，不再预取；中断、结束、重开与卸载会取消当前 request、停止 PCM source、关闭 socket 和释放 AudioContext。
+- 状态：`已修复（待浏览器验证）`
 
 ### P2-6 批量删除和字段映射更新不是事务
 
 - 位置：网申、字段映射 API
 - 问题：多步删除或更新中途失败会留下半完成状态。
 - 影响：用户看到孤立记录或自动填表使用旧映射。
-- 修复方向：使用数据库函数/事务边界；接口返回明确的部分失败状态，必要时增加幂等键。
-- 状态：`未处理`
+- 修复：`replace_field_mappings`、`apply_prefill_feedback` 与 `commit_interview_turn` 均在数据库事务内提交，避免删后插、资料更新或结构化面试投影留下半完成状态。
+- 状态：`已修复（待外部验证）`
 
 ### P2-7 公司名校验错误使用岗位标题规则
 
@@ -184,13 +195,13 @@
 - 修复方向：只信任明确配置的反向代理；按可信代理链解析最后一个可信地址，否则使用连接对端地址，并补充 IPv4/IPv6 规范化。
 - 状态：`未处理`
 
-### P2-9 文档、品牌和 Provider 信息漂移
+### P2-9 文档、品牌和 Provider 信息漂移（已处理）
 
 - 位置：README、设计文档、Provider 文档和界面文案
-- 问题：Liorvix、Rising Path、Coze、Alibaba 等名称在不同文档和链路中混用。
+- 问题：Liorvix、Rising Path、Alibaba 等名称在不同文档和链路中混用。
 - 影响：部署、排障和用户沟通容易误导，团队无法确认真实依赖。
 - 修复方向：确定产品名、服务边界和 Provider 责任，统一 README、环境变量、日志和 UI 文案。
-- 状态：`未处理`
+- 状态：`已修复`
 
 ## P3 问题
 

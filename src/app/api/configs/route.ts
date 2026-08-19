@@ -1,9 +1,44 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { getSupabaseClient } from '@/storage/database/supabase-client';
 import { hasValidAdminSession } from '@/lib/admin-auth';
+import { ADMIN_PERMISSIONS, requireAdminPermission } from '@/lib/admin-permissions';
+import { recordAdminAuditEvent, recordAdminAuditFailure } from '@/lib/admin-audit';
 
 const RESERVED_CONFIG_TYPE = 'admin_password_hash';
 const PUBLIC_CONFIG_TYPES = ['region', 'direction', 'audience', 'job_type'] as const;
+
+function fallbackConfigs(configType: 'region' | 'direction', values: string[], idOffset: number) {
+  return values.map((config_value, index) => ({
+    id: -(idOffset + index + 1),
+    config_type: configType,
+    config_value,
+    sort_order: index + 1,
+    is_active: true,
+  }));
+}
+
+const FALLBACK_REGION_CONFIGS = fallbackConfigs('region', [
+  '美国',
+  '加拿大',
+  '英国',
+  '澳大利亚',
+  '香港',
+  '新加坡',
+], 0);
+
+const FALLBACK_DIRECTION_CONFIGS = fallbackConfigs('direction', [
+  'SDE',
+  'ML/AI',
+  'Data',
+  'PM',
+  'Quant',
+  'Finance',
+  'IBD/S&T',
+  'Consulting',
+  'Risk',
+  'MKT',
+  'Legal',
+], 100);
 
 // 获取所有配置
 export async function GET(request: NextRequest) {
@@ -43,7 +78,17 @@ export async function GET(request: NextRequest) {
       return acc;
     }, {} as Record<string, typeof data>);
 
-    return NextResponse.json({ configs: grouped, list: data });
+    // A fresh database often has jobs before an administrator has populated
+    // job_configs. The user-facing job filters must remain usable in that
+    // state, so provide stable market labels and actual directions from jobs.
+    if (!isAdmin && !configType && !(grouped.region?.length)) {
+      grouped.region = FALLBACK_REGION_CONFIGS;
+    }
+    if (!isAdmin && !configType && !(grouped.direction?.length)) {
+      grouped.direction = FALLBACK_DIRECTION_CONFIGS;
+    }
+
+    return NextResponse.json({ configs: grouped, list: Object.values(grouped).flat() });
   } catch (error) {
     console.error('Error fetching configs:', error);
     return NextResponse.json(
@@ -56,9 +101,8 @@ export async function GET(request: NextRequest) {
 // 添加配置
 export async function POST(request: NextRequest) {
   try {
-    if (!hasValidAdminSession(request)) {
-      return NextResponse.json({ error: '需要管理员权限' }, { status: 401 });
-    }
+    const permissionError = requireAdminPermission(request, ADMIN_PERMISSIONS.configWrite);
+    if (permissionError) return permissionError;
 
     const client = getSupabaseClient();
     const body = await request.json();
@@ -99,9 +143,18 @@ export async function POST(request: NextRequest) {
       throw new Error(`添加配置失败: ${error.message}`);
     }
 
+    await recordAdminAuditEvent({
+      request,
+      action: 'config.create',
+      resourceType: 'job_config',
+      resourceId: data.id,
+      afterData: data,
+    });
+
     return NextResponse.json({ config: data });
   } catch (error) {
     console.error('Error creating config:', error);
+    await recordAdminAuditFailure({ request, action: 'config.create', resourceType: 'job_config', error });
     return NextResponse.json(
       { error: '添加配置失败' },
       { status: 500 }
@@ -112,9 +165,8 @@ export async function POST(request: NextRequest) {
 // 更新配置
 export async function PUT(request: NextRequest) {
   try {
-    if (!hasValidAdminSession(request)) {
-      return NextResponse.json({ error: '需要管理员权限' }, { status: 401 });
-    }
+    const permissionError = requireAdminPermission(request, ADMIN_PERMISSIONS.configWrite);
+    if (permissionError) return permissionError;
 
     const client = getSupabaseClient();
     const body = await request.json();
@@ -129,7 +181,7 @@ export async function PUT(request: NextRequest) {
 
     const { data: existingConfig, error: existingError } = await client
       .from('job_configs')
-      .select('config_type')
+      .select('*')
       .eq('id', id)
       .single();
     if (existingError) {
@@ -155,9 +207,19 @@ export async function PUT(request: NextRequest) {
       throw new Error(`更新配置失败: ${error.message}`);
     }
 
+    await recordAdminAuditEvent({
+      request,
+      action: 'config.update',
+      resourceType: 'job_config',
+      resourceId: id,
+      beforeData: existingConfig,
+      afterData: data,
+    });
+
     return NextResponse.json({ config: data });
   } catch (error) {
     console.error('Error updating config:', error);
+    await recordAdminAuditFailure({ request, action: 'config.update', resourceType: 'job_config', error });
     return NextResponse.json(
       { error: '更新配置失败' },
       { status: 500 }
@@ -168,9 +230,8 @@ export async function PUT(request: NextRequest) {
 // 删除配置
 export async function DELETE(request: NextRequest) {
   try {
-    if (!hasValidAdminSession(request)) {
-      return NextResponse.json({ error: '需要管理员权限' }, { status: 401 });
-    }
+    const permissionError = requireAdminPermission(request, ADMIN_PERMISSIONS.configWrite);
+    if (permissionError) return permissionError;
 
     const client = getSupabaseClient();
     const searchParams = request.nextUrl.searchParams;
@@ -185,7 +246,7 @@ export async function DELETE(request: NextRequest) {
 
     const { data: existingConfig, error: existingError } = await client
       .from('job_configs')
-      .select('config_type')
+      .select('*')
       .eq('id', id)
       .single();
     if (existingError) {
@@ -204,9 +265,18 @@ export async function DELETE(request: NextRequest) {
       throw new Error(`删除配置失败: ${error.message}`);
     }
 
+    await recordAdminAuditEvent({
+      request,
+      action: 'config.delete',
+      resourceType: 'job_config',
+      resourceId: id,
+      beforeData: existingConfig,
+    });
+
     return NextResponse.json({ success: true });
   } catch (error) {
     console.error('Error deleting config:', error);
+    await recordAdminAuditFailure({ request, action: 'config.delete', resourceType: 'job_config', error });
     return NextResponse.json(
       { error: '删除配置失败' },
       { status: 500 }

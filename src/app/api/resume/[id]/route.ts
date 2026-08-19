@@ -5,6 +5,9 @@ import { resolveRegionKey } from '@/lib/region-dna';
 import { isRecord } from '@/lib/resume-parser';
 import type { ResumeProfile } from '@/lib/resume-types';
 import { deleteResumeFile } from '@/lib/resume-storage';
+import { hasValidAdminSession } from '@/lib/admin-auth';
+import { ADMIN_PERMISSIONS, requireAdminPermission } from '@/lib/admin-permissions';
+import { recordAdminAuditEvent, recordAdminAuditFailure } from '@/lib/admin-audit';
 
 // PATCH /api/resume/[id] —— 用户手动修正画像并选择是否确认
 export async function PATCH(
@@ -229,38 +232,48 @@ export async function DELETE(
   request: NextRequest,
   { params }: { params: Promise<{ id: string }> },
 ) {
+  const isAdminRequest = hasValidAdminSession(request);
+  if (isAdminRequest) {
+    const permissionError = requireAdminPermission(request, ADMIN_PERMISSIONS.configWrite);
+    if (permissionError) return permissionError;
+  }
   try {
-    const auth = await getAuthContext(request);
-    if (!auth) return unauthorizedResponse();
-    const client = auth.client;
+    const auth = isAdminRequest ? null : await getAuthContext(request);
+    if (!isAdminRequest && !auth) return unauthorizedResponse();
+    const client = isAdminRequest
+      ? (await import('@/storage/database/supabase-client')).getSupabaseClient()
+      : auth!.client;
     const { id } = await params;
 
     const { data: resumeToDelete } = await client
       .from('resumes')
-      .select('file_key')
+      .select('id,file_key,file_name,user_id')
       .eq('id', id)
-      .eq('user_id', auth.user.id)
       .maybeSingle();
+    if (!resumeToDelete) return NextResponse.json({ error: '简历不存在或无权访问' }, { status: 404 });
 
-    const { error: matchError } = await client
+    let matchDelete = client
       .from('ai_matches')
       .delete()
-      .eq('resume_id', id)
-      .eq('user_id', auth.user.id);
+      .eq('resume_id', id);
+    if (!isAdminRequest) matchDelete = matchDelete.eq('user_id', auth!.user.id);
+    const { error: matchError } = await matchDelete;
     if (matchError) console.error('Error deleting ai_matches:', matchError);
 
-    const { error: appError } = await client
+    let applicationDelete = client
       .from('applications')
       .delete()
-      .eq('resume_id', id)
-      .eq('user_id', auth.user.id);
+      .eq('resume_id', id);
+    if (!isAdminRequest) applicationDelete = applicationDelete.eq('user_id', auth!.user.id);
+    const { error: appError } = await applicationDelete;
     if (appError) console.error('Error deleting applications:', appError);
 
-    const { error } = await client
+    let resumeDelete = client
       .from('resumes')
       .delete()
-      .eq('id', id)
-      .eq('user_id', auth.user.id);
+      .eq('id', id);
+    if (!isAdminRequest) resumeDelete = resumeDelete.eq('user_id', auth!.user.id);
+    const { error } = await resumeDelete;
     if (error) throw new Error(`删除简历失败: ${error.message}`);
 
     if (typeof resumeToDelete?.file_key === 'string') {
@@ -271,9 +284,23 @@ export async function DELETE(
       }
     }
 
+    if (isAdminRequest) {
+      await recordAdminAuditEvent({
+        request,
+        action: 'resume.delete',
+        resourceType: 'resume',
+        resourceId: id,
+        subjectUserId: typeof resumeToDelete.user_id === 'string' ? resumeToDelete.user_id : null,
+        beforeData: { id: resumeToDelete.id, file_name: resumeToDelete.file_name, user_id: resumeToDelete.user_id },
+      });
+    }
+
     return NextResponse.json({ success: true });
   } catch (error) {
     console.error('Error deleting resume:', error);
+    if (isAdminRequest) {
+      await recordAdminAuditFailure({ request, action: 'resume.delete', resourceType: 'resume', error });
+    }
     return NextResponse.json({ error: '删除简历失败' }, { status: 500 });
   }
 }

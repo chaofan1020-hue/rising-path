@@ -5,9 +5,9 @@ import { Languages } from "lucide-react";
 import { useState, useRef, useEffect } from "react";
 
 const languageOptions = [
-  { value: "zh-CN" as Locale, label: "简体中文" },
-  { value: "zh-TW" as Locale, label: "繁體中文" },
-  { value: "en" as Locale, label: "English" },
+  { value: "zh-CN" as Locale, label: "简体中文", shortLabel: "中" },
+  { value: "zh-TW" as Locale, label: "繁體中文", shortLabel: "繁" },
+  { value: "en" as Locale, label: "English", shortLabel: "EN" },
 ];
 
 export function LanguageSwitcher() {
@@ -31,11 +31,11 @@ export function LanguageSwitcher() {
     <div className="relative" ref={dropdownRef}>
       <button
         onClick={() => setIsOpen(!isOpen)}
-        className="flex items-center gap-2 px-2 py-2 text-sm text-black dark:text-white hover:text-zinc-900 dark:hover:text-zinc-100 transition-colors"
-        aria-label="Switch language"
+        className="flex items-center gap-2 px-2 py-2 text-sm text-black dark:text-white hover:text-zinc-900 dark:hover:text-zinc-100 transition-colors whitespace-nowrap shrink-0"
+        aria-label={currentLanguage ? `Current language: ${currentLanguage.label}` : "Switch language"}
       >
         <Languages className="w-4 h-4" />
-        <span className="hidden sm:inline">{currentLanguage?.label}</span>
+        <span className="hidden sm:inline whitespace-nowrap shrink-0">{currentLanguage?.shortLabel}</span>
       </button>
 
       {isOpen && (

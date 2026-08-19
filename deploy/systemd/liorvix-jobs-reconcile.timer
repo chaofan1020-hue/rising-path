@@ -1,0 +1,10 @@
+[Unit]
+Description=Run Liorvix full job reconciliation daily
+
+[Timer]
+OnCalendar=*-*-* 03:25:00
+RandomizedDelaySec=10min
+Persistent=true
+
+[Install]
+WantedBy=timers.target

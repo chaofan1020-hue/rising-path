@@ -5,7 +5,7 @@ import { attachInterviewASRWebSocket } from './lib/interview-asr-ws-server';
 import { attachInterviewTTSWebSocket } from './lib/interview-tts-ws-server';
 import { startResumeProcessingWorker } from './lib/resume-processing-worker';
 
-const dev = process.env.NODE_ENV !== 'production' && process.env.COZE_PROJECT_ENV !== 'PROD';
+const dev = process.env.NODE_ENV !== 'production';
 const hostname = process.env.HOSTNAME || '0.0.0.0';
 const port = parseInt(process.env.PORT || '5000', 10);
 
@@ -34,7 +34,7 @@ app.prepare().then(() => {
     startResumeProcessingWorker();
     console.log(
       `> Server listening at http://${hostname}:${port} as ${
-        dev ? 'development' : process.env.COZE_PROJECT_ENV
+        dev ? 'development' : 'production'
       }`,
     );
   });

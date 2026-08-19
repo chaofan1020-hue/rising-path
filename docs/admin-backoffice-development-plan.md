@@ -1,5 +1,7 @@
 # Liorvix 管理员后台开发计划
 
+> 执行状态：2026-08-12，当前批次正在落实 P0 管理员读取隔离和 P1 数据量化基础。本文同时作为后台整改的执行清单；完成项必须有代码位置、验证命令和外部环境验收条件。
+
 ## 目标
 
 建设一个面向运营、内容审核和产品管理员的后台，统一管理：
@@ -46,6 +48,101 @@
 - 缺少管理员操作审计日志。
 - 缺少批量操作、筛选、分页和错误状态标准。
 - 统计页面还没有统一的数据口径。
+
+## 当前执行批次
+
+### 已完成
+
+- [x] 管理员审计日志表和统一脱敏写入服务：`0021_admin_audit_logs.sql`、`src/lib/admin-audit.ts`。
+- [x] 管理员审计查询页：`/api/admin/audit-logs`，支持资源、操作和服务端分页。
+- [x] 岗位、配置、企业配置、Logo、网申、简历删除、DNA、反馈审核和密码修改写操作接入审计。
+- [x] AI 文本、ASR、TTS 用量事件及学生聚合接口：`0017`–`0019`、`/api/admin/ai-usage/*`。
+- [x] 岗位后台列表使用数据库分页和服务端搜索。
+- [x] 管理员简历、网申、配置读取接口独立于普通用户接口：`/api/admin/resumes`、`/api/admin/applications`、`/api/admin/configs`。
+- [x] 简历和网申后台列表使用服务端分页、状态筛选、安全字段和 exact count；不返回完整简历正文或用户邮箱。
+
+### 当前进行中
+
+- [ ] 将管理员读取接口在 staging/生产 Supabase 环境验证，重点检查 `service_role`、RLS、关联查询字段和 `0021` 迁移。
+- [x] 管理员仪表盘 analytics 已迁移为数据库聚合：`0022_admin_analytics_aggregates.sql`、`/api/admin/analytics`；旧 `/api/analytics` 已退役，避免继续全表读取。
+- [x] AI 用量事件已接入版本化模型价格和预计成本：`0023_ai_model_prices.sql`、`/api/admin/ai-prices`；事件保存价格快照，按币种聚合，未定价调用不计入金额。
+- [x] 已按官方定价填入当前 provider 基线：`0024_seed_ai_model_prices.sql`；Cartesia 价格明确标注为套餐等价估算，等待实际合同/PAYG 账单后替换。
+- [x] 已补充实时 ASR 价格并修正 Cartesia 基线：`0025_correct_audio_price_baselines.sql`；`qwen3-asr-flash-realtime` 按国际/新加坡官方价计费，Cartesia 仅保留内部套餐折算估算。
+- [x] 建立共享管理员壳层和响应式导航：`src/components/admin-shell.tsx`；`/admin` 与 `/admin/dna-review` 统一认证、导航和页面结构。
+- [x] 建立角色权限基础和统一权限函数：`0026_admin_roles_and_dna_versions.sql`、`src/lib/admin-permissions.ts`；共享密码暂以 `legacy_super_admin` 兼容映射。
+- [x] DNA 发布生成不可变版本快照，并增加版本历史和回滚 API：`/api/admin/dna/versions`；回滚和发布写入审计日志。
+- [x] 其他管理员 API 已迁移到细粒度权限函数；密码登录、会话检查和退出仍保留独立安全流程。
+- [x] 管理员 Supabase Auth 账号绑定和角色管理：`/api/admin/auth`、`/api/admin/accounts`、`/admin/accounts`；共享密码保留为迁移期兼容入口。
+- [x] 后台前端按权限收敛：`/api/admin/auth` 返回权限快照，导航、Tab、DNA 审核和管理员账号页按 permission key 显示；无权直达 URL 自动回退或显示无权状态，不再发起必然 `403` 的请求。
+- [x] 学生 AI 用量详情：`/api/admin/students/[id]`、`/admin/students/[id]` 汇总单个学生的 Token、ASR/TTS 时长、价格快照成本、业务计数、功能拆分与最近调用摘要；不返回简历正文和面试对话。
+- [x] 管理员路径下的简历删除和网申更新改为高权限操作：通用用户 API 检测到管理员会话时要求 `admin.config.write`，用户管理员列表默认只读并链接到学生详情。
+- [x] 阻断管理员误用普通用户全量接口：管理员访问 `/api/resume`、`/api/applications` 返回 `403`，必须使用脱敏分页管理员接口；岗位创建、编辑、删除和批量操作要求 `admin.jobs.write`。
+- [x] 岗位运营权限扫尾：岗位同步、Techmap 同步、岗位描述抓取/生成、结构化处理、赞助商批量判断、岗位审核队列、岗位表格导入和管理端外链抓取统一要求 `admin.jobs.write`；管理员共享密码修改要求 `admin.config.write`。
+- [x] 网申字段映射质量看板：`0027_application_prefill_quality_aggregates.sql`、`/api/admin/prefill-quality`、后台“网申质量”页按聚合口径展示确认率、修改率、忽略量、趋势、字段高纠错榜和共享模板高纠错榜；不返回填写内容或用户身份。
+- [x] 服务健康看板：`0028_admin_service_health_aggregates.sql`、`/api/admin/service-health`、后台“服务健康”页按已记录 AI 调用和岗位同步状态展示供应商成功率、平均耗时、失败热点与同步滞后；页面刷新不产生第三方探测调用。
+- [x] 服务健康告警摘要：在页面顶部汇总供应商异常/告警、岗位同步滞后与当前同步中状态，便于运营快速识别需处理事项；告警只基于已有聚合数据。
+- [x] 岗位运营审计补齐：投稿审核/删除、赞助判断、岗位描述抓取/生成、结构化处理和 Techmap 同步均记录操作结果或失败；投稿审核拒绝未知 action，正式岗位写入失败会返回失败而非静默标记已批准。
+- [x] AI 用量导出权限与审计：新增 `admin.usage.export`，仅超级管理员与共享密码兼容管理员可下载按当前筛选条件的脱敏 CSV；导出不包含简历、面试、提示词、音频、邮箱或错误正文，并记录筛选条件与导出条数。
+- [x] 岗位投稿审核工作台：`/api/admin/job-submissions` 提供脱敏分页列表，后台“投稿审核”支持按状态/岗位/公司筛选、批准/拒绝确认与删除；查看需要 `admin.jobs.read`，写操作需要 `admin.jobs.write`，批准调用 `0030` 原子事务。
+- [x] 岗位 Feed 运营状态：岗位页显示数据源配置、最近增量/完整对账成功时间、连续失败和最近错误；同步状态支持手动刷新，完整对账要求二次确认；`/api/jobs/sync-feed` 对 `maxPages` 做 1–1000 整数校验。
+- [x] 岗位只读权限收口：没有 `admin.jobs.write` 的管理员只能查询和打开岗位外链，新增、编辑、删除、导入、批量选择、同步和完整对账入口均不显示。
+- [x] 学生运营目录：`0034_admin_student_directory.sql`、`/api/admin/students`、`/admin/students` 提供服务端分页、昵称/ID 搜索，以及简历、网申、面试、AI 调用和 Token 的脱敏运营汇总；仅 `admin.users.read` 可访问，并链接到既有学生成本详情。
+
+### 下一批验收标准
+
+1. 未带管理员会话访问 `/api/admin/resumes`、`/api/admin/applications`、`/api/admin/configs` 必须返回 `401`。
+2. 管理员列表只返回当前页安全字段；服务端响应不得包含 `parsed_content`、`profile`、完整邮箱、面试消息或对象存储密钥。
+3. `meta.total` 和 `summary.byStatus` 与数据库真实记录一致，筛选、搜索和分页的口径一致。
+4. 删除简历、更新网申后，当前页和总数正确刷新，并产生对应审计记录。
+5. `0017`、`0018`、`0019`、`0020`、`0021`、`0022` 在 staging 按顺序执行；远端已有历史时先核对 migration history，不直接重放或改名覆盖。
+6. `0023_ai_model_prices.sql` 在 `0022` 后执行；配置模型价格后验证文本 Token、ASR/TTS 音频计费、未定价调用和历史价格快照。
+7. `0024_seed_ai_model_prices.sql` 在 `0023` 后执行；验证后台能读取三条价格，下一次 AI 调用写入 `price_snapshot`。
+8. `0025_correct_audio_price_baselines.sql` 在 `0024` 后执行；验证实时 ASR 使用 `qwen3-asr-flash-realtime` 时有价格快照，Cartesia 估算来源明确可见。
+9. `content_admin` 不显示学生、配置、审计和管理员账号模块；`support_admin` 不显示 DNA、岗位、配置、审计和管理员账号模块；直接访问无权页面不会显示或请求受限数据。
+10. 学生详情仅限 `admin.users.read`，显示 Token、ASR/TTS 时长和事件成本快照，不返回简历原文、邮箱、面试消息或第三方凭据。
+11. `0027_application_prefill_quality_aggregates.sql` 在 staging/生产执行后，验证“网申质量”页仅返回聚合数据；确认率、修改率的分母均为 `confirmed + edited`，忽略量不混入分母。
+12. `0028_admin_service_health_aggregates.sql` 在 staging/生产执行后，验证服务健康页不返回请求文本、错误正文或凭据；AI 状态与 `ai_usage_events`、岗位同步状态与 `job_sync_state` 一致。
+13. `0029_admin_usage_export_permission.sql` 在 `0026`、`0027`、`0028` 后执行，验证仅 `super_admin` 与 `legacy_super_admin` 获得 `admin.usage.export`；CSV 导出记录审计日志且不含简历、对话、提示词、音频、邮箱或错误正文。
+14. `0030_job_submission_review_transaction.sql` 在 `0029` 后执行，验证批准/拒绝只能处理 `pending` 投稿；批准后岗位和审核状态同时存在，任一写入失败时二者均不变。
+15. 岗位页只能由 `admin.jobs.write` 读取或触发 Feed 同步状态；完整对账必须确认，非法 `maxPages` 返回 `400` 且不启动同步任务。
+
+## 迁移执行清单
+
+当前仓库新增迁移：
+
+| 文件 | 用途 | 执行前提 |
+| --- | --- | --- |
+| `0017_ai_usage_events.sql` | AI/音频调用明细与 usage 来源 | 基础业务表已存在 |
+| `0018_ai_usage_admin_aggregates.sql` | 管理员用量汇总函数 | `0017` 已执行 |
+| `0019_audio_ai_usage_metrics.sql` | ASR/TTS 时长、字节、计费单位汇总 | `0017`、`0018` 已执行 |
+| `0020_job_feed_reconciliation.sql` | 岗位 Feed 对账字段和约束 | 当前岗位表结构与代码一致 |
+| `0021_admin_audit_logs.sql` | 管理员审计日志表、索引和 service role 权限 | service role 仅服务端使用 |
+| `0022_admin_analytics_aggregates.sql` | 管理员仪表盘的有界数据库聚合与索引 | `profiles`、简历、网申、AI 匹配和岗位表已存在；在 `0021` 后执行 |
+| `0023_ai_model_prices.sql` | 版本化模型价格、事件价格快照和按币种成本聚合 | `0019`、`0022` 已执行；在 `0022` 后执行 |
+| `0024_seed_ai_model_prices.sql` | 当前 Alibaba 文本/ASR 与 Cartesia TTS 价格基线 | `0023` 已执行；价格变更应新增价格记录，不覆盖历史快照 |
+| `0025_correct_audio_price_baselines.sql` | 实时 ASR 价格和 Cartesia 估算基线修正 | `0024` 已执行；停用旧估算但保留历史价格快照 |
+| `0025_interview_core_upgrade.sql` | 面试核心表和实时面试结构升级 | 与价格修正同编号，部署工具必须按文件名确认执行状态 |
+| `0026_admin_roles_and_dna_versions.sql` | 管理员角色权限、DNA 版本快照、发布和回滚函数 | `company_dna`、`auth.users` 已存在；在两个 `0025` 迁移均确认后执行 |
+| `0027_application_prefill_quality_aggregates.sql` | 网申预填质量聚合、趋势和映射/模板纠错榜 | `0005`、`0008` 已执行；在现有 `0026` 之后执行 |
+| `0028_admin_service_health_aggregates.sql` | AI 调用和岗位同步的服务健康聚合 | `0017`、`0020` 已执行；在 `0027` 后执行 |
+| `0029_admin_usage_export_permission.sql` | AI 用量导出权限种子 | `0026` 已执行；在 `0028` 后执行 |
+| `0030_job_submission_review_transaction.sql` | 岗位投稿批准/拒绝的原子事务 | `job_submissions`、`jobs` 已存在；在 `0029` 后执行 |
+| `0031_voice_only_interview_constraints.sql` | 语音面试输入约束与会话字段补齐 | 面试核心表已存在；在 `0030` 后执行 |
+| `0032_application_write_safety.sql` | 网申资料/反馈并发写入与字段映射原子替换 | 网申资料、反馈和映射表已存在；在 `0031` 后执行 |
+| `0033_interview_request_claim.sql` | 面试请求互斥领取，防止并发重复生成 | `interview_sessions` 已存在；在 `0032` 后执行 |
+| `0034_admin_student_directory.sql` | 管理员学生目录的脱敏聚合、搜索和分页 | `profiles`、简历、网申、面试、AI 用量表已存在；在 `0033` 后执行 |
+
+## 仪表盘统计口径
+
+- 新增：目标表的 `created_at` 落在选定 UTC 半开区间 `[from, to)`。
+- 活跃学生：该区间内至少创建过一条简历、网申或 AI 选岗记录的用户。
+- 活跃学生平均操作：区间内上述三类记录总数除以活跃学生数；无活跃学生时为 `0`。
+- 岗位库存与岗位地区/方向分布：当前 `is_active = true` 的全部岗位，不随时间范围变化。
+- 网申状态分布：区间内创建的网申按状态统计；历史 `interview` 统一计入 `submitted`。
+- 趋势：截至 `to` 的 7 个 UTC 自然日，当天为截至查询时刻的部分数据。
+- 用户活跃排行：按选定区间内三类操作总数降序，仅返回前 10 名和显示名；不返回邮箱、简历正文或画像 JSON。
+
+迁移完成后必须检查：`select version from supabase_migrations.schema_migrations order by version;`，并用管理员会话实际访问上述接口。`.env.local` 中的 Supabase URL、anon key 和 service role key 只在部署环境配置，不能写入文档或提交。
 
 ## 设计原则
 
@@ -116,6 +213,7 @@ admin.feedback.review
 admin.jobs.read
 admin.jobs.write
 admin.users.read
+admin.usage.export
 admin.config.write
 admin.audit.read
 admin.roles.write

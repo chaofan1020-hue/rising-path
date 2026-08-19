@@ -22,6 +22,7 @@ import {
 } from '@/components/ui/card';
 import { Loader2, Save, Download, ClipboardList, MapPin, Sparkles } from 'lucide-react';
 import { AuthGuard } from '@/components/auth-guard';
+import { PaywallGate } from '@/components/paywall-gate';
 import { apiFetch } from '@/lib/api-client';
 import { Header1 } from '@/components/header1';
 import ApplicationList from '@/components/application-list';
@@ -112,6 +113,7 @@ function FieldSource({ source }: { source?: ProfileSource }) {
 
 function AutoApplicationContent() {
   const [profile, setProfile] = useState<ApplicationProfile | null>(null);
+  const [profileVersion, setProfileVersion] = useState(0);
   const [source, setSource] = useState<Record<string, ProfileSource>>({});
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
@@ -134,7 +136,8 @@ function AutoApplicationContent() {
       const data = await res.json();
       setProfile(data.profile);
       setSource(data.fieldStats || data.source || {});
-      setSelectedResumeId(data.resumeId ?? null);
+      setProfileVersion(typeof data.version === 'number' ? data.version : 0);
+      setSelectedResumeId(typeof data.resumeId === 'number' ? data.resumeId : null);
     } catch (error) {
       console.error('Failed to load application profile:', error);
     } finally {
@@ -180,8 +183,8 @@ function AutoApplicationContent() {
 
   const updateEducation = (index: number, value: string) => {
     if (!profile) return;
-    const education = profile.education.map((entry, idx) =>
-      idx === index ? { ...entry, raw: value } : entry,
+    const education = profile.education.map((entry, entryIndex) =>
+      entryIndex === index ? { ...entry, raw: value } : entry,
     );
     setProfile({ ...profile, education });
     setSaveDone(false);
@@ -189,8 +192,8 @@ function AutoApplicationContent() {
 
   const updateExperience = (index: number, value: string) => {
     if (!profile) return;
-    const experience = profile.experience.map((entry, idx) =>
-      idx === index ? { ...entry, raw: value } : entry,
+    const experience = profile.experience.map((entry, entryIndex) =>
+      entryIndex === index ? { ...entry, raw: value } : entry,
     );
     setProfile({ ...profile, experience });
     setSaveDone(false);
@@ -211,6 +214,8 @@ function AutoApplicationContent() {
       }
       setProfile(data.profile);
       setSource(data.fieldStats || data.source || {});
+      setProfileVersion(typeof data.version === 'number' ? data.version : profileVersion + 1);
+      setSelectedResumeId(typeof data.resumeId === 'number' ? data.resumeId : selectedResumeId);
       setSaveDone(false);
     } catch (error) {
       alert(error instanceof Error ? error.message : 'AI 填写失败');
@@ -226,12 +231,13 @@ function AutoApplicationContent() {
       const res = await apiFetch('/api/application-profile', {
         method: 'PUT',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ profile }),
+        body: JSON.stringify({ profile, version: profileVersion }),
       });
       const data = await res.json();
       if (data.profile) {
         setProfile(data.profile);
         setSource(data.fieldStats || data.source || {});
+        setProfileVersion(typeof data.version === 'number' ? data.version : profileVersion + 1);
         setSaveDone(true);
       } else {
         alert(data.error || '保存失败');
@@ -251,7 +257,7 @@ function AutoApplicationContent() {
       <main className="container mx-auto px-4 py-8 pt-20 max-w-5xl">
         <div className="mb-8">
           <PageBackButton fallbackHref="/jobs" className="mb-3" />
-          <h1 className="text-3xl font-bold mb-2 flex items-center gap-3">
+          <h1 className="text-xl md:text-2xl font-bold mb-2 flex items-center gap-3">
             <ClipboardList className="h-8 w-8 text-primary" />
             自动网申
           </h1>
@@ -286,7 +292,7 @@ function AutoApplicationContent() {
                       来源标记会同步到扩展的确认列表；手动修改后来源变为“手动”。还有 {pendingFields} 个字段待补充。
                     </CardDescription>
                   </div>
-                  <div className="flex flex-col sm:flex-row items-stretch sm:items-center gap-2">
+                  <div className="flex flex-col items-stretch gap-2 sm:flex-row sm:items-center">
                     <Select
                       value={selectedResumeId ? String(selectedResumeId) : undefined}
                       onValueChange={(value) => setSelectedResumeId(Number(value))}
@@ -304,18 +310,18 @@ function AutoApplicationContent() {
                     </Select>
                     <Button onClick={handleAiFill} disabled={!selectedResumeId || aiFilling}>
                       {aiFilling ? (
-                        <><Loader2 className="h-4 w-4 mr-2 animate-spin" />AI 填写中...</>
+                        <><Loader2 className="mr-2 h-4 w-4 animate-spin" />AI 填写中...</>
                       ) : (
-                        <><Sparkles className="h-4 w-4 mr-2" />AI 自动填写</>
+                        <><Sparkles className="mr-2 h-4 w-4" />AI 自动填写</>
                       )}
                     </Button>
-                  <Button onClick={handleSave} disabled={saving || !profile}>
-                    {saving ? (
-                      <><Loader2 className="h-4 w-4 mr-2 animate-spin" />保存中...</>
-                    ) : (
-                      <><Save className="h-4 w-4 mr-2" />{saveDone ? '已保存' : '保存档案'}</>
-                    )}
-                  </Button>
+                    <Button onClick={handleSave} disabled={saving || !profile}>
+                      {saving ? (
+                        <><Loader2 className="mr-2 h-4 w-4 animate-spin" />保存中...</>
+                      ) : (
+                        <><Save className="mr-2 h-4 w-4" />{saveDone ? '已保存' : '保存档案'}</>
+                      )}
+                    </Button>
                   </div>
                 </div>
               </CardHeader>
@@ -328,7 +334,7 @@ function AutoApplicationContent() {
                 ) : (
                   <div className="space-y-8">
                     <section>
-                      <h3 className="text-sm font-medium mb-3">教育经历</h3>
+                      <h3 className="mb-3 text-sm font-medium">教育经历</h3>
                       {profile.education.length === 0 ? (
                         <p className="text-sm text-muted-foreground">暂无教育经历，点击 AI 自动填写。</p>
                       ) : (
@@ -346,7 +352,7 @@ function AutoApplicationContent() {
                     </section>
 
                     <section>
-                      <h3 className="text-sm font-medium mb-3">工作 / 实习经历</h3>
+                      <h3 className="mb-3 text-sm font-medium">工作 / 实习经历</h3>
                       {profile.experience.length === 0 ? (
                         <p className="text-sm text-muted-foreground">暂无经历，点击 AI 自动填写。</p>
                       ) : (
@@ -504,7 +510,9 @@ function Metric({ label, value }: { label: string; value: string }) {
 export default function FieldMappingsPage() {
   return (
     <AuthGuard>
-      <AutoApplicationContent />
+      <PaywallGate feature="auto_apply">
+        <AutoApplicationContent />
+      </PaywallGate>
     </AuthGuard>
   );
 }

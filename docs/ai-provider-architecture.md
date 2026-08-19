@@ -2,7 +2,7 @@
 
 ## 当前状态
 
-项目此前在多个接口内直接创建 Coze 的 `LLMClient`。现在已经统一通过 `src/lib/ai/text-provider.ts` 创建服务端阿里云文本模型客户端，业务代码不再直接依赖供应商构造函数。
+项目的文本 AI 已统一通过 `src/lib/ai/text-provider.ts` 创建服务端阿里云文本模型客户端，业务代码不直接依赖供应商 SDK。
 
 当前唯一文本模型配置为：
 
@@ -20,19 +20,19 @@ ALIBABA_BASE_URL=https://dashscope.aliyuncs.com/compatible-mode/v1
 - 简历基础字段和求职画像解析。
 - AI 岗位匹配。
 - ATS 简历优化。
-- 模拟面试对话。
+- 模拟面试编排与语音链路。纯语音面试中，文本模型只负责生成候选人可见的面试官话术；轮次推进、淘汰、结束和会话状态由服务端状态机及结构化会话字段决定，不能由模型文本标记控制。候选人输入必须来自 ASR。
 
 ASR 已切换到阿里云 Qwen3-ASR-Flash；岗位描述生成、企业 DNA 生成和翻译也已统一复用阿里文本 provider。TTS 独立使用 Cartesia，不与文本模型供应商耦合。
 
 ## 面试 TTS：Cartesia 接入
 
-模拟面试语音统一从以下接口进入：
+模拟面试语音统一从以下接口进入；候选人没有文本输入通道：
 
 ```text
 POST /api/interview/tts
 ```
 
-前端不需要知道 Cartesia 的具体调用方式。服务端通过 `src/lib/tts-provider.ts` 统一返回同源音频字节，保留当前前端的 Blob 播放和频谱分析逻辑。
+前端不需要知道 Cartesia 的具体调用方式。服务端通过 `src/lib/tts-provider.ts` 统一返回同源音频字节，保留当前前端的 Blob 播放和频谱分析逻辑。所有 HTTP fallback 都必须绑定进行中的面试会话。
 
 启用 Cartesia：
 
@@ -45,9 +45,9 @@ CARTESIA_VOICE_ZH=...
 CARTESIA_VOICE_EN=...
 ```
 
-当前使用 Cartesia Bytes API，输出 MP3，适合无须改动前端的第一阶段接入。Cartesia 的 Voice ID 与旧 Coze speaker ID 不兼容；服务端会忽略旧格式的 `zh_female_*` / `saturn_*` 值，改用对应语言的 Cartesia 默认音色。若需要给某个面试官指定 Cartesia 音色，可以传入 UUID，或传入 `cartesia:<voice-id>`。
+HTTP 路径使用 Cartesia Bytes API 输出 MP3，仅作为实时链路失败时的单一路径 fallback。若需要给某个面试官指定 Cartesia 音色，可以传入 UUID，或传入 `cartesia:<voice-id>`。
 
-下一阶段如果需要更低首字节延迟，再增加独立的流式接口：
+当前实时面试使用自定义 server 的会话级 WebSocket TTS。浏览器复用一个连接，以 `requestId` 连续发送 `speak` 和 `cancel`；结束面试、切换轮次、打断和卸载时会取消播放并释放连接及音频资源。HTTP MP3 仅作为单一路径 fallback，不能与同一段实时合成并行预取。若未来需要更低首字节延迟，再扩展独立的上游会话复用协议：
 
 ```text
 POST /api/interview/tts/stream
@@ -69,4 +69,4 @@ POST /api/interview/tts/stream
 1. 配置真实 DashScope 和 Cartesia 凭据，分别完成一份真实简历解析与一段真实面试语音。
 2. 给阿里文本、ASR 和 Cartesia TTS 调用保存 provider、model、耗时和错误类型，支持质量与成本审计。
 3. 对岗位匹配引入确定性维度计算，模型只负责证据解释和差距总结。
-4. 为实时 ASR 增加 WebSocket 接口，为 Cartesia TTS 增加流式音频播放接口。
+4. 为实时 ASR 补齐 `pause`、`resume`、`finalize` 会话协议、每日额度及端到端延迟监控。

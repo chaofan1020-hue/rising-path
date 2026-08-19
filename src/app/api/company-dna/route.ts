@@ -4,9 +4,10 @@
 import { NextRequest } from 'next/server';
 import { getCompanyDNA, saveManualDNA } from '@/lib/company-dna-service';
 import { CompanyDNA } from '@/lib/company-dna';
-import { hasValidAdminSession } from '@/lib/admin-auth';
 import { getAuthContext, unauthorizedResponse } from '@/lib/auth-server';
 import { consumeAuthRateLimit } from '@/lib/auth-security';
+import { recordAdminAuditEvent, recordAdminAuditFailure } from '@/lib/admin-audit';
+import { ADMIN_PERMISSIONS, requireAdminPermission } from '@/lib/admin-permissions';
 
 export async function GET(request: NextRequest) {
   const auth = await getAuthContext(request);
@@ -25,15 +26,22 @@ export async function GET(request: NextRequest) {
     return new Response(JSON.stringify({ error: '缺少公司名称' }), { status: 400 });
   }
 
-  const result = await getCompanyDNA(name, request.headers);
+  // Preview is deliberately read-only. Unknown companies are generated only
+  // once the user explicitly starts a session, where cost can be attributed.
+  const result = await getCompanyDNA(name, request.headers, {}, { allowGeneration: false });
   if (!result) {
-    return new Response(JSON.stringify({ error: '基因生成失败' }), { status: 500 });
+    return new Response(JSON.stringify({
+      company: name,
+      available: false,
+      message: '该公司尚无面试基因，将在开始面试时生成。',
+    }), { headers: { 'Content-Type': 'application/json' } });
   }
 
   const { dna, source, version } = result;
   return new Response(
     JSON.stringify({
       company: dna.company,
+      available: true,
       source,
       version,
       tagline: dna.tagline,
@@ -49,9 +57,8 @@ export async function GET(request: NextRequest) {
 // PATCH：人工更新基因（来自审查页）。body: { company, dna, reviewNotes? }
 export async function PATCH(request: NextRequest) {
   try {
-    if (!hasValidAdminSession(request)) {
-      return new Response(JSON.stringify({ error: '需要管理员权限' }), { status: 401 });
-    }
+    const permissionError = requireAdminPermission(request, ADMIN_PERMISSIONS.dnaPublish);
+    if (permissionError) return permissionError;
 
     const body: unknown = await request.json();
     if (!body || typeof body !== 'object' || Array.isArray(body)) {
@@ -78,10 +85,19 @@ export async function PATCH(request: NextRequest) {
     if (!result) {
       return new Response(JSON.stringify({ error: '保存失败' }), { status: 500 });
     }
+    await recordAdminAuditEvent({
+      request,
+      action: 'company_dna.update',
+      resourceType: 'company_dna',
+      resourceId: company.trim(),
+      metadata: { company: company.trim(), version: result.version },
+      afterData: { company: company.trim(), version: result.version, review_notes: reviewNotes },
+    });
     return new Response(JSON.stringify({ success: true, version: result.version }), {
       headers: { 'Content-Type': 'application/json' },
     });
-  } catch {
+  } catch (error) {
+    await recordAdminAuditFailure({ request, action: 'company_dna.update', resourceType: 'company_dna', error });
     return new Response(JSON.stringify({ error: '服务器错误' }), { status: 500 });
   }
 }

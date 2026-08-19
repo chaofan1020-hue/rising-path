@@ -1,7 +1,9 @@
 import { NextRequest, NextResponse } from "next/server";
 import { getSupabaseClient } from "@/storage/database/supabase-client";
-import { hasValidAdminSession } from "@/lib/admin-auth";
+import { ADMIN_PERMISSIONS, requireAdminPermission } from '@/lib/admin-permissions';
 import { createTextProviderClient, type TextProviderClient } from '@/lib/ai/text-provider';
+import { invokeTrackedTextGeneration } from '@/lib/ai-usage';
+import { recordAdminAuditEvent, recordAdminAuditFailure } from '@/lib/admin-audit';
 
 interface Job {
   id: number;
@@ -31,9 +33,11 @@ async function updateJobDescription(job: Job, client: TextProviderClient): Promi
   try {
     const prompt = buildPrompt(job);
     
-    const response = await client.invoke(
+    const response = await invokeTrackedTextGeneration(
+      client,
       [{ role: "user", content: prompt }],
-      { temperature: 0.7 }
+      { temperature: 0.7 },
+      { feature: 'job_description', jobId: job.id, metadata: { admin_generated: true } },
     );
 
     return response.content;
@@ -45,9 +49,8 @@ async function updateJobDescription(job: Job, client: TextProviderClient): Promi
 
 export async function POST(request: NextRequest) {
   try {
-    if (!hasValidAdminSession(request)) {
-      return NextResponse.json({ error: "需要管理员权限" }, { status: 401 });
-    }
+    const permissionError = requireAdminPermission(request, ADMIN_PERMISSIONS.jobsWrite);
+    if (permissionError) return permissionError;
     const supabase = getSupabaseClient();
     const llmClient = createTextProviderClient();
     
@@ -92,24 +95,26 @@ export async function POST(request: NextRequest) {
       await new Promise(resolve => setTimeout(resolve, 300));
     }
 
-    return NextResponse.json({
+    const result = {
       message: "Done",
       success: successCount,
       failed: failCount,
       total: allJobs?.length || 0
-    });
+    };
+    await recordAdminAuditEvent({ request, action: 'job.description_generate', resourceType: 'job', metadata: result });
+    return NextResponse.json(result);
 
   } catch (error) {
     console.error("Error:", error);
+    await recordAdminAuditFailure({ request, action: 'job.description_generate', resourceType: 'job', error });
     return NextResponse.json({ error: "Internal server error" }, { status: 500 });
   }
 }
 
 export async function GET(request: NextRequest) {
   try {
-    if (!hasValidAdminSession(request)) {
-      return NextResponse.json({ error: "需要管理员权限" }, { status: 401 });
-    }
+    const permissionError = requireAdminPermission(request, ADMIN_PERMISSIONS.jobsWrite);
+    if (permissionError) return permissionError;
     const supabase = getSupabaseClient();
     
     const { data: jobs, error } = await supabase
@@ -126,7 +131,7 @@ export async function GET(request: NextRequest) {
       avgLength: jobs ? Math.round(jobs.reduce((sum, j) => sum + j.description.length, 0) / jobs.length) : 0
     });
 
-  } catch (error) {
+  } catch {
     return NextResponse.json({ error: "Internal server error" }, { status: 500 });
   }
 }

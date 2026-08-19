@@ -1,61 +1,17 @@
 import { NextRequest, NextResponse } from 'next/server';
+import { getCompanyFaviconUrl, getCompanyLogoUrl } from '@/lib/company-logo';
 import { getSupabaseClient } from '@/storage/database/supabase-client';
-import { hasValidAdminSession } from '@/lib/admin-auth';
+import { sanitizeJobContent } from '@/lib/job-content';
+import { ADMIN_PERMISSIONS, requireAdminPermission } from '@/lib/admin-permissions';
+import { recordAdminAuditEvent, recordAdminAuditFailure } from '@/lib/admin-audit';
 
 // 本地 logo 缓存
 let localLogosCache: Record<string, string> = {};
 let lastCacheTime = 0;
 const CACHE_DURATION = 5 * 60 * 1000; // 5 分钟
 
-// 公司域名映射
-const companyDomains: Record<string, string> = {
-  'Stripe': 'stripe.com',
-  'Airbnb': 'airbnb.com',
-  'Uber': 'uber.com',
-  'Lyft': 'lyft.com',
-  'DoorDash': 'doordash.com',
-  'Dropbox': 'dropbox.com',
-  'Coinbase': 'coinbase.com',
-  'Robinhood': 'robinhood.com',
-  'Figma': 'figma.com',
-  'Notion': 'notion.so',
-  'Palantir': 'palantir.com',
-  'Databricks': 'databricks.com',
-  'Snowflake': 'snowflake.com',
-  'Twilio': 'twilio.com',
-  'Zoom': 'zoom.us',
-  'Atlassian': 'atlassian.com',
-  'Confluent': 'confluent.io',
-  'MongoDB': 'mongodb.com',
-  'Cloudflare': 'cloudflare.com',
-  'Rubrik': 'rubrik.com',
-  'Scale AI': 'scale.com',
-  'OpenAI': 'openai.com',
-  'Anthropic': 'anthropic.com',
-  'Instacart': 'instacart.com',
-  'Discord': 'discord.com',
-  'Plaid': 'plaid.com',
-  'Brex': 'brex.com',
-  'Datadog': 'datadoghq.com',
-  'GitLab': 'gitlab.com',
-  'Google': 'google.com',
-  'Meta': 'meta.com',
-  'Apple': 'apple.com',
-  'Microsoft': 'microsoft.com',
-  'Amazon': 'amazon.com',
-  'Netflix': 'netflix.com',
-  'Tesla': 'tesla.com',
-  'NVIDIA': 'nvidia.com',
-  'Adobe': 'adobe.com',
-  'Oracle': 'oracle.com',
-  'Salesforce': 'salesforce.com',
-  'Snap': 'snap.com',
-  'Pinterest': 'pinterest.com',
-  'LinkedIn': 'linkedin.com',
-};
-
-// 获取公司 logo URL（优先本地，fallback 到 Clearbit）
-async function getCompanyLogo(company: string): Promise<string | null> {
+// 获取公司 logo URL（优先本地，fallback 到 Iconify Simple Icons）
+async function getCompanyLogo(company: string, jobUrl?: string | null): Promise<string | null> {
   // 先检查缓存
   if (localLogosCache[company]) {
     return localLogosCache[company];
@@ -75,16 +31,10 @@ async function getCompanyLogo(company: string): Promise<string | null> {
       return data.logo_url;
     }
   } catch (error) {
-    // 忽略错误，继续使用 Clearbit
+    // Ignore lookup failures and use the deterministic remote fallback.
   }
   
-  // 使用 Clearbit API
-  const domain = companyDomains[company];
-  if (domain) {
-    return `https://logo.clearbit.com/${domain}`;
-  }
-  const cleanName = company.toLowerCase().replace(/\s+/g, '');
-  return `https://logo.clearbit.com/${cleanName}.com`;
+  return getCompanyLogoUrl(company, jobUrl);
 }
 
 // 刷新 logo 缓存
@@ -136,13 +86,16 @@ export async function GET(
     }
 
     // 获取 company logo
-    const logo_url = data.company ? await getCompanyLogo(data.company) : null;
+    const configuredLogo = data.company_info?.logo_url || null;
+    const logo_url = configuredLogo || (data.company ? await getCompanyLogo(data.company, data.job_url) : null);
+    const logo_fallback_url = data.company ? getCompanyFaviconUrl(data.company, data.job_url) : null;
 
-    return NextResponse.json({ 
-      job: {
+    return NextResponse.json({
+      job: sanitizeJobContent({
         ...data,
-        logo_url
-      }
+        logo_url,
+        logo_fallback_url,
+      }),
     });
   } catch (error) {
     console.error('Error fetching job:', error);
@@ -158,15 +111,15 @@ export async function PUT(
   { params }: { params: Promise<{ id: string }> }
 ) {
   try {
-    if (!hasValidAdminSession(request)) {
-      return NextResponse.json({ error: '需要管理员权限' }, { status: 401 });
-    }
+    const permissionError = requireAdminPermission(request, ADMIN_PERMISSIONS.jobsWrite);
+    if (permissionError) return permissionError;
     const client = getSupabaseClient();
     const { id } = await params;
     if (!/^\d+$/.test(id)) {
       return NextResponse.json({ error: '岗位 ID 无效' }, { status: 400 });
     }
-    const body = await request.json();
+    const body = sanitizeJobContent(await request.json());
+    const { data: beforeData } = await client.from('jobs').select('*').eq('id', id).maybeSingle();
 
     const { data, error } = await client
       .from('jobs')
@@ -182,9 +135,19 @@ export async function PUT(
       throw new Error(`更新岗位失败: ${error.message}`);
     }
 
+    await recordAdminAuditEvent({
+      request,
+      action: 'job.update',
+      resourceType: 'job',
+      resourceId: id,
+      beforeData,
+      afterData: data,
+    });
+
     return NextResponse.json({ job: data });
   } catch (error) {
     console.error('Error updating job:', error);
+    await recordAdminAuditFailure({ request, action: 'job.update', resourceType: 'job', error });
     return NextResponse.json(
       { error: '更新岗位失败' },
       { status: 500 }
@@ -197,14 +160,15 @@ export async function DELETE(
   { params }: { params: Promise<{ id: string }> }
 ) {
   try {
-    if (!hasValidAdminSession(request)) {
-      return NextResponse.json({ error: '需要管理员权限' }, { status: 401 });
-    }
+    const permissionError = requireAdminPermission(request, ADMIN_PERMISSIONS.jobsWrite);
+    if (permissionError) return permissionError;
     const client = getSupabaseClient();
     const { id } = await params;
     if (!/^\d+$/.test(id)) {
       return NextResponse.json({ error: '岗位 ID 无效' }, { status: 400 });
     }
+
+    const { data: beforeData } = await client.from('jobs').select('id,title,company,region,direction,audience,is_active').eq('id', id).maybeSingle();
 
     // 先删除关联的 ai_matches 记录
     const aiMatchesDelete = await client
@@ -237,9 +201,18 @@ export async function DELETE(
       throw new Error(`删除岗位失败: ${error.message}`);
     }
 
+    await recordAdminAuditEvent({
+      request,
+      action: 'job.delete',
+      resourceType: 'job',
+      resourceId: id,
+      beforeData,
+    });
+
     return NextResponse.json({ success: true });
   } catch (error) {
     console.error('Error deleting job:', error);
+    await recordAdminAuditFailure({ request, action: 'job.delete', resourceType: 'job', error });
     return NextResponse.json(
       { error: '删除岗位失败' },
       { status: 500 }

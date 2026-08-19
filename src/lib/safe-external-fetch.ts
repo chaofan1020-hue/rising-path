@@ -7,7 +7,7 @@ const MAX_RESPONSE_BYTES = 1_000_000;
 const MAX_REDIRECTS = 3;
 
 export class ExternalFetchError extends Error {
-  constructor(message: string, readonly status: number) {
+  constructor(message: string, readonly status: number, readonly upstreamStatus?: number) {
     super(message);
     this.name = 'ExternalFetchError';
   }
@@ -128,7 +128,7 @@ function requestPinnedHttps(url: URL, address: { address: string; family: 4 | 6 
       const statusCode = response.statusCode || 0;
       const contentType = response.headers['content-type'] || '';
       const isRedirect = [301, 302, 303, 307, 308].includes(statusCode);
-      if (!isRedirect && !/^(text\/|application\/(json|xml|xhtml\+xml))/i.test(contentType)) {
+      if (!isRedirect && statusCode >= 200 && statusCode < 300 && !/^(text\/|application\/(json|xml|xhtml\+xml))/i.test(contentType)) {
         response.resume();
         finish(() => reject(new ExternalFetchError('目标内容不是可读取的文本页面', 422)));
         return;
@@ -203,7 +203,7 @@ export async function fetchSafeExternalPage(rawUrl: string): Promise<ExternalPag
       continue;
     }
     if (response.statusCode < 200 || response.statusCode >= 300) {
-      throw new ExternalFetchError(`目标页面返回 HTTP ${response.statusCode}`, 422);
+      throw new ExternalFetchError(`目标页面返回 HTTP ${response.statusCode}`, 422, response.statusCode);
     }
 
     const rawContent = response.body.toString('utf8');

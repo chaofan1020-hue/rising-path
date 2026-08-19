@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useRef } from 'react';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
@@ -63,12 +63,30 @@ interface MatchResult {
   resume_profile_version: number;
 }
 
+interface MatchResponse extends ApiErrorPayload {
+  matches?: MatchResult[];
+  candidate_count?: number;
+  partial?: boolean;
+  persistence_warning?: string | null;
+}
+
 interface JobConfig {
   id: number;
   config_type: string;
   config_value: string;
   sort_order: number;
   is_active: boolean;
+}
+
+type ApiErrorPayload = { error?: string | { message?: string } };
+
+function getApiErrorMessage(payload: ApiErrorPayload | null, fallback: string): string {
+  const apiError = payload?.error;
+  if (typeof apiError === 'string' && apiError.trim()) return apiError;
+  if (typeof apiError === 'object' && apiError !== null && typeof apiError.message === 'string' && apiError.message.trim()) {
+    return apiError.message;
+  }
+  return fallback;
 }
 
 // 多选筛选器组件
@@ -152,61 +170,87 @@ function MultiSelectFilter({
 function AIMatchContent() {
   const { t } = useLanguage();
   const [resumes, setResumes] = useState<Resume[]>([]);
+  const [resumesLoading, setResumesLoading] = useState(true);
+  const [resumesError, setResumesError] = useState('');
+  const [configsError, setConfigsError] = useState('');
   const [selectedResumeId, setSelectedResumeId] = useState<string>('');
   const [matching, setMatching] = useState(false);
   const [matchProgress, setMatchProgress] = useState(0);
   const [matchResults, setMatchResults] = useState<MatchResult[]>([]);
   const [matchError, setMatchError] = useState('');
+  const [matchNotice, setMatchNotice] = useState('');
   
   // 筛选相关状态
   const [regions, setRegions] = useState<JobConfig[]>([]);
   const [directions, setDirections] = useState<JobConfig[]>([]);
   const [selectedRegions, setSelectedRegions] = useState<string[]>([]);
   const [selectedDirections, setSelectedDirections] = useState<string[]>([]);
+  const progressResetTimeout = useRef<ReturnType<typeof setTimeout> | null>(null);
+
+  const eligibleResumes = resumes.filter((resume) => (
+    resume.processing_status === 'ready' && resume.segmentation_confirmed === true
+  ));
 
   useEffect(() => {
-    fetchResumes();
-    fetchJobConfigs();
+    void fetchResumes();
+    void fetchJobConfigs();
+    return () => {
+      if (progressResetTimeout.current) clearTimeout(progressResetTimeout.current);
+    };
   }, []);
 
   const fetchResumes = async () => {
+    setResumesLoading(true);
+    setResumesError('');
     try {
       const response = await apiFetch('/api/resume');
-      const data = await response.json();
-      setResumes((data.resumes || []).filter((resume: Resume) => (
-        resume.processing_status === 'ready' && resume.segmentation_confirmed === true
-      )));
+      const data = await response.json() as { resumes?: Resume[] } & ApiErrorPayload;
+      if (!response.ok) throw new Error(getApiErrorMessage(data, '无法读取简历，请稍后重试'));
+      const nextResumes = data.resumes || [];
+      setResumes(nextResumes);
+      setSelectedResumeId((current) => (
+        current && nextResumes.some((resume) => String(resume.id) === current)
+          ? current
+          : String(nextResumes.find((resume) => resume.processing_status === 'ready' && resume.segmentation_confirmed === true)?.id || '')
+      ));
     } catch (error) {
       console.error('Failed to fetch resumes:', error);
+      setResumesError(error instanceof Error ? error.message : '无法读取简历，请稍后重试');
+    } finally {
+      setResumesLoading(false);
     }
   };
 
   const fetchJobConfigs = async () => {
+    setConfigsError('');
     try {
       const response = await apiFetch('/api/configs');
-      const data = await response.json();
+      const data = await response.json() as { configs?: Record<string, JobConfig[]> } & ApiErrorPayload;
+      if (!response.ok) throw new Error(getApiErrorMessage(data, '无法读取筛选项'));
       if (data.configs) {
         setRegions(data.configs.region || []);
         setDirections(data.configs.direction || []);
       }
     } catch (error) {
       console.error('Failed to fetch job configs:', error);
+      setConfigsError(error instanceof Error ? error.message : '无法读取筛选项');
     }
   };
 
   const handleMatch = async () => {
-    if (!selectedResumeId) return;
+    if (!selectedResumeId || matching) return;
 
     setMatching(true);
     setMatchProgress(0);
     setMatchResults([]);
     setMatchError('');
+    setMatchNotice('');
 
+    let progressInterval: ReturnType<typeof setInterval> | null = null;
     try {
-      // Simulate progress
-      const progressInterval = setInterval(() => {
+      progressInterval = setInterval(() => {
         setMatchProgress((prev) => Math.min(prev + 5, 90));
-      }, 100);
+      }, 180);
 
       const response = await apiFetch('/api/ai/match', {
         method: 'POST',
@@ -219,21 +263,32 @@ function AIMatchContent() {
       });
 
       clearInterval(progressInterval);
+      progressInterval = null;
       setMatchProgress(100);
 
-      const data = await response.json();
+      const data = await response.json() as MatchResponse;
       if (!response.ok) {
-        throw new Error(data.error || 'AI匹配失败，请重试');
+        throw new Error(getApiErrorMessage(data, 'AI匹配失败，请重试'));
       }
       setMatchResults(data.matches || []);
+      const notices = [
+        data.partial ? `AI 已返回 ${data.matches?.length || 0} 个可用推荐，其余岗位未能在本次分析中完成。` : '',
+        data.persistence_warning || '',
+      ].filter(Boolean);
+      if (notices.length > 0) {
+        setMatchNotice(notices.join(' '));
+      }
 
-      setTimeout(() => {
+      if (progressResetTimeout.current) clearTimeout(progressResetTimeout.current);
+      progressResetTimeout.current = setTimeout(() => {
         setMatchProgress(0);
+        progressResetTimeout.current = null;
       }, 1000);
     } catch (error) {
       console.error('Match failed:', error);
       setMatchError(error instanceof Error ? error.message : 'AI匹配失败，请重试');
     } finally {
+      if (progressInterval) clearInterval(progressInterval);
       setMatching(false);
     }
   };
@@ -252,8 +307,8 @@ function AIMatchContent() {
         <div className="relative mb-8 md:mb-10">
           <p className="text-sm font-medium text-zinc-400 dark:text-zinc-500 mb-3">{t('aiMatch.eyebrow')}</p>
           <PageBackButton fallbackHref="/resume" className="mb-3" />
-          <h1 className="text-2xl md:text-4xl font-bold tracking-tight text-zinc-900 dark:text-zinc-50 mb-4">{t('aiMatch.title')}</h1>
-          <p className="text-zinc-500 dark:text-zinc-400 max-w-2xl md:text-lg leading-relaxed">{t('aiMatch.subtitle')}</p>
+          <h1 className="text-xl md:text-2xl font-bold tracking-tight text-zinc-900 dark:text-zinc-50 mb-3">{t('aiMatch.title')}</h1>
+          <p className="text-zinc-500 dark:text-zinc-400 max-w-2xl text-sm md:text-base leading-relaxed">{t('aiMatch.subtitle')}</p>
         </div>
 
         {/* Match Form */}
@@ -274,12 +329,12 @@ function AIMatchContent() {
               {/* 简历选择 */}
               <div className="w-full md:w-auto">
                 <label className="text-xs md:text-sm font-medium mb-1.5 block text-zinc-700 dark:text-zinc-200">{t('aiMatch.selectResume')}</label>
-                <Select value={selectedResumeId} onValueChange={setSelectedResumeId}>
+                <Select value={selectedResumeId} onValueChange={setSelectedResumeId} disabled={resumesLoading || eligibleResumes.length === 0}>
                   <SelectTrigger className="h-11 w-full md:w-52 rounded-xl border-zinc-200 dark:border-zinc-700 bg-white dark:bg-zinc-900">
                     <SelectValue placeholder={t('aiMatch.selectResumePlaceholder')} />
                   </SelectTrigger>
                   <SelectContent>
-                    {resumes.map((resume) => (
+                    {eligibleResumes.map((resume) => (
                       <SelectItem key={resume.id} value={resume.id.toString()}>
                         {resume.file_name}
                         {resume.user_info?.name && ` - ${resume.user_info.name}`}
@@ -310,7 +365,7 @@ function AIMatchContent() {
                 />
                 <Button
                   onClick={handleMatch}
-                  disabled={!selectedResumeId || matching}
+                  disabled={!selectedResumeId || matching || resumesLoading}
                   className="h-11 rounded-xl px-6 bg-zinc-900 text-white hover:bg-zinc-800 dark:bg-white dark:text-zinc-900 dark:hover:bg-zinc-200 shadow-md hover:shadow-lg transition-all"
                 >
                   {matching ? (
@@ -390,6 +445,30 @@ function AIMatchContent() {
                 {matchError}
               </div>
             )}
+            {matchNotice && (
+              <div className="mt-4 rounded-xl border border-amber-200 bg-amber-50 px-3 py-2.5 text-sm text-amber-800 dark:border-amber-900/60 dark:bg-amber-950/30 dark:text-amber-200">
+                {matchNotice}
+              </div>
+            )}
+            {resumesError && (
+              <div className="mt-4 flex flex-wrap items-center gap-3 rounded-xl border border-red-200 bg-red-50 px-3 py-2.5 text-sm text-red-700 dark:border-red-900/60 dark:bg-red-950/30 dark:text-red-300">
+                <span>{resumesError}</span>
+                <Button type="button" variant="outline" size="sm" onClick={() => void fetchResumes()} className="h-8 border-red-200 bg-transparent text-red-700 hover:bg-red-100 dark:border-red-800 dark:text-red-200">
+                  重试
+                </Button>
+              </div>
+            )}
+            {configsError && (
+              <p className="mt-3 text-xs text-amber-700 dark:text-amber-300">筛选项暂时不可用，仍可直接开始匹配。</p>
+            )}
+            {!resumesLoading && !resumesError && eligibleResumes.length === 0 && (
+              <div className="mt-4 flex flex-col gap-3 rounded-xl border border-amber-200 bg-amber-50 px-3 py-3 text-sm text-amber-900 dark:border-amber-900/60 dark:bg-amber-950/30 dark:text-amber-100 md:flex-row md:items-center md:justify-between">
+                <span>{resumes.length === 0 ? '请先上传简历并完成解析，再开始 AI 选岗。' : '请先在简历管理中确认求职画像，AI 才能基于准确版本推荐岗位。'}</span>
+                <Button asChild size="sm" className="h-9 shrink-0 bg-amber-900 text-white hover:bg-amber-800 dark:bg-amber-100 dark:text-amber-950">
+                  <Link href="/resume">前往简历管理</Link>
+                </Button>
+              </div>
+            )}
           </CardContent>
         </Card>
 
@@ -397,7 +476,7 @@ function AIMatchContent() {
         {matchResults.length > 0 && (
           <div className="relative space-y-4 md:space-y-5">
             <div className="flex items-center justify-between">
-              <h2 className="text-xl md:text-2xl font-semibold tracking-tight flex items-center gap-2.5 text-zinc-900 dark:text-zinc-50">
+              <h2 className="text-lg md:text-xl font-semibold tracking-tight flex items-center gap-2.5 text-zinc-900 dark:text-zinc-50">
                 <span className="w-7 h-7 rounded-lg bg-zinc-900 dark:bg-white flex items-center justify-center">
                   <CheckCircle className="h-4 w-4 text-white dark:text-zinc-900" />
                 </span>
@@ -413,7 +492,7 @@ function AIMatchContent() {
                   <div className="flex flex-col md:flex-row gap-4 md:gap-6">
                     {/* Score - 手机端横向紧凑，桌面端纵向带背景 */}
                     <div className="flex items-center gap-3 md:flex-col md:items-center md:justify-center md:p-5 md:rounded-2xl md:bg-zinc-50 dark:md:bg-zinc-900/60 md:border md:border-zinc-100 dark:md:border-zinc-800 flex-shrink-0 md:min-w-[120px]">
-                      <div className="text-3xl md:text-4xl font-bold tracking-tight text-zinc-900 dark:text-zinc-50">
+                      <div className="text-2xl md:text-3xl font-bold tracking-tight text-zinc-900 dark:text-zinc-50">
                         {result.match_score}
                       </div>
                       <div className="flex flex-col gap-0.5 md:gap-1 md:items-center">
@@ -453,9 +532,9 @@ function AIMatchContent() {
                         </div>
                       )}
 
-                      {(result.evidence.length > 0 || result.key_gaps.length > 0) && (
+                      {((result.evidence?.length || 0) > 0 || (result.key_gaps?.length || 0) > 0) && (
                         <div className="grid gap-3 md:grid-cols-2">
-                          {result.evidence.length > 0 && (
+                          {(result.evidence?.length || 0) > 0 && (
                             <div className="rounded-xl border border-emerald-100 bg-emerald-50/60 p-3 dark:border-emerald-900/50 dark:bg-emerald-950/20">
                               <h4 className="mb-1.5 text-sm font-medium text-emerald-900 dark:text-emerald-200">{t('aiMatch.evidence')}</h4>
                               <ul className="list-disc space-y-1 pl-4 text-xs text-emerald-800 dark:text-emerald-300">
@@ -463,7 +542,7 @@ function AIMatchContent() {
                               </ul>
                             </div>
                           )}
-                          {result.key_gaps.length > 0 && (
+                          {(result.key_gaps?.length || 0) > 0 && (
                             <div className="rounded-xl border border-amber-100 bg-amber-50/60 p-3 dark:border-amber-900/50 dark:bg-amber-950/20">
                               <h4 className="mb-1.5 text-sm font-medium text-amber-900 dark:text-amber-200">{t('aiMatch.keyGaps')}</h4>
                               <ul className="list-disc space-y-1 pl-4 text-xs text-amber-800 dark:text-amber-300">

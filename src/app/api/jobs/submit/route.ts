@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { getSupabaseClient } from '@/storage/database/supabase-client';
 import { getAuthContext, unauthorizedResponse } from '@/lib/auth-server';
-import { hasValidAdminSession } from '@/lib/admin-auth';
+import { ADMIN_PERMISSIONS, requireAdminPermission } from '@/lib/admin-permissions';
 
 // 验证 URL
 function isValidUrl(url: string): boolean {
@@ -22,7 +22,8 @@ function isValidTitle(title: string): boolean {
 
 export async function GET(request: NextRequest) {
   try {
-    if (!hasValidAdminSession(request)) return unauthorizedResponse('需要管理员权限');
+    const permissionError = requireAdminPermission(request, ADMIN_PERMISSIONS.jobsWrite);
+    if (permissionError) return permissionError;
     const supabase = getSupabaseClient();
     const { searchParams } = new URL(request.url);
     const status = searchParams.get('status') || 'pending';

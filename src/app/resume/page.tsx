@@ -1,6 +1,7 @@
 'use client';
 
 import { useState, useCallback, useEffect, useRef } from 'react';
+import { useSearchParams } from 'next/navigation';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
@@ -41,6 +42,8 @@ import type {
 import { Target, Wand2, Send, CheckCircle2 } from 'lucide-react';
 import { useLanguage } from '@/lib/language-context';
 import PageBackButton from '@/components/page-back-button';
+import type { PersonalityAssessment } from '@/lib/personality-assessment';
+import { PersonalityQuizPanel } from '@/components/personality-quiz-panel';
 
 interface ParsedFields {
   name?: string;
@@ -115,7 +118,14 @@ function ResumeContent() {
   const [selectedFile, setSelectedFile] = useState<File | null>(null);
   const [translatingId, setTranslatingId] = useState<number | null>(null);
   const [reparsingId, setReparsingId] = useState<number | null>(null);
+  const [personality, setPersonality] = useState<PersonalityAssessment | null>(null);
+  const [personalityLoaded, setPersonalityLoaded] = useState(false);
   const { t } = useLanguage();
+  const searchParams = useSearchParams();
+  const autoOpenQuiz = searchParams.get('quiz') === '1';
+  const confirmedResumeId = resumes.find((resume) => (
+    resume.segmentation_confirmed === true && resume.processing_status === 'ready'
+  ))?.id ?? null;
 
   const handleFileSelect = useCallback((e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
@@ -244,6 +254,14 @@ function ResumeContent() {
     void fetchResumes({ showLoading: true });
   }, [fetchResumes]);
 
+  useEffect(() => {
+    apiFetch('/api/personality/assessment')
+      .then((response) => (response.ok ? response.json() : { assessment: null }))
+      .then((data) => setPersonality(data.assessment || null))
+      .catch((error) => console.error('Failed to fetch personality assessment:', error))
+      .finally(() => setPersonalityLoaded(true));
+  }, []);
+
   const processingResumeIds = resumes
     .filter(isProcessing)
     .map((resume) => resume.id)
@@ -269,9 +287,16 @@ function ResumeContent() {
         <div className="relative mb-8 md:mb-10">
           <p className="text-sm font-medium text-zinc-400 dark:text-zinc-500 mb-3">{t('resume.eyebrow')}</p>
           <PageBackButton fallbackHref="/" className="mb-3" />
-          <h1 className="text-2xl md:text-4xl font-bold tracking-tight text-zinc-900 dark:text-zinc-50 mb-4">{t('resume.title')}</h1>
-          <p className="text-zinc-500 dark:text-zinc-400 max-w-2xl md:text-lg leading-relaxed">{t('resume.subtitle')}</p>
+          <h1 className="text-xl md:text-2xl font-bold tracking-tight text-zinc-900 dark:text-zinc-50 mb-3">{t('resume.title')}</h1>
+          <p className="text-zinc-500 dark:text-zinc-400 max-w-2xl text-sm md:text-base leading-relaxed">{t('resume.subtitle')}</p>
         </div>
+
+        {searchParams.get('first') === '1' && resumes.length === 0 && (
+          <div className="mb-6 max-w-2xl mx-auto rounded-2xl border border-zinc-900 dark:border-white bg-zinc-900 dark:bg-white text-white dark:text-zinc-900 px-5 py-4">
+            <p className="text-sm font-semibold">{t('resume.firstRunTitle')}</p>
+            <p className="mt-1 text-xs opacity-75 leading-relaxed">{t('resume.firstRunDesc')}</p>
+          </div>
+        )}
 
         {/* 上传 Dropzone */}
         <div className="relative mb-8 md:mb-10 max-w-2xl mx-auto">
@@ -443,6 +468,24 @@ function ResumeContent() {
                         )}
                       </div>
                     </div>
+
+                    {personalityLoaded && resume.segmentation_confirmed === true && resume.processing_status === 'ready' && (
+                      <PersonalityQuizPanel
+                        resumeId={resume.id}
+                        assessment={personality}
+                        autoStart={personalityLoaded && autoOpenQuiz && confirmedResumeId === resume.id}
+                        showRecommendations={false}
+                        onCompleted={(assessment, profile) => {
+                          setPersonality(assessment);
+                          setResumes((prev) => prev.map((item) => (
+                            item.id === resume.id
+                              ? { ...item, profile: profile || item.profile }
+                              : item
+                          )));
+                        }}
+                        onSkip={() => {}}
+                      />
+                    )}
 
                     {/* 分层确认卡片：求职画像透明展示 + 可修正 */}
                     {resume.profile && (

@@ -22,12 +22,29 @@ async function main() {
       assert.equal(payload.model, 'qwen3-asr-flash');
       assert.equal(payload.messages[0]?.content[0]?.input_audio?.data, 'data:audio/webm;base64,AQID');
       return new Response(JSON.stringify({
+        id: 'chatcmpl-asr-test',
+        model: 'qwen3-asr-flash',
         choices: [{ message: { content: ' 你好，Rising Path。' } }],
+        usage: {
+          seconds: 3,
+          prompt_tokens: 42,
+          completion_tokens: 8,
+          total_tokens: 50,
+          prompt_tokens_details: { audio_tokens: 42 },
+        },
       }), { status: 200, headers: { 'Content-Type': 'application/json' } });
     };
 
     const result = await recognizeWithAlibaba({ audioBase64: 'AQID' });
     assert.equal(result.text, '你好，Rising Path。');
+    assert.equal(result.audioBytes, 3);
+    assert.equal(result.usage.inputAudioSeconds, 3);
+    assert.equal(result.usage.audioTokens, 42);
+    assert.equal(result.usage.inputTokens, 42);
+    assert.equal(result.usage.outputTokens, 8);
+    assert.equal(result.usage.totalTokens, 50);
+    assert.equal(result.usage.requestId, 'chatcmpl-asr-test');
+    assert.equal(result.usage.usageSource, 'actual');
   } finally {
     globalThis.fetch = originalFetch;
     if (originalApiKey === undefined) delete process.env.DASHSCOPE_API_KEY;

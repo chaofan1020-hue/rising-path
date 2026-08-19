@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { getSupabaseClient } from '@/storage/database/supabase-client';
-import { hasValidAdminSession } from '@/lib/admin-auth';
+import { ADMIN_PERMISSIONS, requireAdminPermission } from '@/lib/admin-permissions';
+import { recordAdminAuditEvent, recordAdminAuditFailure } from '@/lib/admin-audit';
 
 interface JobInput {
   title: string;
@@ -33,9 +34,8 @@ function chunks<T>(values: T[], size: number): T[][] {
 
 export async function POST(request: NextRequest) {
   try {
-    if (!hasValidAdminSession(request)) {
-      return NextResponse.json({ error: '需要管理员权限' }, { status: 401 });
-    }
+    const permissionError = requireAdminPermission(request, ADMIN_PERMISSIONS.jobsWrite);
+    if (permissionError) return permissionError;
     const client = getSupabaseClient();
     const body: BatchJobInput = await request.json();
 
@@ -139,6 +139,13 @@ export async function POST(request: NextRequest) {
     });
   } catch (error) {
     console.error('Error batch creating jobs:', error);
+    await recordAdminAuditFailure({
+      request,
+      action: 'job.batch_create',
+      resourceType: 'job',
+      metadata: { operation: 'batch_create' },
+      error,
+    });
     return NextResponse.json(
       { error: '批量创建岗位失败' },
       { status: 500 }
@@ -156,9 +163,8 @@ export async function PUT(request: NextRequest) {
 
 async function handleBatchDelete(request: NextRequest) {
   try {
-    if (!hasValidAdminSession(request)) {
-      return NextResponse.json({ error: '需要管理员权限' }, { status: 401 });
-    }
+    const permissionError = requireAdminPermission(request, ADMIN_PERMISSIONS.jobsWrite);
+    if (permissionError) return permissionError;
     const client = getSupabaseClient();
     
     // 安全解析请求体
@@ -219,12 +225,25 @@ async function handleBatchDelete(request: NextRequest) {
       throw new Error(`批量删除岗位失败: ${error.message}`);
     }
 
+    await recordAdminAuditEvent({
+      request,
+      action: 'job.batch_delete',
+      resourceType: 'job',
+      metadata: { ids: body.ids.slice(0, 500), count: body.ids.length },
+    });
+
     return NextResponse.json({
       success: true,
       deleted: body.ids.length
     });
   } catch (error) {
     console.error('Error batch deleting jobs:', error);
+    await recordAdminAuditFailure({
+      request,
+      action: 'job.batch_delete',
+      resourceType: 'job',
+      error,
+    });
     return NextResponse.json(
       { error: '批量删除岗位失败' },
       { status: 500 }

@@ -262,6 +262,23 @@ body {
   @apply font-sans;
 }
 
+/* Keep operational surfaces dense without allowing long labels to overlap. */
+[data-admin-shell] [data-slot='card'] {
+  border-radius: 0.5rem;
+}
+
+[data-admin-shell] [data-slot='card-header'],
+[data-admin-shell] [data-slot='card-title'],
+[data-admin-shell] [data-slot='card-description'] {
+  min-width: 0;
+  overflow-wrap: anywhere;
+}
+
+[data-admin-shell] button,
+[data-admin-shell] a {
+  -webkit-tap-highlight-color: transparent;
+}
+
 /* Custom animations for vibrant UI */
 @keyframes float {
   0%, 100% { transform: translateY(0px); }

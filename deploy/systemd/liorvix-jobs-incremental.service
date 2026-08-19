@@ -1,0 +1,17 @@
+[Unit]
+Description=Liorvix incremental job feed sync
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=oneshot
+User=liorvix
+Group=liorvix
+WorkingDirectory=/opt/liorvix
+EnvironmentFile=/opt/liorvix/.env.local
+ExecStart=/usr/bin/env corepack pnpm run sync:jobs -- --max-pages=100
+TimeoutStartSec=15min
+Nice=10
+
+[Install]
+WantedBy=multi-user.target

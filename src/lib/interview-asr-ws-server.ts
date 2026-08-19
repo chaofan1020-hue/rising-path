@@ -1,6 +1,13 @@
 import type { IncomingMessage, Server } from 'node:http';
+import { createHash } from 'node:crypto';
 import { getSupabaseClient } from '@/storage/database/supabase-client';
 import WebSocket, { WebSocketServer } from 'ws';
+import {
+  countTextCharacters,
+  createAiUsageRequestId,
+  estimatePcmDurationSeconds,
+  recordAiUsageEvent,
+} from '@/lib/ai-usage';
 import {
   INTERVIEW_ASR_WS_PATH,
   buildRealtimeAudioAppend,
@@ -29,12 +36,20 @@ interface AlibabaASREvent {
   stash?: string;
   transcript?: string;
   session?: { id?: string; [key: string]: unknown };
+  usage?: { duration?: number };
   error?: { message?: string };
 }
 
 interface ClientStartMessage {
   type: 'start';
   language?: string;
+  sessionId?: number | string | null;
+}
+
+interface UpstreamUtteranceState {
+  sequence: number;
+  activeId: string | null;
+  itemIds: Map<string, string>;
 }
 
 function sendJSON(socket: WebSocket, value: Record<string, unknown>): void {
@@ -53,24 +68,76 @@ function getProtocols(request: IncomingMessage): string[] {
   return header.split(',').map((value) => value.trim()).filter(Boolean);
 }
 
-function getAccessToken(request: IncomingMessage): string | null {
+function getTicket(request: IncomingMessage): string | null {
   const authProtocol = getProtocols(request).find((protocol) => protocol.startsWith(AUTH_PROTOCOL_PREFIX));
   const token = authProtocol?.slice(AUTH_PROTOCOL_PREFIX.length).trim();
   return token || null;
 }
 
-async function authenticate(accessToken: string): Promise<string | null> {
+async function authenticateTicket(ticket: string): Promise<{ userId: string; sessionId: number; language: 'zh' | 'en' } | null> {
   try {
-    const client = getSupabaseClient(accessToken);
-    const { data, error } = await client.auth.getUser(accessToken);
-    return error || !data.user ? null : data.user.id;
+    const ticketHash = createHash('sha256').update(ticket).digest('hex');
+    const client = getSupabaseClient();
+    const { data, error } = await client
+      .from('interview_realtime_tickets')
+      .select('id, user_id, session_id, capability, expires_at, used_at')
+      .eq('ticket_hash', ticketHash)
+      .eq('capability', 'asr')
+      .is('used_at', null)
+      .gt('expires_at', new Date().toISOString())
+      .maybeSingle();
+    if (error || !data) return null;
+    if (!data.session_id) return null;
+    const { data: session } = await client
+      .from('interview_sessions')
+      .select('id, status, language')
+      .eq('id', data.session_id)
+      .eq('user_id', data.user_id)
+      .maybeSingle();
+    if (!session || session.status !== 'in_progress') return null;
+    const { data: claimed } = await client
+      .from('interview_realtime_tickets')
+      .update({ used_at: new Date().toISOString() })
+      .eq('id', data.id)
+      .is('used_at', null)
+      .select('user_id, session_id')
+      .maybeSingle();
+    return claimed?.user_id && claimed.session_id
+      ? { userId: claimed.user_id, sessionId: Number(claimed.session_id), language: session.language === 'en' ? 'en' : 'zh' }
+      : null;
   } catch (error) {
     console.error('[Interview ASR WS] Supabase authentication failed:', error);
     return null;
   }
 }
 
-function forwardAlibabaEvent(client: WebSocket, raw: WebSocket.RawData): void {
+async function ownsInterviewSession(userId: string, sessionId: unknown): Promise<number | null> {
+  if (sessionId === undefined || sessionId === null || sessionId === '') return null;
+  const parsed = Number(sessionId);
+  if (!Number.isInteger(parsed) || parsed <= 0) return null;
+  try {
+    const { data, error } = await getSupabaseClient()
+      .from('interview_sessions')
+      .select('id, status')
+      .eq('id', parsed)
+      .eq('user_id', userId)
+      .maybeSingle();
+    if (error) {
+      console.error('[Interview ASR WS] Session ownership check failed:', error.message);
+      return null;
+    }
+    return data?.status === 'in_progress' ? parsed : null;
+  } catch (error) {
+    console.error('[Interview ASR WS] Session ownership check failed:', error);
+    return null;
+  }
+}
+
+function forwardAlibabaEvent(
+  client: WebSocket,
+  raw: WebSocket.RawData,
+  utteranceState: UpstreamUtteranceState,
+): void {
   let event: AlibabaASREvent;
   try {
     event = JSON.parse(raw.toString()) as AlibabaASREvent;
@@ -86,32 +153,53 @@ function forwardAlibabaEvent(client: WebSocket, raw: WebSocket.RawData): void {
     case 'session.updated':
       sendJSON(client, { type: 'ready', session: event.session });
       return;
-    case 'input_audio_buffer.speech_started':
-      sendJSON(client, { type: 'speech_started', eventId: event.event_id });
+    case 'input_audio_buffer.speech_started': {
+      const utteranceId = `utterance_${++utteranceState.sequence}`;
+      utteranceState.activeId = utteranceId;
+      sendJSON(client, { type: 'speech_started', eventId: event.event_id, utteranceId });
       return;
+    }
     case 'input_audio_buffer.speech_stopped':
-      sendJSON(client, { type: 'speech_stopped', eventId: event.event_id });
+      sendJSON(client, {
+        type: 'speech_stopped',
+        eventId: event.event_id,
+        utteranceId: utteranceState.activeId,
+      });
       return;
-    case 'conversation.item.input_audio_transcription.text':
+    case 'conversation.item.input_audio_transcription.text': {
+      const utteranceId = event.item_id
+        ? utteranceState.itemIds.get(event.item_id) || utteranceState.activeId
+        : utteranceState.activeId;
+      if (event.item_id && utteranceId) utteranceState.itemIds.set(event.item_id, utteranceId);
       sendJSON(client, {
         type: 'partial',
         itemId: event.item_id,
-        text: `${event.text || ''}${event.stash || ''}`.trim(),
-        confirmedText: event.text || '',
+        utteranceId,
+        // `stash` is an unstable hypothesis. The browser receives it as a
+        // separate field and only renders the confirmed prefix.
+        text: String(event.text || '').trim(),
+        confirmedText: String(event.text || '').trim(),
         draftText: event.stash || '',
         language: event.language,
         emotion: event.emotion,
       });
       return;
-    case 'conversation.item.input_audio_transcription.completed':
+    }
+    case 'conversation.item.input_audio_transcription.completed': {
+      const utteranceId = event.item_id
+        ? utteranceState.itemIds.get(event.item_id) || null
+        : utteranceState.activeId;
       sendJSON(client, {
         type: 'final',
         itemId: event.item_id,
+        utteranceId,
         text: String(event.transcript || '').trim(),
         language: event.language,
         emotion: event.emotion,
       });
+      if (event.item_id) utteranceState.itemIds.delete(event.item_id);
       return;
+    }
     case 'conversation.item.input_audio_transcription.failed':
       sendJSON(client, {
         type: 'error',
@@ -130,15 +218,29 @@ function forwardAlibabaEvent(client: WebSocket, raw: WebSocket.RawData): void {
   }
 }
 
-function setupConnection(client: WebSocket, userId: string): void {
+function setupConnection(client: WebSocket, userId: string, ticketSessionId: number, ticketLanguage: 'zh' | 'en'): void {
   activeConnections += 1;
   let upstream: WebSocket | null = null;
   let upstreamReady = false;
   let finishing = false;
-  let language = 'zh';
+  const language = ticketLanguage;
   let queuedAudio: Buffer[] = [];
   let queuedAudioBytes = 0;
   let audioBytes = 0;
+  let started = false;
+  let textCharacters = 0;
+  let providerAudioSeconds: number | null = null;
+  let upstreamSessionId: string | null = null;
+  let interviewSessionId: number | null = null;
+  let usageRecorded = false;
+  let lastError: string | null = null;
+  const utteranceState: UpstreamUtteranceState = {
+    sequence: 0,
+    activeId: null,
+    itemIds: new Map(),
+  };
+  const usageRequestId = createAiUsageRequestId();
+  const startedAt = Date.now();
   let idleTimer: ReturnType<typeof setTimeout> | null = null;
   const connectionTimer = setTimeout(() => client.close(1008, 'ASR connection time limit'), MAX_CONNECTION_MS);
   const touch = () => {
@@ -155,13 +257,33 @@ function setupConnection(client: WebSocket, userId: string): void {
     upstreamReady = false;
   };
 
+  const recordUsage = async (status: 'success' | 'error') => {
+    if (usageRecorded || !started) return;
+    usageRecorded = true;
+    const inputAudioSeconds = providerAudioSeconds ?? estimatePcmDurationSeconds(audioBytes, 16000, 1, 16);
+    await recordAiUsageEvent({
+      userId,
+      feature: 'interview_asr_realtime',
+      provider: 'alibaba',
+      modality: 'audio',
+      model: process.env.ALIBABA_ASR_REALTIME_MODEL?.trim() || 'qwen3-asr-flash-realtime',
+      requestId: usageRequestId,
+      status,
+      usageSource: providerAudioSeconds !== null ? 'actual' : inputAudioSeconds !== null ? 'estimated' : 'unknown',
+      inputAudioSeconds,
+      inputAudioBytes: audioBytes,
+      textCharacters,
+      billingUnit: inputAudioSeconds !== null ? 'audio_seconds' : null,
+      billingUnits: inputAudioSeconds,
+      measurementSource: providerAudioSeconds !== null ? 'provider' : inputAudioSeconds !== null ? 'pcm_exact' : 'unknown',
+      interviewSessionId,
+      metadata: { upstream_session_id: upstreamSessionId, audio_format: 'pcm_s16le', sample_rate: 16000, channels: 1 },
+      durationMs: Date.now() - startedAt,
+      errorMessage: lastError,
+    });
+  };
+
   const sendAudio = (chunk: Buffer) => {
-    audioBytes += chunk.byteLength;
-    if (audioBytes > MAX_AUDIO_BYTES_PER_CONNECTION) {
-      sendJSON(client, { type: 'error', error: '实时 ASR 音频额度已用尽' });
-      client.close(1008, 'ASR audio limit exceeded');
-      return;
-    }
     if (!upstream || !upstreamReady || upstream.readyState !== WebSocket.OPEN) {
       if (queuedAudioBytes + chunk.byteLength <= MAX_QUEUED_AUDIO_BYTES) {
         queuedAudio.push(chunk);
@@ -203,18 +325,29 @@ function setupConnection(client: WebSocket, userId: string): void {
       }
       if (event?.type === 'session.updated') {
         upstreamReady = true;
-        sendJSON(client, { type: 'ready', session: event.session });
+        // Echo the server-authorized language so test diagnostics can prove
+        // which recognition language reached the provider for this ticket.
+        sendJSON(client, { type: 'ready', session: event.session, language });
         flushAudio();
       } else {
-        forwardAlibabaEvent(client, raw);
+        forwardAlibabaEvent(client, raw, utteranceState);
+      }
+      if (event?.type === 'session.created') upstreamSessionId = event.session?.id || null;
+      if (typeof event?.usage?.duration === 'number' && Number.isFinite(event.usage.duration) && event.usage.duration >= 0) {
+        providerAudioSeconds = event.usage.duration;
+      }
+      if (event?.type === 'conversation.item.input_audio_transcription.completed') {
+        textCharacters += countTextCharacters(String(event.transcript || '').trim());
       }
       if (event?.type === 'session.finished') {
         finishing = false;
+        void recordUsage('success');
         closeUpstream();
       }
     });
     upstream.on('error', (error) => {
       console.error('[Interview ASR WS] Alibaba connection failed:', error.message);
+      lastError = error.message;
       if (!finishing) sendJSON(client, { type: 'error', error: '实时 ASR 连接失败' });
     });
     upstream.on('close', () => {
@@ -224,10 +357,18 @@ function setupConnection(client: WebSocket, userId: string): void {
     });
   };
 
-  client.on('message', (raw, isBinary) => {
+  client.on('message', async (raw, isBinary) => {
     touch();
     if (isBinary) {
       const chunk = Buffer.isBuffer(raw) ? raw : Buffer.from(raw as ArrayBuffer);
+      audioBytes += chunk.byteLength;
+      if (audioBytes > MAX_AUDIO_BYTES_PER_CONNECTION) {
+        lastError = 'ASR audio limit exceeded';
+        sendJSON(client, { type: 'error', error: '实时 ASR 音频额度已用尽' });
+        void recordUsage('error');
+        client.close(1008, 'ASR audio limit exceeded');
+        return;
+      }
       sendAudio(chunk);
       return;
     }
@@ -241,12 +382,19 @@ function setupConnection(client: WebSocket, userId: string): void {
     }
 
     if (message.type === 'start') {
-      const requestedLanguage = message.language?.trim().toLowerCase() || 'zh';
-      if (requestedLanguage !== 'zh' && requestedLanguage !== 'en') {
+      const requestedLanguage = message.language?.trim().toLowerCase();
+      if (requestedLanguage && requestedLanguage !== language) {
         sendJSON(client, { type: 'error', error: '不支持的 ASR 语言' });
         return;
       }
-      language = requestedLanguage;
+      const requestedSessionId = Number(message.sessionId);
+      if (!Number.isInteger(requestedSessionId) || requestedSessionId !== ticketSessionId) {
+        sendJSON(client, { type: 'error', error: '实时 ASR 会话不匹配' });
+        client.close(1008, 'Realtime ASR session mismatch');
+        return;
+      }
+      interviewSessionId = ticketSessionId;
+      started = true;
       startUpstream();
     } else if (message.type === 'stop') {
       finishing = true;
@@ -269,8 +417,13 @@ function setupConnection(client: WebSocket, userId: string): void {
     queuedAudio = [];
     queuedAudioBytes = 0;
     closeUpstream();
+    void recordUsage(lastError ? 'error' : 'success');
   });
-  client.on('error', () => closeUpstream());
+  client.on('error', (error) => {
+    lastError = error instanceof Error ? error.message : 'ASR client connection failed';
+    closeUpstream();
+    void recordUsage('error');
+  });
 }
 
 export function attachInterviewASRWebSocket(server: Server): void {
@@ -285,14 +438,14 @@ export function attachInterviewASRWebSocket(server: Server): void {
     if (requestUrl.pathname !== INTERVIEW_ASR_WS_PATH) return;
 
     const protocols = getProtocols(request);
-    const accessToken = getAccessToken(request);
-    if (!protocols.includes(CLIENT_PROTOCOL) || !accessToken) {
+    const ticket = getTicket(request);
+    if (!protocols.includes(CLIENT_PROTOCOL) || !ticket) {
       rejectUpgrade(socket, 401, 'Missing realtime ASR authentication');
       return;
     }
 
-    void authenticate(accessToken).then((userId) => {
-      if (!userId) {
+    void authenticateTicket(ticket).then((auth) => {
+      if (!auth) {
         rejectUpgrade(socket, 401, 'Invalid realtime ASR authentication');
         return;
       }
@@ -300,7 +453,7 @@ export function attachInterviewASRWebSocket(server: Server): void {
         rejectUpgrade(socket, 429, 'Realtime ASR capacity reached');
         return;
       }
-      wss.handleUpgrade(request, socket, head, (client) => setupConnection(client, userId));
+      wss.handleUpgrade(request, socket, head, (client) => setupConnection(client, auth.userId, auth.sessionId, auth.language));
     }).catch((error) => {
       console.error('[Interview ASR WS] Upgrade failed:', error);
       rejectUpgrade(socket, 401, 'Realtime ASR authentication failed');

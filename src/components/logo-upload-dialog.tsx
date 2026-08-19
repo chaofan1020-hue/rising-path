@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useRef, useCallback } from "react";
+import { useState, useRef, useCallback, useEffect } from "react";
 import ReactCrop, { Crop, centerCrop, makeAspectCrop } from "react-image-crop";
 import "react-image-crop/dist/ReactCrop.css";
 import { Upload, X, Loader2 } from "lucide-react";
@@ -13,6 +13,7 @@ interface LogoUploadDialogProps {
   open: boolean;
   onOpenChange: (open: boolean) => void;
   onSuccess: () => void;
+  initialCompanyName?: string;
 }
 
 function centerAspectCrop(mediaWidth: number, mediaHeight: number, aspect: number) {
@@ -31,12 +32,16 @@ function centerAspectCrop(mediaWidth: number, mediaHeight: number, aspect: numbe
   );
 }
 
-export function LogoUploadDialog({ open, onOpenChange, onSuccess }: LogoUploadDialogProps) {
+export function LogoUploadDialog({ open, onOpenChange, onSuccess, initialCompanyName = "" }: LogoUploadDialogProps) {
   const [companyName, setCompanyName] = useState("");
   const [src, setSrc] = useState<string | null>(null);
   const [crop, setCrop] = useState<Crop>();
   const [uploading, setUploading] = useState(false);
   const imgRef = useRef<HTMLImageElement>(null);
+
+  useEffect(() => {
+    if (open) setCompanyName(initialCompanyName);
+  }, [open, initialCompanyName]);
 
   // 监听 dialog 关闭，重置状态
   const handleOpenChange = (isOpen: boolean) => {
@@ -172,8 +177,8 @@ export function LogoUploadDialog({ open, onOpenChange, onSuccess }: LogoUploadDi
     <Dialog open={open} onOpenChange={handleOpenChange}>
       <DialogContent className="sm:max-w-md max-h-[90vh] overflow-y-auto">
         <DialogHeader>
-          <DialogTitle>上传企业 Logo</DialogTitle>
-          <DialogDescription>支持 JPG、PNG、GIF、WebP 格式，裁剪为 1:1 正方形</DialogDescription>
+          <DialogTitle>{initialCompanyName ? `替换 ${initialCompanyName} 的 Logo` : "上传企业 Logo"}</DialogTitle>
+        <DialogDescription>支持 JPG、PNG、GIF、WebP、SVG 格式，裁剪为 1:1 正方形</DialogDescription>
         </DialogHeader>
 
         <div className="space-y-4 py-4">
@@ -186,6 +191,7 @@ export function LogoUploadDialog({ open, onOpenChange, onSuccess }: LogoUploadDi
                 value={companyName}
                 onChange={(e) => setCompanyName(e.target.value)}
                 placeholder="例如：Stripe"
+                disabled={Boolean(initialCompanyName)}
                 className="mt-1"
               />
             </div>
@@ -194,7 +200,7 @@ export function LogoUploadDialog({ open, onOpenChange, onSuccess }: LogoUploadDi
               <Input
                 id="logo-file"
                 type="file"
-                accept="image/jpeg,image/png,image/gif,image/webp"
+                accept="image/jpeg,image/png,image/gif,image/webp,image/svg+xml"
                 onChange={onSelectFile}
                 className="mt-1"
               />

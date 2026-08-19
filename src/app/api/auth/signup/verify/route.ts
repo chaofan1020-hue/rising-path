@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { getSupabaseAnonClient } from '@/storage/database/supabase-client';
+import { getSupabaseAnonClient, getSupabaseClient } from '@/storage/database/supabase-client';
 import { getClientIp } from '@/lib/auth-server';
 import { isValidEmail } from '@/lib/auth-shared';
 import {
@@ -45,6 +45,16 @@ export async function POST(request: NextRequest) {
         message: error?.message,
       });
       return NextResponse.json({ error: authErrorMessage(error) }, { status: 401 });
+    }
+    if (!data.user) {
+      return NextResponse.json({ error: '用户信息缺失，请重新验证' }, { status: 500 });
+    }
+    try {
+      await getSupabaseClient(data.session.access_token).rpc('grant_signup_credits', {
+        p_user: data.user.id,
+      });
+    } catch (grantError) {
+      console.error('[Auth] Failed to grant signup credits:', grantError);
     }
 
     return NextResponse.json({ session: data.session, user: data.user });

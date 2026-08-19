@@ -4,10 +4,23 @@ export interface ASRRequest {
   language?: string;
 }
 
+export interface ASRUsage {
+  inputAudioSeconds: number | null;
+  audioTokens: number | null;
+  inputTokens: number | null;
+  outputTokens: number | null;
+  totalTokens: number | null;
+  requestId: string | null;
+  model: string | null;
+  usageSource: 'actual' | 'unknown';
+}
+
 export interface ASRResult {
   text: string;
   language?: string;
   emotion?: string;
+  audioBytes: number | null;
+  usage: ASRUsage;
 }
 
 export class ASRProviderConfigError extends Error {
@@ -61,6 +74,24 @@ function extractText(value: unknown): string {
     .join('');
 }
 
+function toNonNegativeInteger(value: unknown): number | null {
+  return typeof value === 'number' && Number.isInteger(value) && value >= 0 ? value : null;
+}
+
+function toNonNegativeNumber(value: unknown): number | null {
+  return typeof value === 'number' && Number.isFinite(value) && value >= 0 ? value : null;
+}
+
+function decodeAudioByteLength(audioBase64: string): number | null {
+  const encoded = audioBase64.replace(/^data:[^,]+,/, '').replace(/\s/g, '');
+  if (!encoded || !/^[A-Za-z0-9+/]*={0,2}$/.test(encoded)) return null;
+  try {
+    return Buffer.from(encoded, 'base64').byteLength;
+  } catch {
+    return null;
+  }
+}
+
 export async function recognizeWithAlibaba(request: ASRRequest): Promise<ASRResult> {
   const apiKey = process.env.DASHSCOPE_API_KEY?.trim();
   if (!apiKey) throw new ASRProviderConfigError('阿里云 ASR 未配置，请设置 DASHSCOPE_API_KEY');
@@ -94,8 +125,20 @@ export async function recognizeWithAlibaba(request: ASRRequest): Promise<ASRResu
     });
 
     const payload = await response.json() as {
+      id?: string;
+      model?: string;
       choices?: Array<{ message?: { content?: unknown; annotations?: Array<{ language?: string; emotion?: string }> } }>;
       output?: { choices?: Array<{ message?: { content?: unknown; annotations?: Array<{ language?: string; emotion?: string }> } }> };
+      usage?: {
+        seconds?: number;
+        prompt_tokens?: number;
+        completion_tokens?: number;
+        total_tokens?: number;
+        input_tokens?: number;
+        output_tokens?: number;
+        prompt_tokens_details?: { audio_tokens?: number; text_tokens?: number };
+        input_tokens_details?: { audio_tokens?: number; text_tokens?: number };
+      };
       message?: string;
     };
     if (!response.ok) {
@@ -104,10 +147,32 @@ export async function recognizeWithAlibaba(request: ASRRequest): Promise<ASRResu
 
     const message = payload.choices?.[0]?.message || payload.output?.choices?.[0]?.message;
     const annotation = message?.annotations?.[0];
+    const usage = payload.usage;
+    const tokenDetails = usage?.prompt_tokens_details || usage?.input_tokens_details;
+    const inputTokens = toNonNegativeInteger(usage?.prompt_tokens ?? usage?.input_tokens);
+    const outputTokens = toNonNegativeInteger(usage?.completion_tokens ?? usage?.output_tokens);
+    const totalTokens = toNonNegativeInteger(
+      usage?.total_tokens ?? (inputTokens !== null && outputTokens !== null ? inputTokens + outputTokens : null),
+    );
+    const inputAudioSeconds = toNonNegativeNumber(usage?.seconds);
+    const audioTokens = toNonNegativeInteger(tokenDetails?.audio_tokens);
     return {
       text: extractText(message?.content).trim(),
       language: annotation?.language,
       emotion: annotation?.emotion,
+      audioBytes: decodeAudioByteLength(request.audioBase64),
+      usage: {
+        inputAudioSeconds,
+        audioTokens,
+        inputTokens,
+        outputTokens,
+        totalTokens,
+        requestId: typeof payload.id === 'string' ? payload.id : null,
+        model: typeof payload.model === 'string' ? payload.model : model,
+        usageSource: inputAudioSeconds !== null || inputTokens !== null || outputTokens !== null || totalTokens !== null
+          ? 'actual'
+          : 'unknown',
+      },
     };
   } finally {
     clearTimeout(timeout);

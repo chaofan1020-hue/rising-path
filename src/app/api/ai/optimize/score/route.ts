@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { getAuthContext, unauthorizedResponse } from '@/lib/auth-server';
 import { createTextProviderClient } from '@/lib/ai/text-provider';
+import { consumeTrackedTextStream } from '@/lib/ai-usage';
 import {
   OPTIMIZATION_SCORE_RESPONSE_SCHEMA,
   parseOptimizationScoreComparison,
@@ -31,26 +32,31 @@ export async function POST(request: NextRequest) {
     if (optimizationError || !optimization) {
       return NextResponse.json({ error: '优化版本不存在或无权访问' }, { status: 404 });
     }
-    if (!optimization.job_id) {
-      return NextResponse.json({ error: '该优化版本没有绑定目标岗位，无法计算对比评分' }, { status: 400 });
+    let jobContent: string;
+    if (optimization.job_id) {
+      const { data: job, error: jobError } = await auth.client
+        .from('jobs')
+        .select('id, title, company, region, description, requirements')
+        .eq('id', optimization.job_id)
+        .maybeSingle();
+      if (jobError) throw new Error(`查询评分岗位失败: ${jobError.message}`);
+      if (!job) return NextResponse.json({ error: '目标岗位不存在' }, { status: 404 });
+      jobContent = JSON.stringify({
+        title: job.title,
+        company: job.company,
+        region: job.region,
+        description: job.description,
+        requirements: job.requirements,
+      }, null, 2);
+    } else {
+      jobContent = JSON.stringify({
+        title: optimization.target_position,
+        company: optimization.target_company,
+        region: optimization.target_region,
+      }, null, 2);
     }
 
-    const { data: job, error: jobError } = await auth.client
-      .from('jobs')
-      .select('id, title, company, region, description, requirements')
-      .eq('id', optimization.job_id)
-      .maybeSingle();
-    if (jobError) throw new Error(`查询评分岗位失败: ${jobError.message}`);
-    if (!job) return NextResponse.json({ error: '目标岗位不存在' }, { status: 404 });
-
     const client = createTextProviderClient({ requestHeaders: request.headers });
-    const jobContent = JSON.stringify({
-      title: job.title,
-      company: job.company,
-      region: job.region,
-      description: job.description,
-      requirements: job.requirements,
-    }, null, 2);
     const prompt = `请用完全相同的评分标准，对比同一候选人的原始简历和优化后简历与目标岗位的匹配度。
 
 目标岗位：
@@ -68,10 +74,11 @@ ${JSON.stringify(optimization.reviewed_content || optimization.optimized_content
 3. 分数必须是 0 到 100 的整数，评分维度为 ats、keywords、experience、evidence、region、profile_fit。
 4. summary 解释优化是否带来真实、可验证的提升；如果没有提升也要明确说明。
 5. key_changes 只写优化前后实际可见且与岗位相关的变化。
+6. 只输出评分结果对象，不要输出 original_resume、optimized_resume 或任何简历原文内容。
 
 只返回 JSON，不要其他说明文字。`;
 
-    const stream = client.stream([
+    const generated = await consumeTrackedTextStream(client, [
       { role: 'system', content: '你是严格、保守的简历评估专家。必须输出有效 JSON。' },
       { role: 'user', content: prompt },
     ], {
@@ -80,17 +87,20 @@ ${JSON.stringify(optimization.reviewed_content || optimization.optimized_content
         name: 'optimization_score_comparison',
         schema: OPTIMIZATION_SCORE_RESPONSE_SCHEMA,
       },
-    });
-
-    let raw = '';
-    for await (const chunk of stream) {
-      if (chunk.content) raw += chunk.content;
-    }
+    }, {
+      userId: auth.user.id,
+      feature: 'resume_score',
+      resumeId: optimization.resume_id,
+      jobId: optimization.job_id,
+      metadata: { optimization_id: optimization.id },
+    }, () => undefined);
+    const raw = generated.content;
 
     let comparison;
     try {
       comparison = parseOptimizationScoreComparison(raw);
     } catch (error) {
+      console.error('Invalid optimization score comparison raw:', raw);
       console.error('Invalid optimization score comparison:', error);
       return NextResponse.json({ error: 'AI返回的评分对比格式无效，请重试' }, { status: 502 });
     }

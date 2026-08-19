@@ -1,0 +1,17 @@
+[Unit]
+Description=Liorvix job expiry and official-link maintenance
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=oneshot
+User=liorvix
+Group=liorvix
+WorkingDirectory=/opt/liorvix
+EnvironmentFile=/opt/liorvix/.env.local
+ExecStart=/usr/bin/env corepack pnpm run maintain:jobs
+TimeoutStartSec=30min
+Nice=15
+
+[Install]
+WantedBy=multi-user.target

@@ -39,8 +39,8 @@ export default function FAQs() {
         <section className="bg-white py-16 md:py-24 rounded-t-[3rem]">
             <div className="mx-auto max-w-5xl px-4 md:px-6">
                 <div>
-                    <h2 className="text-gray-900 text-4xl font-semibold">{t("faqs.title")}</h2>
-                    <p className="text-gray-500 mt-4 text-balance text-lg">{t("faqs.subtitle")}</p>
+                    <h2 className="text-gray-900 text-2xl md:text-3xl font-semibold">{t("faqs.title")}</h2>
+                    <p className="text-gray-500 mt-3 text-balance text-sm md:text-base">{t("faqs.subtitle")}</p>
                 </div>
 
                 <div className="mt-12">
@@ -53,15 +53,15 @@ export default function FAQs() {
                                 key={item.id}
                                 value={item.id}
                                 className="border-b border-gray-200">
-                                <AccordionTrigger className="cursor-pointer text-base hover:no-underline text-gray-900">{t(item.questionKey)}</AccordionTrigger>
+                                <AccordionTrigger className="cursor-pointer text-sm hover:no-underline text-gray-900">{t(item.questionKey)}</AccordionTrigger>
                                 <AccordionContent>
-                                    <p className="text-base text-gray-900">{t(item.answerKey)}</p>
+                                    <p className="text-sm text-gray-900">{t(item.answerKey)}</p>
                                 </AccordionContent>
                             </AccordionItem>
                         ))}
                     </Accordion>
 
-                    <p className="text-gray-500 mt-6">
+                    <p className="text-gray-500 mt-6 text-sm">
                         {t("faqs.contact")}{' '}
                         <Link
                             href="#"

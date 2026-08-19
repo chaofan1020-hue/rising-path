@@ -1,12 +1,16 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { getAuthContext, unauthorizedResponse } from '@/lib/auth-server';
-import { createAiProvider } from '@/lib/ai-provider';
+import { entitlementErrorResponse, requirePlanFeature } from '@/lib/entitlements';
+import { invokeTrackedTextGeneration } from '@/lib/ai-usage';
+import { createTextProviderClient } from '@/lib/ai/text-provider';
+import { extractFirstJsonObject } from '@/lib/json-extract';
 import {
   buildProfileFromResume,
   DEFAULT_PROFILE,
   type ApplicationProfile,
   type ProfileSourceMap,
 } from '@/lib/application-profile';
+import { applicationPrefillRequestSchema } from '@/lib/application-contracts';
 
 function decayedConfidence(fieldSource?: { source?: string; confidence?: number; updatedAt?: string }): number {
   const base = typeof fieldSource?.confidence === 'number' ? fieldSource.confidence : 0.9;
@@ -36,6 +40,10 @@ interface PrefillResult {
   confidence: number;
   needsReview: boolean;
   reason?: string;
+}
+
+function isRecord(value: unknown): value is Record<string, unknown> {
+  return typeof value === 'object' && value !== null && !Array.isArray(value);
 }
 
 function directProfileValue(
@@ -112,11 +120,12 @@ export async function POST(request: NextRequest) {
     const auth = await getAuthContext(request);
     if (!auth) return unauthorizedResponse();
     const client = auth.client;
-    const body = await request.json();
-    const fields = Array.isArray(body.fields) ? (body.fields as PrefillField[]) : [];
-    if (fields.length === 0) {
-      return NextResponse.json({ fields: [] });
-    }
+    const access = await requirePlanFeature(client, auth.user.id, 'auto_apply');
+    if (!access.allowed) return entitlementErrorResponse(access);
+    const parsed = applicationPrefillRequestSchema.safeParse(await request.json());
+    if (!parsed.success) return NextResponse.json({ error: '预填参数无效' }, { status: 400 });
+    const body = parsed.data;
+    const fields = body.fields as PrefillField[];
 
     const { data: profileRow } = await client
       .from('application_profiles')
@@ -124,30 +133,16 @@ export async function POST(request: NextRequest) {
       .eq('user_id', auth.user.id)
       .maybeSingle();
 
-    interface ResumeRow {
-      id: number;
-      user_info: unknown;
-      profile: unknown;
-    }
-    let resume: ResumeRow | null = null;
-    if (profileRow?.resume_id) {
-      const { data: selected } = await client
-        .from('resumes')
-        .select('id, user_info, profile')
-        .eq('id', profileRow.resume_id)
-        .eq('user_id', auth.user.id)
-        .maybeSingle();
-      resume = selected as ResumeRow | null;
-    }
-    if (!resume) {
-      const { data: latest } = await client
-        .from('resumes')
-        .select('id, user_info, profile')
-        .eq('user_id', auth.user.id)
-        .order('created_at', { ascending: false })
-        .limit(1)
-        .maybeSingle();
-      resume = latest as ResumeRow | null;
+    const resumeQuery = client
+      .from('resumes')
+      .select('id, user_info, profile')
+      .eq('user_id', auth.user.id);
+    const selectedResumeId = body.resumeId || profileRow?.resume_id || null;
+    const { data: resume } = selectedResumeId
+      ? await resumeQuery.eq('id', selectedResumeId).maybeSingle()
+      : await resumeQuery.order('created_at', { ascending: false }).limit(1).maybeSingle();
+    if (body.resumeId && !resume) {
+      return NextResponse.json({ error: '简历不存在或无权使用' }, { status: 404 });
     }
 
     let profile: ApplicationProfile = DEFAULT_PROFILE;
@@ -219,7 +214,7 @@ export async function POST(request: NextRequest) {
     }
 
     if (unresolved.length > 0) {
-      const provider = createAiProvider(Object.fromEntries(request.headers.entries()));
+      const provider = createTextProviderClient({ requestHeaders: request.headers });
       const aiFields = unresolved.map((f) => ({
         key: f.key,
         label: f.label,
@@ -230,7 +225,7 @@ export async function POST(request: NextRequest) {
         semanticKey: f.selectorHints?.semanticKey || f.key,
       }));
       try {
-        const aiResult = await provider.completeJson([
+        const generated = await invokeTrackedTextGeneration(provider, [
           {
             role: 'system',
             content:
@@ -244,19 +239,39 @@ export async function POST(request: NextRequest) {
               fields: aiFields,
             }),
           },
-        ]);
-        const aiFieldsMap = (aiResult.fields || {}) as Record<string, { value?: unknown; confidence?: number; reason?: string }>;
+        ], {
+          temperature: 0.2,
+          thinking: 'disabled',
+          responseFormat: {
+            name: 'application_prefill',
+            schema: {
+              type: 'object',
+              properties: { fields: { type: 'object' } },
+              required: ['fields'],
+            },
+          },
+        }, {
+          userId: auth.user.id,
+          feature: 'application_prefill',
+          jobId: typeof body.jobId === 'number' ? body.jobId : null,
+          resumeId: resume?.id || null,
+          metadata: { unresolved_field_count: unresolved.length },
+        });
+        const parsed = extractFirstJsonObject(generated.content);
+        const aiFieldsMap = isRecord(parsed) && isRecord(parsed.fields) ? parsed.fields : {};
         for (const field of unresolved) {
-          const guess = aiFieldsMap[field.key];
+          const rawGuess = aiFieldsMap[field.key];
+          const guess = isRecord(rawGuess) ? rawGuess : null;
           const value = typeof guess?.value === 'string' ? guess.value.trim() : '';
           const confidence = typeof guess?.confidence === 'number' ? Math.min(1, Math.max(0, guess.confidence)) : 0.5;
+          const reason = typeof guess?.reason === 'string' ? guess.reason : undefined;
           results.push({
             key: field.key,
             value,
             source: value ? 'ai' : 'empty',
             confidence: value ? confidence : 0,
             needsReview: true,
-            reason: guess?.reason || (value ? 'AI 推测，请确认' : '未能自动填写'),
+            reason: reason || (value ? 'AI 推测，请确认' : '未能自动填写'),
           });
         }
       } catch (error) {

@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { resolveRegionKey, type RegionKey, REGION_DNA, shouldBeApplying } from '@/lib/region-dna';
 import { getAuthContext, unauthorizedResponse } from '@/lib/auth-server';
+import { getBillingSnapshot } from '@/lib/entitlements';
 import { buildCareerRoutePlan, type CareerRouteDiagnosis } from '@/lib/career-route-planner';
 import type { ResumeProfile, UserSegmentation } from '@/lib/resume-types';
 
@@ -30,7 +31,21 @@ interface DashboardPlan {
 
 interface DashboardResume {
   id?: number;
+  segmentation_confirmed?: boolean | null;
   profile?: {
+    personality?: {
+      dimensions?: Record<string, number>;
+      primaryDimension?: string;
+      summaryKey?: string;
+      recommendations?: Array<{
+        roleKey: string;
+        labelKey: string;
+        score: number;
+        fit: string;
+        reasons: string[];
+      }>;
+      completedAt?: string;
+    } | null;
     targetRegion?: string | null;
     inferredRegion?: string | null;
     targetRole?: string | null;
@@ -287,17 +302,70 @@ export async function GET(request: NextRequest) {
   const auth = await getAuthContext(request);
   if (!auth) return unauthorizedResponse();
   const supabase = auth.client;
+  const billing = await getBillingSnapshot(supabase, auth.user.id);
+  const weekStart = getWeekStart(new Date());
 
-  // 最新简历（含画像与分层）
-  const [{ data: resumes }, { count: resumeCountResult }] = await Promise.all([
+  // 这些数据互相独立，必须并行读取，避免 dashboard 首屏耗时叠加。
+  const [
+    { data: resumes },
+    { count: resumeCountResult },
+    { data: aiMatches },
+    { data: interviews },
+    { count: interviewCountResult },
+    { count: weeklyApplicationCountResult },
+    { count: applicationCountResult },
+    { data: interviewEvaluationsData },
+    { data: favorites },
+    { count: favoriteCountResult },
+  ] = await Promise.all([
     supabase
       .from('resumes')
-      .select('id, created_at, updated_at, file_name, profile, segmentation, segmentation_overrides')
+      .select('id, created_at, updated_at, file_name, profile, segmentation, segmentation_overrides, segmentation_confirmed')
       .eq('user_id', auth.user.id)
       .order('created_at', { ascending: false })
       .limit(1),
     supabase
       .from('resumes')
+      .select('id', { count: 'exact', head: true })
+      .eq('user_id', auth.user.id),
+    supabase
+      .from('ai_matches')
+      .select('match_score, job_id')
+      .eq('user_id', auth.user.id)
+      .order('created_at', { ascending: false })
+      .limit(50),
+    supabase
+      .from('interview_sessions')
+      .select('id, status, updated_at, created_at')
+      .eq('user_id', auth.user.id)
+      .order('created_at', { ascending: false })
+      .limit(1),
+    supabase
+      .from('interview_sessions')
+      .select('id', { count: 'exact', head: true })
+      .eq('user_id', auth.user.id),
+    supabase
+      .from('applications')
+      .select('id', { count: 'exact', head: true })
+      .eq('user_id', auth.user.id)
+      .gte('created_at', weekStart.toISOString()),
+    supabase
+      .from('applications')
+      .select('id', { count: 'exact', head: true })
+      .eq('user_id', auth.user.id),
+    supabase
+      .from('interview_sessions')
+      .select('id, target_company, interview_type, overall_score, report_grade, updated_at, created_at, report')
+      .eq('user_id', auth.user.id)
+      .eq('status', 'completed')
+      .order('created_at', { ascending: false })
+      .limit(10),
+    supabase
+      .from('favorites')
+      .select('jobs!inner(updated_at)')
+      .eq('user_id', auth.user.id),
+    supabase
+      .from('favorites')
       .select('id', { count: 'exact', head: true })
       .eq('user_id', auth.user.id),
   ]);
@@ -306,60 +374,17 @@ export async function GET(request: NextRequest) {
   const latestResumeId = latestResume?.id ?? null;
   const resumeCount = resumeCountResult ?? 0;
 
-  // AI 匹配
-  const { data: aiMatches } = await supabase
-    .from('ai_matches')
-    .select('match_score, job_id')
-    .eq('user_id', auth.user.id)
-    .order('created_at', { ascending: false })
-    .limit(50);
-
   const avgMatchScore = aiMatches?.length
     ? Math.round(aiMatches.reduce((s, m) => s + (m.match_score || 0), 0) / aiMatches.length)
     : 0;
 
-  // 模拟面试
-  const [{ data: interviews }, { count: interviewCountResult }] = await Promise.all([
-    supabase
-      .from('interview_sessions')
-      .select('id, status, current_round, total_rounds, updated_at, created_at, target_company, interview_type, overall_score, report_grade, report')
-      .eq('user_id', auth.user.id)
-      .order('created_at', { ascending: false })
-      .limit(50),
-    supabase
-      .from('interview_sessions')
-      .select('id', { count: 'exact', head: true })
-      .eq('user_id', auth.user.id),
-  ]);
-
   const interviewCount = interviewCountResult ?? 0;
   const latestInterview = interviews?.[0] ?? null;
 
-  // 投递记录
-  const weekStart = getWeekStart(new Date());
-  const [{ data: applications }, { count: applicationCountResult }] = await Promise.all([
-    supabase
-      .from('applications')
-      .select('id, status, created_at, updated_at')
-      .eq('user_id', auth.user.id)
-      .gte('created_at', weekStart.toISOString()),
-    supabase
-      .from('applications')
-      .select('id', { count: 'exact', head: true })
-      .eq('user_id', auth.user.id),
-  ]);
-
   const applicationCount = applicationCountResult ?? 0;
-  // 本周投递数
-  const weeklyApplications = applications?.length ?? 0;
+  const weeklyApplications = weeklyApplicationCountResult ?? 0;
 
-  // 收藏岗位
-  const { data: favorites } = await supabase
-    .from('favorites')
-    .select('id, job_id, created_at, jobs!inner(id, updated_at)')
-    .eq('user_id', auth.user.id);
-
-  const favoriteCount = favorites?.length ?? 0;
+  const favoriteCount = favoriteCountResult ?? 0;
   const favoriteRows = (favorites ?? []) as FavoriteRow[];
   const recentlyUpdatedFavorites =
     favoriteRows.filter((f) => {
@@ -367,6 +392,18 @@ export async function GET(request: NextRequest) {
       const jobUpdated = new Date(job?.updated_at || 0);
       return Date.now() - jobUpdated.getTime() < 7 * 24 * 60 * 60 * 1000;
     }).length ?? 0;
+
+  const personalityProfile = latestResume?.profile?.personality ?? null;
+  const personality = personalityProfile
+    ? {
+        hasAssessment: true,
+        resumeId: latestResumeId,
+        dimensions: personalityProfile.dimensions || {},
+        summaryKey: personalityProfile.summaryKey || '',
+        recommendations: personalityProfile.recommendations || [],
+        updatedAt: personalityProfile.completedAt || '',
+      }
+    : null;
 
   const now = Date.now();
   const daysSinceLogin = auth.user.last_sign_in_at
@@ -514,8 +551,8 @@ export async function GET(request: NextRequest) {
   };
 
   // 面试评估记录（仅 completed 且有分数的）
-  const interviewEvaluations = (interviews ?? [])
-    .filter((iv) => iv.status === 'completed' && (iv.overall_score != null || iv.report_grade != null))
+  const interviewEvaluations = (interviewEvaluationsData ?? [])
+    .filter((iv) => iv.overall_score != null || iv.report_grade != null)
     .slice(0, 10)
     .map((iv) => ({
       id: iv.id,
@@ -553,7 +590,10 @@ export async function GET(request: NextRequest) {
     story,
     plan,
     diagnosis: plan?.diagnosis ?? null,
+    personality,
     interviewEvaluations,
+    billing,
+    segmentationConfirmed: latestResume?.segmentation_confirmed === true,
     counts: {
       resumes: resumeCount,
       matches: aiMatches?.length ?? 0,

@@ -1,13 +1,13 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { getSupabaseClient } from '@/storage/database/supabase-client';
 import { detectSponsorship } from '@/lib/utils';
-import { hasValidAdminSession } from '@/lib/admin-auth';
+import { ADMIN_PERMISSIONS, requireAdminPermission } from '@/lib/admin-permissions';
+import { recordAdminAuditEvent, recordAdminAuditFailure } from '@/lib/admin-audit';
 
 export async function POST(request: NextRequest) {
   try {
-    if (!hasValidAdminSession(request)) {
-      return NextResponse.json({ error: '需要管理员权限' }, { status: 401 });
-    }
+    const permissionError = requireAdminPermission(request, ADMIN_PERMISSIONS.jobsWrite);
+    if (permissionError) return permissionError;
 
     const supabase = getSupabaseClient();
 
@@ -45,16 +45,19 @@ export async function POST(request: NextRequest) {
       else unknown++;
     }
 
-    return NextResponse.json({
+    const result = {
       success: true,
       total: jobs?.length || 0,
       with_sponsor: withSponsor,
       no_sponsor: noSponsor,
       unknown: unknown,
       updated,
-    });
+    };
+    await recordAdminAuditEvent({ request, action: 'job.sponsorship_recheck', resourceType: 'job', metadata: result });
+    return NextResponse.json(result);
   } catch (error) {
     console.error('Error checking sponsor:', error);
+    await recordAdminAuditFailure({ request, action: 'job.sponsorship_recheck', resourceType: 'job', error });
     return NextResponse.json({ error: '服务器错误' }, { status: 500 });
   }
 }
