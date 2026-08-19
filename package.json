@@ -37,6 +37,7 @@
     "test:application-profile": "tsx scripts/test-application-profile.ts",
     "test:visa-timeline": "tsx scripts/test-visa-timeline.ts",
     "test:networking": "tsx scripts/test-networking-recommender.ts",
+    "test:entitlements": "tsx scripts/test-entitlements.ts",
     "test:personality": "tsx scripts/test-personality.ts",
     "lint:build": "eslint . --quiet",
     "validate": "pnpm run ts-check && pnpm run lint:build"

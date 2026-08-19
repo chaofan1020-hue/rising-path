@@ -287,9 +287,16 @@ function ResumeContent() {
         <div className="relative mb-8 md:mb-10">
           <p className="text-sm font-medium text-zinc-400 dark:text-zinc-500 mb-3">{t('resume.eyebrow')}</p>
           <PageBackButton fallbackHref="/" className="mb-3" />
-          <h1 className="text-2xl md:text-4xl font-bold tracking-tight text-zinc-900 dark:text-zinc-50 mb-4">{t('resume.title')}</h1>
-          <p className="text-zinc-500 dark:text-zinc-400 max-w-2xl md:text-lg leading-relaxed">{t('resume.subtitle')}</p>
+          <h1 className="text-xl md:text-2xl font-bold tracking-tight text-zinc-900 dark:text-zinc-50 mb-3">{t('resume.title')}</h1>
+          <p className="text-zinc-500 dark:text-zinc-400 max-w-2xl text-sm md:text-base leading-relaxed">{t('resume.subtitle')}</p>
         </div>
+
+        {searchParams.get('first') === '1' && resumes.length === 0 && (
+          <div className="mb-6 max-w-2xl mx-auto rounded-2xl border border-zinc-900 dark:border-white bg-zinc-900 dark:bg-white text-white dark:text-zinc-900 px-5 py-4">
+            <p className="text-sm font-semibold">{t('resume.firstRunTitle')}</p>
+            <p className="mt-1 text-xs opacity-75 leading-relaxed">{t('resume.firstRunDesc')}</p>
+          </div>
+        )}
 
         {/* 上传 Dropzone */}
         <div className="relative mb-8 md:mb-10 max-w-2xl mx-auto">

@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from 'next/server';
 import { buildRegionBlock, resolveRegionKey } from '@/lib/region-dna';
 import type { UserSegmentation } from '@/lib/user-segmentation';
 import { getAuthContext, unauthorizedResponse } from '@/lib/auth-server';
+import { consumeFeatureAccess, entitlementErrorResponse } from '@/lib/entitlements';
 import { createTextProviderClient } from '@/lib/ai/text-provider';
 import { consumeTrackedTextStream } from '@/lib/ai-usage';
 import { requireConfirmedResume } from '@/lib/resume-access';
@@ -139,6 +140,9 @@ export async function POST(request: NextRequest) {
     }
 
     // AI optimization
+    const access = await consumeFeatureAccess(client, auth.user.id, 'ats_optimize');
+    if (!access.allowed) return entitlementErrorResponse(access);
+
     const llmClient = createTextProviderClient({ requestHeaders: request.headers });
     
     const resumeContent = resume.parsed_content || JSON.stringify(resume.user_info);

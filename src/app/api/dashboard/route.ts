@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { resolveRegionKey, type RegionKey, REGION_DNA, shouldBeApplying } from '@/lib/region-dna';
 import { getAuthContext, unauthorizedResponse } from '@/lib/auth-server';
+import { getBillingSnapshot } from '@/lib/entitlements';
 import { buildCareerRoutePlan, type CareerRouteDiagnosis } from '@/lib/career-route-planner';
 import type { ResumeProfile, UserSegmentation } from '@/lib/resume-types';
 
@@ -30,6 +31,7 @@ interface DashboardPlan {
 
 interface DashboardResume {
   id?: number;
+  segmentation_confirmed?: boolean | null;
   profile?: {
     personality?: {
       dimensions?: Record<string, number>;
@@ -300,6 +302,7 @@ export async function GET(request: NextRequest) {
   const auth = await getAuthContext(request);
   if (!auth) return unauthorizedResponse();
   const supabase = auth.client;
+  const billing = await getBillingSnapshot(supabase, auth.user.id);
   const weekStart = getWeekStart(new Date());
 
   // 这些数据互相独立，必须并行读取，避免 dashboard 首屏耗时叠加。
@@ -317,7 +320,7 @@ export async function GET(request: NextRequest) {
   ] = await Promise.all([
     supabase
       .from('resumes')
-      .select('id, created_at, updated_at, file_name, profile, segmentation, segmentation_overrides')
+      .select('id, created_at, updated_at, file_name, profile, segmentation, segmentation_overrides, segmentation_confirmed')
       .eq('user_id', auth.user.id)
       .order('created_at', { ascending: false })
       .limit(1),
@@ -589,6 +592,8 @@ export async function GET(request: NextRequest) {
     diagnosis: plan?.diagnosis ?? null,
     personality,
     interviewEvaluations,
+    billing,
+    segmentationConfirmed: latestResume?.segmentation_confirmed === true,
     counts: {
       resumes: resumeCount,
       matches: aiMatches?.length ?? 0,

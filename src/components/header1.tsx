@@ -9,12 +9,15 @@ import {
     NavigationMenuList,
     NavigationMenuTrigger,
 } from "@/components/ui/navigation-menu";
-import { Menu, MoveRight, X, LogOut, User as UserIcon } from "lucide-react";
+import { Menu, MoveRight, X } from "lucide-react";
 import { useState, useEffect } from "react";
 import Link from "next/link";
 import { ThemeToggle } from "@/components/theme-toggle";
 import { LanguageSwitcher } from "@/components/language-switcher";
+import { AccountMenu } from "@/components/account-menu";
 import { useLanguage } from "@/lib/language-context";
+import { apiFetch } from "@/lib/api-client";
+import type { BillingSnapshot } from "@/lib/billing-types";
 import { getSupabaseBrowserClient } from "@/lib/supabase-browser";
 import type { User as SupabaseUser, AuthChangeEvent, Session } from "@supabase/supabase-js";
 
@@ -34,7 +37,7 @@ function Header1() {
     const [isOpen, setOpen] = useState(false);
     const [isLoggedIn, setIsLoggedIn] = useState(false);
     const [displayName, setDisplayName] = useState("");
-    const [user, setUser] = useState<SupabaseUser | null>(null);
+    const [billing, setBilling] = useState<BillingSnapshot | null>(null);
 
     useEffect(() => {
         let mounted = true;
@@ -42,7 +45,6 @@ function Header1() {
             supabase.auth.getSession().then(({ data: { session } }: { data: { session: Session | null } }) => {
                 if (mounted) {
                     setIsLoggedIn(!!session);
-                    setUser(session?.user ?? null);
                     setDisplayName(getDisplayName(session?.user ?? null));
                 }
             });
@@ -50,7 +52,6 @@ function Header1() {
                 (_event: AuthChangeEvent, session: Session | null) => {
                     if (mounted) {
                         setIsLoggedIn(!!session);
-                        setUser(session?.user ?? null);
                         setDisplayName(getDisplayName(session?.user ?? null));
                     }
                 }
@@ -67,10 +68,26 @@ function Header1() {
         const supabase = await getSupabaseBrowserClient();
         await supabase.auth.signOut();
         setIsLoggedIn(false);
-        setUser(null);
         setDisplayName("");
         window.location.href = '/';
     };
+
+    useEffect(() => {
+        if (!isLoggedIn) {
+            setBilling(null);
+            return;
+        }
+        let cancelled = false;
+        apiFetch("/api/billing/status")
+            .then((response) => (response.ok ? response.json() : { billing: null }))
+            .then((json) => {
+                if (!cancelled && json.billing) setBilling(json.billing);
+            })
+            .catch(() => undefined);
+        return () => {
+            cancelled = true;
+        };
+    }, [isLoggedIn]);
 
     const navigationItems: Array<{
         title: string;
@@ -78,61 +95,96 @@ function Header1() {
         description?: string;
         highlighted?: boolean;
         items?: Array<{ title: string; href: string }>;
-    }> = [
-        {
-            title: t("nav.home"),
-            href: "/",
-            description: "",
-        },
-        {
-            title: t("nav.mockInterview"),
-            href: "/mock-interview",
-            highlighted: true,
-        },
-        {
-            title: t("nav.features"),
-            description: t("features.subtitle"),
-            items: [
-                {
-                    title: t("nav.jobSearch"),
-                    href: "/jobs",
-                },
-                {
-                    title: t("nav.resumeManager"),
-                    href: "/resume",
-                },
-                {
-                    title: t("nav.aiMatch"),
-                    href: "/ai-match",
-                },
-                {
-                    title: t("nav.atsOptimize"),
-                    href: "/optimize",
-                },
-                {
-                    title: t("nav.dashboard"),
-                    href: "/dashboard",
-                },
-            ],
-        },
-        {
-            title: t("nav.more"),
-            description: "",
-            items: [
-                {
-                    title: t("nav.autoApplication"),
-                    href: "/field-mappings",
-                },
-            ],
-        },
-    ];
+    }> = isLoggedIn
+        ? [
+            {
+                title: t("nav.dashboard"),
+                href: "/dashboard",
+                description: "",
+            },
+            {
+                title: t("nav.mockInterview"),
+                href: "/mock-interview",
+                highlighted: false,
+            },
+            {
+                title: t("nav.jobSearch"),
+                href: "/jobs",
+                description: "",
+            },
+            {
+                title: t("nav.features"),
+                description: t("features.subtitle"),
+                items: [
+                    {
+                        title: t("nav.resumeManager"),
+                        href: "/resume",
+                    },
+                    {
+                        title: t("nav.aiMatch"),
+                        href: "/ai-match",
+                    },
+                    {
+                        title: t("nav.atsOptimize"),
+                        href: "/optimize",
+                    },
+                    {
+                        title: t("nav.autoApplication"),
+                        href: "/field-mappings",
+                    },
+                ],
+            },
+        ]
+        : [
+            {
+                title: t("nav.mockInterview"),
+                href: "/mock-interview",
+                highlighted: false,
+            },
+            {
+                title: t("nav.features"),
+                description: t("features.subtitle"),
+                items: [
+                    {
+                        title: t("nav.jobSearch"),
+                        href: "/jobs",
+                    },
+                    {
+                        title: t("nav.resumeManager"),
+                        href: "/resume",
+                    },
+                    {
+                        title: t("nav.aiMatch"),
+                        href: "/ai-match",
+                    },
+                    {
+                        title: t("nav.atsOptimize"),
+                        href: "/optimize",
+                    },
+                    {
+                        title: t("nav.dashboard"),
+                        href: "/dashboard",
+                    },
+                ],
+            },
+            {
+                title: t("nav.more"),
+                description: "",
+                items: [
+                    {
+                        title: t("nav.autoApplication"),
+                        href: "/field-mappings",
+                    },
+                ],
+            },
+        ];
 
     return (
         <header className="w-full z-40 fixed top-0 left-0 bg-background">
-            <div className="container relative mx-auto min-h-14 flex gap-4 flex-row lg:grid lg:grid-cols-3 items-center">
-                <div className="justify-start items-center gap-4 lg:flex hidden flex-row">
+            <div className="container relative mx-auto min-h-14 flex gap-4 flex-row lg:grid lg:grid-cols-[minmax(0,1fr)_auto_minmax(0,1fr)] items-center">
+                <div className="justify-start items-center gap-4 lg:flex hidden flex-row min-w-0">
                     <NavigationMenu className="flex justify-start items-start">
-                        <NavigationMenuList className="flex justify-start gap-4 flex-row">
+                        <NavigationMenuList className="flex justify-start gap-1 flex-row">
                             {navigationItems.map((item) => (
                                 <NavigationMenuItem key={item.title}>
                                     {item.href ? (
@@ -141,8 +193,8 @@ function Header1() {
                                                 <Button
                                                     variant={item.highlighted ? "default" : "ghost"}
                                                     className={item.highlighted
-                                                        ? "bg-zinc-900 text-white hover:bg-zinc-800 dark:bg-white dark:text-zinc-900 dark:hover:bg-zinc-200"
-                                                        : "text-black dark:text-white hover:bg-zinc-100 dark:hover:bg-zinc-800 hover:text-zinc-900 dark:hover:text-zinc-100"}
+                                                        ? "bg-zinc-900 text-white hover:bg-zinc-800 dark:bg-white dark:text-zinc-900 dark:hover:bg-zinc-200 px-2.5"
+                                                        : "text-black dark:text-white hover:bg-zinc-100 dark:hover:bg-zinc-800 hover:text-zinc-900 dark:hover:text-zinc-100 px-2.5"}
                                                 >
                                                     {item.title}
                                                 </Button>
@@ -186,7 +238,7 @@ function Header1() {
                         </NavigationMenuList>
                     </NavigationMenu>
                 </div>
-                <div className="flex lg:justify-center">
+                <div className="flex lg:justify-center shrink-0">
                     <Link href="/" className="flex items-center gap-2 font-semibold text-lg text-black dark:text-white">
                         <svg viewBox="0 0 40 20" fill="currentColor" aria-hidden="true" className="h-2.5 w-auto shrink-0">
                             <path d="M0 0h29a4 4 0 0 1 0 8H0V0z" />
@@ -195,24 +247,20 @@ function Header1() {
                         Liorvix
                     </Link>
                 </div>
-                <div className="flex justify-end w-full gap-3 items-center">
-                    <LanguageSwitcher />
-                    <ThemeToggle />
+                <div className="flex justify-end w-full gap-3 items-center min-w-0">
                     {isLoggedIn ? (
                         <>
-                            <div className="hidden md:flex items-center gap-2 text-sm text-black dark:text-white">
-                                <UserIcon className="w-4 h-4" />
-                                <span>{displayName}</span>
-                            </div>
-                            <Button variant="ghost" onClick={handleLogout} className="hidden md:inline-flex text-black dark:text-white hover:bg-zinc-100 dark:hover:bg-zinc-800 hover:text-zinc-900 dark:hover:text-zinc-100">
-                                <LogOut className="w-4 h-4 mr-2" />
-                                {t("nav.logout")}
-                            </Button>
+                            <ThemeToggle />
+                            <AccountMenu displayName={displayName} billing={billing} onLogout={handleLogout} />
                         </>
                     ) : (
-                        <Button asChild className="bg-zinc-900 text-white hover:bg-zinc-800 dark:bg-white dark:text-zinc-900 dark:hover:bg-zinc-200">
-                            <Link href="/login">{t("nav.getStarted")}</Link>
-                        </Button>
+                        <>
+                            <LanguageSwitcher />
+                            <ThemeToggle />
+                            <Button asChild className="bg-zinc-900 text-white hover:bg-zinc-800 dark:bg-white dark:text-zinc-900 dark:hover:bg-zinc-200">
+                                <Link href="/login">{t("nav.getStarted")}</Link>
+                            </Button>
+                        </>
                     )}
                 </div>
                 <div className="flex w-12 shrink lg:hidden justify-end items-center">

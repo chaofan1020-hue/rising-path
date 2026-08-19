@@ -1,8 +1,10 @@
 "use client";
 
+import Link from "next/link";
 import { useState, useRef, useEffect, useCallback } from "react";
 import { Header1 } from "@/components/header1";
 import { AuthGuard } from "@/components/auth-guard";
+import { PaywallGate } from "@/components/paywall-gate";
 import { apiFetch } from "@/lib/api-client";
 import { Button } from "@/components/ui/button";
 import { Textarea } from "@/components/ui/textarea";
@@ -472,6 +474,8 @@ function MockInterviewContent() {
   const [reportHistory, setReportHistory] = useState<HistoryPoint[]>([]);
   const [reportChars, setReportChars] = useState(0); // 生成中已接收字符数（进度展示）
   const [reportError, setReportError] = useState(false); // 报告生成失败（可重试）
+  const [reportPaywall, setReportPaywall] = useState(false);
+  const [isProUser, setIsProUser] = useState(false);
 
   // 自动真实流程状态：HR 初筛 → 业务深挖 → 跨部门交叉 → 高管终面
   const totalRounds = 4;
@@ -761,6 +765,19 @@ function MockInterviewContent() {
     if (manualAsrFinalizeTimerRef.current) window.clearTimeout(manualAsrFinalizeTimerRef.current);
     deferredAsrFinalsRef.current.clear();
     summaryAbortRef.current?.abort();
+  }, []);
+
+  useEffect(() => {
+    let cancelled = false;
+    apiFetch("/api/billing/status")
+      .then((res) => (res.ok ? res.json() : { billing: null }))
+      .then((json) => {
+        if (!cancelled) setIsProUser(json.billing?.isPro === true);
+      })
+      .catch(() => undefined);
+    return () => {
+      cancelled = true;
+    };
   }, []);
 
   // 加载公司列表
@@ -2913,6 +2930,7 @@ function MockInterviewContent() {
     const timeout = window.setTimeout(() => controller.abort(), SUMMARY_CLIENT_TIMEOUT_MS);
     setEnding(true);
     setReportError(false);
+    setReportPaywall(false);
     if (showSummaryImmediately) setStage("summary");
     setSummary("");
     setReport(null);
@@ -2926,7 +2944,17 @@ function MockInterviewContent() {
         body: JSON.stringify({ sessionId: targetSessionId, language }),
         signal: controller.signal,
       });
-      if (!res.ok) throw new Error("failed");
+      if (!res.ok) {
+        try {
+          const json = await res.json() as { code?: string };
+          if (json.code === "PLAN_REQUIRED" || json.code === "USAGE_EXHAUSTED") {
+            setReportPaywall(true);
+          }
+        } catch {
+          // 非 JSON 错误走统一失败状态
+        }
+        throw new Error("failed");
+      }
       const reader = res.body?.getReader();
       if (!reader) throw new Error("no reader");
       const decoder = new TextDecoder();
@@ -3144,7 +3172,7 @@ function MockInterviewContent() {
                 <div className="inline-flex items-center justify-center h-12 w-12 rounded-2xl bg-zinc-900 dark:bg-white mb-3">
                   <Bot className="h-6 w-6 text-white dark:text-zinc-900" />
                 </div>
-                <h1 className="text-3xl md:text-4xl font-light text-black dark:text-white mb-2">
+                <h1 className="text-xl md:text-2xl font-light text-black dark:text-white mb-2">
                   {t("mockInterview.title")}
                 </h1>
                 <p className="text-gray-500 dark:text-gray-400">{t("mockInterview.subtitle")}</p>
@@ -3666,12 +3694,30 @@ function MockInterviewContent() {
               <div className="inline-flex items-center justify-center h-12 w-12 rounded-2xl bg-gradient-to-br from-[#C46A4A] to-[#B5BEB0] mb-3">
                 <ClipboardList className="h-6 w-6 text-white" />
               </div>
-              <h1 className="text-3xl md:text-4xl font-light text-black dark:text-white">
+              <h1 className="text-xl md:text-2xl font-light text-black dark:text-white">
                 {t("mockInterview.summaryTitle")}
               </h1>
             </div>
 
             {!report ? (
+              reportPaywall ? (
+                <div className="rounded-3xl border border-zinc-200 dark:border-zinc-800 shadow-lg p-12 flex flex-col items-center text-center">
+                  <h2 className="text-lg font-semibold text-zinc-900 dark:text-white mb-2">
+                    {t("paywall.title")}
+                  </h2>
+                  <p className="text-sm text-zinc-500 max-w-md mb-6">
+                    {t("paywall.description")}
+                  </p>
+                  <div className="flex gap-3">
+                    <Button asChild className="rounded-full bg-zinc-900 hover:bg-zinc-700 dark:bg-white dark:text-zinc-900 dark:hover:bg-zinc-200 text-white px-6">
+                      <Link href="/pricing">{t("paywall.upgrade")}</Link>
+                    </Button>
+                    <Button onClick={handleRestart} variant="outline" className="rounded-full px-6">
+                      {t("mockInterview.restart")}
+                    </Button>
+                  </div>
+                </div>
+              ) :
               reportError ? (
                 /* 报告生成失败：提供重试 */
                 <div className="rounded-3xl border border-red-200 dark:border-red-900/50 bg-red-50/60 dark:bg-red-950/20 shadow-lg p-12 flex flex-col items-center">
@@ -3723,6 +3769,21 @@ function MockInterviewContent() {
                      {language === "en" ? "Hiring Committee" : "招聘评估"}
                    </Button>
                  </div>
+                 {!isProUser && (
+                   <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 rounded-2xl border border-zinc-200 dark:border-zinc-800 p-4">
+                     <div>
+                       <p className="text-sm font-medium text-zinc-900 dark:text-white">
+                         {t("paywall.title")}
+                       </p>
+                       <p className="text-xs text-zinc-500 mt-0.5">
+                         {t("paywall.description")}
+                       </p>
+                     </div>
+                     <Button asChild size="sm" className="rounded-full bg-zinc-900 hover:bg-zinc-700 dark:bg-white dark:text-zinc-900 dark:hover:bg-zinc-200 text-white shrink-0">
+                       <Link href="/pricing">{t("paywall.upgrade")}</Link>
+                     </Button>
+                   </div>
+                 )}
                  {reportView === "coach" && report.coach && (
                    <section className="rounded-3xl border border-[#C46A4A]/25 bg-[#C46A4A]/5 dark:bg-[#C46A4A]/10 p-6 md:p-8">
                      <h2 className="text-lg font-medium text-zinc-900 dark:text-white mb-4">
@@ -4069,7 +4130,9 @@ function MockInterviewContent() {
 export default function MockInterviewPage() {
   return (
     <AuthGuard>
-      <MockInterviewContent />
+      <PaywallGate feature="mock_interview" allowGrant>
+        <MockInterviewContent />
+      </PaywallGate>
     </AuthGuard>
   );
 }

@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { getAuthContext, unauthorizedResponse } from '@/lib/auth-server';
+import { entitlementErrorResponse, requirePlanFeature } from '@/lib/entitlements';
 import type { NetworkingProgress } from '@/lib/networking-recommender';
 import { NETWORKING_STAGES } from '@/lib/networking-recommender';
 
@@ -17,6 +18,8 @@ export async function GET(request: NextRequest) {
     const auth = await getAuthContext(request);
     if (!auth) return unauthorizedResponse();
     const client = auth.client;
+    const access = await requirePlanFeature(client, auth.user.id, 'networking');
+    if (!access.allowed) return entitlementErrorResponse(access);
     const { data: resume } = await client
       .from('resumes')
       .select('id, profile')
@@ -38,6 +41,8 @@ export async function POST(request: NextRequest) {
     const auth = await getAuthContext(request);
     if (!auth) return unauthorizedResponse();
     const client = auth.client;
+    const access = await requirePlanFeature(client, auth.user.id, 'networking');
+    if (!access.allowed) return entitlementErrorResponse(access);
     const body = await request.json() as {
       stage?: unknown;
       completedMilestones?: unknown;

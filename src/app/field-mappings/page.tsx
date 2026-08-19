@@ -22,6 +22,7 @@ import {
 } from '@/components/ui/card';
 import { Loader2, Save, Download, ClipboardList, MapPin, Sparkles } from 'lucide-react';
 import { AuthGuard } from '@/components/auth-guard';
+import { PaywallGate } from '@/components/paywall-gate';
 import { apiFetch } from '@/lib/api-client';
 import { Header1 } from '@/components/header1';
 import ApplicationList from '@/components/application-list';
@@ -256,7 +257,7 @@ function AutoApplicationContent() {
       <main className="container mx-auto px-4 py-8 pt-20 max-w-5xl">
         <div className="mb-8">
           <PageBackButton fallbackHref="/jobs" className="mb-3" />
-          <h1 className="text-3xl font-bold mb-2 flex items-center gap-3">
+          <h1 className="text-xl md:text-2xl font-bold mb-2 flex items-center gap-3">
             <ClipboardList className="h-8 w-8 text-primary" />
             自动网申
           </h1>
@@ -509,7 +510,9 @@ function Metric({ label, value }: { label: string; value: string }) {
 export default function FieldMappingsPage() {
   return (
     <AuthGuard>
-      <AutoApplicationContent />
+      <PaywallGate feature="auto_apply">
+        <AutoApplicationContent />
+      </PaywallGate>
     </AuthGuard>
   );
 }

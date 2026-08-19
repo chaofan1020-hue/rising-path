@@ -307,8 +307,8 @@ function AIMatchContent() {
         <div className="relative mb-8 md:mb-10">
           <p className="text-sm font-medium text-zinc-400 dark:text-zinc-500 mb-3">{t('aiMatch.eyebrow')}</p>
           <PageBackButton fallbackHref="/resume" className="mb-3" />
-          <h1 className="text-2xl md:text-4xl font-bold tracking-tight text-zinc-900 dark:text-zinc-50 mb-4">{t('aiMatch.title')}</h1>
-          <p className="text-zinc-500 dark:text-zinc-400 max-w-2xl md:text-lg leading-relaxed">{t('aiMatch.subtitle')}</p>
+          <h1 className="text-xl md:text-2xl font-bold tracking-tight text-zinc-900 dark:text-zinc-50 mb-3">{t('aiMatch.title')}</h1>
+          <p className="text-zinc-500 dark:text-zinc-400 max-w-2xl text-sm md:text-base leading-relaxed">{t('aiMatch.subtitle')}</p>
         </div>
 
         {/* Match Form */}
@@ -476,7 +476,7 @@ function AIMatchContent() {
         {matchResults.length > 0 && (
           <div className="relative space-y-4 md:space-y-5">
             <div className="flex items-center justify-between">
-              <h2 className="text-xl md:text-2xl font-semibold tracking-tight flex items-center gap-2.5 text-zinc-900 dark:text-zinc-50">
+              <h2 className="text-lg md:text-xl font-semibold tracking-tight flex items-center gap-2.5 text-zinc-900 dark:text-zinc-50">
                 <span className="w-7 h-7 rounded-lg bg-zinc-900 dark:bg-white flex items-center justify-center">
                   <CheckCircle className="h-4 w-4 text-white dark:text-zinc-900" />
                 </span>
@@ -492,7 +492,7 @@ function AIMatchContent() {
                   <div className="flex flex-col md:flex-row gap-4 md:gap-6">
                     {/* Score - 手机端横向紧凑，桌面端纵向带背景 */}
                     <div className="flex items-center gap-3 md:flex-col md:items-center md:justify-center md:p-5 md:rounded-2xl md:bg-zinc-50 dark:md:bg-zinc-900/60 md:border md:border-zinc-100 dark:md:border-zinc-800 flex-shrink-0 md:min-w-[120px]">
-                      <div className="text-3xl md:text-4xl font-bold tracking-tight text-zinc-900 dark:text-zinc-50">
+                      <div className="text-2xl md:text-3xl font-bold tracking-tight text-zinc-900 dark:text-zinc-50">
                         {result.match_score}
                       </div>
                       <div className="flex flex-col gap-0.5 md:gap-1 md:items-center">

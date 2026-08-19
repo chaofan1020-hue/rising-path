@@ -17,7 +17,7 @@ const features: Feature[] = [
     titleKey: "feature1.title",
     descKey: "feature1.desc",
     icon: (
-      <svg className="w-12 h-12 text-white" fill="currentColor" viewBox="0 0 24 24">
+      <svg className="w-7 h-7 text-white" fill="currentColor" viewBox="0 0 24 24">
         <path d="M12 2l3.09 6.26L22 9.27l-5 4.87 1.18 6.88L12 17.77l-6.18 3.25L7 14.14 2 9.27l6.91-1.01L12 2z" />
       </svg>
     ),
@@ -26,7 +26,7 @@ const features: Feature[] = [
     titleKey: "feature2.title",
     descKey: "feature2.desc",
     icon: (
-      <svg className="w-12 h-12 text-white" fill="currentColor" viewBox="0 0 24 24">
+      <svg className="w-7 h-7 text-white" fill="currentColor" viewBox="0 0 24 24">
         <path d="M7 2v11h3v9l7-12h-4l4-8z" />
       </svg>
     ),
@@ -35,7 +35,7 @@ const features: Feature[] = [
     titleKey: "feature3.title",
     descKey: "feature3.desc",
     icon: (
-      <svg className="w-12 h-12 text-white" fill="currentColor" viewBox="0 0 24 24">
+      <svg className="w-7 h-7 text-white" fill="currentColor" viewBox="0 0 24 24">
         <path d="M22.7 19l-9.1-9.1c.9-2.3.4-5-1.5-6.9-2-2-5-2.4-7.4-1.3L9 6 6 9 1.6 4.7C.4 7.1.9 10.1 2.9 12.1c1.9 1.9 4.6 2.4 6.9 1.5l9.1 9.1c.4.4 1 .4 1.4 0l2.3-2.3c.5-.4.5-1.1.1-1.4z" />
       </svg>
     ),
@@ -44,7 +44,7 @@ const features: Feature[] = [
     titleKey: "feature4.title",
     descKey: "feature4.desc",
     icon: (
-      <svg className="w-12 h-12 text-white" fill="currentColor" viewBox="0 0 24 24">
+      <svg className="w-7 h-7 text-white" fill="currentColor" viewBox="0 0 24 24">
         <path d="M20 6h-4V4c0-1.11-.89-2-2-2h-4c-1.11 0-2 .89-2 2v2H4c-1.11 0-1.99.89-1.99 2L2 19c0 1.11.89 2 2 2h16c1.11 0 2-.89 2-2V8c0-1.11-.89-2-2-2zm-6 0h-4V4h4v2z" />
       </svg>
     ),
@@ -52,13 +52,13 @@ const features: Feature[] = [
   {
     titleKey: "feature5.title",
     descKey: "feature5.desc",
-    icon: <Gauge className="w-12 h-12 text-white" strokeWidth={1.5} />,
+    icon: <Gauge className="w-7 h-7 text-white" strokeWidth={1.5} />,
   },
   {
     titleKey: "feature6.title",
     descKey: "feature6.desc",
     icon: (
-      <svg className="w-12 h-12 text-white" fill="currentColor" viewBox="0 0 24 24">
+      <svg className="w-7 h-7 text-white" fill="currentColor" viewBox="0 0 24 24">
         <path d="M12 2a2 2 0 0 1 2 2c0 .74-.4 1.39-1 1.73V7h1a7 7 0 0 1 7 7h1a1 1 0 0 1 1 1v3a1 1 0 0 1-1 1h-1v1a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-1H2a1 1 0 0 1-1-1v-3a1 1 0 0 1 1-1h1a7 7 0 0 1 7-7h1V5.73c-.6-.34-1-.99-1-1.73a2 2 0 0 1 2-2M7.5 13A2.5 2.5 0 0 0 5 15.5A2.5 2.5 0 0 0 7.5 18a2.5 2.5 0 0 0 2.5-2.5A2.5 2.5 0 0 0 7.5 13m9 0a2.5 2.5 0 0 0-2.5 2.5a2.5 2.5 0 0 0 2.5 2.5a2.5 2.5 0 0 0 2.5-2.5a2.5 2.5 0 0 0-2.5-2.5Z"/>
       </svg>
     ),
@@ -134,16 +134,16 @@ export default function FeaturesCards() {
   }
 
   return (
-    <section className="min-h-screen py-20 px-4 bg-white dark:bg-black rounded-b-[3rem]">
+    <section className="py-10 md:py-14 px-4 bg-white dark:bg-black rounded-b-[3rem]">
       <div className="max-w-7xl mx-auto">
-        <div className="text-center mb-16">
-          <h2 className="text-4xl md:text-5xl font-light text-black dark:text-white mb-6">{t("features.title")}</h2>
-          <p className="text-xl text-black dark:text-white max-w-3xl mx-auto leading-relaxed">
+        <div className="text-center mb-8">
+          <h2 className="text-2xl md:text-3xl font-light text-black dark:text-white mb-3">{t("features.title")}</h2>
+          <p className="text-sm md:text-base text-black dark:text-white max-w-3xl mx-auto leading-relaxed">
             {t("features.subtitle")}
           </p>
         </div>
 
-        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-8">
+        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4 md:gap-5">
           {features.map((feature, index) => {
             const shaderConfig = getShaderConfig(index)
             return (
@@ -163,7 +163,7 @@ export default function FeaturesCards() {
                 }}
                 className="block group cursor-pointer"
               >
-                <div className="relative h-64 transition-transform duration-300 group-hover:scale-105">
+                <div className="relative h-36 md:h-40 transition-transform duration-300 group-hover:scale-105">
                   <div className="absolute inset-0 rounded-3xl overflow-hidden">
                     <Warp
                       style={{ height: "100%", width: "100%" }}
@@ -181,8 +181,8 @@ export default function FeaturesCards() {
                     <div className="mb-3 p-2.5 rounded-xl bg-white/10 backdrop-blur-sm transition-transform duration-300 group-hover:scale-110">
                       {feature.icon}
                     </div>
-                    <h3 className="text-xl font-semibold text-white mb-2">{t(feature.titleKey)}</h3>
-                    <p className="text-white/80 text-sm leading-relaxed">{t(feature.descKey)}</p>
+                    <h3 className="text-sm md:text-base font-semibold text-white mb-1.5">{t(feature.titleKey)}</h3>
+                    <p className="text-white/80 text-xs leading-relaxed">{t(feature.descKey)}</p>
                   </div>
                 </div>
               </div>

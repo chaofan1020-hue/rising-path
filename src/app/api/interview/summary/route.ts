@@ -1,6 +1,7 @@
 import { NextRequest } from 'next/server';
 import { z } from 'zod';
 import { getAuthContext, unauthorizedResponse } from '@/lib/auth-server';
+import { entitlementErrorResponse, getBillingSnapshot } from '@/lib/entitlements';
 import { interviewSummaryRequestSchema } from '@/lib/interview-contracts';
 import { createTextProviderClient } from '@/lib/ai/text-provider';
 import { consumeTrackedTextStream } from '@/lib/ai-usage';
@@ -173,6 +174,24 @@ export async function POST(request: NextRequest) {
     const auth = await getAuthContext(request);
     if (!auth) return unauthorizedResponse();
     const client = auth.client;
+    const billing = await getBillingSnapshot(client, auth.user.id);
+    if (!billing.isPro) {
+      const { count } = await client
+        .from('interview_sessions')
+        .select('id', { count: 'exact', head: true })
+        .eq('user_id', auth.user.id)
+        .in('status', ['completed', 'ended', 'finished'])
+        .not('overall_score', 'is', null);
+      const hasPreviousReport = (count || 0) > 0;
+      if (hasPreviousReport) {
+        return entitlementErrorResponse({
+          allowed: false,
+          code: 'PLAN_REQUIRED',
+          feature: 'mock_interview',
+          message: '完整报告需要 Pro 订阅',
+        });
+      }
+    }
     const parsedRequest = interviewSummaryRequestSchema.safeParse(await request.json());
     if (!parsedRequest.success) return new Response(JSON.stringify({ error: '总结参数无效' }), { status: 400 });
     const { sessionId, language } = parsedRequest.data;

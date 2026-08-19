@@ -1,5 +1,6 @@
 import { NextRequest } from 'next/server';
 import { getAuthContext, unauthorizedResponse } from '@/lib/auth-server';
+import { consumeFeatureAccess } from '@/lib/entitlements';
 import { consumeAuthRateLimit } from '@/lib/auth-security';
 import { createTextProviderClient } from '@/lib/ai/text-provider';
 import { consumeTrackedTextStream } from '@/lib/ai-usage';
@@ -367,6 +368,14 @@ export async function POST(request: NextRequest) {
     const isGauntlet = mode === 'gauntlet' && totalRounds > 1;
 
     if (!sessionId) {
+      const access = await consumeFeatureAccess(client, auth.user.id, 'mock_interview');
+      if (!access.allowed) {
+        return new Response(JSON.stringify({
+          error: access.message || '需要 Pro 订阅',
+          code: access.code,
+          upgradeUrl: '/pricing',
+        }), { status: 403 });
+      }
       if (inputSource !== 'system') {
         return new Response(JSON.stringify({ error: '开场只能由系统发起' }), { status: 400 });
       }
