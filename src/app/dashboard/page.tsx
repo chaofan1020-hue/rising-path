@@ -384,7 +384,7 @@ export default function DashboardPage() {
                         <p className="text-xs font-medium text-zinc-500 mb-1">
                           {t('dashboard.diagnosis.window')}
                         </p>
-                        <p className="text-base font-semibold text-zinc-900 dark:text-zinc-100">
+                        <p className="text-base font-semibold text-zinc-900 dark:text-zinc-900">
                           {t(data.diagnosis.windowLabelKey)}
                         </p>
                       </div>
@@ -392,7 +392,7 @@ export default function DashboardPage() {
                         <p className="text-xs font-medium text-zinc-500 mb-1">
                           {t('dashboard.diagnosis.mainRoute')}
                         </p>
-                        <p className="text-base font-semibold text-zinc-900 dark:text-zinc-100">
+                        <p className="text-base font-semibold text-zinc-900 dark:text-zinc-900">
                           {t(data.diagnosis.mainRouteLabelKey)}
                         </p>
                       </div>
@@ -446,13 +446,13 @@ export default function DashboardPage() {
                         <div className="flex flex-wrap items-center gap-x-4 gap-y-1">
                           <p className="text-xs text-zinc-500">
                             {t('dashboard.diagnosis.visaStatus')}
-                            <span className="ml-2 font-medium text-zinc-900 dark:text-zinc-100">
+                            <span className="ml-2 font-medium text-zinc-900 dark:text-zinc-900">
                               {t(`dashboard.visaStatus.${data.diagnosis.visaStatus}`)}
                             </span>
                           </p>
                           <p className="text-xs text-zinc-500">
                             {t('dashboard.diagnosis.visaFeasibility')}
-                            <span className="ml-2 font-medium text-zinc-900 dark:text-zinc-100">
+                            <span className="ml-2 font-medium text-zinc-900 dark:text-zinc-900">
                               {t(`dashboard.visaFeasibility.${data.diagnosis.visaFeasibility}`)}
                             </span>
                           </p>
@@ -489,7 +489,7 @@ export default function DashboardPage() {
                         {data.diagnosis.visaStatus === 'unknown' && (
                           <Link
                             href="/resume"
-                            className="mt-2 inline-flex items-center gap-1 text-xs font-medium text-zinc-900 dark:text-zinc-100 hover:underline"
+                            className="mt-2 inline-flex items-center gap-1 text-xs font-medium text-zinc-900 dark:text-zinc-900 hover:underline"
                           >
                             {t('dashboard.diagnosis.confirmVisa')}
                             <ArrowRight className="h-3 w-3" />
@@ -529,6 +529,83 @@ export default function DashboardPage() {
                           {getLocalizedText(data.diagnosis.verificationNote, locale)}
                         </p>
                       )}
+                      {data.personality?.hasAssessment ? (
+                        <div className="mt-4 rounded-lg border border-zinc-200 p-3">
+                          <p className="text-xs font-medium text-zinc-500 mb-3">
+                            {t('dashboard.personalityTitle')}
+                          </p>
+                          {(() => {
+                            const core = (data.personality?.recommendations || []).slice(0, 3);
+                            const alternatives = (data.personality?.recommendations || []).slice(3, 5);
+                            const renderCard = (recommendation: typeof core[number]) => (
+                              <div key={recommendation.roleKey} className="rounded-lg border border-zinc-200 p-3">
+                                <div className="flex items-start justify-between gap-2 mb-1">
+                                  <p className="text-sm font-semibold text-zinc-900 dark:text-zinc-900">
+                                    {t(recommendation.labelKey)}
+                                  </p>
+                                  <Badge variant="secondary" className="text-[10px]">
+                                    {t(`personality.fit.${recommendation.fit}`)}
+                                  </Badge>
+                                </div>
+                                <p className="text-xs text-zinc-500 mb-2">{recommendation.score}%</p>
+                                <ul className="space-y-1">
+                                  {recommendation.reasons.map((reason) => (
+                                    <li key={reason} className="text-xs text-zinc-500 leading-relaxed">
+                                      {t(reason)}
+                                    </li>
+                                  ))}
+                                </ul>
+                                {recommendation.sponsorship && (
+                                  <div className="mt-2 flex flex-wrap items-center gap-1.5">
+                                    <Badge variant="outline" className="text-[10px]">
+                                      {t(`personality.sponsor.${recommendation.sponsorship.level}`)}
+                                    </Badge>
+                                    {recommendation.sponsorship.activeJobCount > 0 && (
+                                      <span className="text-[10px] text-zinc-500">
+                                        {recommendation.sponsorship.sponsorJobCount} / {recommendation.sponsorship.activeJobCount}
+                                      </span>
+                                    )}
+                                  </div>
+                                )}
+                              </div>
+                            );
+                            return (
+                              <>
+                                <p className="text-xs font-medium text-zinc-500 mb-2">
+                                  {t('personality.recommendationsCore')}
+                                </p>
+                                <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
+                                  {core.map(renderCard)}
+                                </div>
+                                {alternatives.length > 0 && (
+                                  <>
+                                    <p className="mt-3 text-xs font-medium text-zinc-500 mb-2">
+                                      {t('personality.recommendationsAlternatives')}
+                                    </p>
+                                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                                      {alternatives.map(renderCard)}
+                                    </div>
+                                  </>
+                                )}
+                              </>
+                            );
+                          })()}
+                        </div>
+                      ) : data.diagnosis.risks.some((risk) => risk.key === 'missing_direction') ? (
+                        <div className="mt-4 flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3 rounded-lg border border-zinc-200 p-3">
+                          <div>
+                            <p className="text-sm font-medium text-zinc-900 dark:text-zinc-900">
+                              {t('dashboard.personalityCtaTitle')}
+                            </p>
+                            <p className="mt-1 text-xs text-zinc-500 leading-relaxed">
+                              {t('dashboard.personalityCtaDesc')}
+                            </p>
+                          </div>
+                          <Button size="sm" asChild>
+                            <Link href="/resume?quiz=1">{t('dashboard.personalityStart')}</Link>
+                          </Button>
+                        </div>
+                      ) : null}
                     </CardContent>
                   </Card>
                 </div>
@@ -732,7 +809,7 @@ export default function DashboardPage() {
                           <div className="space-y-3">
                             {networking.outreach.map((item) => (
                               <div key={item.scenario}>
-                                <p className="text-sm font-medium text-zinc-900 dark:text-zinc-100">{item.scenario}</p>
+                                <p className="text-sm font-medium text-zinc-900 dark:text-zinc-900">{item.scenario}</p>
                                 <p className="mt-1 text-xs text-zinc-500 leading-relaxed">{item.script}</p>
                               </div>
                             ))}
@@ -1093,7 +1170,7 @@ export default function DashboardPage() {
                               <MessageSquare className="h-3.5 w-3.5 text-white" />
                             </div>
                             <div className="min-w-0">
-                              <p className="text-sm font-medium text-zinc-900 dark:text-zinc-100 truncate">
+                              <p className="text-sm font-medium text-zinc-900 dark:text-zinc-900 truncate">
                                 {ev.targetCompany || t('dashboard.unknownCompany')}
                               </p>
                               <p className="text-xs text-zinc-500">
