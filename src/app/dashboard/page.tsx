@@ -1,6 +1,6 @@
 'use client';
 
-import { useCallback, useEffect, useMemo, useState } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import Link from 'next/link';
 import { Header1 } from '@/components/header1';
 import { AuthGuard } from '@/components/auth-guard';
@@ -10,6 +10,13 @@ import { Card, CardContent } from '@/components/ui/card';
 import { Skeleton } from '@/components/ui/skeleton';
 import { Badge } from '@/components/ui/badge';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
+import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogHeader,
+  DialogTitle,
+} from '@/components/ui/dialog';
 
 import {
   Select,
@@ -19,7 +26,7 @@ import {
   SelectValue,
 } from '@/components/ui/select';
 import { useLanguage } from '@/lib/language-context';
-import PageBackButton from '@/components/page-back-button';
+import { getSupabaseBrowserClient } from '@/lib/supabase-browser';
 import { getLocalizedText, type CareerRouteDiagnosis } from '@/lib/career-route-planner';
 import {
   NETWORKING_STAGES,
@@ -32,14 +39,12 @@ import {
   Briefcase,
   Calendar,
   Check,
-  FileText,
   LineChart,
   Loader2,
   MapPin,
   MessageSquare,
   RefreshCw,
   Target,
-  TrendingUp,
   Zap,
 } from 'lucide-react';
 
@@ -141,8 +146,94 @@ interface DashboardData {
     overallScore: number | null;
     reportGrade: string | null;
     completedAt: string;
-    report: { radar?: Array<{ dimension: string; score: number; grade: string; diagnosis: string }> } | null;
+    report?: { radar?: Array<{ dimension: string; score: number; grade: string; diagnosis: string }> } | null;
   }>;
+}
+
+interface DashboardActivity {
+  recentlyUpdatedFavorites: number;
+  interviewEvaluations: NonNullable<DashboardData['interviewEvaluations']>;
+}
+
+interface DashboardInterviewMessage {
+  role?: 'interviewer' | 'candidate' | string;
+  content?: string;
+  interviewerName?: string;
+  round?: number;
+  ts?: number;
+}
+
+interface DashboardInterviewReport {
+  verdict?: {
+    pass?: boolean;
+    grade?: string;
+    hireLevel?: string;
+    headline?: string;
+    vote?: string;
+  };
+  committee?: Array<{
+    name?: string;
+    company?: string;
+    round?: number;
+    roleLabel?: string;
+    grade?: string;
+    attitude?: string;
+    comment?: string;
+    tags?: string[];
+    keyMoment?: { question?: string; answer?: string; note?: string };
+  }>;
+  radar?: Array<{ dimension?: string; score?: number; grade?: string; diagnosis?: string }>;
+  highlights?: {
+    mistakes?: Array<{ title?: string; scene?: string; consequence?: string; coach?: string }>;
+    best?: { title?: string; scene?: string; effect?: string; coach?: string };
+  };
+  actionPlan?: { immediate?: string[]; practice?: string[]; reading?: string[] };
+}
+
+interface DashboardInterviewDetail {
+  id: number;
+  target_company?: string | null;
+  interview_type?: string | null;
+  mode?: string | null;
+  total_rounds?: number | null;
+  current_round?: number | null;
+  messages?: DashboardInterviewMessage[] | null;
+  report?: DashboardInterviewReport | null;
+  report_grade?: string | null;
+  overall_score?: number | null;
+  summary?: string | null;
+  status: string;
+  created_at: string;
+  updated_at?: string | null;
+}
+
+const DASHBOARD_CACHE_TTL_MS = 10 * 60 * 1000;
+
+function dashboardCacheKey(userId: string, locale: string) {
+  return `liorvix.dashboard.${userId}.${locale}.v1`;
+}
+
+function readDashboardCache(userId: string, locale: string): DashboardData | null {
+  try {
+    const raw = window.sessionStorage.getItem(dashboardCacheKey(userId, locale));
+    if (!raw) return null;
+    const parsed = JSON.parse(raw) as { savedAt?: number; data?: DashboardData };
+    if (!parsed.savedAt || !parsed.data || Date.now() - parsed.savedAt > DASHBOARD_CACHE_TTL_MS) return null;
+    return parsed.data;
+  } catch {
+    return null;
+  }
+}
+
+function writeDashboardCache(userId: string, locale: string, data: DashboardData) {
+  try {
+    window.sessionStorage.setItem(
+      dashboardCacheKey(userId, locale),
+      JSON.stringify({ savedAt: Date.now(), data }),
+    );
+  } catch {
+    // Cache failures must never block the live dashboard response.
+  }
 }
 
 export default function DashboardPage() {
@@ -150,6 +241,8 @@ export default function DashboardPage() {
   const [data, setData] = useState<DashboardData | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+  const [dashboardLoadVersion, setDashboardLoadVersion] = useState(0);
+  const dashboardCacheOwnerRef = useRef<string | null>(null);
   const [savingRegion, setSavingRegion] = useState(false);
   const [networking, setNetworking] = useState<NetworkingRecommendation | null>(null);
   const [networkingByStage, setNetworkingByStage] = useState<Record<string, NetworkingRecommendation>>({});
@@ -162,9 +255,13 @@ export default function DashboardPage() {
     recommendations: {},
     updatedAt: '',
   });
+  const [selectedInterview, setSelectedInterview] = useState<DashboardInterviewDetail | null>(null);
+  const [interviewDetailLoading, setInterviewDetailLoading] = useState(false);
+  const [interviewDetailError, setInterviewDetailError] = useState<string | null>(null);
 
-  const fetchDashboard = useCallback(() => {
-    setLoading(true);
+  const fetchDashboard = useCallback((keepVisible = false) => {
+    if (!keepVisible) setLoading(true);
+    setError(null);
     apiFetch(`/api/dashboard?lang=${locale}`)
       .then(async (res) => {
         const json = await res.json();
@@ -175,7 +272,12 @@ export default function DashboardPage() {
         if (json.error) {
           setError(json.error);
         } else {
-          setData(json as DashboardData);
+          const nextData = json as DashboardData;
+          setData(nextData);
+          if (dashboardCacheOwnerRef.current) {
+            writeDashboardCache(dashboardCacheOwnerRef.current, locale, nextData);
+          }
+          setDashboardLoadVersion((version) => version + 1);
         }
       })
       .catch((err) => setError(err?.message || t('dashboard.loadError') || '加载失败'))
@@ -184,8 +286,61 @@ export default function DashboardPage() {
 
   useEffect(() => {
     if (!localeReady) return;
-    fetchDashboard();
+    let cancelled = false;
+    getSupabaseBrowserClient()
+      .then((client) => client.auth.getSession())
+      .then(({ data: { session } }) => {
+        if (cancelled) return;
+        const userId = session?.user.id ?? null;
+        const cachedData = userId ? readDashboardCache(userId, locale) : null;
+        dashboardCacheOwnerRef.current = userId;
+        if (cachedData) {
+          setData(cachedData);
+          setLoading(false);
+        }
+        fetchDashboard(Boolean(cachedData));
+      })
+      .catch(() => fetchDashboard());
+    return () => {
+      cancelled = true;
+    };
   }, [fetchDashboard, localeReady]);
+
+  useEffect(() => {
+    if (dashboardLoadVersion === 0) return;
+    let cancelled = false;
+    const timer = window.setTimeout(() => {
+      apiFetch('/api/dashboard/activity', { cache: 'no-store' })
+        .then(async (res) => {
+          const json = await res.json();
+          if (!res.ok) throw new Error(json.error || 'Dashboard activity unavailable');
+          return json as DashboardActivity;
+        })
+        .then((activity) => {
+          if (cancelled) return;
+          setData((current) => {
+            if (!current) return current;
+            const withoutFavoriteReminder = current.reminders.filter((item) => item.type !== 'favorite_update');
+            const reminders = activity.recentlyUpdatedFavorites > 0
+              ? [...withoutFavoriteReminder, {
+                type: 'favorite_update',
+                titleKey: 'dashboard.reminder.favoriteUpdate.title',
+                descriptionKey: 'dashboard.reminder.favoriteUpdate.description',
+                descriptionParams: { count: activity.recentlyUpdatedFavorites },
+              }]
+              : withoutFavoriteReminder;
+            return { ...current, reminders, interviewEvaluations: activity.interviewEvaluations };
+          });
+        })
+        .catch(() => {
+          // Deferred cards are non-critical; the dashboard remains fully usable.
+        });
+    }, 350);
+    return () => {
+      cancelled = true;
+      window.clearTimeout(timer);
+    };
+  }, [dashboardLoadVersion]);
 
   const loadNetworking = useCallback(async () => {
     setNetworkingLoading(true);
@@ -198,7 +353,14 @@ export default function DashboardPage() {
       });
       const json = await res.json();
       if (!res.ok || !json.recommendation) {
-        throw new Error(json.error || 'Networking 推荐生成失败');
+        const creditMessage = json.code === 'CREDIT_INSUFFICIENT'
+          ? t('dashboard.networking.creditInsufficient')
+          : json.code === 'CREDIT_METRIC_NOT_CONFIGURED'
+            ? t('dashboard.networking.creditNotConfigured')
+            : json.code?.startsWith('CREDIT_')
+              ? t('dashboard.networking.creditUnavailable')
+              : null;
+        throw new Error(creditMessage || json.error || 'Networking 推荐生成失败');
       }
       setNetworking(json.recommendation);
       setNetworkingByStage(json.recommendations || {});
@@ -209,7 +371,28 @@ export default function DashboardPage() {
     } finally {
       setNetworkingLoading(false);
     }
-  }, [locale]);
+  }, [locale, t]);
+
+  const loadInterviewDetail = useCallback(async (interviewId: number) => {
+    setSelectedInterview(null);
+    setInterviewDetailError(null);
+    setInterviewDetailLoading(true);
+    try {
+      const res = await apiFetch(`/api/dashboard/interviews/${interviewId}`, { cache: 'no-store' });
+      const json = await res.json();
+      if (!res.ok || !json.interview) throw new Error(json.error || t('dashboard.evaluation.loadError'));
+      setSelectedInterview(json.interview as DashboardInterviewDetail);
+    } catch (err) {
+      setInterviewDetailError(err instanceof Error ? err.message : t('dashboard.evaluation.loadError'));
+    } finally {
+      setInterviewDetailLoading(false);
+    }
+  }, [t]);
+
+  const formatInterviewDate = useCallback((value: string) => new Date(value).toLocaleDateString(
+    locale === 'zh-CN' ? 'zh-CN' : locale === 'zh-TW' ? 'zh-TW' : 'en-US',
+    { year: 'numeric', month: 'short', day: 'numeric' },
+  ), [locale]);
 
   useEffect(() => {
     if (data?.diagnosis?.window !== 'preparation') return;
@@ -241,7 +424,7 @@ export default function DashboardPage() {
     return () => {
       cancelled = true;
     };
-  }, [data?.diagnosis?.window, locale]);
+  }, [data?.diagnosis?.window, data?.selectedRegion, locale]);
 
   const handleToggleNetworkingMilestone = useCallback(async (milestone: string) => {
     if (!networkingProgress) return;
@@ -282,18 +465,22 @@ export default function DashboardPage() {
 
   const handleRegionChange = useCallback(
     async (value: string) => {
-      if (!data?.latestResumeId) return;
       setSavingRegion(true);
       try {
-        const res = await apiFetch(`/api/resume/${data.latestResumeId}`, {
+        const res = await apiFetch('/api/account/profile', {
           method: 'PATCH',
           headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ overrides: { regions: [value] } }),
+          body: JSON.stringify({ preferredRegion: value }),
         });
         const json = await res.json().catch(() => ({}));
         if (!res.ok) {
           setError(json.error || '保存地区失败');
         } else {
+          // Recommendations are generated for a specific market. Clear the
+          // previous result immediately so an old-region card cannot linger.
+          setNetworking(null);
+          setNetworkingByStage({});
+          setNetworkingError(null);
           fetchDashboard();
         }
       } catch (err) {
@@ -302,7 +489,7 @@ export default function DashboardPage() {
         setSavingRegion(false);
       }
     },
-    [data?.latestResumeId, fetchDashboard]
+    [fetchDashboard]
   );
 
   const planGroups = useMemo(() => {
@@ -318,23 +505,22 @@ export default function DashboardPage() {
     <AuthGuard showAccountBar={false}>
       <div className="min-h-screen bg-white dark:bg-zinc-950">
         <Header1 />
-        <main className="container mx-auto px-4 pt-16 md:pt-20 pb-16">
-        <div className="mb-8 md:mb-10">
-          <p className="text-sm font-medium text-zinc-400 dark:text-zinc-500 mb-3">
+        <main className="container mx-auto max-w-6xl px-4 pb-16 pt-20 md:pt-24">
+        <div className="mb-7 md:mb-8">
+          <p className="mb-2 text-xs font-medium text-zinc-400 dark:text-zinc-500">
             {t('dashboard.eyebrow')}
           </p>
-          <PageBackButton fallbackHref="/" className="mb-3" />
-          <h1 className="text-2xl md:text-4xl font-bold tracking-tight text-zinc-900 dark:text-zinc-50 mb-4">
+          <h1 className="mb-2 text-2xl font-semibold tracking-tight text-zinc-900 dark:text-zinc-50 md:text-3xl">
             {t('dashboard.title')}
           </h1>
-          <p className="text-zinc-500 dark:text-zinc-400 max-w-2xl md:text-lg leading-relaxed">
+          <p className="max-w-2xl text-sm leading-6 text-zinc-500 dark:text-zinc-400 md:text-base">
             {t('dashboard.subtitle')}
           </p>
         </div>
 
-        {loading && <DashboardSkeleton />}
+        {loading && !data && <DashboardSkeleton />}
 
-        {!loading && error && (
+        {!loading && error && !data && (
           <Card className="rounded-2xl border-zinc-200 dark:border-zinc-800">
             <CardContent className="p-6 text-center text-zinc-500">
               {error}
@@ -343,47 +529,65 @@ export default function DashboardPage() {
         )}
 
         {!loading && !error && data && (
-          <div className="space-y-6 md:space-y-8">
-            <section>
-              <Card className="rounded-2xl border-zinc-200 dark:border-zinc-800 bg-gradient-to-br from-zinc-800 via-zinc-900 to-zinc-950 dark:from-zinc-200 dark:via-white dark:to-zinc-300 text-white dark:text-zinc-900 shadow-xl shadow-zinc-900/10">
-                <CardContent className="p-6 md:p-10">
-                  <div className="flex flex-col md:flex-row md:items-center md:justify-between gap-6">
-                    <div className="space-y-3">
-                      <div className="inline-flex items-center gap-2 text-xs font-medium tracking-widest uppercase opacity-70">
+          <div className="flex flex-col gap-8 md:gap-10">
+            <section className="order-1">
+                  <div className="grid border-y border-zinc-200 lg:grid-cols-[minmax(0,1fr)_20rem] dark:border-zinc-800">
+                    <div className="py-6 pr-0 md:py-8 lg:pr-10">
+                      <div className="mb-3 inline-flex items-center gap-2 text-xs font-medium text-zinc-500 dark:text-zinc-400">
                         <Target className="h-3.5 w-3.5" />
                         {t('dashboard.phaseLabel')}
                       </div>
-                      <h2 className="text-2xl md:text-3xl font-bold tracking-tight">
+                      <h2 className="max-w-2xl text-2xl font-semibold tracking-tight text-zinc-950 dark:text-zinc-50 md:text-3xl">
                         {t(data.phaseTitleKey, data.phaseTitleParams)}
                       </h2>
-                      <p className="text-sm md:text-base opacity-80 max-w-2xl leading-relaxed">
+                      <p className="mt-3 max-w-xl text-sm leading-6 text-zinc-500 dark:text-zinc-400 md:text-base">
                         {t(data.phaseDescriptionKey, data.phaseDescriptionParams)}
                       </p>
+                      <Button
+                        asChild
+                        className="mt-5 rounded-md bg-zinc-900 text-white hover:bg-zinc-800 dark:bg-white dark:text-zinc-900 dark:hover:bg-zinc-200"
+                      >
+                        <Link href={data.nextAction?.href || data.actions[0]?.href || '/resume'}>
+                          {t(data.nextAction?.titleKey || 'dashboard.nextAction')}
+                          <ArrowRight className="ml-2 h-4 w-4" />
+                        </Link>
+                      </Button>
                     </div>
-                    <Button
-                      asChild
-                      variant="outline"
-                      className="self-start md:self-auto rounded-full border-white/30 bg-white/10 text-white hover:bg-white hover:text-zinc-900 dark:border-zinc-900/30 dark:bg-zinc-900/10 dark:text-zinc-900 dark:hover:bg-zinc-900 dark:hover:text-white"
-                    >
-                      <Link href={data.nextAction?.href || data.actions[0]?.href || '/resume'}>
-                        {t(data.nextAction?.titleKey || 'dashboard.nextAction')}
-                        <ArrowRight className="ml-2 h-4 w-4" />
-                      </Link>
-                    </Button>
+                    <div className="grid grid-cols-1 border-t border-zinc-200 bg-zinc-50/60 sm:grid-cols-3 lg:grid-cols-1 lg:border-l lg:border-t-0 dark:border-zinc-800 dark:bg-zinc-900/20">
+                      <OverviewMetric
+                        label={t('dashboard.metricResume')}
+                        value={`${data.metrics.resumeImpact}%`}
+                        hint={t('dashboard.metricResumeHint')}
+                      />
+                      <OverviewMetric
+                        label={t('dashboard.metricInterview')}
+                        value={`${data.metrics.interviewStrength}`}
+                        hint={t('dashboard.metricInterviewHint')}
+                      />
+                      <OverviewMetric
+                        label={t('dashboard.metricHealth')}
+                        value={data.weeklyGoal > 0 ? `${data.weeklyApplications}/${data.weeklyGoal}` : '—'}
+                        hint={data.weeklyGoal > 0 ? `${data.metrics.applicationHealth}% ${t('dashboard.metricHealthDone')}` : t('dashboard.metricHealthNoGoal')}
+                        last
+                      />
+                    </div>
                   </div>
-                </CardContent>
-              </Card>
             </section>
             {data.diagnosis && (
-              <section id="diagnosis">
-                <div className="flex items-center gap-2 mb-4">
-                  <span className="flex items-center justify-center w-6 h-6 rounded-lg bg-zinc-900 text-white">
-                    <Target className="h-3.5 w-3.5" />
-                  </span>
-                  <h3 className="text-sm font-medium text-zinc-400 dark:text-zinc-500 tracking-widest uppercase">
-                    {t('dashboard.diagnosis.title')}
-                  </h3>
-                </div>
+              <details id="diagnosis" className="order-4 group rounded-lg border border-zinc-200 bg-zinc-50/60 dark:border-zinc-800 dark:bg-zinc-900/20">
+                <summary className="flex cursor-pointer list-none items-center justify-between gap-4 px-4 py-3.5 marker:hidden md:px-5">
+                  <div className="flex items-center gap-2.5">
+                    <span className="flex h-7 w-7 items-center justify-center rounded-md bg-zinc-900 text-white dark:bg-white dark:text-zinc-900">
+                      <Target className="h-3.5 w-3.5" />
+                    </span>
+                    <div>
+                      <p className="text-sm font-medium text-zinc-900 dark:text-zinc-100">{t('dashboard.diagnosis.title')}</p>
+                      <p className="mt-0.5 text-xs text-zinc-500 dark:text-zinc-400">{t(data.diagnosis.mainRouteLabelKey)}</p>
+                    </div>
+                  </div>
+                  <ArrowRight className="h-4 w-4 text-zinc-400 transition-transform group-open:rotate-90" />
+                </summary>
+                <section className="border-t border-zinc-200 p-4 dark:border-zinc-800 md:p-5">
                 <div className="grid grid-cols-1 lg:grid-cols-3 gap-4">
                   <Card className="rounded-2xl border-zinc-200 dark:border-zinc-800">
                     <CardContent className="p-5 space-y-3">
@@ -616,7 +820,8 @@ export default function DashboardPage() {
                     </CardContent>
                   </Card>
                 </div>
-              </section>
+                </section>
+              </details>
             )}
             {/* legacy networking block
               <section>
@@ -801,51 +1006,15 @@ export default function DashboardPage() {
                 ) : null}
               </section>
             */}
-            {/* 阶段定位 */}
-
-            {/* 三个核心数字 */}
-            <section id="metrics">
-              <h3 className="text-sm font-medium text-zinc-400 dark:text-zinc-500 tracking-widest uppercase mb-4">
-                {t('dashboard.metricsTitle')}
-              </h3>
-              <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-                <MetricCard
-                  icon={<FileText className="h-4 w-4" />}
-                  label={t('dashboard.metricResume')}
-                  value={`${data.metrics.resumeImpact}%`}
-                  hint={t('dashboard.metricResumeHint')}
-                />
-                <MetricCard
-                  icon={<MessageSquare className="h-4 w-4" />}
-                  label={t('dashboard.metricInterview')}
-                  value={`${data.metrics.interviewStrength}`}
-                  hint={t('dashboard.metricInterviewHint')}
-                />
-                <MetricCard
-                  icon={<TrendingUp className="h-4 w-4" />}
-                  label={t('dashboard.metricHealth')}
-                  value={
-                    data.weeklyGoal > 0
-                      ? `${data.weeklyApplications}/${data.weeklyGoal}`
-                      : '—'
-                  }
-                  hint={t('dashboard.metricHealthHint')}
-                  footer={
-                    data.weeklyGoal > 0
-                      ? `${data.metrics.applicationHealth}% ${t('dashboard.metricHealthDone')}`
-                      : t('dashboard.metricHealthNoGoal')
-                  }
-                />
-              </div>
-            </section>
-
             {/* 个性化求职规划 */}
             {data.plan && planGroups && (
-              <section id="plan">
+              <section id="plan" className="order-3 scroll-mt-24">
                 <div className="flex flex-col md:flex-row md:items-center md:justify-between gap-4 mb-4">
-                  <h3 className="text-sm font-medium text-zinc-400 dark:text-zinc-500 tracking-widest uppercase">
-                    {t('dashboard.planTitle')}
-                  </h3>
+                  <div>
+                    <h3 className="text-lg font-semibold tracking-tight text-zinc-900 dark:text-zinc-100">
+                      {t('dashboard.planTitle')}
+                    </h3>
+                  </div>
                   <div className="flex flex-col sm:flex-row sm:items-center gap-3 sm:gap-4">
                     {data.latestResumeId ? (
                       <div className="flex items-center gap-2">
@@ -893,7 +1062,7 @@ export default function DashboardPage() {
                     </div>
                   </div>
                 </div>
-                <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+                <div className="grid grid-cols-1 divide-y divide-zinc-200 border-y border-zinc-200 md:grid-cols-3 md:divide-x md:divide-y-0 dark:divide-zinc-800 dark:border-zinc-800">
                   <PlanColumn
                     icon={<Zap className="h-4 w-4" />}
                     label={t('dashboard.planNow')}
@@ -917,7 +1086,7 @@ export default function DashboardPage() {
             )}
 
             {!data.plan && (
-              <section>
+              <section className="order-3">
                 <h3 className="text-sm font-medium text-zinc-400 dark:text-zinc-500 tracking-widest uppercase mb-4">
                   {t('dashboard.planTitle')}
                 </h3>
@@ -937,19 +1106,20 @@ export default function DashboardPage() {
               </section>
             )}
 
-            <div id="execution" className="grid grid-cols-1 lg:grid-cols-3 gap-6 md:gap-8">
+            <div id="execution" className="order-2 grid grid-cols-1 gap-5 lg:grid-cols-[minmax(0,1fr)_20rem]">
               {/* 行动建议 */}
-              <section className="lg:col-span-2">
-                <h3 className="text-sm font-medium text-zinc-400 dark:text-zinc-500 tracking-widest uppercase mb-4">
-                  {t('dashboard.actionsTitle')}
-                </h3>
-                <Card className="rounded-2xl border-zinc-200 dark:border-zinc-800">
-                  <CardContent className="p-0">
+              <section>
+                <div className="mb-4">
+                  <h3 className="text-lg font-semibold tracking-tight text-zinc-900 dark:text-zinc-100">
+                    {t('dashboard.actionsTitle')}
+                  </h3>
+                </div>
+                <div className="border-y border-zinc-200 dark:border-zinc-800">
                     {data.actions.map((action, idx) => (
                       <Link
                         key={`${action.titleKey}-${idx}`}
                         href={action.href}
-                        className="group flex items-center justify-between p-4 md:p-5 border-b border-zinc-200 last:border-0 hover:bg-zinc-50 dark:hover:bg-zinc-900/50 transition-colors"
+                        className="group flex items-center justify-between border-b border-zinc-200 p-4 transition-colors last:border-0 hover:bg-zinc-50 dark:border-zinc-800 dark:hover:bg-zinc-900/50 md:p-5"
                       >
                         <div className="flex items-center gap-4">
                           <span
@@ -964,29 +1134,27 @@ export default function DashboardPage() {
                         <ArrowRight className="h-4 w-4 text-zinc-700 group-hover:text-zinc-900 dark:text-zinc-600 dark:group-hover:text-zinc-900 transition-colors" />
                       </Link>
                     ))}
-                  </CardContent>
-                </Card>
+                </div>
               </section>
 
               {/* 智能提醒 */}
-              <section id="networking">
-                <h3 className="text-sm font-medium text-zinc-400 dark:text-zinc-500 tracking-widest uppercase mb-4">
-                  {t('dashboard.remindersTitle')}
-                </h3>
-                <div className="space-y-3">
+              <section id="reminders">
+                <div className="mb-4">
+                  <h3 className="text-lg font-semibold tracking-tight text-zinc-900 dark:text-zinc-100">
+                    {t('dashboard.remindersTitle')}
+                  </h3>
+                </div>
+                <div>
                   {data.reminders.length === 0 && (
-                    <Card className="rounded-2xl border-zinc-200 dark:border-zinc-800 border-dashed">
-                      <CardContent className="p-5 text-center text-sm text-zinc-500">
-                        {t('dashboard.noReminders')}
-                      </CardContent>
-                    </Card>
+                    <div className="border-y border-dashed border-zinc-200 py-5 text-center text-sm text-zinc-500 dark:border-zinc-800">
+                      {t('dashboard.noReminders')}
+                    </div>
                   )}
                   {data.reminders.map((reminder) => (
-                    <Card
+                    <div
                       key={reminder.type}
-                      className="rounded-2xl border-zinc-200 dark:border-zinc-800"
+                      className="border-b border-zinc-200 py-4 last:border-b-0 dark:border-zinc-800"
                     >
-                      <CardContent className="p-4">
                         <div className="flex items-start gap-3">
                           <div className="mt-0.5">
                             <Bell className="h-4 w-4 text-zinc-500" />
@@ -1000,8 +1168,7 @@ export default function DashboardPage() {
                             </p>
                           </div>
                         </div>
-                      </CardContent>
-                    </Card>
+                    </div>
                   ))}
                 </div>
               </section>
@@ -1013,7 +1180,7 @@ export default function DashboardPage() {
                     {t('dashboard.evaluationsTitle')}
                   </h3>
                   <div className="rounded-lg border border-zinc-200 overflow-hidden divide-y divide-white/10">
-                    {data.interviewEvaluations.slice(0, 5).map((ev) => {
+                    {data.interviewEvaluations.slice(0, 10).map((ev) => {
                       const scoreColor =
                         ev.overallScore != null
                           ? ev.overallScore >= 7
@@ -1023,8 +1190,13 @@ export default function DashboardPage() {
                             : 'bg-zinc-100 text-zinc-500'
                           : 'bg-zinc-100 text-zinc-500';
                       return (
-                        <div key={ev.id} className="px-4 py-3 flex items-center justify-between">
-                          <div className="flex items-center gap-3 min-w-0">
+                          <button
+                            key={ev.id}
+                            type="button"
+                            onClick={() => void loadInterviewDetail(ev.id)}
+                            className="w-full px-4 py-3 flex items-center justify-between text-left transition-colors hover:bg-zinc-50 dark:hover:bg-zinc-900/50 focus-visible:outline-none focus-visible:bg-zinc-50 dark:focus-visible:bg-zinc-900/50"
+                          >
+                            <div className="flex items-center gap-3 min-w-0">
                             <div className="w-7 h-7 rounded-lg bg-zinc-900 flex items-center justify-center flex-shrink-0">
                               <MessageSquare className="h-3.5 w-3.5 text-white" />
                             </div>
@@ -1033,10 +1205,7 @@ export default function DashboardPage() {
                                 {ev.targetCompany || t('dashboard.unknownCompany')}
                               </p>
                               <p className="text-xs text-zinc-500">
-                                {new Date(ev.completedAt).toLocaleDateString(
-                                  locale === 'zh-CN' ? 'zh-CN' : locale === 'zh-TW' ? 'zh-TW' : 'en-US',
-                                  { month: 'short', day: 'numeric' }
-                                )}
+                                {formatInterviewDate(ev.completedAt)}
                                 {ev.interviewType ? ` · ${ev.interviewType}` : ''}
                               </p>
                             </div>
@@ -1047,13 +1216,14 @@ export default function DashboardPage() {
                                 {ev.overallScore}
                               </span>
                             )}
-                            {ev.reportGrade && (
+                              {ev.reportGrade && (
                               <span className="text-xs font-medium text-zinc-500">
                                 {ev.reportGrade}
                               </span>
-                            )}
-                          </div>
-                        </div>
+                              )}
+                              <ArrowRight className="h-4 w-4 text-zinc-400" aria-hidden="true" />
+                            </div>
+                          </button>
                       );
                     })}
                   </div>
@@ -1062,14 +1232,16 @@ export default function DashboardPage() {
 
             </div>
 
-            {data.diagnosis?.window === 'preparation' && networkingError && (
+            {data.diagnosis?.window === 'preparation' && (
+              <section id="networking" className="order-5">
+            {networkingError && (
               <Card className="rounded-2xl border-zinc-200 dark:border-zinc-800 mb-4">
                 <CardContent className="p-6 text-center text-sm text-red-500">
                   {networkingError}
                 </CardContent>
               </Card>
             )}
-            {data.diagnosis?.window === 'preparation' && networkingLoading && !networking && (
+            {networkingLoading && !networking && (
               <Card className="rounded-2xl border-zinc-200 dark:border-zinc-800 mb-4">
                 <CardContent className="p-6 text-center text-sm text-zinc-500">
                   <Loader2 className="h-5 w-5 animate-spin mx-auto mb-2" />
@@ -1077,7 +1249,7 @@ export default function DashboardPage() {
                 </CardContent>
               </Card>
             )}
-            {data.diagnosis?.window === 'preparation' && !networkingLoading && !networking && !networkingError && (
+            {!networkingLoading && !networking && !networkingError && (
               <Card className="rounded-2xl border-zinc-200 dark:border-zinc-800 mb-4">
                 <CardContent className="p-6 flex flex-col items-center gap-3 text-center">
                   <p className="text-sm text-zinc-500">{t('dashboard.networking.title')}</p>
@@ -1088,8 +1260,8 @@ export default function DashboardPage() {
                 </CardContent>
               </Card>
             )}
-            {data.diagnosis?.window === 'preparation' && networkingProgress && networking && (
-              <section>
+            {networkingProgress && networking && (
+              <div>
                 <div className="flex items-center justify-between gap-3 mb-4">
                   <div className="flex items-center gap-2">
                     <span className="flex items-center justify-center w-6 h-6 rounded-lg bg-zinc-900 text-white">
@@ -1294,15 +1466,21 @@ export default function DashboardPage() {
                     </div>
                   </div>
                 </Card>
+              </div>
+            )}
               </section>
             )}
 
             {/* 成长故事线 */}
-            <section id="story">
-              <h3 className="text-sm font-medium text-zinc-400 dark:text-zinc-500 tracking-widest uppercase mb-4">
-                {t('dashboard.storyTitle')}
-              </h3>
-              <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+            <details id="story" className="order-6 group rounded-lg border border-zinc-200 dark:border-zinc-800">
+              <summary className="flex cursor-pointer list-none items-center justify-between gap-4 px-4 py-3.5 marker:hidden md:px-5">
+                <div>
+                  <p className="text-sm font-medium text-zinc-900 dark:text-zinc-100">{t('dashboard.storyTitle')}</p>
+                  <p className="mt-0.5 text-xs text-zinc-500 dark:text-zinc-400">{t(data.story.resumeKey, data.story.resumeParams)}</p>
+                </div>
+                <ArrowRight className="h-4 w-4 text-zinc-400 transition-transform group-open:rotate-90" />
+              </summary>
+              <div className="grid grid-cols-1 gap-3 border-t border-zinc-200 p-4 dark:border-zinc-800 md:grid-cols-3 md:p-5">
                 <StoryCard
                   icon={<LineChart className="h-4 w-4" />}
                   title={t('dashboard.storyResume')}
@@ -1319,11 +1497,34 @@ export default function DashboardPage() {
                   description={t(data.story.mindsetKey, data.story.mindsetParams)}
                 />
               </div>
-            </section>
+            </details>
 
           </div>
         )}
         </main>
+        <Dialog open={interviewDetailLoading || !!selectedInterview || !!interviewDetailError} onOpenChange={(open) => {
+          if (!open && !interviewDetailLoading) {
+            setSelectedInterview(null);
+            setInterviewDetailError(null);
+          }
+        }}>
+          <DialogContent className="max-h-[88vh] max-w-4xl overflow-y-auto p-0">
+            {interviewDetailLoading ? (
+              <div className="flex min-h-56 flex-col items-center justify-center gap-3 p-8 text-sm text-zinc-500">
+                <Loader2 className="h-5 w-5 animate-spin" />
+                {t('dashboard.evaluation.loading')}
+              </div>
+            ) : interviewDetailError ? (
+              <div className="p-8 text-center text-sm text-red-500">{interviewDetailError}</div>
+            ) : selectedInterview ? (
+              <InterviewDetailPanel
+                interview={selectedInterview}
+                formatDate={formatInterviewDate}
+                translate={t}
+              />
+            ) : null}
+          </DialogContent>
+        </Dialog>
       </div>
     </AuthGuard>
   );
@@ -1341,7 +1542,7 @@ const priorityBadge: Record<
 > = {
   high: {
     className:
-      'bg-white text-zinc-900 hover:bg-zinc-200',
+      'bg-zinc-900 text-white dark:bg-white dark:text-zinc-900',
   },
   medium: {
     className: 'bg-zinc-100 text-zinc-700 dark:bg-zinc-800 dark:text-zinc-200',
@@ -1351,39 +1552,23 @@ const priorityBadge: Record<
   },
 };
 
-function MetricCard({
-  icon,
+function OverviewMetric({
   label,
   value,
   hint,
-  footer,
+  last = false,
 }: {
-  icon: React.ReactNode;
   label: string;
   value: string;
   hint: string;
-  footer?: string;
+  last?: boolean;
 }) {
   return (
-    <Card className="rounded-2xl border-zinc-200 dark:border-zinc-800 hover:shadow-lg hover:shadow-zinc-900/[0.05] transition-shadow">
-      <CardContent className="p-5 md:p-6">
-        <div className="flex items-center gap-2 text-xs font-medium text-zinc-500 dark:text-zinc-400 mb-3">
-          <span className="flex items-center justify-center w-6 h-6 rounded-lg bg-zinc-900 dark:bg-white text-white dark:text-zinc-900">
-            {icon}
-          </span>
-          {label}
-        </div>
-        <div className="text-3xl md:text-4xl font-bold tracking-tight text-zinc-900 dark:text-zinc-50 mb-2">
-          {value}
-        </div>
-        <p className="text-xs text-zinc-500 leading-relaxed">{hint}</p>
-        {footer && (
-          <p className="mt-2 text-xs font-medium text-zinc-700 dark:text-zinc-300">
-            {footer}
-          </p>
-        )}
-      </CardContent>
-    </Card>
+    <div className={`min-w-0 px-4 py-3.5 sm:border-r sm:border-zinc-200 lg:border-r-0 lg:px-5 lg:py-4 dark:sm:border-zinc-800 ${last ? 'sm:border-r-0' : 'border-b border-zinc-200 lg:border-b dark:border-zinc-800'}`}>
+      <p className="truncate text-xs text-zinc-500 dark:text-zinc-400">{label}</p>
+      <p className="mt-1 text-xl font-semibold tracking-tight text-zinc-950 dark:text-zinc-50">{value}</p>
+      <p className="mt-1 line-clamp-2 text-xs leading-5 text-zinc-500 dark:text-zinc-400">{hint}</p>
+    </div>
   );
 }
 
@@ -1399,8 +1584,7 @@ function PlanColumn({
   translate: (key: string, params?: Record<string, string | number>) => string;
 }) {
   return (
-    <Card className="rounded-2xl border-zinc-200 dark:border-zinc-800 bg-zinc-50/50 dark:bg-zinc-900/30">
-      <CardContent className="p-5">
+    <div className="min-w-0 px-4 py-5 md:px-5">
         <div className="flex items-center gap-2 mb-4">
           <span className="flex items-center justify-center w-6 h-6 rounded-lg bg-zinc-900 dark:bg-white text-white dark:text-zinc-900">
             {icon}
@@ -1435,8 +1619,7 @@ function PlanColumn({
             </div>
           ))}
         </div>
-      </CardContent>
-    </Card>
+    </div>
   );
 }
 
@@ -1450,8 +1633,8 @@ function StoryCard({
   description: string;
 }) {
   return (
-    <Card className="rounded-2xl border-zinc-200 dark:border-zinc-800 bg-zinc-50 dark:bg-zinc-900/40">
-      <CardContent className="p-5">
+    <Card className="rounded-lg border-zinc-200 bg-zinc-50 dark:border-zinc-800 dark:bg-zinc-900/40">
+      <CardContent className="p-4">
         <div className="flex items-center gap-2 mb-3">
           <span className="flex items-center justify-center w-6 h-6 rounded-lg bg-zinc-900 dark:bg-white text-white dark:text-zinc-900">
             {icon}
@@ -1465,6 +1648,130 @@ function StoryCard({
         </p>
       </CardContent>
     </Card>
+  );
+}
+
+function InterviewDetailPanel({
+  interview,
+  formatDate,
+  translate,
+}: {
+  interview: DashboardInterviewDetail;
+  formatDate: (value: string) => string;
+  translate: (key: string, params?: Record<string, string | number>) => string;
+}) {
+  const report = interview.report;
+  const messages = Array.isArray(interview.messages) ? interview.messages : [];
+  const listItems = (items?: string[]) => (
+    items && items.length > 0 ? (
+      <ul className="space-y-2 text-sm leading-6 text-zinc-700 dark:text-zinc-300">
+        {items.map((item, index) => <li key={`${item}-${index}`} className="flex gap-2"><span className="text-zinc-400">{index + 1}.</span><span>{item}</span></li>)}
+      </ul>
+    ) : <p className="text-sm text-zinc-500">{translate('dashboard.noEvaluationDetail')}</p>
+  );
+
+  return (
+    <div>
+      <DialogHeader className="border-b border-zinc-200 px-6 pb-5 pt-6 text-left dark:border-zinc-800">
+        <DialogTitle className="pr-8 text-xl text-zinc-900 dark:text-zinc-100">
+          {interview.target_company || translate('dashboard.unknownCompany')}
+        </DialogTitle>
+        <DialogDescription>
+          {formatDate(interview.updated_at || interview.created_at)}
+          {interview.interview_type ? ` · ${interview.interview_type}` : ''}
+          {interview.mode ? ` · ${interview.mode}` : ''}
+        </DialogDescription>
+      </DialogHeader>
+
+      <div className="space-y-6 px-6 py-6">
+        <section className="grid gap-3 sm:grid-cols-3">
+          <div className="rounded-lg border border-zinc-200 bg-zinc-50/70 p-4 dark:border-zinc-800 dark:bg-zinc-900/40">
+            <p className="text-xs text-zinc-500">{translate('dashboard.evaluation.score')}</p>
+            <p className="mt-1 text-2xl font-semibold text-zinc-900 dark:text-zinc-100">{interview.overall_score ?? '—'}<span className="ml-1 text-xs font-normal text-zinc-500">/ 100</span></p>
+          </div>
+          <div className="rounded-lg border border-zinc-200 bg-zinc-50/70 p-4 dark:border-zinc-800 dark:bg-zinc-900/40">
+            <p className="text-xs text-zinc-500">{translate('dashboard.evaluation.grade')}</p>
+            <p className="mt-1 text-2xl font-semibold text-zinc-900 dark:text-zinc-100">{interview.report_grade || report?.verdict?.grade || '—'}</p>
+          </div>
+          <div className="rounded-lg border border-zinc-200 bg-zinc-50/70 p-4 dark:border-zinc-800 dark:bg-zinc-900/40">
+            <p className="text-xs text-zinc-500">{translate('dashboard.evaluation.rounds')}</p>
+            <p className="mt-1 text-2xl font-semibold text-zinc-900 dark:text-zinc-100">{interview.total_rounds || '—'}</p>
+          </div>
+        </section>
+
+        {!report ? (
+          <div className="border-y border-dashed border-zinc-200 py-6 text-center text-sm text-zinc-500 dark:border-zinc-800">
+            {translate('dashboard.noEvaluationDetail')}
+          </div>
+        ) : (
+          <>
+            {(report.verdict?.headline || report.verdict?.hireLevel) && (
+              <section>
+                <h3 className="mb-3 text-sm font-semibold text-zinc-900 dark:text-zinc-100">{translate('dashboard.evaluation.overview')}</h3>
+                {report.verdict.hireLevel && <p className="mb-2 text-sm font-medium text-zinc-700 dark:text-zinc-300">{report.verdict.hireLevel}{report.verdict.vote ? ` · ${report.verdict.vote}` : ''}</p>}
+                {report.verdict.headline && <p className="border-l-2 border-[#C46A4A] pl-3 text-sm leading-6 text-zinc-600 dark:text-zinc-400">{report.verdict.headline}</p>}
+              </section>
+            )}
+
+            {report.committee && report.committee.length > 0 && (
+              <section>
+                <h3 className="mb-3 text-sm font-semibold text-zinc-900 dark:text-zinc-100">{translate('dashboard.evaluation.committee')}</h3>
+                <div className="space-y-3">
+                  {report.committee.map((member, index) => (
+                    <div key={`${member.name || 'member'}-${index}`} className="rounded-lg border border-zinc-200 p-4 dark:border-zinc-800">
+                      <div className="flex flex-wrap items-start justify-between gap-2">
+                        <div>
+                          <p className="text-sm font-medium text-zinc-900 dark:text-zinc-100">{member.name || translate('dashboard.evaluation.interviewer')}</p>
+                          <p className="mt-0.5 text-xs text-zinc-500">{[member.company, member.roleLabel, member.attitude].filter(Boolean).join(' · ')}</p>
+                        </div>
+                        {member.grade && <span className="text-sm font-semibold text-zinc-900 dark:text-zinc-100">{member.grade}</span>}
+                      </div>
+                      {member.tags && member.tags.length > 0 && <div className="mt-2 flex flex-wrap gap-1.5">{member.tags.map((tag) => <Badge key={tag} variant="secondary" className="text-[10px]">{tag}</Badge>)}</div>}
+                      {member.comment && <p className="mt-3 text-sm leading-6 text-zinc-600 dark:text-zinc-400">{member.comment}</p>}
+                      {member.keyMoment?.question && <div className="mt-3 rounded-md bg-zinc-50 p-3 text-xs leading-5 text-zinc-600 dark:bg-zinc-900/70 dark:text-zinc-400"><p className="font-medium text-zinc-700 dark:text-zinc-300">Q: {member.keyMoment.question}</p>{member.keyMoment.answer && <p className="mt-1">{member.keyMoment.answer}</p>}{member.keyMoment.note && <p className="mt-1 text-zinc-500">{member.keyMoment.note}</p>}</div>}
+                    </div>
+                  ))}
+                </div>
+              </section>
+            )}
+
+            {report.radar && report.radar.length > 0 && (
+              <section>
+                <h3 className="mb-3 text-sm font-semibold text-zinc-900 dark:text-zinc-100">{translate('dashboard.evaluation.radar')}</h3>
+                <div className="space-y-3">
+                  {report.radar.map((dimension, index) => {
+                    const score = Math.max(0, Math.min(100, dimension.score ?? 0));
+                    return <div key={`${dimension.dimension || 'dimension'}-${index}`}><div className="mb-1 flex items-center justify-between gap-3 text-xs"><span className="font-medium text-zinc-700 dark:text-zinc-300">{dimension.dimension || '—'}</span><span className="text-zinc-500">{dimension.grade || score}</span></div><div className="h-1.5 overflow-hidden rounded-full bg-zinc-100 dark:bg-zinc-800"><div className="h-full rounded-full bg-[#C46A4A]" style={{ width: `${score}%` }} /></div>{dimension.diagnosis && <p className="mt-1 text-xs leading-5 text-zinc-500">{dimension.diagnosis}</p>}</div>;
+                  })}
+                </div>
+              </section>
+            )}
+
+            {report.highlights && (
+              <section>
+                <h3 className="mb-3 text-sm font-semibold text-zinc-900 dark:text-zinc-100">{translate('dashboard.evaluation.highlights')}</h3>
+                <div className="grid gap-3 md:grid-cols-2">
+                  {(report.highlights.mistakes || []).map((item, index) => <div key={`mistake-${index}`} className="rounded-lg border border-red-200/80 bg-red-50/40 p-4 dark:border-red-900/50 dark:bg-red-950/20"><p className="text-sm font-medium text-zinc-900 dark:text-zinc-100">{item.title}</p><p className="mt-2 text-xs leading-5 text-zinc-600 dark:text-zinc-400">{item.scene}</p>{item.coach && <p className="mt-2 text-xs leading-5 text-zinc-500">{item.coach}</p>}</div>)}
+                  {report.highlights.best?.title && <div className="rounded-lg border border-emerald-200/80 bg-emerald-50/40 p-4 dark:border-emerald-900/50 dark:bg-emerald-950/20"><p className="text-sm font-medium text-zinc-900 dark:text-zinc-100">{report.highlights.best.title}</p><p className="mt-2 text-xs leading-5 text-zinc-600 dark:text-zinc-400">{report.highlights.best.scene}</p>{report.highlights.best.coach && <p className="mt-2 text-xs leading-5 text-zinc-500">{report.highlights.best.coach}</p>}</div>}
+                </div>
+              </section>
+            )}
+
+            {report.actionPlan && (
+              <section>
+                <h3 className="mb-3 text-sm font-semibold text-zinc-900 dark:text-zinc-100">{translate('dashboard.evaluation.actionPlan')}</h3>
+                <div className="grid gap-4 md:grid-cols-3"><div><p className="mb-2 text-xs font-medium text-zinc-500">{translate('dashboard.evaluation.immediate')}</p>{listItems(report.actionPlan.immediate)}</div><div><p className="mb-2 text-xs font-medium text-zinc-500">{translate('dashboard.evaluation.practice')}</p>{listItems(report.actionPlan.practice)}</div><div><p className="mb-2 text-xs font-medium text-zinc-500">{translate('dashboard.evaluation.reading')}</p>{listItems(report.actionPlan.reading)}</div></div>
+              </section>
+            )}
+          </>
+        )}
+
+        <section>
+          <h3 className="mb-3 text-sm font-semibold text-zinc-900 dark:text-zinc-100">{translate('dashboard.evaluation.transcript')}</h3>
+          {messages.length === 0 ? <p className="border-y border-dashed border-zinc-200 py-6 text-center text-sm text-zinc-500 dark:border-zinc-800">{translate('dashboard.noEvaluationDetail')}</p> : <div className="max-h-80 space-y-2 overflow-y-auto rounded-lg border border-zinc-200 p-3 dark:border-zinc-800">{messages.map((message, index) => <div key={`${message.ts || index}-${index}`} className={`rounded-md p-3 ${message.role === 'candidate' ? 'ml-5 bg-[#C46A4A]/5' : 'bg-zinc-50 dark:bg-zinc-900/60'}`}><p className="mb-1 text-[11px] font-medium text-zinc-400">{message.role === 'candidate' ? translate('dashboard.evaluation.you') : (message.interviewerName || translate('dashboard.evaluation.interviewer'))}</p><p className="whitespace-pre-wrap text-sm leading-6 text-zinc-700 dark:text-zinc-300">{message.content || '—'}</p></div>)}</div>}
+        </section>
+      </div>
+    </div>
   );
 }
 

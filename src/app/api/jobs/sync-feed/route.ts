@@ -21,7 +21,10 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ error: 'maxPages 必须是 1 到 1000 之间的整数' }, { status: 400 });
     }
     const mode = body.mode || 'incremental';
-    const maxPages = body.maxPages ?? (mode === 'reconcile' ? 100 : 20);
+    // Keep manual sync requests bounded as well. Reconciliation resumes from
+    // its persisted cursor, so a few pages per click is safer than holding an
+    // HTTP request and the sync lease for an entire full pass.
+    const maxPages = body.maxPages ?? (mode === 'reconcile' ? 3 : 10);
     const result = await runJobFeedSync({
       mode,
       maxPages,

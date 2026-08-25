@@ -4,6 +4,7 @@ import type { UserSegmentation } from '@/lib/user-segmentation';
 import { getAuthContext, unauthorizedResponse } from '@/lib/auth-server';
 import { createTextProviderClient } from '@/lib/ai/text-provider';
 import { consumeTrackedTextStream } from '@/lib/ai-usage';
+import { betaEntitlementResponse } from '@/lib/beta-entitlements';
 import { requireConfirmedResume } from '@/lib/resume-access';
 import {
   OPTIMIZED_RESUME_RESPONSE_SCHEMA,
@@ -336,6 +337,8 @@ ${suggestionsSection}
     });
   } catch (error) {
     console.error('Optimization error:', error);
+    const betaResponse = betaEntitlementResponse(error);
+    if (betaResponse) return betaResponse;
     return NextResponse.json(
       { error: '简历优化失败' },
       { status: 500 }

@@ -12,6 +12,8 @@ assert.equal(valid.language, 'zh');
 assert.equal(valid.practiceMode, 'fresh');
 assert.equal(valid.totalRounds, 4);
 assert.equal(valid.inputSource, 'system');
+assert.equal(valid.endInterview, false);
+assert.equal(interviewChatRequestSchema.parse({ endInterview: true }).endInterview, true);
 
 assert.equal(interviewChatRequestSchema.safeParse({ totalRounds: 5 }).success, false);
 assert.equal(interviewChatRequestSchema.safeParse({ answer: 'x'.repeat(10_001) }).success, false);

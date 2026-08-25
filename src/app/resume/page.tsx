@@ -154,7 +154,12 @@ function ResumeContent() {
         setResumes((prev) => [data.resume as Resume, ...prev]);
         setSelectedFile(null);
       } else if (data.error) {
-        alert(t('resume.uploadFailed') + ': ' + data.error);
+        const message = typeof data.error === 'string'
+          ? data.error
+          : typeof data.error?.message === 'string'
+            ? data.error.message
+            : t('resume.uploadFailedRetry');
+        alert(t('resume.uploadFailed') + ': ' + message);
       }
     } catch (error) {
       console.error('Upload failed:', error);
@@ -282,12 +287,12 @@ function ResumeContent() {
   return (
     <div className="min-h-screen bg-white dark:bg-zinc-950">
       <Header1 />
-      <main className="relative container mx-auto px-4 pt-16 md:pt-20 pb-16">
+        <main className="relative container mx-auto px-4 pt-20 pb-16 sm:px-6 md:pt-24">
         {/* Hero：左对齐 eyebrow + 大标题（Tailark 式） */}
-        <div className="relative mb-8 md:mb-10">
+        <div className="relative mb-8 max-w-3xl md:mb-10">
           <p className="text-sm font-medium text-zinc-400 dark:text-zinc-500 mb-3">{t('resume.eyebrow')}</p>
-          <PageBackButton fallbackHref="/" className="mb-3" />
-          <h1 className="text-2xl md:text-4xl font-bold tracking-tight text-zinc-900 dark:text-zinc-50 mb-4">{t('resume.title')}</h1>
+          <PageBackButton fallbackHref="/home" className="mb-3" />
+          <h1 className="break-words text-2xl font-bold tracking-tight text-zinc-900 dark:text-zinc-50 md:text-4xl mb-4">{t('resume.title')}</h1>
           <p className="text-zinc-500 dark:text-zinc-400 max-w-2xl md:text-lg leading-relaxed">{t('resume.subtitle')}</p>
         </div>
 

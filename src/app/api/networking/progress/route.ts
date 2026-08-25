@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from 'next/server';
 import { getAuthContext, unauthorizedResponse } from '@/lib/auth-server';
 import type { NetworkingProgress } from '@/lib/networking-recommender';
 import { NETWORKING_STAGES } from '@/lib/networking-recommender';
+import { resolveActiveRegion } from '@/lib/user-region';
 
 function defaultProgress(): NetworkingProgress {
   return {
@@ -19,13 +20,22 @@ export async function GET(request: NextRequest) {
     const client = auth.client;
     const { data: resume } = await client
       .from('resumes')
-      .select('id, profile')
+      .select('id, profile, segmentation, segmentation_overrides')
       .eq('user_id', auth.user.id)
       .order('created_at', { ascending: false })
       .limit(1)
       .maybeSingle();
-    const progress = (resume?.profile as { networkingProgress?: NetworkingProgress } | null)
+    const { data: userProfile } = await client
+      .from('profiles')
+      .select('preferred_region')
+      .eq('id', auth.user.id)
+      .maybeSingle();
+    const activeRegion = resolveActiveRegion(userProfile?.preferred_region, resume);
+    const storedProgress = (resume?.profile as { networkingProgress?: NetworkingProgress } | null)
       ?.networkingProgress || defaultProgress();
+    const progress = storedProgress.region === activeRegion
+      ? storedProgress
+      : { ...storedProgress, region: activeRegion, recommendations: {} };
     return NextResponse.json({ progress, resumeId: resume?.id ?? null });
   } catch (error) {
     console.error('Error loading networking progress:', error);
@@ -52,7 +62,7 @@ export async function POST(request: NextRequest) {
 
     const { data: resume } = await client
       .from('resumes')
-      .select('id, profile')
+      .select('id, profile, segmentation, segmentation_overrides')
       .eq('user_id', auth.user.id)
       .order('created_at', { ascending: false })
       .limit(1)
@@ -60,12 +70,19 @@ export async function POST(request: NextRequest) {
     if (!resume) {
       return NextResponse.json({ error: '未找到简历' }, { status: 404 });
     }
+    const { data: userProfile } = await client
+      .from('profiles')
+      .select('preferred_region')
+      .eq('id', auth.user.id)
+      .maybeSingle();
+    const activeRegion = resolveActiveRegion(userProfile?.preferred_region, resume);
     const currentProfile = (resume.profile || {}) as Record<string, unknown>;
     const current = (currentProfile.networkingProgress || defaultProgress()) as NetworkingProgress;
     const next: NetworkingProgress = {
       ...current,
       stage,
       completedMilestones: milestones,
+      region: activeRegion,
       updatedAt: new Date().toISOString(),
     };
     const nextProfile = {

@@ -82,7 +82,7 @@ export default function AdminStudentsPage() {
   const totalPages = Math.max(1, Math.ceil(total / pageSize));
   return <main className="mx-auto max-w-7xl px-4 py-6 sm:px-6">
     <div className="flex flex-wrap items-start justify-between gap-4">
-      <div><h1 className="flex items-center gap-2 text-xl font-semibold"><Users className="h-5 w-5 text-primary" />学生中心</h1><p className="mt-1 text-sm text-muted-foreground">仅展示运营汇总，不包含邮箱、简历正文、画像或面试对话。</p></div>
+      <div><h1 className="flex items-center gap-2 text-xl font-semibold"><Users className="h-5 w-5 text-zinc-900 dark:text-white" />学生中心</h1><p className="mt-1 text-sm text-zinc-500 dark:text-zinc-400">仅展示运营汇总，不包含邮箱、简历正文、画像或面试对话。</p></div>
       <p className="pt-1 text-sm text-muted-foreground">共 {number(total)} 名学生</p>
     </div>
     <Card className="mt-5">

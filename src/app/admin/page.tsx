@@ -367,6 +367,14 @@ interface AiUsageEvent {
   estimated_cost: number | string | null;
   currency: string;
   cost_source: 'priced' | 'unpriced';
+  interview_session_id?: number | null;
+  billing_unit?: string | null;
+  billing_units?: number | string | null;
+  phase?: string | null;
+  fallback?: boolean;
+  retry_count?: number | null;
+  metadata?: Record<string, unknown> | null;
+  error_code?: string | null;
   created_at: string;
 }
 
@@ -447,6 +455,12 @@ function formatAudioMinutes(value: number | string | null | undefined): string {
   if (value === null || value === undefined || value === '') return '未知';
   const parsed = Number(value);
   return Number.isFinite(parsed) ? new Intl.NumberFormat('zh-CN', { maximumFractionDigits: 2 }).format(parsed / 60) : '未知';
+}
+
+function formatAudioSeconds(value: number | string | null | undefined): string {
+  if (value === null || value === undefined || value === '') return '未测量';
+  const parsed = Number(value);
+  return Number.isFinite(parsed) ? `${parsed.toFixed(parsed >= 10 ? 1 : 2)} 秒` : '未测量';
 }
 
 function formatAudioBytes(value: number | string | null | undefined): string {
@@ -546,6 +560,13 @@ const adminTabMeta: Record<AdminTab, { title: string; description: string }> = {
   configs: { title: '岗位与企业配置', description: '维护地区、方向、受众和企业资料' },
   audit: { title: '审计日志', description: '查看后台操作的安全记录' },
 };
+
+const workspaceTabs: Array<{ label: string; tabs: AdminTab[] }> = [
+  { label: '数据与质量', tabs: ['analytics', 'prefill-quality', 'ai-usage', 'service-health'] },
+  { label: '岗位工作台', tabs: ['jobs', 'job-submissions'] },
+  { label: '简历与网申', tabs: ['resumes', 'applications'] },
+  { label: '配置与品牌', tabs: ['configs', 'logos'] },
+];
 
 function AdminContent() {
   const { loading: permissionsLoading, hasPermission } = useAdminPermissions();
@@ -1699,8 +1720,11 @@ function AdminContent() {
       const data = await response.json();
       if (!response.ok) throw new Error(data.error || '同步失败');
       const result = data.result;
+      const skippedReasons = Object.entries(result.skipped_by_reason || {})
+        .map(([reason, count]) => `${reason}: ${count}`)
+        .join('，');
       setFeedSyncMessage(
-        `${mode === 'reconcile' ? '对账' : '同步'}完成：接收 ${result.received} 条，写入 ${result.upserted} 条，关闭 ${result.closed} 条。${result.has_more ? '仍有剩余数据，请再次执行。' : '已完成。'}`,
+        `${mode === 'reconcile' ? '对账' : '同步'}完成：接收 ${result.received} 条，写入 ${result.upserted} 条，关闭 ${result.closed} 条。${result.skipped ? `跳过 ${result.skipped} 条（${skippedReasons || '见日志'}）。` : ''}${result.has_more ? '仍有剩余数据，请再次执行。' : '已完成。'}`,
       );
       await fetchJobsPage();
       await fetchJobFeedState();
@@ -1962,7 +1986,7 @@ function AdminContent() {
   const automaticLogoCount = companyLogos.filter((logo) => logo.source === 'automatic').length;
 
   return (
-      <div className="min-h-screen bg-muted/30">
+      <div className="min-h-screen bg-background">
         <Dialog open={aiPriceDialogOpen} onOpenChange={setAiPriceDialogOpen}>
           <DialogContent className="max-h-[90vh] overflow-y-auto sm:max-w-xl">
             <DialogHeader>
@@ -1989,16 +2013,22 @@ function AdminContent() {
           </DialogContent>
         </Dialog>
         {/* Secondary settings toolbar; navigation and session controls live in AdminShell. */}
-        <div className="border-b bg-background sticky top-14 z-30">
-          <div className="container mx-auto flex min-h-12 items-center justify-between gap-3 px-4 py-2">
+        <div className="sticky top-16 z-30 border-b border-zinc-200 bg-background/95 backdrop-blur dark:border-zinc-800">
+          <div className="mx-auto flex min-h-12 max-w-7xl items-center justify-between gap-3 px-4 py-2 sm:px-6">
             <div className="min-w-0">
               <h1 className="truncate text-sm font-semibold">{adminTabMeta[activeTab].title}</h1>
               <p className="hidden truncate text-xs text-muted-foreground sm:block">{adminTabMeta[activeTab].description}</p>
             </div>
             <div className="flex items-center gap-1 md:gap-2">
+              {workspaceTabs.find((workspace) => workspace.tabs.includes(activeTab))?.tabs.map((tab) => {
+                const meta = adminTabMeta[tab];
+                const allowed = availableTabs.some((item) => item.value === tab);
+                if (!allowed) return null;
+                return <Button key={tab} variant={tab === activeTab ? 'secondary' : 'ghost'} size="sm" className="hidden h-8 px-2 text-xs text-zinc-600 hover:bg-zinc-100 hover:text-zinc-900 dark:text-zinc-300 dark:hover:bg-zinc-800 sm:inline-flex" onClick={() => router.push(`/admin?tab=${tab}`)}>{meta.title.replace('岗位管理', '岗位')}</Button>;
+              })}
               {canWriteConfig && <Dialog open={passwordDialogOpen} onOpenChange={setPasswordDialogOpen}>
                 <DialogTrigger asChild>
-                  <Button variant="ghost" size="sm" className="h-8 w-8 md:w-auto md:px-3">
+                    <Button variant="ghost" size="sm" className="h-8 w-8 text-zinc-600 hover:bg-zinc-100 hover:text-zinc-900 dark:text-zinc-300 dark:hover:bg-zinc-800 md:w-auto md:px-3">
                     <Settings className="h-4 w-4 md:mr-1" />
                     <span className="hidden md:inline">修改密码</span>
                   </Button>
@@ -2082,7 +2112,7 @@ function AdminContent() {
           </div>
         </div>
 
-        <main className="container mx-auto px-4 py-4 md:py-8">
+        <main className="mx-auto max-w-7xl px-4 py-5 sm:px-6 md:py-8">
         {loading || permissionsLoading ? (
           <div className="text-center py-12">
             <Loader2 className="h-8 w-8 animate-spin mx-auto text-primary" />
@@ -3108,17 +3138,19 @@ function AdminContent() {
                       </CardHeader>
                       <CardContent>
                         <div className="overflow-x-auto">
-                            <table className="w-full min-w-[1020px] text-sm">
+                            <table className="w-full min-w-[1320px] text-sm">
                             <thead>
                               <tr className="border-b text-muted-foreground">
                                 <th className="py-2 text-left font-medium">时间</th>
                                 <th className="py-2 text-left font-medium">功能</th>
                                 <th className="py-2 text-left font-medium">供应商 / 模型</th>
-                                 <th className="py-2 text-right font-medium">文本 Token</th>
-                                 <th className="py-2 text-right font-medium">音频</th>
-                                 <th className="py-2 text-right font-medium">字节</th>
+                                <th className="py-2 text-left font-medium">会话 / 路由</th>
+                                <th className="py-2 text-right font-medium">文本 Token</th>
+                                <th className="py-2 text-right font-medium">音频</th>
+                                <th className="py-2 text-right font-medium">计量来源</th>
                                 <th className="py-2 text-right font-medium">预计成本</th>
                                 <th className="py-2 text-center font-medium">状态</th>
+                                <th className="py-2 text-left font-medium">原因 / metadata</th>
                               </tr>
                             </thead>
                             <tbody>
@@ -3127,19 +3159,21 @@ function AdminContent() {
                                   <td className="py-3 pr-3 text-xs text-muted-foreground">{new Date(event.created_at).toLocaleString('zh-CN')}</td>
                                   <td className="py-3">{formatAiFeature(event.feature)}</td>
                                   <td className="py-3 text-xs">{event.provider}{event.model ? ` / ${event.model}` : ''}</td>
+                                  <td className="py-3 text-xs">{event.interview_session_id ? `#${event.interview_session_id}` : '非面试'}{event.metadata?.voice_route ? <><br /><span className="text-muted-foreground">{String(event.metadata.voice_route)}</span></> : null}</td>
                                    <td className="py-3 text-right">{formatTokenCount(event.total_tokens)}</td>
-                                   <td className="py-3 text-right">{event.modality === 'audio' ? `ASR ${formatAudioMinutes(event.input_audio_seconds)} / TTS ${formatAudioMinutes(event.output_audio_seconds)}` : '文本'}</td>
-                                   <td className="py-3 text-right">{event.modality === 'audio' ? `${formatAudioBytes(event.input_audio_bytes)} / ${formatAudioBytes(event.output_audio_bytes)}` : '-'}</td>
+                                   <td className="py-3 text-right">{event.modality === 'audio' ? <><span>ASR {formatAudioSeconds(event.input_audio_seconds)}</span><br /><span>TTS {formatAudioSeconds(event.output_audio_seconds)}</span></> : '文本'}</td>
+                                   <td className="py-3 text-right text-xs">{event.usage_source === 'actual' ? '实际' : event.usage_source === 'estimated' ? '估算' : '未测量'}<br />{event.measurement_source || '未测量'}</td>
                                    <td className="py-3 text-right text-xs" title={event.cost_source === 'priced' ? `${event.currency} ${event.estimated_cost}` : '该调用尚无有效价格'}>{event.cost_source === 'priced' ? `${event.currency} ${Number(event.estimated_cost || 0).toFixed(4)}` : '未定价'}</td>
                                   <td className="py-3 text-center">
                                     <Badge variant={event.status === 'success' ? 'secondary' : 'destructive'}>
                                       {event.status === 'success' ? '成功' : '失败'}
                                     </Badge>
                                   </td>
+                                  <td className="max-w-[300px] py-3 text-xs text-muted-foreground"><div>{event.error_message || (event.status === 'success' ? '完成' : '调用失败')}</div><details className="mt-1"><summary className="cursor-pointer text-primary">查看明细</summary><pre className="mt-1 max-w-[300px] overflow-auto whitespace-pre-wrap break-all rounded bg-muted p-2 text-[10px]">{JSON.stringify({ request_id: event.request_id, phase: event.phase, fallback: event.fallback, retry_count: event.retry_count, billing_unit: event.billing_unit, billing_units: event.billing_units, metadata: event.metadata || {} }, null, 2)}</pre></details></td>
                                 </tr>
                               ))}
                               {aiUsage.events.length === 0 && (
-                                 <tr><td colSpan={8} className="py-8 text-center text-muted-foreground">暂无调用事件</td></tr>
+                                 <tr><td colSpan={10} className="py-8 text-center text-muted-foreground">暂无调用事件</td></tr>
                               )}
                             </tbody>
                           </table>
@@ -4788,7 +4822,7 @@ function AdminContent() {
           <DialogHeader>
             <DialogTitle>批量导入岗位</DialogTitle>
             <DialogDescription>
-              支持 Excel (.xlsx) 或 CSV 文件上传，也可使用文本方式导入
+                支持 Excel (.xlsx) 或 CSV 文件上传，也可使用文本方式导入
             </DialogDescription>
           </DialogHeader>
           
@@ -4838,7 +4872,7 @@ function AdminContent() {
                 <div className="border-2 border-dashed border-muted-foreground/25 rounded-lg p-8 text-center hover:border-primary/50 transition-colors">
                   <input
                     type="file"
-                    accept=".xlsx,.xls,.csv"
+                    accept=".xlsx,.csv"
                     onChange={handleFileUpload}
                     className="hidden"
                     id="batch-file-upload"
@@ -4850,7 +4884,7 @@ function AdminContent() {
                       点击选择文件或拖拽文件到此处
                     </p>
                     <p className="text-xs text-muted-foreground">
-                      支持 .xlsx, .xls, .csv 格式
+                      支持 .xlsx, .csv 格式
                     </p>
                   </label>
                 </div>

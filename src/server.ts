@@ -4,6 +4,7 @@ import next from 'next';
 import { attachInterviewASRWebSocket } from './lib/interview-asr-ws-server';
 import { attachInterviewTTSWebSocket } from './lib/interview-tts-ws-server';
 import { startResumeProcessingWorker } from './lib/resume-processing-worker';
+import { startJobBackgroundWorker } from './lib/job-background-worker';
 
 const dev = process.env.NODE_ENV !== 'production';
 const hostname = process.env.HOSTNAME || '0.0.0.0';
@@ -24,14 +25,36 @@ app.prepare().then(() => {
       res.end('Internal server error');
     }
   });
-  attachInterviewASRWebSocket(server);
-  attachInterviewTTSWebSocket(server);
+  const asrUpgradeHandler = attachInterviewASRWebSocket(server);
+  const ttsUpgradeHandler = attachInterviewTTSWebSocket(server);
+
+  // Next registers its own upgrade listener during app.prepare(). An ASR/TTS
+  // handler authenticates asynchronously, so allowing Next's listener to run
+  // for the same socket closes it before our ticket check can finish. Keep
+  // exactly one dispatcher and hand non-interview upgrades back to Next.
+  const nextUpgradeHandlers = server.listeners('upgrade').filter(
+    (handler) => handler !== asrUpgradeHandler && handler !== ttsUpgradeHandler,
+  );
+  server.removeAllListeners('upgrade');
+  server.on('upgrade', (request, socket, head) => {
+    const pathname = new URL(request.url || '/', 'http://localhost').pathname;
+    if (pathname === '/ws/interview/asr') {
+      asrUpgradeHandler(request, socket, head);
+      return;
+    }
+    if (pathname === '/ws/interview/tts') {
+      ttsUpgradeHandler(request, socket, head);
+      return;
+    }
+    nextUpgradeHandlers.forEach((handler) => handler.call(server, request, socket, head));
+  });
   server.once('error', err => {
     console.error(err);
     process.exit(1);
   });
-  server.listen(port, () => {
+  server.listen(port, hostname, () => {
     startResumeProcessingWorker();
+    startJobBackgroundWorker();
     console.log(
       `> Server listening at http://${hostname}:${port} as ${
         dev ? 'development' : 'production'

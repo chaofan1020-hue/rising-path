@@ -8,10 +8,10 @@ import {
   BriefcaseBusiness,
   Radio,
   ClipboardList,
+  Coins,
   Dna,
   ExternalLink,
   FileText,
-  Image,
   LayoutDashboard,
   LogOut,
   Menu,
@@ -46,37 +46,37 @@ type NavigationItem = { label: string; href: string; icon: typeof LayoutDashboar
 
 const navigationGroups: { label: string; items: NavigationItem[] }[] = [
   {
-    label: '概览与分析',
+    label: '运营总览',
     items: [
       { label: '运营概览', href: '/admin', icon: LayoutDashboard, permission: ADMIN_PERMISSIONS.dashboardRead },
-      { label: 'AI 用量与成本', href: '/admin?tab=ai-usage', icon: Activity, permission: ADMIN_PERMISSIONS.dashboardRead },
-      { label: '业务数据分析', href: '/admin?tab=analytics', icon: BarChart3, permission: ADMIN_PERMISSIONS.dashboardRead },
+      { label: '数据与质量', href: '/admin?tab=analytics', icon: BarChart3, permission: ADMIN_PERMISSIONS.dashboardRead },
       { label: '网申质量', href: '/admin?tab=prefill-quality', icon: FileText, permission: ADMIN_PERMISSIONS.dashboardRead },
+      { label: 'AI 用量与成本', href: '/admin?tab=ai-usage', icon: Activity, permission: ADMIN_PERMISSIONS.dashboardRead },
       { label: '服务健康', href: '/admin?tab=service-health', icon: Activity, permission: ADMIN_PERMISSIONS.dashboardRead },
     ],
   },
   {
-    label: '岗位运营',
+    label: '岗位与企业',
     items: [
-      { label: '岗位管理', href: '/admin?tab=jobs', icon: BriefcaseBusiness, permission: ADMIN_PERMISSIONS.jobsRead },
+      { label: '岗位工作台', href: '/admin?tab=jobs', icon: BriefcaseBusiness, permission: ADMIN_PERMISSIONS.jobsRead },
       { label: '投稿审核', href: '/admin?tab=job-submissions', icon: ClipboardList, permission: ADMIN_PERMISSIONS.jobsRead },
       { label: '岗位轮换', href: '/admin/job-rotation', icon: Radio, permission: ADMIN_PERMISSIONS.dashboardRead },
-      { label: 'DNA 审核', href: '/admin/dna-review', icon: Dna, permission: ADMIN_PERMISSIONS.dnaRead },
+      { label: '面试基因', href: '/admin/dna-review', icon: Dna, permission: ADMIN_PERMISSIONS.dnaRead },
     ],
   },
   {
-    label: '学生与业务',
+    label: '用户运营',
     items: [
       { label: '学生中心', href: '/admin/students', icon: Users, permission: ADMIN_PERMISSIONS.usersRead },
+      { label: '内测与积分', href: '/admin/credits', icon: Coins, permission: ADMIN_PERMISSIONS.usersRead },
       { label: '简历处理', href: '/admin?tab=resumes', icon: FileText, permission: ADMIN_PERMISSIONS.usersRead },
       { label: '网申记录', href: '/admin?tab=applications', icon: ClipboardList, permission: ADMIN_PERMISSIONS.usersRead },
     ],
   },
   {
-    label: '系统管理',
+    label: '系统设置',
     items: [
-      { label: '岗位与企业配置', href: '/admin?tab=configs', icon: Settings, permission: ADMIN_PERMISSIONS.configWrite },
-      { label: '品牌资源', href: '/admin?tab=logos', icon: Image, permission: ADMIN_PERMISSIONS.configWrite },
+      { label: '配置与品牌', href: '/admin?tab=configs', icon: Settings, permission: ADMIN_PERMISSIONS.configWrite },
       { label: '审计日志', href: '/admin?tab=audit', icon: ClipboardList, permission: ADMIN_PERMISSIONS.auditRead },
       { label: '管理员账号', href: '/admin/accounts', icon: ShieldCheck, permission: ADMIN_PERMISSIONS.rolesWrite },
     ],
@@ -90,6 +90,13 @@ function isActive(pathname: string, searchParams: URLSearchParams, href: string)
     ? searchParams.get('tab') === tab
     : !searchParams.get('tab') || searchParams.get('tab') === 'overview';
   return true;
+}
+
+function roleLabel(role: string | null): string {
+  if (role === 'super_admin' || role === 'legacy_super_admin') return '超级管理员';
+  if (role === 'content_admin') return '内容管理员';
+  if (role === 'support_admin') return '支持管理员';
+  return '管理员';
 }
 
 export function AdminShell({ children }: { children: React.ReactNode }) {
@@ -140,32 +147,33 @@ export function AdminShell({ children }: { children: React.ReactNode }) {
   };
 
   return (
-    <div data-admin-shell className="min-h-screen bg-muted/30 text-foreground">
-      <header className="fixed inset-x-0 top-0 z-50 border-b bg-background/95 backdrop-blur">
-        <div className="container mx-auto flex h-14 min-w-0 items-center justify-between gap-2 px-4">
+    <div data-admin-shell className="min-h-screen bg-background text-foreground">
+      <header className="fixed inset-x-0 top-0 z-50 border-b border-zinc-200/80 bg-background/95 shadow-sm backdrop-blur-xl dark:border-zinc-800/80">
+        <div className="mx-auto flex h-16 min-w-0 items-center justify-between gap-3 px-4 sm:px-6">
           <div className="flex min-w-0 items-center gap-3">
             <button
               type="button"
-              className="inline-flex h-9 w-9 items-center justify-center rounded-md border md:hidden"
+              className="inline-flex h-9 w-9 items-center justify-center rounded-lg border border-zinc-200 bg-background transition-colors hover:bg-zinc-100 dark:border-zinc-800 dark:hover:bg-zinc-800 md:hidden"
               onClick={() => setMobileOpen((open) => !open)}
               aria-label={mobileOpen ? '关闭后台导航' : '打开后台导航'}
               aria-expanded={mobileOpen}
             >
               {mobileOpen ? <X className="h-4 w-4" /> : <Menu className="h-4 w-4" />}
             </button>
-            <Link href="/admin" className="flex min-w-0 items-center gap-2 font-semibold">
-              <ShieldCheck className="h-5 w-5 text-primary" />
-              <span className="truncate max-[380px]:hidden">Liorvix 管理后台</span>
+            <Link href="/admin" className="flex min-w-0 items-center gap-2.5 font-semibold">
+              <span className="flex h-8 w-8 shrink-0 items-center justify-center rounded-lg bg-zinc-900 text-white dark:bg-white dark:text-zinc-900"><ShieldCheck className="h-4 w-4" /></span>
+              <span className="min-w-0 truncate"><span className="block text-sm font-semibold leading-5">Liorvix</span><span className="block text-[11px] font-normal leading-4 text-zinc-500 dark:text-zinc-400 max-[420px]:hidden">运营后台</span></span>
             </Link>
           </div>
-          <div className="flex items-center gap-1">
+          <div className="flex items-center gap-2">
+            <span className="hidden rounded-full border border-zinc-200 bg-zinc-50 px-3 py-1.5 text-xs text-zinc-600 dark:border-zinc-800 dark:bg-zinc-900 dark:text-zinc-300 sm:inline-flex">{roleLabel(role)}</span>
             <Link href="/" target="_blank" rel="noreferrer">
-              <Button variant="ghost" size="sm" className="h-9 px-2 sm:px-3">
+              <Button variant="ghost" size="sm" className="h-9 px-2.5 sm:px-3">
                 <ExternalLink className="h-4 w-4 sm:mr-1.5" />
                 <span className="hidden sm:inline">返回前台</span>
               </Button>
             </Link>
-            <Button variant="ghost" size="sm" className="h-9 px-2 sm:px-3" onClick={() => void signOut()}>
+            <Button variant="ghost" size="sm" className="h-9 px-2.5 text-muted-foreground hover:text-foreground sm:px-3" onClick={() => void signOut()}>
               <LogOut className="h-4 w-4 sm:mr-1.5" />
               <span className="hidden sm:inline">退出</span>
             </Button>
@@ -173,17 +181,17 @@ export function AdminShell({ children }: { children: React.ReactNode }) {
         </div>
       </header>
 
-      <aside className="fixed inset-y-14 left-0 z-40 hidden w-56 border-r bg-background md:block">
-        <nav className="h-full overflow-y-auto p-3" aria-label="管理员导航">
-          <div className="space-y-5">
+      <aside className="fixed inset-y-16 left-0 z-40 hidden w-60 border-r border-zinc-200 bg-background md:block dark:border-zinc-800">
+        <nav className="h-full overflow-y-auto px-3 py-5" aria-label="管理员导航">
+          <div className="space-y-6">
             {visibleNavigationGroups.map((group) => (
               <section key={group.label}>
-                <p className="px-3 pb-1.5 text-xs font-medium text-muted-foreground">{group.label}</p>
-                <div className="space-y-1">
+                <p className="px-3 pb-2 text-[10px] font-semibold uppercase tracking-[0.14em] text-zinc-400 dark:text-zinc-500">{group.label}</p>
+                <div className="space-y-0.5">
                   {group.items.map((item) => {
                     const Icon = item.icon;
                     const active = isActive(pathname, searchParams, item.href);
-                    return <Link key={item.href} href={item.href} className={`flex min-w-0 items-center gap-2 rounded-md px-3 py-2 text-sm transition-colors ${active ? 'bg-primary/10 font-medium text-primary' : 'text-muted-foreground hover:bg-muted hover:text-foreground'}`}>
+                    return <Link key={item.href} href={item.href} className={`group flex min-w-0 items-center gap-3 rounded-lg px-3 py-2.5 text-sm transition-colors ${active ? 'bg-zinc-900 text-white shadow-sm dark:bg-white dark:text-zinc-900' : 'text-zinc-600 hover:bg-zinc-100 hover:text-zinc-900 dark:text-zinc-300 dark:hover:bg-zinc-800 dark:hover:text-white'}`}>
                       <Icon className="h-4 w-4 shrink-0" />
                       <span className="truncate">{item.label}</span>
                     </Link>;
@@ -196,15 +204,15 @@ export function AdminShell({ children }: { children: React.ReactNode }) {
       </aside>
 
       {mobileOpen && (
-        <div className="fixed inset-14 z-40 bg-background md:hidden">
+        <div className="fixed inset-16 z-40 border-t border-zinc-200 bg-background md:hidden dark:border-zinc-800">
           <nav className="h-full overflow-y-auto p-4" aria-label="管理员导航">
             <div className="space-y-5">
               {visibleNavigationGroups.map((group) => <section key={group.label}>
-                <p className="px-3 pb-1.5 text-xs font-medium text-muted-foreground">{group.label}</p>
+                <p className="px-3 pb-2 text-[10px] font-semibold uppercase tracking-[0.14em] text-zinc-400 dark:text-zinc-500">{group.label}</p>
                 <div className="space-y-1">{group.items.map((item) => {
                   const Icon = item.icon;
                   const active = isActive(pathname, searchParams, item.href);
-                  return <Link key={item.href} href={item.href} onClick={() => setMobileOpen(false)} className={`flex min-w-0 items-center gap-3 rounded-md px-3 py-3 text-sm ${active ? 'bg-primary/10 font-medium text-primary' : 'text-muted-foreground hover:bg-muted hover:text-foreground'}`}><Icon className="h-4 w-4 shrink-0" /><span className="truncate">{item.label}</span></Link>;
+                  return <Link key={item.href} href={item.href} onClick={() => setMobileOpen(false)} className={`flex min-w-0 items-center gap-3 rounded-lg px-3 py-3 text-sm ${active ? 'bg-zinc-900 text-white dark:bg-white dark:text-zinc-900' : 'text-zinc-600 hover:bg-zinc-100 hover:text-zinc-900 dark:text-zinc-300 dark:hover:bg-zinc-800 dark:hover:text-white'}`}><Icon className="h-4 w-4 shrink-0" /><span className="truncate">{item.label}</span></Link>;
                 })}</div>
               </section>)}
             </div>
@@ -213,7 +221,7 @@ export function AdminShell({ children }: { children: React.ReactNode }) {
       )}
 
       <AdminPermissionContext.Provider value={permissionContext}>
-        <div className="pt-14 md:pl-56">{children}</div>
+        <div className="min-h-[calc(100vh-4rem)] pt-16 md:pl-60">{children}</div>
       </AdminPermissionContext.Provider>
     </div>
   );

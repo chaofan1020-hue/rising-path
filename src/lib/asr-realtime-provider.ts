@@ -90,11 +90,11 @@ export function buildRealtimeSessionUpdate(language?: string): string {
         : {},
       turn_detection: {
         type: 'server_vad',
-        // Browser audio is now sent continuously during a candidate turn, so
-        // server VAD is the authoritative speech detector. 0.42 missed normal
-        // laptop-microphone speech; 0.28 still leaves enough headroom for the
-        // provider's noise suppression and the 850ms end-of-turn boundary.
-        threshold: readNumberEnv('ALIBABA_ASR_REALTIME_VAD_THRESHOLD', 0.28, 0.1, 0.95),
+        // Silero already filters the local microphone stream before it is
+        // forwarded. Keep provider VAD sensitive so quiet laptop/headset
+        // speech is not clipped a second time. Alibaba recommends 0.0 for
+        // Qwen-ASR Realtime; noisy deployments can override this by env var.
+        threshold: readNumberEnv('ALIBABA_ASR_REALTIME_VAD_THRESHOLD', 0, -1, 1),
         silence_duration_ms: readNumberEnv('ALIBABA_ASR_REALTIME_SILENCE_MS', 850, 300, 3000),
       },
     },

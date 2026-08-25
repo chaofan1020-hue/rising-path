@@ -36,19 +36,21 @@ function render(state) {
     return;
   }
   for (const result of state.results) {
-    if (!selectedKeys.has(result.key)) selectedKeys.add(result.key);
+    if (!selectedKeys.has(result.key) && result.source !== "ai" && !result.needsReview) {
+      selectedKeys.add(result.key);
+    }
     const item = document.createElement("div");
     item.className = "field";
     const label = state.fields.find((f) => f.key === result.key)?.label || result.key;
     const checked = selectedKeys.has(result.key) ? "checked" : "";
     item.innerHTML = `
       <label>
-        <input type="checkbox" data-key="${result.key}" ${checked} />
+        <input type="checkbox" data-key="${escapeHtml(result.key)}" ${checked} />
         <span>
           <strong>${escapeHtml(label)}</strong>
           <div class="meta"><span class="badge ${sourceClass(result.source)}">${sourceText(result.source)}</span>
           · ${Math.round(result.confidence * 100)}% 置信度</div>
-          <input type="text" data-key="${result.key}" data-original="${escapeHtml(result.value || "")}" value="${escapeHtml(result.value || "")}" placeholder="${escapeHtml(result.reason || "等待手动填写")}" />
+          <input type="text" data-key="${escapeHtml(result.key)}" data-original="${escapeHtml(result.value || "")}" value="${escapeHtml(result.value || "")}" placeholder="${escapeHtml(result.reason || "等待手动填写")}" />
         </span>
       </label>`;
     fieldsEl.appendChild(item);
@@ -64,6 +66,7 @@ function escapeHtml(value) {
 document.getElementById("scan").addEventListener("click", async () => {
   showError("");
   try {
+    selectedKeys.clear();
     const res = await chrome.runtime.sendMessage({ type: "scan" });
     if (!res?.ok) throw new Error(res?.error || "扫描失败");
     render(res.state);
@@ -78,7 +81,8 @@ document.getElementById("fill").addEventListener("click", async () => {
   const keys = Array.from(selectedKeys);
   const values = {};
   for (const key of keys) {
-    const input = fieldsEl.querySelector(`input[type=text][data-key="${key}"]`);
+    const input = Array.from(fieldsEl.querySelectorAll('input[type=text]'))
+      .find((candidate) => candidate.dataset.key === key);
     if (input) values[key] = input.value;
   }
   try {
@@ -107,7 +111,9 @@ document.getElementById("mark-submitted").addEventListener("click", async () => 
 });
 
 document.getElementById("open-liorvix").addEventListener("click", () => {
-  chrome.tabs.create({ url: "http://localhost:5000" });
+  getState()
+    .then((state) => chrome.tabs.create({ url: state.apiBase || "http://localhost:5000" }))
+    .catch(() => chrome.tabs.create({ url: "http://localhost:5000" }));
 });
 
 fieldsEl.addEventListener("change", (event) => {

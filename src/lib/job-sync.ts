@@ -1,8 +1,12 @@
 import { createHash } from 'node:crypto';
 import type { SupabaseClient } from '@supabase/supabase-js';
+import type { JobAvailabilityStatus, JobLinkHealth } from '@/lib/job-link-health';
 
 type Sponsorship = 'yes' | 'no' | 'unknown';
 const EXISTING_JOB_LOOKUP_BATCH_SIZE = 20;
+// UUID lists are serialized into the PostgREST query string. 500 IDs can
+// exceed proxy/request-line limits and surface as an opaque `fetch failed`.
+const EXISTING_EXTERNAL_ID_LOOKUP_BATCH_SIZE = 100;
 const EXISTING_SYNC_RECORD_LOOKUP_BATCH_SIZE = 500;
 const WRITE_BATCH_SIZE = 500;
 
@@ -29,6 +33,11 @@ export interface JobSyncRecord {
   valid_through?: string | null;
   missing_from_feed_at?: string | null;
   missing_feed_checks?: number;
+  availability_status?: JobAvailabilityStatus | null;
+  link_health?: JobLinkHealth | null;
+  last_link_error?: string | null;
+  last_link_http_status?: number | null;
+  availability_checked_at?: string | null;
 }
 
 export interface JobSyncRejection {
@@ -49,11 +58,21 @@ export interface JobSyncResult {
 interface ExistingJob {
   id: number;
   job_url: string | null;
+  company: string | null;
+  source_system: string | null;
+  external_job_id: string | null;
+  is_active: boolean;
+  is_closed: boolean;
 }
 
 interface ExistingJobSyncRecord {
   job_id: number;
   content_hash: string;
+  availability_status: JobAvailabilityStatus | null;
+  link_health: JobLinkHealth | null;
+  last_link_error: string | null;
+  last_link_http_status: number | null;
+  availability_checked_at: string | null;
 }
 
 interface PendingJobWrite {
@@ -69,6 +88,11 @@ interface PendingSyncRecord {
   last_verified_at: string;
   missing_from_feed_at: null;
   missing_feed_checks: number;
+  availability_status: JobAvailabilityStatus | null;
+  link_health: JobLinkHealth | null;
+  last_link_error: string | null;
+  last_link_http_status: number | null;
+  availability_checked_at: string | null;
 }
 
 function chunks<T>(values: T[], size: number): T[][] {
@@ -85,7 +109,7 @@ function errorMessage(error: unknown): string {
 async function retryDatabaseOperation<T extends { error: unknown }>(
   operation: () => PromiseLike<T>,
   label: string,
-  attempts = 3,
+  attempts = 4,
 ): Promise<T> {
   let lastResult: T | undefined;
   for (let attempt = 1; attempt <= attempts; attempt += 1) {
@@ -118,6 +142,15 @@ function key(url: string | null): string | null {
   } catch {
     return url.trim();
   }
+}
+
+function identityPart(value: string | null | undefined): string {
+  return (value || '').trim().toLocaleLowerCase();
+}
+
+function externalIdentity(sourceSystem: string | null | undefined, company: string | null | undefined, externalId: string | null | undefined): string | null {
+  if (!sourceSystem || !company || !externalId) return null;
+  return `${identityPart(sourceSystem)}:${identityPart(company)}:${identityPart(externalId)}`;
 }
 
 function timestampForHash(value: string | null | undefined): string {
@@ -163,7 +196,13 @@ export function jobContentHash(job: JobSyncRecord): string {
   return createHash('md5').update(fields.map(hashPart).join('|'), 'utf8').digest('hex');
 }
 
-function makeSyncRecord(jobId: number, job: JobSyncRecord, contentHash: string, verifiedAt: string): PendingSyncRecord {
+function makeSyncRecord(
+  jobId: number,
+  job: JobSyncRecord,
+  contentHash: string,
+  verifiedAt: string,
+  previous?: ExistingJobSyncRecord,
+): PendingSyncRecord {
   return {
     job_id: jobId,
     source_system: job.source_system || 'manual',
@@ -171,7 +210,24 @@ function makeSyncRecord(jobId: number, job: JobSyncRecord, contentHash: string, 
     last_verified_at: verifiedAt,
     missing_from_feed_at: null,
     missing_feed_checks: 0,
+    availability_status: job.availability_status ?? previous?.availability_status ?? null,
+    link_health: job.link_health ?? previous?.link_health ?? null,
+    last_link_error: job.last_link_error ?? previous?.last_link_error ?? null,
+    last_link_http_status: job.last_link_http_status ?? previous?.last_link_http_status ?? null,
+    availability_checked_at: job.availability_checked_at ?? previous?.availability_checked_at ?? verifiedAt,
   };
+}
+
+function toJobPayload(job: JobSyncRecord): Omit<JobSyncRecord, 'availability_status' | 'link_health' | 'last_link_error' | 'last_link_http_status' | 'availability_checked_at'> {
+  const {
+    availability_status: _availabilityStatus,
+    link_health: _linkHealth,
+    last_link_error: _lastLinkError,
+    last_link_http_status: _lastLinkHttpStatus,
+    availability_checked_at: _availabilityCheckedAt,
+    ...payload
+  } = job;
+  return payload;
 }
 
 async function saveSyncRecords(client: SupabaseClient, records: PendingSyncRecord[]): Promise<void> {
@@ -205,34 +261,74 @@ export async function syncJobRecords(
   const distinctJobs = new Map<string, JobSyncRecord>();
   for (const job of jobs) {
     // Invalid records remain independent so the validation branch can report
-    // them. Valid entries use the normalized URL as their stable feed key.
-    const jobKey = key(job.job_url) || `invalid-${distinctJobs.size}`;
+    // them. Prefer the upstream source/id pair when available because ATS URLs
+    // can change without representing a new job.
+    const externalKey = externalIdentity(job.source_system, job.company, job.external_job_id);
+    const jobKey = externalKey || key(job.job_url) || `invalid-${distinctJobs.size}`;
     distinctJobs.set(jobKey, job);
   }
   const jobsToSync = [...distinctJobs.values()];
-  const urls = [...new Set(jobsToSync.map((job) => job.job_url).filter((url): url is string => Boolean(url)))];
-  const existing = new Map<string, ExistingJob>();
+  const externalIds = [...new Set(
+    jobsToSync
+      .filter((job) => job.source_system && job.external_job_id)
+      .map((job) => job.external_job_id as string),
+  )];
+  const existingByUrl = new Map<string, ExistingJob>();
+  const existingByExternalId = new Map<string, ExistingJob>();
 
+  // The upstream can replace an ATS URL while retaining its external ID. Match
+  // that record before inserting so the unique source/id index remains useful.
+  for (const batch of chunks(externalIds, EXISTING_EXTERNAL_ID_LOOKUP_BATCH_SIZE)) {
+    const { data, error } = await retryDatabaseOperation(
+      () => client.from('jobs').select('id, job_url, company, source_system, external_job_id, is_active, is_closed').in('external_job_id', batch),
+      '查询岗位外部 ID',
+    );
+    if (error) throw new Error(`查询岗位外部 ID 失败: ${error.message}`);
+    for (const row of (data ?? []) as ExistingJob[]) {
+      const identity = externalIdentity(row.source_system, row.company, row.external_job_id);
+      if (identity) {
+        existingByExternalId.set(identity, row);
+      }
+      const normalized = key(row.job_url);
+      if (normalized) existingByUrl.set(normalized, row);
+    }
+  }
+
+  // Most collector records have a stable external ID. Only fall back to URL
+  // lookup when that ID is absent or did not find an existing row, otherwise a
+  // 500-row page needlessly becomes dozens of long PostgREST URL requests.
+  const urls = [...new Set(jobsToSync
+    .filter((job) => !job.source_system || !job.external_job_id
+      || !existingByExternalId.has(externalIdentity(job.source_system, job.company, job.external_job_id) || ''))
+    .map((job) => job.job_url)
+    .filter((url): url is string => Boolean(url)))];
   // job_url can be very long for ATS portals. Keep each PostgREST `in()`
   // query comfortably below proxy request-line limits instead of sending one
   // oversized URL that surfaces as a generic fetch failure.
   for (const batch of chunks(urls, EXISTING_JOB_LOOKUP_BATCH_SIZE)) {
     const { data, error } = await retryDatabaseOperation(
-      () => client.from('jobs').select('id, job_url').in('job_url', batch),
+      () => client.from('jobs').select('id, job_url, company, source_system, external_job_id, is_active, is_closed').in('job_url', batch),
       '查询岗位',
     );
     if (error) throw new Error(`查询岗位失败: ${error.message}`);
     for (const row of (data ?? []) as ExistingJob[]) {
       const normalized = key(row.job_url);
-      if (normalized) existing.set(normalized, row);
+      if (normalized) existingByUrl.set(normalized, row);
+      const identity = externalIdentity(row.source_system, row.company, row.external_job_id);
+      if (identity) {
+        existingByExternalId.set(identity, row);
+      }
     }
   }
 
   const existingSyncRecords = new Map<number, ExistingJobSyncRecord>();
-  const existingIds = [...new Set([...existing.values()].map((job) => job.id))];
+  const existingIds = [...new Set([...existingByUrl.values(), ...existingByExternalId.values()].map((job) => job.id))];
   for (const batch of chunks(existingIds, EXISTING_SYNC_RECORD_LOOKUP_BATCH_SIZE)) {
     const { data, error } = await retryDatabaseOperation(
-      () => client.from('job_sync_records').select('job_id, content_hash').in('job_id', batch),
+      () => client
+        .from('job_sync_records')
+        .select('job_id, content_hash, availability_status, link_health, last_link_error, last_link_http_status, availability_checked_at')
+        .in('job_id', batch),
       '查询岗位同步状态',
     );
     if (error) throw new Error(`查询岗位同步状态失败: ${error.message}`);
@@ -253,13 +349,20 @@ export async function syncJobRecords(
       continue;
     }
     const contentHash = jobContentHash(job);
-    const found = existing.get(key(job.job_url) || '');
+    // External IDs are stable across ATS URL rotations. Prefer that identity
+    // before the URL so a refreshed link updates the existing row instead of
+    // colliding with its unique source/external-id index.
+    const found = (job.source_system && job.external_job_id
+      ? existingByExternalId.get(externalIdentity(job.source_system, job.company, job.external_job_id) || '')
+      : undefined)
+      || existingByUrl.get(key(job.job_url) || '');
     if (!found) {
       inserts.push({ job, contentHash });
       continue;
     }
-    if (existingSyncRecords.get(found.id)?.content_hash === contentHash) {
-      unchanged.push(makeSyncRecord(found.id, job, contentHash, timestamp));
+    const lifecycleChanged = found.is_active !== job.is_active || found.is_closed !== job.is_closed;
+    if (existingSyncRecords.get(found.id)?.content_hash === contentHash && !lifecycleChanged) {
+      unchanged.push(makeSyncRecord(found.id, job, contentHash, timestamp, existingSyncRecords.get(found.id)));
       continue;
     }
     updates.push({ id: found.id, job, contentHash });
@@ -270,7 +373,7 @@ export async function syncJobRecords(
     const { data, error } = await retryDatabaseOperation(
       () => client
         .from('jobs')
-        .insert(batch.map(({ job }) => ({ ...job, last_verified_at: timestamp })))
+        .insert(batch.map(({ job }) => ({ ...toJobPayload(job), last_verified_at: timestamp })))
         .select('id, job_url'),
       '创建岗位',
     );
@@ -298,7 +401,7 @@ export async function syncJobRecords(
       outcome: await retryDatabaseOperation(
         () => client
           .from('jobs')
-          .update({ ...pending.job, updated_at: timestamp })
+          .update({ ...toJobPayload(pending.job), updated_at: timestamp })
           .eq('id', pending.id),
         '更新岗位',
       ),
@@ -309,7 +412,7 @@ export async function syncJobRecords(
         result.invalidJobs.push({ index: result.invalidJobs.length + 1, reason: `更新岗位失败: ${outcome.error.message}`, data: {} });
       } else {
         result.updated += 1;
-        savedSyncRecords.push(makeSyncRecord(pending.id, pending.job, pending.contentHash, timestamp));
+        savedSyncRecords.push(makeSyncRecord(pending.id, pending.job, pending.contentHash, timestamp, existingSyncRecords.get(pending.id)));
       }
     }
   }

@@ -6,13 +6,13 @@ begin;
 alter table if exists public.profiles
   add column if not exists display_name varchar(120);
 
-update public.profiles
+update public.profiles as profile
 set display_name = nullif(
   left(
     coalesce(
       display_name,
-      to_jsonb(public.profiles) ->> 'full_name',
-      to_jsonb(public.profiles) ->> 'email',
+      to_jsonb(profile) ->> 'full_name',
+      to_jsonb(profile) ->> 'email',
       ''
     ),
     120

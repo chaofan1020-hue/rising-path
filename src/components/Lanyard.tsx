@@ -25,6 +25,11 @@ extend({ MeshLineGeometry, MeshLineMaterial });
 const cardGLB = '/card.glb';
 const lanyard = '/lanyard.png';
 
+export function preloadLanyardAssets(): void {
+  useGLTF.preload(cardGLB);
+  useTexture.preload(lanyard);
+}
+
 declare module '@react-three/fiber' {
   interface ThreeElements {
     meshLineGeometry: ThreeElement<typeof MeshLineGeometry>;

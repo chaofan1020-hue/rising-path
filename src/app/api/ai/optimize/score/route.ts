@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from 'next/server';
 import { getAuthContext, unauthorizedResponse } from '@/lib/auth-server';
 import { createTextProviderClient } from '@/lib/ai/text-provider';
 import { consumeTrackedTextStream } from '@/lib/ai-usage';
+import { betaEntitlementResponse } from '@/lib/beta-entitlements';
 import {
   OPTIMIZATION_SCORE_RESPONSE_SCHEMA,
   parseOptimizationScoreComparison,
@@ -127,6 +128,8 @@ ${JSON.stringify(optimization.reviewed_content || optimization.optimized_content
     });
   } catch (error) {
     console.error('Optimization score comparison error:', error);
+    const betaResponse = betaEntitlementResponse(error);
+    if (betaResponse) return betaResponse;
     return NextResponse.json({ error: '计算优化前后评分失败' }, { status: 500 });
   }
 }

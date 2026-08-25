@@ -1,7 +1,7 @@
 'use client';
 
 import { useState, useEffect } from 'react';
-import { useParams } from 'next/navigation';
+import { useParams, useSearchParams } from 'next/navigation';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
@@ -44,6 +44,9 @@ import Link from 'next/link';
 import { AuthGuard } from '@/components/auth-guard';
 import { apiFetch } from '@/lib/api-client';
 import PageBackButton from '@/components/page-back-button';
+import { AutoApplyAssistant } from '@/components/auto-apply-assistant';
+import { useLanguage } from '@/lib/language-context';
+import { getJobDeadlineRemaining } from '@/lib/job-deadline';
 
 interface Job {
   id: number;
@@ -63,7 +66,8 @@ interface Job {
   logo_fallback_url?: string;
   sponsorship?: 'yes' | 'no' | 'unknown';
   created_at: string;
-  application_deadline?: string;
+  valid_through?: string | null;
+  application_deadline?: string | null;
   job_type?: string;
   // 公司信息
   company_info?: {
@@ -76,6 +80,31 @@ interface Job {
     headquarters?: string;
     industry?: string;
   };
+}
+
+function getDeadlineDate(value: string | null | undefined): Date | null {
+  if (!value) return null;
+  const normalized = value.trim();
+  const dateOnly = normalized.match(/^(\d{4})-(\d{2})-(\d{2})$/);
+  const timestamp = dateOnly
+    ? new Date(Number(dateOnly[1]), Number(dateOnly[2]) - 1, Number(dateOnly[3]), 23, 59, 59, 999).getTime()
+    : Date.parse(normalized);
+  return Number.isFinite(timestamp) ? new Date(timestamp) : null;
+}
+
+function formatDeadline(value: string | null | undefined): string | null {
+  const date = getDeadlineDate(value);
+  return date
+    ? new Intl.DateTimeFormat(undefined, { year: 'numeric', month: '2-digit', day: '2-digit', timeZone: 'UTC' }).format(date)
+    : null;
+}
+
+function formatDeadlineRemaining(value: string | null | undefined, now: number, t: (key: string, params?: Record<string, string | number>) => string): string | null {
+  if (!now) return null;
+  const remaining = getJobDeadlineRemaining(value, now);
+  if (!remaining) return null;
+  if (remaining.expired) return t('jobs.deadlineExpired');
+  return t('jobs.daysLeft', { days: remaining.days });
 }
 
 interface RelatedJob {
@@ -179,6 +208,8 @@ function InfoBadge({ icon: Icon, children, variant = 'default' }: { icon: Lucide
 // 内部组件
 function JobDetailContent() {
   const params = useParams();
+  const searchParams = useSearchParams();
+  const { t } = useLanguage();
   const [job, setJob] = useState<Job | null>(null);
   const [relatedJobs, setRelatedJobs] = useState<RelatedJob[]>([]);
   const [loading, setLoading] = useState(true);
@@ -194,15 +225,25 @@ function JobDetailContent() {
   const [favoriteLoading, setFavoriteLoading] = useState(false);
   const [showAllResponsibilities, setShowAllResponsibilities] = useState(false);
   const [showAllRequirements, setShowAllRequirements] = useState(false);
+  const [deadlineNow, setDeadlineNow] = useState(0);
+
+  const requestedResumeId = searchParams.get('resumeId');
+
+  useEffect(() => {
+    setDeadlineNow(Date.now());
+    const timer = window.setInterval(() => setDeadlineNow(Date.now()), 60_000);
+    return () => window.clearInterval(timer);
+  }, []);
   
   useEffect(() => {
     const fetchJob = async () => {
       try {
         const response = await apiFetch(`/api/jobs/${params.id}`);
+        const payload = await response.json().catch(() => ({}));
         if (!response.ok) {
-          throw new Error('岗位不存在');
+          throw new Error(payload.error || '岗位不存在');
         }
-        const data = await response.json();
+        const data = payload;
         setJob(data.job);
         
         // 获取同公司其他岗位
@@ -236,6 +277,11 @@ function JobDetailContent() {
         resume.processing_status === 'ready' && resume.segmentation_confirmed === true
       ));
       setResumes(availableResumes);
+      const requestedResume = Number(requestedResumeId);
+      if (Number.isInteger(requestedResume) && availableResumes.some((resume: ResumeOption) => resume.id === requestedResume)) {
+        setSelectedResumeId(String(requestedResume));
+        return;
+      }
       if (availableResumes.length === 1) {
         setSelectedResumeId(String(availableResumes[0].id));
       }
@@ -307,9 +353,10 @@ function JobDetailContent() {
           company: job.company,
           title: job.title,
           jobUrl: job.job_url,
+          resumeId: selectedResumeId ? Number(selectedResumeId) : undefined,
         };
         window.postMessage({ type: "liorvix-apply-context", context: applyContext }, window.location.origin);
-        window.open(job.job_url, '_blank', 'noopener,noreferrer');
+        window.open(`/api/jobs/${job.id}/open`, '_blank', 'noopener,noreferrer');
       }
       return;
     }
@@ -327,6 +374,7 @@ function JobDetailContent() {
           job_id: Number(params.id),
           status: 'pending',
           notes: '',
+          ...(selectedResumeId ? { resume_id: Number(selectedResumeId) } : {}),
         }),
       });
       
@@ -339,9 +387,10 @@ function JobDetailContent() {
           company: job.company,
           title: job.title,
           jobUrl: job.job_url,
+          resumeId: selectedResumeId ? Number(selectedResumeId) : undefined,
         };
         window.postMessage({ type: "liorvix-apply-context", context: applyContext }, window.location.origin);
-        window.open(job.job_url, '_blank', 'noopener,noreferrer');
+        window.open(`/api/jobs/${job.id}/open`, '_blank', 'noopener,noreferrer');
       } else if (data.error) {
         alert('投递失败: ' + data.error);
       }
@@ -479,13 +528,24 @@ function JobDetailContent() {
               )}
             </div>
 
-            {/* 截止日期 */}
-            {job.application_deadline && (
-              <div className="flex items-center gap-2 text-sm text-zinc-500 dark:text-zinc-400 mb-4">
-                <Calendar className="h-4 w-4" />
-                <span>截止日期：{job.application_deadline}</span>
-              </div>
-            )}
+            {/* 截止日期与剩余时间：日期来自上游 valid_through，不做发布时间推算。 */}
+            {(() => {
+              const deadline = job.valid_through || job.application_deadline;
+              const remaining = formatDeadlineRemaining(deadline, deadlineNow, t);
+              return (
+                <div className="mb-4 space-y-1.5 text-sm">
+                  <div className="flex items-center gap-2 text-zinc-500 dark:text-zinc-400">
+                    <Calendar className="h-4 w-4" />
+                    <span>{t('jobs.deadlineLabel')}：{formatDeadline(deadline) || t('jobs.deadlineUnknown')}</span>
+                  </div>
+                  {remaining && (
+                    <p className="font-semibold text-red-600 dark:text-red-400">
+                      {remaining}
+                    </p>
+                  )}
+                </div>
+              );
+            })()}
 
             <Separator className="my-4 bg-zinc-100 dark:bg-zinc-800" />
 
@@ -532,13 +592,22 @@ function JobDetailContent() {
               </Button>
               {job.job_url && (
                 <Button variant="outline" asChild className="flex-1 sm:flex-none border-zinc-200 dark:border-zinc-700 text-zinc-600 dark:text-zinc-300 hover:bg-zinc-100 hover:text-zinc-900 dark:hover:bg-zinc-800 dark:hover:text-zinc-100">
-                  <a href={job.job_url} target="_blank" rel="noopener noreferrer">
+                  <a href={`/api/jobs/${job.id}/open`} target="_blank" rel="noopener noreferrer">
                     <ExternalLink className="h-4 w-4 mr-2" />
                     原链接
                   </a>
                 </Button>
               )}
             </div>
+            <AutoApplyAssistant
+              context={{
+                jobId: Number(params.id),
+                company: job.company,
+                title: job.title,
+                jobUrl: job.job_url,
+                resumeId: selectedResumeId ? Number(selectedResumeId) : undefined,
+              }}
+            />
           </CardContent>
         </Card>
 
@@ -606,7 +675,7 @@ function JobDetailContent() {
             )}
 
             {matchError && (
-              <div className="mt-4 rounded-xl border border-red-200 bg-red-50 px-3 py-2.5 text-sm text-red-700 dark:border-red-900/60 dark:bg-red-950/30 dark:text-red-300">
+              <div className="mt-4 rounded-xl border border-primary/25 bg-primary/5 px-3 py-2.5 text-sm text-foreground dark:bg-primary/15">
                 {matchError}
               </div>
             )}
@@ -654,9 +723,9 @@ function JobDetailContent() {
                       </div>
                     )}
                     {match.key_gaps.length > 0 && (
-                      <div className="rounded-xl border border-amber-100 bg-amber-50/60 p-3 dark:border-amber-900/50 dark:bg-amber-950/20">
-                        <h3 className="mb-1.5 text-sm font-medium text-amber-900 dark:text-amber-200">关键差距</h3>
-                        <ul className="list-disc space-y-1 pl-4 text-xs text-amber-800 dark:text-amber-300">
+                      <div className="rounded-xl border border-primary/20 bg-primary/5 p-3 dark:bg-primary/15">
+                        <h3 className="mb-1.5 text-sm font-medium text-foreground">关键差距</h3>
+                        <ul className="list-disc space-y-1 pl-4 text-xs text-foreground/80">
                           {match.key_gaps.map((item) => <li key={item}>{item}</li>)}
                         </ul>
                       </div>

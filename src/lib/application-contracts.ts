@@ -63,6 +63,11 @@ export const applicationPrefillRequestSchema = z.object({
     id: shortText.optional(),
     placeholder: shortText.max(500).optional(),
     options: z.array(shortText).max(100).optional(),
-    selectorHints: z.object({ semanticKey: applicationSemanticKeySchema.optional() }).catchall(shortText).optional(),
+    // The extension carries a numeric DOM index and may encounter fields
+    // outside the profile's known semantic-key set. The server still bounds
+    // the values, while the field-specific logic decides what can be mapped.
+    selectorHints: z.object({
+      semanticKey: shortText.optional(),
+    }).catchall(z.union([shortText, z.number().int().min(0).max(10_000)])).optional(),
   }).strict()).min(1).max(100),
 }).strict();

@@ -209,7 +209,7 @@ function DNAReviewContent() {
   };
 
   return (
-    <div className="bg-muted/30">
+    <div className="bg-background">
       <main className="mx-auto max-w-7xl px-4 py-6 sm:px-6 md:py-8">
         {permissionsLoading ? (
           <div className="flex min-h-80 items-center justify-center"><Loader2 className="h-6 w-6 animate-spin text-zinc-400" /></div>
@@ -217,7 +217,7 @@ function DNAReviewContent() {
           <div className="rounded-lg border border-dashed py-20 text-center text-sm text-muted-foreground">当前管理员角色无权查看 DNA 审核台</div>
         ) : <>
         <div className="mb-6 flex items-start gap-3">
-          <Dna className="mt-0.5 h-5 w-5 shrink-0 text-primary" />
+          <Dna className="mt-0.5 h-5 w-5 shrink-0 text-zinc-900 dark:text-white" />
           <div>
             <h1 className="text-xl font-semibold">面试基因审查</h1>
             <p className="mt-1 text-sm text-muted-foreground">审查真实度反馈，维护企业面试基因和版本历史。</p>

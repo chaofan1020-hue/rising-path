@@ -2,6 +2,13 @@ import type { SupabaseClient } from '@supabase/supabase-js';
 import { syncJobRecords, type JobSyncRecord } from '@/lib/job-sync';
 import { jobHtmlToPlainText, sanitizeJobContent } from '@/lib/job-content';
 import { isTargetRegion } from '@/lib/job-region-scope';
+import { resolveJobDeadline } from '@/lib/job-deadline';
+import {
+  isDefinitivelyClosed,
+  observeJobLinkHealth,
+} from '@/lib/job-link-health';
+import { enrichGreenhouseOffices } from '@/lib/greenhouse-location-enrichment';
+import { enrichAshbyLocations } from '@/lib/ashby-location-enrichment';
 
 const DEFAULT_FEED_URL = 'https://hfscareer.com/collector-api/integrations/v1/jobs';
 export const JOBS_FEED_SOURCE = 'collector_feed';
@@ -15,8 +22,10 @@ export interface JobsFeedItem {
   title?: string | null;
   description?: string | null;
   source_url?: string | null;
-  location?: string | null;
-  country?: string | null;
+  location?: unknown;
+  country?: unknown;
+  offices?: unknown;
+  official_location?: unknown;
   department?: string | null;
   job_function?: string | null;
   level?: string | null;
@@ -25,9 +34,22 @@ export interface JobsFeedItem {
   visa_sponsorship?: boolean | null;
   date_posted?: string | null;
   valid_through?: string | null;
+  application_deadline?: string | null;
+  deadline?: string | null;
+  application_close_date?: string | null;
+  application_closing_date?: string | null;
+  closing_date?: string | null;
+  close_date?: string | null;
+  end_date?: string | null;
+  expires_at?: string | null;
+  expiration_date?: string | null;
   employment_type?: string | null;
+  responsibilities?: string | null;
+  qualifications?: string | null;
+  application_process?: string | null;
   status?: string | null;
   sync_action?: 'upsert' | 'close';
+  closed_at?: string | null;
   missing_fields?: string[];
   data_completeness?: string | null;
   source_evidence?: Record<string, unknown>;
@@ -52,6 +74,7 @@ export interface JobsFeedSyncResult {
   next_cursor: string | null;
   has_more: boolean;
   open_seen: number;
+  skipped_by_reason: Record<string, number>;
 }
 
 function getFeedConfig() {
@@ -70,6 +93,29 @@ function getFeedConfig() {
 
 function text(value: unknown): string {
   return typeof value === 'string' ? value.trim() : value == null ? '' : String(value).trim();
+}
+
+export function normalizeFeedLocation(value: unknown, depth = 0): string {
+  if (depth > 2 || value == null) return '';
+  if (typeof value === 'string' || typeof value === 'number') return String(value).trim();
+  if (Array.isArray(value)) return value.map((item) => normalizeFeedLocation(item, depth + 1)).filter(Boolean).join(', ');
+  if (typeof value === 'object') {
+    const record = value as Record<string, unknown>;
+    return [
+      record.city,
+      record.city_name,
+      record.state,
+      record.state_code,
+      record.region,
+      record.country,
+      record.country_code,
+      record.name,
+      record.label,
+      record.location,
+      record.address,
+    ].map((item) => normalizeFeedLocation(item, depth + 1)).filter(Boolean).join(', ');
+  }
+  return '';
 }
 
 function list(value: unknown): string[] {
@@ -105,7 +151,7 @@ function inferJobType(item: JobsFeedItem): string {
   return text(item.employment_type) || '社招';
 }
 
-function normalizeItem(item: JobsFeedItem): JobSyncRecord | null {
+export function normalizeFeedItem(item: JobsFeedItem): JobSyncRecord | null {
   const title = text(item.title);
   const company = text(item.company_name);
   const sourceUrl = text(item.source_url);
@@ -117,8 +163,14 @@ function normalizeItem(item: JobsFeedItem): JobSyncRecord | null {
   const description = jobHtmlToPlainText(item.description);
   const required = list(item.required_skills);
   const preferred = list(item.preferred_skills);
-  const location = text(item.location) || text(item.country) || '未注明';
-  if (!isTargetRegion(item.location, item.country)) return null;
+  const rawLocation = [
+    normalizeFeedLocation(item.location),
+    normalizeFeedLocation(item.offices),
+    normalizeFeedLocation(item.official_location),
+  ].filter(Boolean).join(', ');
+  const rawCountry = normalizeFeedLocation(item.country);
+  const location = [rawLocation, rawCountry].filter(Boolean).join(', ') || '未注明';
+  if (!isTargetRegion(rawLocation, rawCountry)) return null;
   const evidence = item.source_evidence ? JSON.stringify(item.source_evidence) : '';
   const requirements = required.length > 0
     ? required.map((value) => jobHtmlToPlainText(value)).filter(Boolean).join('\n')
@@ -126,6 +178,19 @@ function normalizeItem(item: JobsFeedItem): JobSyncRecord | null {
   const niceToHave = preferred.length > 0
     ? preferred.map((value) => jobHtmlToPlainText(value)).filter(Boolean).join('\n')
     : '';
+  const rawHealth = observeJobLinkHealth(item.source_evidence);
+  const closeSignal = hasFeedCloseSignal(item)
+    || rawHealth.availabilityStatus === 'closed'
+    || rawHealth.linkHealth === 'closed';
+  const health = closeSignal
+    ? {
+      availabilityStatus: 'unknown' as const,
+      linkHealth: 'unknown' as const,
+      httpStatus: null,
+      error: '上游标记岗位关闭，等待官网链接核验',
+      checkedAt: null,
+    }
+    : rawHealth;
   const closed = isClosedItem(item);
 
   return {
@@ -151,17 +216,59 @@ function normalizeItem(item: JobsFeedItem): JobSyncRecord | null {
     is_closed: closed,
     source_system: JOBS_FEED_SOURCE,
     external_job_id: text(item.external_job_id) || text(item.id) || null,
-    valid_through: Number.isFinite(Date.parse(text(item.valid_through))) ? new Date(text(item.valid_through)).toISOString() : null,
+    valid_through: resolveJobDeadline(item)?.value || null,
     missing_from_feed_at: null,
     missing_feed_checks: 0,
+    availability_status: health.availabilityStatus,
+    link_health: health.linkHealth,
+    last_link_error: health.error,
+    last_link_http_status: health.httpStatus,
+    availability_checked_at: health.checkedAt,
   };
 }
 
-function isClosedItem(item: JobsFeedItem, now = Date.now()): boolean {
+function normalizeSkipReason(item: JobsFeedItem): string | null {
+  if (!text(item.title)) return 'missing_title';
+  if (!text(item.company_name)) return 'missing_company';
+  if (!text(item.source_url)) return 'missing_source_url';
+  if (!isTargetRegion(
+    [
+      normalizeFeedLocation(item.location),
+      normalizeFeedLocation(item.offices),
+      normalizeFeedLocation(item.official_location),
+    ].filter(Boolean).join(', '),
+    normalizeFeedLocation(item.country),
+  )) return 'outside_target_region';
+  return null;
+}
+
+function incrementSkipReason(result: JobsFeedSyncResult, reason: string): void {
+  result.skipped += 1;
+  result.skipped_by_reason[reason] = (result.skipped_by_reason[reason] || 0) + 1;
+}
+
+export function hasFeedCloseSignal(item: JobsFeedItem): boolean {
   const status = text(item.status).toLowerCase();
-  if (item.sync_action === 'close' || status === 'closed' || status === 'close') return true;
-  const validThrough = Date.parse(text(item.valid_through));
-  return Number.isFinite(validThrough) && validThrough < now;
+  return item.sync_action === 'close'
+    || status === 'closed'
+    || status === 'close'
+    || Boolean(text(item.closed_at));
+}
+
+export function isClosedItem(item: JobsFeedItem, now = Date.now()): boolean {
+  const health = observeJobLinkHealth(item.source_evidence);
+  // The collector is the authoritative source for the job lifecycle. A close
+  // event must remove the matching catalog record even when the ATS has a
+  // stale or generic page cached behind the old application URL.
+  if (hasFeedCloseSignal(item)) return true;
+  // A 404 remains inconclusive until the local health worker observes it
+  // twice. An explicit 410 is definitive immediately.
+  if (health.httpStatus === 410) return true;
+  if (isDefinitivelyClosed(health) && health.httpStatus === 410) return true;
+  // The upstream lifecycle is authoritative. A stale application deadline is
+  // not proof that a role was removed; many portals keep open roles listed
+  // after the deadline field has passed.
+  return false;
 }
 
 async function fetchPage(cursor?: string, since?: string, includeClosed = true): Promise<FeedPage> {
@@ -252,30 +359,45 @@ export async function syncJobsFeed(
     next_cursor: cursor || null,
     has_more: false,
     open_seen: 0,
+    skipped_by_reason: {},
   };
 
   while (hasMore && result.pages < maxPages) {
     const requestedCursor = cursor;
     const page = await fetchPage(cursor, cursor ? undefined : options.since, options.includeClosed ?? true);
-    const items = Array.isArray(page.items) ? page.items : [];
+    const rawItems = Array.isArray(page.items) ? page.items : [];
+    const greenhouseEnriched = await enrichGreenhouseOffices(rawItems);
+    const items = await enrichAshbyLocations(greenhouseEnriched);
     result.pages += 1;
     result.received += items.length;
 
     const openItems: JobSyncRecord[] = [];
-    const closeSources: string[] = [];
+    const closeSourcesByCompany = new Map<string, string[]>();
+    const closeExternalIdsByCompany = new Map<string, string[]>();
     for (const item of items) {
       if (isClosedItem(item)) {
         const sourceUrl = text(item.source_url);
-        if (!sourceUrl) {
-          result.skipped += 1;
+        const externalJobId = text(item.external_job_id) || text(item.id);
+        if (!sourceUrl && !externalJobId) {
+          incrementSkipReason(result, 'closed_without_identity');
           continue;
         }
-        closeSources.push(sourceUrl);
+        const company = text(item.company_name);
+        if (company && sourceUrl) {
+          const urls = closeSourcesByCompany.get(company) || [];
+          urls.push(sourceUrl);
+          closeSourcesByCompany.set(company, urls);
+        }
+        if (company && externalJobId) {
+          const ids = closeExternalIdsByCompany.get(company) || [];
+          ids.push(externalJobId);
+          closeExternalIdsByCompany.set(company, ids);
+        }
         continue;
       }
-      const normalized = normalizeItem(item);
+      const normalized = normalizeFeedItem(item);
       if (normalized) openItems.push(normalized);
-      else result.skipped += 1;
+      else incrementSkipReason(result, normalizeSkipReason(item) || 'invalid_record');
     }
 
     const verifiedAt = options.verifiedAt || new Date().toISOString();
@@ -285,30 +407,75 @@ export async function syncJobsFeed(
       source_system: JOBS_FEED_SOURCE,
       updated_at: new Date().toISOString(),
     };
-    for (const batch of chunks(closeSources, 100)) {
+    const closedJobIds = new Set<number>();
+    // Stable IDs survive ATS URL rotations, so use them before URL fallbacks.
+    for (const [company, externalIds] of closeExternalIdsByCompany) {
+      for (const batch of chunks([...new Set(externalIds)], 100)) {
       const { data, error } = await client
         .from('jobs')
         .update(closePayload)
+        .eq('source_system', JOBS_FEED_SOURCE)
+        .eq('company', company)
+        .eq('is_active', true)
+        .in('external_job_id', batch)
+        .select('id');
+      if (error) result.failed += batch.length;
+      else {
+        for (const job of (data || []) as Array<{ id: number }>) closedJobIds.add(job.id);
+      }
+      }
+    }
+    // Older records can predate external IDs. Preserve both URL fallbacks so
+    // close events can still find a job after the feed changed its URL field.
+    for (const [company, sourceUrls] of closeSourcesByCompany) {
+      for (const batch of chunks([...new Set(sourceUrls)], 100)) {
+      const { data, error } = await client
+        .from('jobs')
+        .update(closePayload)
+        .eq('source_system', JOBS_FEED_SOURCE)
+        .eq('company', company)
+        .eq('is_active', true)
+        .in('source_url', batch)
+        .select('id');
+      if (error) result.failed += batch.length;
+      else {
+        for (const job of (data || []) as Array<{ id: number }>) closedJobIds.add(job.id);
+      }
+      }
+    }
+    for (const [company, sourceUrls] of closeSourcesByCompany) {
+      for (const batch of chunks([...new Set(sourceUrls)], 100)) {
+      const { data, error } = await client
+        .from('jobs')
+        .update(closePayload)
+        .eq('source_system', JOBS_FEED_SOURCE)
+        .eq('company', company)
         .eq('is_active', true)
         .in('job_url', batch)
         .select('id');
       if (error) result.failed += batch.length;
       else {
-        const closedJobIds = ((data || []) as Array<{ id: number }>).map((job) => job.id);
-        result.closed += closedJobIds.length;
-        if (closedJobIds.length > 0) {
-          const { error: syncStateError } = await client
-            .from('job_sync_records')
-            .update({
-              last_verified_at: verifiedAt,
-              missing_from_feed_at: null,
-              missing_feed_checks: 0,
-              updated_at: new Date().toISOString(),
-            })
-            .in('job_id', closedJobIds);
-          if (syncStateError) result.failed += closedJobIds.length;
-        }
+        for (const job of (data || []) as Array<{ id: number }>) closedJobIds.add(job.id);
       }
+      }
+    }
+    result.closed += closedJobIds.size;
+    if (closedJobIds.size > 0) {
+      const { error: syncStateError } = await client
+        .from('job_sync_records')
+        .update({
+          last_verified_at: verifiedAt,
+          missing_from_feed_at: null,
+          missing_feed_checks: 0,
+          availability_status: 'closed',
+          link_health: 'closed',
+          last_link_error: null,
+          last_link_http_status: null,
+          availability_checked_at: verifiedAt,
+          updated_at: new Date().toISOString(),
+        })
+        .in('job_id', [...closedJobIds]);
+      if (syncStateError) result.failed += closedJobIds.size;
     }
 
     if (openItems.length > 0) {
@@ -317,6 +484,11 @@ export async function syncJobsFeed(
       result.open_seen += openItems.length;
       result.failed += synced.failed;
       result.skipped += synced.skipped + synced.invalidJobs.length;
+      if (synced.skipped > 0) result.skipped_by_reason.invalid_sync_record = (result.skipped_by_reason.invalid_sync_record || 0) + synced.skipped;
+      if (synced.invalidJobs.length > 0) result.skipped_by_reason.invalid_sync_record = (result.skipped_by_reason.invalid_sync_record || 0) + synced.invalidJobs.length;
+      if (synced.invalidJobs.length > 0) {
+        console.error('[JobsFeed] rejected records:', JSON.stringify(synced.invalidJobs.slice(0, 10)));
+      }
     }
 
     const nextCursor = page.next_cursor || undefined;

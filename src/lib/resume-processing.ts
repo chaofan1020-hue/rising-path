@@ -157,6 +157,7 @@ export async function processResume(input: ProcessResumeInput): Promise<{
       ?? resolveRegionKey(parsed.profile.intention?.locations?.[0])
       ?? null;
     const planRefinement = await refineCareerPlan({
+      userId: input.userId,
       profile: parsed.profile,
       segmentation: nextSegmentation,
       region,

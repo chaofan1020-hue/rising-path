@@ -15,6 +15,7 @@ interface AuthContextType {
 }
 
 const AuthContext = createContext<AuthContextType | null>(null);
+let verifiedUserCache: User | null = null;
 
 export function useAuth(): AuthContextType {
   const context = useContext(AuthContext);
@@ -26,19 +27,44 @@ export function useAuth(): AuthContextType {
 
 export function AuthGuard({
   children,
-  showAccountBar = true,
+  showAccountBar = false,
 }: {
   children: ReactNode;
   showAccountBar?: boolean;
 }) {
   const router = useRouter();
-  const [loading, setLoading] = useState(true);
-  const [user, setUser] = useState<User | null>(null);
-  const [authorized, setAuthorized] = useState(false);
+  const [loading, setLoading] = useState(() => verifiedUserCache === null);
+  const [user, setUser] = useState<User | null>(() => verifiedUserCache);
+  const [authorized, setAuthorized] = useState(() => verifiedUserCache !== null);
 
   useEffect(() => {
     let mounted = true;
     let authListener: { subscription: { unsubscribe: () => void } } | null = null;
+
+    const applySession = (nextUser: User | null) => {
+      if (!mounted) return;
+      if (!nextUser) {
+        verifiedUserCache = null;
+        setUser(null);
+        setAuthorized(false);
+        setLoading(false);
+        router.replace('/login');
+        return;
+      }
+      if (!isEmailVerified(nextUser)) {
+        verifiedUserCache = null;
+        setUser(nextUser);
+        setAuthorized(false);
+        setLoading(false);
+        router.replace('/login?verify=1');
+        return;
+      }
+
+      verifiedUserCache = nextUser;
+      setUser(nextUser);
+      setAuthorized(true);
+      setLoading(false);
+    };
 
     const init = async () => {
       try {
@@ -47,38 +73,16 @@ export function AuthGuard({
           data: { session },
         } = await client.auth.getSession();
 
-        if (!mounted) return;
-        const nextUser = session?.user ?? null;
-        if (!nextUser) {
-          router.replace('/login');
-        } else if (!isEmailVerified(nextUser)) {
-          router.replace('/login?verify=1');
-        } else {
-          setUser(nextUser);
-          setAuthorized(true);
-        }
-        setLoading(false);
+        applySession(session?.user ?? null);
 
         const { data: listener } = client.auth.onAuthStateChange((_event, nextSession) => {
-          if (!mounted) return;
-          const nextSessionUser = nextSession?.user ?? null;
-          if (!nextSessionUser) {
-            setUser(null);
-            setAuthorized(false);
-            router.replace('/login');
-          } else if (!isEmailVerified(nextSessionUser)) {
-            setUser(nextSessionUser);
-            setAuthorized(false);
-            router.replace('/login?verify=1');
-          } else {
-            setUser(nextSessionUser);
-            setAuthorized(true);
-          }
+          applySession(nextSession?.user ?? null);
         });
         authListener = listener;
       } catch (error) {
         console.error('[Auth] Failed to initialize session:', error);
         if (mounted) {
+          verifiedUserCache = null;
           setLoading(false);
           router.replace('/login');
         }
@@ -95,6 +99,7 @@ export function AuthGuard({
   const logout = async () => {
     const client = await getSupabaseBrowserClient();
     await client.auth.signOut();
+    verifiedUserCache = null;
     setUser(null);
     setAuthorized(false);
     router.replace('/login');
@@ -138,7 +143,7 @@ export function AuthGuard({
           </div>
         </div>
       )}
-      {children}
+      <div className="app-page-enter">{children}</div>
     </AuthContext.Provider>
   );
 }

@@ -10,13 +10,21 @@ import {
   estimatePcmDurationSeconds,
   recordAiUsageEvent,
 } from '@/lib/ai-usage';
+import { reserveCredits, settleCreditsActual, type CreditReservation } from '@/lib/credits';
+import {
+  getEffectiveInterviewTTSProvider,
+  parseInterviewVoiceRoute,
+  resolveInterviewVoiceRoute,
+  type InterviewVoiceRoute,
+} from '@/lib/interview-voice-routing';
 import WebSocket, { WebSocketServer } from 'ws';
 
 const TTS_WS_PATH = '/ws/interview/tts';
 const CLIENT_PROTOCOL = 'rising-path-tts-v1';
 const AUTH_PROTOCOL_PREFIX = 'rising-path-auth.';
-const MAX_CONNECTION_MS = 5 * 60 * 1000;
+const MAX_CONNECTION_MS = Number(process.env.INTERVIEW_REALTIME_CONNECTION_MAX_MS || 30 * 60 * 1000);
 const IDLE_TIMEOUT_MS = 60 * 1000;
+const UPSTREAM_IDLE_CLOSE_MS = Number(process.env.CARTESIA_TTS_IDLE_CLOSE_MS || 10_000);
 const MAX_ACTIVE_CONNECTIONS = 50;
 let activeConnections = 0;
 
@@ -48,7 +56,14 @@ function getTicket(request: IncomingMessage): string | null {
   return authProtocol?.slice(AUTH_PROTOCOL_PREFIX.length).trim() || null;
 }
 
-async function authenticateTicket(ticket: string): Promise<{ userId: string; sessionId: number; language: 'zh' | 'en' } | null> {
+interface AuthenticatedTtsSession {
+  userId: string;
+  sessionId: number;
+  language: 'zh' | 'en';
+  voiceRoute: InterviewVoiceRoute;
+}
+
+async function authenticateTicket(ticket: string): Promise<AuthenticatedTtsSession | null> {
   try {
     const ticketHash = createHash('sha256').update(ticket).digest('hex');
     const client = getSupabaseClient();
@@ -64,7 +79,7 @@ async function authenticateTicket(ticket: string): Promise<{ userId: string; ses
     if (!data.session_id) return null;
     const { data: session } = await client
       .from('interview_sessions')
-      .select('id, status, language')
+      .select('id, status, language, voice_route, job_id')
       .eq('id', data.session_id)
       .eq('user_id', data.user_id)
       .maybeSingle();
@@ -76,9 +91,18 @@ async function authenticateTicket(ticket: string): Promise<{ userId: string; ses
       .is('used_at', null)
       .select('user_id, session_id')
       .maybeSingle();
-    return claimed?.user_id && claimed.session_id
-      ? { userId: claimed.user_id, sessionId: Number(claimed.session_id), language: session.language === 'en' ? 'en' : 'zh' }
-      : null;
+    if (!claimed?.user_id || !claimed.session_id) return null;
+    let voiceRoute = parseInterviewVoiceRoute(session.voice_route);
+    if (!voiceRoute && session.job_id) {
+      const { data: job } = await client.from('jobs').select('region').eq('id', session.job_id).maybeSingle();
+      voiceRoute = resolveInterviewVoiceRoute(job?.region);
+    }
+    return {
+      userId: claimed.user_id,
+      sessionId: Number(claimed.session_id),
+      language: session.language === 'en' ? 'en' : 'zh',
+      voiceRoute: voiceRoute || resolveInterviewVoiceRoute(null),
+    };
   } catch (error) {
     console.error('[Interview TTS WS] Supabase authentication failed:', error);
     return null;
@@ -135,17 +159,21 @@ interface ActiveTtsRequest {
   startedAt: number;
   firstAudioAt: number | null;
   settled: boolean;
+  creditReservation: CreditReservation | null;
 }
 
 function isClientRequestId(value: unknown): value is string {
   return typeof value === 'string' && /^[A-Za-z0-9._:-]{8,80}$/.test(value);
 }
 
-function handleConnection(client: WebSocket, userId: string, ticketSessionId: number, sessionLanguage: 'zh' | 'en'): void {
+function handleConnection(client: WebSocket, auth: AuthenticatedTtsSession): void {
+  const { userId, sessionId: ticketSessionId, language: sessionLanguage, voiceRoute } = auth;
+  const ttsRoute = getEffectiveInterviewTTSProvider(voiceRoute);
   activeConnections += 1;
   let activeRequest: ActiveTtsRequest | null = null;
   let cartesia: WebSocket | null = null;
   let cartesiaOpening: Promise<WebSocket> | null = null;
+  let upstreamIdleTimer: ReturnType<typeof setTimeout> | null = null;
   let idleTimer: ReturnType<typeof setTimeout> | null = null;
   const connectionTimer = setTimeout(() => client.close(1008, 'TTS connection time limit'), MAX_CONNECTION_MS);
   const touch = () => {
@@ -155,8 +183,24 @@ function handleConnection(client: WebSocket, userId: string, ticketSessionId: nu
   touch();
 
   const clearUpstream = () => {
+    if (upstreamIdleTimer) {
+      clearTimeout(upstreamIdleTimer);
+      upstreamIdleTimer = null;
+    }
     cartesia = null;
     cartesiaOpening = null;
+  };
+
+  const scheduleUpstreamClose = () => {
+    if (upstreamIdleTimer) clearTimeout(upstreamIdleTimer);
+    upstreamIdleTimer = setTimeout(() => {
+      upstreamIdleTimer = null;
+      if (!activeRequest && cartesia) {
+        if (cartesia.readyState === WebSocket.OPEN) cartesia.close(1000, 'TTS upstream idle');
+        else cartesia.terminate();
+        clearUpstream();
+      }
+    }, Number.isFinite(UPSTREAM_IDLE_CLOSE_MS) && UPSTREAM_IDLE_CLOSE_MS >= 2_000 ? UPSTREAM_IDLE_CLOSE_MS : 10_000);
   };
 
   const settleRequest = (request: ActiveTtsRequest, status: 'success' | 'error', type: 'done' | 'cancelled' | 'error', error?: string) => {
@@ -166,6 +210,7 @@ function handleConnection(client: WebSocket, userId: string, ticketSessionId: nu
     if (type === 'error') sendJSON(client, { type, requestId: request.requestId, error: error || 'Cartesia TTS 生成失败' });
     else sendJSON(client, { type, requestId: request.requestId, sampleRate: 44100 });
     void recordUsage(request, status, error || null);
+    scheduleUpstreamClose();
   };
 
   const handleUpstreamMessage = (message: WebSocket.RawData) => {
@@ -236,12 +281,14 @@ function handleConnection(client: WebSocket, userId: string, ticketSessionId: nu
     await recordAiUsageEvent({
       userId,
       feature: 'interview_tts_realtime',
-      provider: 'cartesia',
+      provider: ttsRoute.provider === 'cartesia_sonic' ? 'cartesia' : 'alibaba',
       modality: 'audio',
-      model: process.env.CARTESIA_MODEL?.trim() || 'sonic-3.5',
+      model: ttsRoute.provider === 'cartesia_sonic'
+        ? process.env.CARTESIA_MODEL?.trim() || 'sonic-3.5'
+        : process.env.ALIBABA_TTS_MODEL?.trim() || 'unconfigured',
       requestId: request.requestId,
       status,
-      usageSource: outputAudioSeconds !== null ? 'estimated' : 'unknown',
+      usageSource: outputAudioSeconds !== null ? 'actual' : 'unknown',
       outputAudioSeconds,
       outputAudioBytes: request.outputAudioBytes,
       textCharacters: request.textCharacters,
@@ -249,13 +296,28 @@ function handleConnection(client: WebSocket, userId: string, ticketSessionId: nu
       billingUnits: outputAudioSeconds,
       measurementSource: outputAudioSeconds !== null ? 'pcm_exact' : 'unknown',
       interviewSessionId: ticketSessionId,
-      metadata: { audio_format: 'pcm_s16le', sample_rate: 44100, channels: 1, client_request_id: request.requestId },
+      metadata: {
+        audio_format: 'pcm_s16le',
+        sample_rate: 44100,
+        channels: 1,
+        client_request_id: request.requestId,
+        voice_route: voiceRoute.id,
+        configured_tts_provider: voiceRoute.ttsProvider,
+        fallback_reason: ttsRoute.fallbackReason,
+      },
       durationMs: Date.now() - request.startedAt,
       totalMs: Date.now() - request.startedAt,
       ttfbMs: request.firstAudioAt === null ? null : request.firstAudioAt - request.startedAt,
       phase: 'interviewer_playback',
       errorMessage,
     });
+    await settleCreditsActual(
+      request.creditReservation,
+      status === 'success' && outputAudioSeconds !== null ? outputAudioSeconds / 60 : 0,
+      status === 'success' ? 'committed' : 'released',
+      status === 'success' ? `语音合成 ${outputAudioSeconds?.toFixed(1) || '0.0'} 秒，按实际时长结算` : '语音合成失败，已退回预留积分',
+    );
+    request.creditReservation = null;
   };
 
   client.on('message', async (raw, isBinary) => {
@@ -287,6 +349,14 @@ function handleConnection(client: WebSocket, userId: string, ticketSessionId: nu
     }
     if (request.type === 'ping') return;
     if (request.type !== 'speak' || !request.text?.trim()) return;
+    if (ttsRoute.provider === 'alibaba') {
+      sendJSON(client, {
+        type: 'error',
+        requestId: request.requestId,
+        error: '阿里云实时 TTS 尚未完成服务端配置，已拒绝本次播放以避免使用错误的供应商',
+      });
+      return;
+    }
     if (!isClientRequestId(request.requestId)) {
       sendJSON(client, { type: 'error', error: 'TTS requestId 无效' });
       return;
@@ -306,6 +376,19 @@ function handleConnection(client: WebSocket, userId: string, ticketSessionId: nu
       client.close(1008, 'Realtime TTS session mismatch');
       return;
     }
+    let reservation: CreditReservation | null = null;
+    try {
+      reservation = await reserveCredits({
+        userId,
+        metric: 'tts_minutes',
+        units: Math.max(1 / 60, Math.min(5, request.text.length / 12 / 60)),
+        idempotencyKey: request.requestId,
+        metadata: { feature: 'interview_tts_realtime', session_id: ticketSessionId },
+      });
+    } catch (error) {
+      sendJSON(client, { type: 'error', requestId: request.requestId, error: error instanceof Error ? error.message : '实时 TTS 积分不足' });
+      return;
+    }
     const active: ActiveTtsRequest = {
       requestId: request.requestId,
       contextId: randomUUID(),
@@ -314,6 +397,7 @@ function handleConnection(client: WebSocket, userId: string, ticketSessionId: nu
       startedAt: Date.now(),
       firstAudioAt: null,
       settled: false,
+      creditReservation: reservation,
     };
     activeRequest = active;
 
@@ -353,19 +437,16 @@ function handleConnection(client: WebSocket, userId: string, ticketSessionId: nu
     if (activeRequest) settleRequest(activeRequest, 'error', 'error', error instanceof Error ? error.message : 'TTS 客户端连接失败');
   });
 
-  // Begin the upstream handshake immediately. It runs while the opening text
-  // model generates, so the first TTS request does not pay this cost.
-  void ensureCartesia().catch(() => undefined);
 }
 
-export function attachInterviewTTSWebSocket(server: Server): void {
+export function attachInterviewTTSWebSocket(server: Server): (request: IncomingMessage, socket: import('node:stream').Duplex, head: Buffer) => void {
   const wss = new WebSocketServer({
     noServer: true,
     maxPayload: 64 * 1024,
     handleProtocols: (protocols) => protocols.has(CLIENT_PROTOCOL) ? CLIENT_PROTOCOL : '',
   });
 
-  server.on('upgrade', (request, socket, head) => {
+  const handleUpgrade = (request: IncomingMessage, socket: import('node:stream').Duplex, head: Buffer) => {
     const requestUrl = new URL(request.url || '/', 'http://localhost');
     if (requestUrl.pathname !== TTS_WS_PATH) return;
     const protocols = getProtocols(request);
@@ -383,10 +464,12 @@ export function attachInterviewTTSWebSocket(server: Server): void {
         rejectUpgrade(socket, 429, 'Realtime TTS capacity reached');
         return;
       }
-      wss.handleUpgrade(request, socket, head, (client) => handleConnection(client, auth.userId, auth.sessionId, auth.language));
+      wss.handleUpgrade(request, socket, head, (client) => handleConnection(client, auth));
     }).catch((error) => {
       console.error('[Interview TTS WS] Upgrade failed:', error);
       rejectUpgrade(socket, 401, 'Realtime TTS authentication failed');
     });
-  });
+  };
+  server.on('upgrade', handleUpgrade);
+  return handleUpgrade;
 }

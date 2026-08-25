@@ -31,6 +31,27 @@ export async function PUT(
       return NextResponse.json({ error: '无效的网申状态' }, { status: 400 });
     }
 
+    let currentQuery = client
+      .from('applications')
+      .select('id, user_id, status, submitted_at')
+      .eq('id', id);
+    if (!isAdmin) currentQuery = currentQuery.eq('user_id', auth!.user.id);
+    const { data: current, error: currentError } = await currentQuery.maybeSingle();
+    if (currentError) throw new Error(`读取网申状态失败: ${currentError.message}`);
+    if (!current) return NextResponse.json({ error: '网申记录不存在' }, { status: 404 });
+
+    if (payload.status !== undefined) {
+      const transitions: Record<string, string[]> = {
+        pending: ['pending', 'filling', 'submitted', 'closed'],
+        filling: ['filling', 'submitted', 'closed'],
+        submitted: ['submitted', 'closed'],
+        closed: ['closed'],
+      };
+      if (!transitions[current.status]?.includes(payload.status as string)) {
+        return NextResponse.json({ error: '网申状态不能回退，请按流程推进' }, { status: 409 });
+      }
+    }
+
     const updateData: Record<string, unknown> = {
       updated_at: new Date().toISOString(),
     };
@@ -38,7 +59,9 @@ export async function PUT(
     if (payload.status !== undefined) {
       updateData.status = payload.status;
       if (payload.status === 'submitted') {
-        updateData.submitted_at = new Date().toISOString();
+        updateData.submitted_at = current.submitted_at || new Date().toISOString();
+      } else {
+        updateData.submitted_at = null;
       }
     }
 
@@ -58,7 +81,8 @@ export async function PUT(
     let query = client
       .from('applications')
       .update(updateData)
-      .eq('id', id);
+      .eq('id', id)
+      .eq('status', current.status);
     if (!isAdmin) query = query.eq('user_id', auth!.user.id);
 
     const { data, error } = await query
@@ -72,7 +96,7 @@ export async function PUT(
     if (error) {
       throw new Error(`更新网申记录失败: ${error.message}`);
     }
-    if (!data) return NextResponse.json({ error: '网申记录不存在' }, { status: 404 });
+    if (!data) return NextResponse.json({ error: '网申记录已被其他操作更新，请刷新后重试' }, { status: 409 });
 
     if (isAdmin) {
       await recordAdminAuditEvent({

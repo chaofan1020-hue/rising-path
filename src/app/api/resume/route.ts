@@ -11,6 +11,7 @@ import {
 } from '@/lib/resume-parser';
 import { processResume } from '@/lib/resume-processing';
 import { deleteResumeFile, uploadResumeFile } from '@/lib/resume-storage';
+import { creditResponse, assertCreditsAvailable } from '@/lib/credits';
 
 export async function GET(request: NextRequest) {
   try {
@@ -70,6 +71,7 @@ export async function POST(request: NextRequest) {
     if (!hasSupportedResumeFileSignature(buffer, fileOptions)) {
       return NextResponse.json({ error: '文件内容与声明格式不匹配' }, { status: 400 });
     }
+    await assertCreditsAvailable({ userId: auth.user.id, metric: 'resume_parse' });
     const fileKey = await uploadResumeFile(buffer, auth.user.id, fileName, fileEntry.type);
     const storedUserInfo = { file_type: fileEntry.type };
 
@@ -117,6 +119,8 @@ export async function POST(request: NextRequest) {
     return NextResponse.json({ resume: sanitizeResumeRecord(resumeData) });
   } catch (error) {
     console.error('Error uploading resume:', error);
+    const creditsResponse = creditResponse(error);
+    if (creditsResponse) return creditsResponse;
     return NextResponse.json({ error: '上传简历失败' }, { status: 500 });
   }
 }

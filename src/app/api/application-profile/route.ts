@@ -55,6 +55,22 @@ export async function GET(request: NextRequest) {
       .select()
       .maybeSingle();
 
+    if (error?.code === '23505') {
+      const { data: raced } = await client
+        .from('application_profiles')
+        .select('*')
+        .eq('user_id', auth.user.id)
+        .maybeSingle();
+      if (raced) {
+        return NextResponse.json({
+          profile: raced.profile || DEFAULT_PROFILE,
+          source: raced.source || {},
+          fieldStats: raced.field_stats || raced.source || {},
+          version: raced.version,
+          resumeId: raced.resume_id,
+        });
+      }
+    }
     if (error) throw new Error(`创建求职档案失败: ${error.message}`);
 
     return NextResponse.json({
@@ -121,6 +137,9 @@ export async function PUT(request: NextRequest) {
         .select()
         .maybeSingle();
 
+    if (error?.code === '23505') {
+      return NextResponse.json({ error: '求职档案已更新，请刷新后重试' }, { status: 409 });
+    }
     if (error) throw new Error(`保存求职档案失败: ${error.message}`);
     if (!data) return NextResponse.json({ error: '求职档案已更新，请刷新后重试' }, { status: 409 });
 
@@ -133,7 +152,8 @@ export async function PUT(request: NextRequest) {
         new_value: change.newValue,
         source: 'manual',
       }));
-      await client.from('profile_field_edits').insert(editRows);
+      const { error: editError } = await client.from('profile_field_edits').insert(editRows);
+      if (editError) console.error('Failed to save profile edit history:', editError.message);
     }
 
     return NextResponse.json({

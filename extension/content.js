@@ -1,5 +1,4 @@
 (function () {
-  const LIORVIX_ORIGIN = "http://localhost:5000";
   let scannedFields = [];
 
   function visible(el) {
@@ -69,8 +68,12 @@
       const options = el.tagName.toLowerCase() === "select"
         ? Array.from(el.options).map((o) => o.text || o.value).filter(Boolean)
         : [];
+      const groupIndex = nodes
+        .slice(0, index)
+        .filter((candidate) => candidate.name === el.name && candidate.type === el.type)
+        .length;
       return {
-        key: `${type}-${el.name || el.id || index}`,
+        key: `${type}-${el.id || el.name || "field"}-${index}`,
         label,
         type,
         required: el.required || false,
@@ -81,6 +84,9 @@
         selectorHints: {
           semanticKey: finalSemanticKey || label.toLowerCase().replace(/[^a-z0-9]+/g, "_") || el.name || el.id || String(index),
           index,
+          id: el.id || "",
+          name: el.name || "",
+          groupIndex,
         },
       };
     });
@@ -112,8 +118,17 @@
     const nodes = Array.from(document.querySelectorAll(
       "input:not([type=hidden]):not([disabled]), select:not([disabled]), textarea:not([disabled])"
     )).filter(visible);
-    const el = nodes[index];
+    const hints = field.selectorHints || {};
+    let el = hints.id ? document.getElementById(String(hints.id)) : null;
+    if (!el && hints.name) {
+      const candidates = nodes.filter((candidate) => candidate.name === String(hints.name));
+      el = candidates[Number(hints.groupIndex) || 0] || null;
+    }
+    if (!el) el = nodes[index];
     if (!el) return { key: field.key, filled: false, reason: "页面结构已变化，请重新扫描" };
+    if ((hints.id && el.id !== String(hints.id)) || (hints.name && el.name !== String(hints.name))) {
+      return { key: field.key, filled: false, reason: "页面字段已变化，请重新扫描" };
+    }
     if (el.tagName.toLowerCase() === "select") {
       const option = Array.from(el.options).find((o) =>
         o.value.toLowerCase() === String(value).toLowerCase() ||
@@ -163,7 +178,8 @@
   function submitLike(el) {
     if (!el) return false;
     const text = ((el.textContent || "") + " " + (el.getAttribute("value") || "") + " " + (el.getAttribute("aria-label") || "")).toLowerCase();
-    return /submit|apply|continue|confirm|next|提交|申请|继续|确认/.test(text) &&
+    if (/continue|next|confirm|save|review|继续|下一步|确认信息|保存/.test(text)) return false;
+    return /submit|submit application|apply now|提交申请|确认提交/.test(text) &&
       (el.tagName === "BUTTON" || el.type === "submit");
   }
 
@@ -196,13 +212,29 @@
     if (submitLike(target)) showSubmitConfirm();
   }, true);
 
-  document.addEventListener("submit", () => showSubmitConfirm(), true);
-
   function isLiorvixPage() {
-    return location.origin === LIORVIX_ORIGIN || location.hostname === "app.liorvix.com";
+    return location.hostname === "localhost"
+      || location.hostname === "127.0.0.1"
+      || location.hostname === "app.liorvix.com";
+  }
+
+  function announceExtensionReady(requestId) {
+    window.postMessage({
+      type: "liorvix-extension-ready",
+      requestId: requestId || undefined,
+      version: chrome.runtime.getManifest().version,
+    }, location.origin);
   }
 
   if (isLiorvixPage()) {
+    announceExtensionReady();
+    window.addEventListener("message", (event) => {
+      if (event.source !== window || event.origin !== location.origin) return;
+      if (event.data?.type === "liorvix-extension-ping") {
+        announceExtensionReady(event.data.requestId);
+      }
+    });
+
     setTimeout(() => {
       for (const key of Object.keys(localStorage)) {
         if (key.startsWith("sb-") && key.endsWith("-auth-token")) {
@@ -210,7 +242,11 @@
             const parsed = JSON.parse(localStorage.getItem(key));
             const accessToken = parsed?.access_token || parsed?.session?.access_token;
             if (accessToken) {
-              chrome.runtime.sendMessage({ type: "setAuthToken", token: accessToken }).catch(() => {});
+              chrome.runtime.sendMessage({
+                type: "setAuthToken",
+                token: accessToken,
+                apiBase: location.origin,
+              }).catch(() => {});
             }
           } catch {}
         }

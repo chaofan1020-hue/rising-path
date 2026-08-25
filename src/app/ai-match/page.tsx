@@ -130,22 +130,24 @@ function MultiSelectFilter({
       <PopoverContent className="w-44 md:w-48 p-2" align="start">
         <div className="max-h-60 overflow-y-auto space-y-1">
           {options.map((option) => (
-            <label
+            <div
               key={option.id}
               className={`flex items-center gap-2 px-2 py-1.5 rounded-md cursor-pointer transition-colors ${
                 selected.includes(option.config_value)
                   ? 'bg-zinc-100 text-zinc-900 dark:bg-zinc-800 dark:text-zinc-50'
                   : 'hover:bg-zinc-50 dark:hover:bg-zinc-800/60'
               }`}
+              onClick={() => handleToggle(option.config_value)}
               translate="no"
             >
               <Checkbox
                 checked={selected.includes(option.config_value)}
                 onCheckedChange={() => handleToggle(option.config_value)}
+                onClick={(event) => event.stopPropagation()}
                 className="data-[state=checked]:bg-zinc-900 data-[state=checked]:border-zinc-900 dark:data-[state=checked]:bg-white dark:data-[state=checked]:border-white dark:data-[state=checked]:text-zinc-900"
               />
               <span className="text-sm font-medium">{option.config_value}</span>
-            </label>
+            </div>
           ))}
         </div>
         {options.length === 0 && (
@@ -205,7 +207,7 @@ function AIMatchContent() {
     try {
       const response = await apiFetch('/api/resume');
       const data = await response.json() as { resumes?: Resume[] } & ApiErrorPayload;
-      if (!response.ok) throw new Error(getApiErrorMessage(data, '无法读取简历，请稍后重试'));
+      if (!response.ok) throw new Error(getApiErrorMessage(data, t('aiMatch.resumeLoadFailed')));
       const nextResumes = data.resumes || [];
       setResumes(nextResumes);
       setSelectedResumeId((current) => (
@@ -215,7 +217,7 @@ function AIMatchContent() {
       ));
     } catch (error) {
       console.error('Failed to fetch resumes:', error);
-      setResumesError(error instanceof Error ? error.message : '无法读取简历，请稍后重试');
+      setResumesError(error instanceof Error ? error.message : t('aiMatch.resumeLoadFailed'));
     } finally {
       setResumesLoading(false);
     }
@@ -226,14 +228,14 @@ function AIMatchContent() {
     try {
       const response = await apiFetch('/api/configs');
       const data = await response.json() as { configs?: Record<string, JobConfig[]> } & ApiErrorPayload;
-      if (!response.ok) throw new Error(getApiErrorMessage(data, '无法读取筛选项'));
+      if (!response.ok) throw new Error(getApiErrorMessage(data, t('aiMatch.filtersLoadFailed')));
       if (data.configs) {
         setRegions(data.configs.region || []);
         setDirections(data.configs.direction || []);
       }
     } catch (error) {
       console.error('Failed to fetch job configs:', error);
-      setConfigsError(error instanceof Error ? error.message : '无法读取筛选项');
+      setConfigsError(error instanceof Error ? error.message : t('aiMatch.filtersLoadFailed'));
     }
   };
 
@@ -268,11 +270,11 @@ function AIMatchContent() {
 
       const data = await response.json() as MatchResponse;
       if (!response.ok) {
-        throw new Error(getApiErrorMessage(data, 'AI匹配失败，请重试'));
+        throw new Error(getApiErrorMessage(data, t('aiMatch.failedRetry')));
       }
       setMatchResults(data.matches || []);
       const notices = [
-        data.partial ? `AI 已返回 ${data.matches?.length || 0} 个可用推荐，其余岗位未能在本次分析中完成。` : '',
+        data.partial ? t('aiMatch.partialNotice', { count: data.matches?.length || 0 }) : '',
         data.persistence_warning || '',
       ].filter(Boolean);
       if (notices.length > 0) {
@@ -286,7 +288,7 @@ function AIMatchContent() {
       }, 1000);
     } catch (error) {
       console.error('Match failed:', error);
-      setMatchError(error instanceof Error ? error.message : 'AI匹配失败，请重试');
+      setMatchError(error instanceof Error ? error.message : t('aiMatch.failedRetry'));
     } finally {
       if (progressInterval) clearInterval(progressInterval);
       setMatching(false);
@@ -302,12 +304,12 @@ function AIMatchContent() {
   return (
     <div className="min-h-screen bg-white dark:bg-zinc-950">
       <Header1 />
-      <main className="relative container mx-auto px-4 pt-16 md:pt-20 pb-16">
+      <main className="relative container mx-auto px-4 pt-20 pb-16 sm:px-6 md:pt-24">
         {/* Hero：左对齐 eyebrow + 大标题（Tailark 式） */}
-        <div className="relative mb-8 md:mb-10">
+        <div className="relative mb-8 max-w-3xl md:mb-10">
           <p className="text-sm font-medium text-zinc-400 dark:text-zinc-500 mb-3">{t('aiMatch.eyebrow')}</p>
           <PageBackButton fallbackHref="/resume" className="mb-3" />
-          <h1 className="text-2xl md:text-4xl font-bold tracking-tight text-zinc-900 dark:text-zinc-50 mb-4">{t('aiMatch.title')}</h1>
+          <h1 className="break-words text-2xl font-bold tracking-tight text-zinc-900 dark:text-zinc-50 md:text-4xl mb-4">{t('aiMatch.title')}</h1>
           <p className="text-zinc-500 dark:text-zinc-400 max-w-2xl md:text-lg leading-relaxed">{t('aiMatch.subtitle')}</p>
         </div>
 
@@ -325,12 +327,12 @@ function AIMatchContent() {
             </CardDescription>
           </CardHeader>
           <CardContent>
-            <div className="flex flex-wrap items-end gap-3">
+            <div className="flex flex-col gap-3 xl:flex-row xl:items-end">
               {/* 简历选择 */}
-              <div className="w-full md:w-auto">
+              <div className="w-full xl:w-auto">
                 <label className="text-xs md:text-sm font-medium mb-1.5 block text-zinc-700 dark:text-zinc-200">{t('aiMatch.selectResume')}</label>
                 <Select value={selectedResumeId} onValueChange={setSelectedResumeId} disabled={resumesLoading || eligibleResumes.length === 0}>
-                  <SelectTrigger className="h-11 w-full md:w-52 rounded-xl border-zinc-200 dark:border-zinc-700 bg-white dark:bg-zinc-900">
+                  <SelectTrigger className="h-11 w-full xl:w-56 rounded-xl border-zinc-200 dark:border-zinc-700 bg-white dark:bg-zinc-900">
                     <SelectValue placeholder={t('aiMatch.selectResumePlaceholder')} />
                   </SelectTrigger>
                   <SelectContent>
@@ -346,7 +348,7 @@ function AIMatchContent() {
               </div>
 
               {/* 筛选器 - 推到右边 */}
-              <div className="flex items-center gap-3 md:ml-auto">
+              <div className="flex w-full flex-wrap items-center gap-2 sm:gap-3 xl:ml-auto xl:w-auto xl:flex-nowrap">
                 <MultiSelectFilter
                   label={t('aiMatch.region')}
                   icon={MapPin}
@@ -366,7 +368,7 @@ function AIMatchContent() {
                 <Button
                   onClick={handleMatch}
                   disabled={!selectedResumeId || matching || resumesLoading}
-                  className="h-11 rounded-xl px-6 bg-zinc-900 text-white hover:bg-zinc-800 dark:bg-white dark:text-zinc-900 dark:hover:bg-zinc-200 shadow-md hover:shadow-lg transition-all"
+                  className="h-11 flex-1 rounded-xl px-4 sm:flex-none sm:px-6 bg-zinc-900 text-white hover:bg-zinc-800 dark:bg-white dark:text-zinc-900 dark:hover:bg-zinc-200 shadow-md hover:shadow-lg transition-all"
                 >
                   {matching ? (
                     <>
@@ -446,26 +448,26 @@ function AIMatchContent() {
               </div>
             )}
             {matchNotice && (
-              <div className="mt-4 rounded-xl border border-amber-200 bg-amber-50 px-3 py-2.5 text-sm text-amber-800 dark:border-amber-900/60 dark:bg-amber-950/30 dark:text-amber-200">
+              <div className="mt-4 rounded-xl border border-primary/25 bg-primary/5 px-3 py-2.5 text-sm text-foreground dark:bg-primary/15">
                 {matchNotice}
               </div>
             )}
             {resumesError && (
-              <div className="mt-4 flex flex-wrap items-center gap-3 rounded-xl border border-red-200 bg-red-50 px-3 py-2.5 text-sm text-red-700 dark:border-red-900/60 dark:bg-red-950/30 dark:text-red-300">
+              <div className="mt-4 flex flex-wrap items-center gap-3 rounded-xl border border-primary/25 bg-primary/5 px-3 py-2.5 text-sm text-foreground dark:bg-primary/15">
                 <span>{resumesError}</span>
-                <Button type="button" variant="outline" size="sm" onClick={() => void fetchResumes()} className="h-8 border-red-200 bg-transparent text-red-700 hover:bg-red-100 dark:border-red-800 dark:text-red-200">
-                  重试
+                <Button type="button" variant="outline" size="sm" onClick={() => void fetchResumes()} className="h-8 border-primary/25 bg-transparent text-foreground hover:bg-primary/10">
+                  {t('common.retry')}
                 </Button>
               </div>
             )}
             {configsError && (
-              <p className="mt-3 text-xs text-amber-700 dark:text-amber-300">筛选项暂时不可用，仍可直接开始匹配。</p>
+              <p className="mt-3 text-xs text-primary">{t('aiMatch.filtersUnavailable')}</p>
             )}
             {!resumesLoading && !resumesError && eligibleResumes.length === 0 && (
-              <div className="mt-4 flex flex-col gap-3 rounded-xl border border-amber-200 bg-amber-50 px-3 py-3 text-sm text-amber-900 dark:border-amber-900/60 dark:bg-amber-950/30 dark:text-amber-100 md:flex-row md:items-center md:justify-between">
-                <span>{resumes.length === 0 ? '请先上传简历并完成解析，再开始 AI 选岗。' : '请先在简历管理中确认求职画像，AI 才能基于准确版本推荐岗位。'}</span>
-                <Button asChild size="sm" className="h-9 shrink-0 bg-amber-900 text-white hover:bg-amber-800 dark:bg-amber-100 dark:text-amber-950">
-                  <Link href="/resume">前往简历管理</Link>
+              <div className="mt-4 flex flex-col gap-3 rounded-xl border border-primary/25 bg-primary/5 px-3 py-3 text-sm text-foreground dark:bg-primary/15 md:flex-row md:items-center md:justify-between">
+                <span>{resumes.length === 0 ? t('aiMatch.uploadResumeFirst') : t('aiMatch.confirmProfileFirst')}</span>
+                <Button asChild size="sm" className="h-9 shrink-0 bg-primary text-primary-foreground hover:bg-primary/90">
+                  <Link href="/resume">{t('aiMatch.goToResume')}</Link>
                 </Button>
               </div>
             )}
@@ -543,9 +545,9 @@ function AIMatchContent() {
                             </div>
                           )}
                           {(result.key_gaps?.length || 0) > 0 && (
-                            <div className="rounded-xl border border-amber-100 bg-amber-50/60 p-3 dark:border-amber-900/50 dark:bg-amber-950/20">
-                              <h4 className="mb-1.5 text-sm font-medium text-amber-900 dark:text-amber-200">{t('aiMatch.keyGaps')}</h4>
-                              <ul className="list-disc space-y-1 pl-4 text-xs text-amber-800 dark:text-amber-300">
+                      <div className="rounded-xl border border-primary/20 bg-primary/5 p-3 dark:bg-primary/15">
+                        <h4 className="mb-1.5 text-sm font-medium text-foreground">{t('aiMatch.keyGaps')}</h4>
+                        <ul className="list-disc space-y-1 pl-4 text-xs text-foreground/80">
                                 {result.key_gaps.map((item) => <li key={item}>{item}</li>)}
                               </ul>
                             </div>

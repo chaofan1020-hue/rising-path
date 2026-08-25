@@ -8,6 +8,8 @@ import {
   recordAiUsageError,
   recordAiUsageEvent,
 } from '@/lib/ai-usage';
+import { betaEntitlementResponse } from '@/lib/beta-entitlements';
+import { reserveCredits, settleCredits } from '@/lib/credits';
 
 export const runtime = 'nodejs';
 export const dynamic = 'force-dynamic';
@@ -41,6 +43,14 @@ export async function POST(request: NextRequest) {
 
     const requestId = createAiUsageRequestId();
     const startedAt = Date.now();
+    const estimatedMinutes = Math.max(1 / 60, Math.min(5, text.length / 12 / 60));
+    const reservation = await reserveCredits({
+      userId: auth.user.id,
+      metric: 'tts_minutes',
+      units: estimatedMinutes,
+      idempotencyKey: requestId,
+      metadata: { feature: 'interview_tts', session_id: parsedSessionId },
+    });
     try {
       const ttsClient = createTTSProviderClient({ requestHeaders: request.headers });
       const result = await ttsClient.synthesize({
@@ -77,6 +87,7 @@ export async function POST(request: NextRequest) {
         phase: 'interviewer_playback_fallback',
         fallback: true,
       });
+      await settleCredits(reservation, 'committed');
 
       return new NextResponse(result.audio, {
       headers: {
@@ -85,6 +96,7 @@ export async function POST(request: NextRequest) {
       },
       });
     } catch (error) {
+      await settleCredits(reservation, 'released');
       await recordAiUsageError({
         userId: auth.user.id,
         feature: 'interview_tts',
@@ -106,6 +118,8 @@ export async function POST(request: NextRequest) {
     }
   } catch (error) {
     console.error('TTS error:', error);
+    const betaResponse = betaEntitlementResponse(error);
+    if (betaResponse) return betaResponse;
     return NextResponse.json(
       { error: error instanceof Error ? error.message : '语音合成失败' },
       { status: 500 }

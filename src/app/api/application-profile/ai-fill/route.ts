@@ -3,9 +3,14 @@ import { getAuthContext, unauthorizedResponse } from '@/lib/auth-server';
 import {
   buildProfileFromResume,
   buildSourceMapFromProfile,
+  mergeAiProfilePreservingManual,
   normalizeAiProfile,
+  type ApplicationProfile,
+  type ProfileSourceMap,
 } from '@/lib/application-profile';
 import { createTextProviderClient } from '@/lib/ai/text-provider';
+import { invokeTrackedTextGeneration } from '@/lib/ai-usage';
+import { betaEntitlementResponse } from '@/lib/beta-entitlements';
 import { extractFirstJsonObject } from '@/lib/json-extract';
 
 function buildPrompt(input: {
@@ -53,8 +58,13 @@ export async function POST(request: NextRequest) {
       resume.user_info as Parameters<typeof buildProfileFromResume>[0],
       resume.profile as Parameters<typeof buildProfileFromResume>[1],
     );
+    const { data: existing } = await client
+      .from('application_profiles')
+      .select('id, version, profile, source')
+      .eq('user_id', auth.user.id)
+      .maybeSingle();
     const llmClient = createTextProviderClient();
-    const response = await llmClient.invoke([
+    const response = await invokeTrackedTextGeneration(llmClient, [
       { role: 'system', content: '你是一个严谨的求职档案助手，只输出 JSON。' },
       {
         role: 'user',
@@ -63,34 +73,53 @@ export async function POST(request: NextRequest) {
           parsedContent: typeof resume.parsed_content === 'string' ? resume.parsed_content : '',
         }),
       },
-    ], { temperature: 0.2, thinking: 'disabled' });
+    ], { temperature: 0.2, thinking: 'disabled' }, {
+      userId: auth.user.id,
+      feature: 'application_profile',
+      resumeId,
+    });
 
     const raw = extractFirstJsonObject(response.content || '');
-    const profile = normalizeAiProfile(raw, built.profile);
-    const source = buildSourceMapFromProfile(profile);
-
-    const { data: existing } = await client
-      .from('application_profiles')
-      .select('id, version')
-      .eq('user_id', auth.user.id)
-      .maybeSingle();
+    const aiProfile = normalizeAiProfile(raw, built.profile);
+    const merged = existing
+      ? mergeAiProfilePreservingManual(
+        aiProfile,
+        existing.profile as ApplicationProfile,
+        (existing.source || {}) as ProfileSourceMap,
+      )
+      : { profile: aiProfile, source: buildSourceMapFromProfile(aiProfile) };
+    const profile = merged.profile;
+    const source = merged.source;
     const version = (existing?.version || 0) + 1;
     const now = new Date().toISOString();
 
-    const { data: inserted, error: upsertError } = await client
-      .from('application_profiles')
-      .upsert({
-        user_id: auth.user.id,
-        resume_id: resumeId,
-        profile,
-        source,
-        field_stats: source,
-        version,
-        updated_at: now,
-      }, { onConflict: 'user_id' })
-      .select()
-      .maybeSingle();
-    if (upsertError) throw new Error(`保存 AI 求职档案失败: ${upsertError.message}`);
+    const profileWrite = {
+      user_id: auth.user.id,
+      resume_id: resumeId,
+      profile,
+      source,
+      field_stats: source,
+      version,
+      updated_at: now,
+    };
+    const { data: inserted, error: saveError } = existing
+      ? await client
+        .from('application_profiles')
+        .update(profileWrite)
+        .eq('user_id', auth.user.id)
+        .eq('version', existing.version)
+        .select()
+        .maybeSingle()
+      : await client
+        .from('application_profiles')
+        .insert(profileWrite)
+        .select()
+        .maybeSingle();
+    if (saveError?.code === '23505') {
+      return NextResponse.json({ error: '求职档案已更新，请刷新后重试' }, { status: 409 });
+    }
+    if (saveError) throw new Error(`保存 AI 求职档案失败: ${saveError.message}`);
+    if (!inserted) return NextResponse.json({ error: '求职档案已更新，请刷新后重试' }, { status: 409 });
 
     return NextResponse.json({
       profile: inserted?.profile || profile,
@@ -101,6 +130,8 @@ export async function POST(request: NextRequest) {
     });
   } catch (error) {
     console.error('Error filling application profile with AI:', error);
+    const betaResponse = betaEntitlementResponse(error);
+    if (betaResponse) return betaResponse;
     return NextResponse.json({ error: 'AI 填写求职档案失败' }, { status: 500 });
   }
 }

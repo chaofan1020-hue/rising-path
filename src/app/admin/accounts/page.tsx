@@ -94,13 +94,13 @@ export default function AdminAccountsPage() {
       {permissionsLoading ? <div className="flex min-h-80 items-center justify-center"><Loader2 className="h-6 w-6 animate-spin" /></div> : !canManageRoles ? <div className="rounded-lg border border-dashed p-10 text-center text-sm text-muted-foreground">当前管理员角色无权管理管理员账号</div> : <>
       <div className="mb-6 flex items-center justify-between gap-3">
         <div className="flex items-center gap-3">
-          <ShieldCheck className="h-5 w-5 text-primary" />
+          <ShieldCheck className="h-5 w-5 text-zinc-900 dark:text-white" />
           <div>
             <h1 className="text-lg font-semibold">管理员账号</h1>
             <p className="text-xs text-muted-foreground">绑定 Supabase Auth 用户并分配后台角色</p>
           </div>
         </div>
-        <Button variant="outline" size="sm" onClick={() => void loadAccounts()} disabled={loading}>
+        <Button variant="outline" size="sm" className="border-zinc-200 dark:border-zinc-800" onClick={() => void loadAccounts()} disabled={loading}>
           <RefreshCw className={`mr-2 h-4 w-4 ${loading ? 'animate-spin' : ''}`} />刷新
         </Button>
       </div>

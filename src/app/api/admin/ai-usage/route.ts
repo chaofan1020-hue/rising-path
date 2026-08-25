@@ -39,7 +39,7 @@ export async function GET(request: NextRequest) {
     const client = getSupabaseClient();
     let query = client
       .from('ai_usage_events')
-      .select('*', { count: 'exact' })
+      .select('id,request_id,user_id,feature,provider,model,status,usage_source,input_tokens,output_tokens,total_tokens,modality,input_audio_seconds,output_audio_seconds,input_audio_bytes,output_audio_bytes,audio_tokens,text_characters,measurement_source,error_code,error_message,duration_ms,estimated_cost,currency,cost_source,interview_session_id,billing_unit,billing_units,phase,fallback,retry_count,metadata,created_at', { count: 'exact' })
       .order('created_at', { ascending: false })
       .range((page - 1) * pageSize, page * pageSize - 1);
 

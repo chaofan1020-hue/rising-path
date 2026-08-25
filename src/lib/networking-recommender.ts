@@ -1,4 +1,5 @@
 import { createTextProviderClient } from '@/lib/ai/text-provider';
+import { invokeTrackedTextGeneration } from '@/lib/ai-usage';
 import { extractFirstJsonObject } from '@/lib/json-extract';
 import type { PlanLocale } from '@/lib/resume-types';
 import type { RegionKey } from '@/lib/region-dna';
@@ -34,6 +35,7 @@ export interface NetworkingProgress {
   stage: number;
   completedMilestones: string[];
   recommendations: Record<string, NetworkingRecommendation>;
+  region?: RegionKey | null;
   updatedAt: string;
 }
 
@@ -268,12 +270,17 @@ async function generateStageRecommendation(
   context: NetworkingContext,
   lang: PlanLocale,
   stage: number,
+  userId?: string | null,
 ): Promise<NetworkingRecommendation> {
   const client = createTextProviderClient();
-  const response = await client.invoke([
+  const response = await invokeTrackedTextGeneration(client, [
     { role: 'system', content: '你是一个严谨的求职人脉顾问，只输出 JSON。' },
     { role: 'user', content: buildStageNetworkingPrompt(context, lang, stage) },
-  ], { temperature: 0.4, thinking: 'disabled' });
+  ], { temperature: 0.4, thinking: 'disabled' }, {
+    userId,
+    feature: 'networking_recommendation',
+    metadata: { stage, language: lang },
+  });
   const parsed = extractFirstJsonObject(response.content || '');
   if (!parsed) throw new Error(`Networking 阶段 ${stage} 推荐生成失败`);
   return normalizeRecommendation(parsed);
@@ -282,10 +289,11 @@ async function generateStageRecommendation(
 export async function generateNetworkingRecommendations(
   context: NetworkingContext,
   lang: PlanLocale,
+  userId?: string | null,
 ): Promise<Record<string, NetworkingRecommendation>> {
   const results = await Promise.all(
     NETWORKING_STAGES.map((_, index) =>
-      generateStageRecommendation(context, lang, index + 1)),
+      generateStageRecommendation(context, lang, index + 1, userId)),
   );
   return Object.fromEntries(
     results.map((recommendation, index) => [String(index + 1), recommendation]),

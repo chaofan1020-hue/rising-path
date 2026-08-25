@@ -1,15 +1,57 @@
 "use client"
 
 import type React from "react"
-import { Warp } from "@paper-design/shaders-react"
+import dynamic from "next/dynamic"
 import { Gauge } from "lucide-react"
+import { useEffect, useRef, useState } from "react"
+import { useRouter } from "next/navigation"
 import { getSupabaseBrowserClient } from "@/lib/supabase-browser"
 import { useLanguage } from "@/lib/language-context"
+import type { FeatureWarpConfig } from "@/components/feature-card-warp"
+
+const FeatureCardWarp = dynamic(
+  () => import("@/components/feature-card-warp").then((module) => module.FeatureCardWarp),
+  { ssr: false },
+)
 
 interface Feature {
   titleKey: string
   descKey: string
   icon: React.ReactNode
+}
+
+function DeferredFeatureBackground({ config }: { config: FeatureWarpConfig }) {
+  const containerRef = useRef<HTMLDivElement>(null)
+  const [isVisible, setIsVisible] = useState(false)
+
+  useEffect(() => {
+    const element = containerRef.current
+    if (!element) return
+    let startTimer: number | undefined
+    const observer = new IntersectionObserver(
+      ([entry]) => {
+        if (!entry.isIntersecting) return
+        // Keep the opening path animation on a quiet main thread before
+        // initializing a WebGL surface further down the page.
+        startTimer = window.setTimeout(() => setIsVisible(true), 700)
+        observer.disconnect()
+      },
+      { rootMargin: "0px" },
+    )
+    observer.observe(element)
+    return () => {
+      observer.disconnect()
+      if (startTimer) window.clearTimeout(startTimer)
+    }
+  }, [])
+
+  return <div
+    ref={containerRef}
+    className="absolute inset-0 overflow-hidden rounded-lg"
+    style={{ backgroundColor: config.colors[0] }}
+  >
+    {isVisible && <FeatureCardWarp config={config} />}
+  </div>
 }
 
 const features: Feature[] = [
@@ -67,7 +109,24 @@ const features: Feature[] = [
 
 export default function FeaturesCards() {
   const { t } = useLanguage()
-  const getShaderConfig = (index: number) => {
+  const router = useRouter()
+
+  const handleFeatureClick = async (index: number) => {
+    const targetPaths = ["/ai-match", "/optimize", "/field-mappings", "/jobs", "/dashboard", "/mock-interview"]
+    const targetPath = targetPaths[index] || "/"
+
+    try {
+      const client = await getSupabaseBrowserClient()
+      const {
+        data: { session },
+      } = await client.auth.getSession()
+      router.push(session ? targetPath : "/login")
+    } catch {
+      router.push("/login")
+    }
+  }
+
+  const getShaderConfig = (index: number): FeatureWarpConfig => {
     const configs = [
       {
         proportion: 0.3,
@@ -130,15 +189,15 @@ export default function FeaturesCards() {
         colors: ["hsl(350, 60%, 9%)", "hsl(360, 70%, 15%)", "hsl(340, 50%, 7%)", "hsl(355, 65%, 12%)"],
       },
     ]
-    return configs[index % configs.length]
+    return configs[index % configs.length] as FeatureWarpConfig
   }
 
   return (
-    <section className="min-h-screen py-20 px-4 bg-white dark:bg-black rounded-b-[3rem]">
+    <section className="min-h-screen px-4 pb-16 pt-4 md:pt-6 bg-white dark:bg-black rounded-b-[3rem]">
       <div className="max-w-7xl mx-auto">
-        <div className="text-center mb-16">
-          <h2 className="text-4xl md:text-5xl font-light text-black dark:text-white mb-6">{t("features.title")}</h2>
-          <p className="text-xl text-black dark:text-white max-w-3xl mx-auto leading-relaxed">
+        <div className="mb-5 flex flex-wrap items-baseline justify-between gap-x-5 gap-y-1 md:mb-6">
+          <h2 className="text-2xl font-light text-black dark:text-white md:text-3xl">{t("features.title")}</h2>
+          <p className="max-w-3xl text-sm text-zinc-600 dark:text-zinc-300 md:text-base">
             {t("features.subtitle")}
           </p>
         </div>
@@ -149,34 +208,11 @@ export default function FeaturesCards() {
             return (
               <div
                 key={index}
-                onClick={() => {
-                  const targetPaths = ["/ai-match", "/optimize", "/field-mappings", "/jobs", "/dashboard", "/mock-interview"];
-                  const targetPath = targetPaths[index] || "/";
-                  void getSupabaseBrowserClient()
-                    .then((client) => client.auth.getSession())
-                    .then(({ data: { session } }) => {
-                      window.location.href = session ? targetPath : "/login";
-                    })
-                    .catch(() => {
-                      window.location.href = "/login";
-                    });
-                }}
+                onClick={() => void handleFeatureClick(index)}
                 className="block group cursor-pointer"
               >
                 <div className="relative h-64 transition-transform duration-300 group-hover:scale-105">
-                  <div className="absolute inset-0 rounded-3xl overflow-hidden">
-                    <Warp
-                      style={{ height: "100%", width: "100%" }}
-                      proportion={shaderConfig.proportion}
-                      softness={shaderConfig.softness}
-                      distortion={shaderConfig.distortion}
-                      swirl={shaderConfig.swirl}
-                      swirlIterations={shaderConfig.swirlIterations}
-                      shape={shaderConfig.shape}
-                      shapeScale={shaderConfig.shapeScale}
-                      colors={shaderConfig.colors}
-                    />
-                  </div>
+                  <DeferredFeatureBackground config={shaderConfig} />
                   <div className="relative z-10 flex flex-col items-center justify-center h-full px-6 text-center">
                     <div className="mb-3 p-2.5 rounded-xl bg-white/10 backdrop-blur-sm transition-transform duration-300 group-hover:scale-110">
                       {feature.icon}

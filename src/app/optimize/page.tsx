@@ -46,6 +46,7 @@ import {
   Pencil,
   Eye,
   Plus,
+  Search,
 } from 'lucide-react';
 import Link from 'next/link';
 import { Document, Packer, Paragraph, TextRun, HeadingLevel, AlignmentType } from 'docx';
@@ -70,15 +71,19 @@ interface Resume {
   profile_version?: number;
 }
 
-interface AddedApplication {
+interface JobOption {
   id: number;
-  job_id: number;
-  resume_id?: number | null;
-  jobs?: {
-    title: string;
-    company: string;
-    region: string;
-  };
+  title: string;
+  company: string;
+  region: string;
+  source: 'favorite' | 'application';
+}
+
+interface JobSearchResult {
+  id: number;
+  title: string;
+  company: string;
+  region: string;
 }
 
 // 优化记录历史
@@ -715,9 +720,12 @@ const ResumeEditor = ({
 function OptimizeContent() {
   const searchParams = useSearchParams();
   const [resumes, setResumes] = useState<Resume[]>([]);
-  const [applications, setApplications] = useState<AddedApplication[]>([]);
+  const [favoriteJobs, setFavoriteJobs] = useState<JobOption[]>([]);
+  const [applicationJobs, setApplicationJobs] = useState<JobOption[]>([]);
   const [selectedResumeId, setSelectedResumeId] = useState<string>('');
-  const [selectedApplicationId, setSelectedApplicationId] = useState('');
+  const [jobQuery, setJobQuery] = useState('');
+  const [jobSearchResults, setJobSearchResults] = useState<JobSearchResult[]>([]);
+  const [searchingJobs, setSearchingJobs] = useState(false);
   const [targetCompany, setTargetCompany] = useState('');
   const [targetPosition, setTargetPosition] = useState('');
   const [targetRegion, setTargetRegion] = useState('');
@@ -915,22 +923,14 @@ function OptimizeContent() {
     }
   };
 
-  const handleSelectApplication = (value: string) => {
-    setSelectedApplicationId(value);
-    const app = applications.find((a) => a.id === Number(value));
-    if (!app) return;
-    setTargetJobId(app.job_id);
-    setTargetCompany(app.jobs?.company || '');
-    setTargetPosition(app.jobs?.title || '');
-    setTargetRegion(app.jobs?.region || '');
+  const selectTargetJob = (job: JobSearchResult | JobOption) => {
+    setTargetJobId(job.id);
+    setTargetCompany(job.company || '');
+    setTargetPosition(job.title || '');
+    setTargetRegion(job.region || '');
+    setJobQuery('');
+    setJobSearchResults([]);
   };
-
-  useEffect(() => {
-    apiFetch('/api/applications')
-      .then((response) => (response.ok ? response.json() : null))
-      .then((data) => setApplications((data?.applications || []).filter((app: AddedApplication) => app.job_id)))
-      .catch((error) => console.error('Failed to fetch applications:', error));
-  }, []);
 
   // 加载历史记录
   const loadRecord = (record: OptimizedRecord) => {
@@ -978,6 +978,7 @@ function OptimizeContent() {
   useEffect(() => {
     fetchResumes();
     fetchOptimizations();
+    fetchJobOptions();
   }, []);
 
   // 从URL参数读取预填充数据
@@ -999,6 +1000,43 @@ function OptimizeContent() {
     if (regionParam) setTargetRegion(regionParam);
   }, [searchParams]);
 
+  useEffect(() => {
+    const query = jobQuery.trim();
+    if (query.length < 2) {
+      setJobSearchResults([]);
+      setSearchingJobs(false);
+      return;
+    }
+
+    let cancelled = false;
+    const timer = window.setTimeout(() => {
+      setSearchingJobs(true);
+      apiFetch(`/api/jobs?search=${encodeURIComponent(query)}&limit=8&summary=1&region_scope=all`)
+        .then(async (response) => {
+          const data = await response.json();
+          if (!response.ok) throw new Error(data.error || '搜索岗位失败');
+          return data.jobs as JobSearchResult[];
+        })
+        .then((jobs) => {
+          if (!cancelled) setJobSearchResults(jobs || []);
+        })
+        .catch((error) => {
+          if (!cancelled) {
+            console.error('Failed to search jobs for optimization:', error);
+            setJobSearchResults([]);
+          }
+        })
+        .finally(() => {
+          if (!cancelled) setSearchingJobs(false);
+        });
+    }, 250);
+
+    return () => {
+      cancelled = true;
+      window.clearTimeout(timer);
+    };
+  }, [jobQuery]);
+
   const fetchResumes = async () => {
     try {
       const response = await apiFetch('/api/resume');
@@ -1009,6 +1047,18 @@ function OptimizeContent() {
       )));
     } catch (error) {
       console.error('Failed to fetch resumes:', error);
+    }
+  };
+
+  const fetchJobOptions = async () => {
+    try {
+      const response = await apiFetch('/api/optimize/job-options');
+      const data = await response.json();
+      if (!response.ok) throw new Error(data.error || '读取常用岗位失败');
+      setFavoriteJobs(data.favorites || []);
+      setApplicationJobs(data.applications || []);
+    } catch (error) {
+      console.error('Failed to fetch optimization job options:', error);
     }
   };
 
@@ -1463,12 +1513,12 @@ function OptimizeContent() {
   return (
     <div className="min-h-screen bg-white dark:bg-zinc-950">
       <Header1 />
-      <main className="relative container mx-auto px-4 pt-16 md:pt-20 pb-16">
+      <main className="relative container mx-auto px-4 pt-20 pb-16 sm:px-6 md:pt-24">
         {/* Hero：左对齐 eyebrow + 大标题（Tailark 式） */}
-        <div className="relative mb-8 md:mb-10">
+        <div className="relative mb-8 max-w-3xl md:mb-10">
           <p className="text-sm font-medium text-zinc-400 dark:text-zinc-500 mb-3">{t('optimize.eyebrow')}</p>
           <PageBackButton fallbackHref="/resume" className="mb-3" />
-          <h1 className="text-2xl md:text-4xl font-bold tracking-tight text-zinc-900 dark:text-zinc-50 mb-4">{t('optimize.title')}</h1>
+          <h1 className="break-words text-2xl font-bold tracking-tight text-zinc-900 dark:text-zinc-50 md:text-4xl mb-4">{t('optimize.title')}</h1>
           <p className="text-zinc-500 dark:text-zinc-400 max-w-2xl md:text-lg leading-relaxed">{t('optimize.subtitle')}</p>
         </div>
 
@@ -1548,24 +1598,58 @@ function OptimizeContent() {
             </CardDescription>
           </CardHeader>
           <CardContent className="space-y-3 md:space-y-4">
-            <div>
-              <label className="text-xs md:text-sm font-medium mb-1.5 md:mb-2 block">
-                从已添加岗位选择（可选）
-              </label>
-              <Select value={selectedApplicationId} onValueChange={handleSelectApplication}>
-                <SelectTrigger className="h-9 md:h-10">
-                  <SelectValue placeholder={applications.length > 0 ? '选择已添加岗位' : '暂无已添加岗位'} />
-                </SelectTrigger>
-                <SelectContent>
-                  {applications.map((app) => (
-                    <SelectItem key={app.id} value={String(app.id)}>
-                      {app.jobs?.company || '未知公司'} · {app.jobs?.title || '未知岗位'}
-                    </SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
+            <div className="border-y border-zinc-200 py-4 dark:border-zinc-800">
+              <div className="mb-3 flex items-center justify-between gap-3">
+                <div>
+                  <p className="text-sm font-medium text-zinc-900 dark:text-zinc-100">选择目标岗位</p>
+                  <p className="mt-1 text-xs text-zinc-500 dark:text-zinc-400">优先从收藏或已添加岗位选择，也可搜索全部岗位。</p>
+                </div>
+                {targetJobId && <button type="button" onClick={() => { setTargetJobId(null); setTargetCompany(''); setTargetPosition(''); setTargetRegion(''); }} className="text-xs text-zinc-500 transition-colors hover:text-zinc-900 dark:hover:text-white">清除选择</button>}
+              </div>
+              {favoriteJobs.length > 0 && (
+                <div className="mb-3">
+                  <p className="mb-2 text-xs font-medium text-zinc-500">我的收藏</p>
+                  <div className="flex flex-wrap gap-2">
+                    {favoriteJobs.slice(0, 6).map((job) => (
+                      <button key={job.id} type="button" onClick={() => selectTargetJob(job)} className={`max-w-full rounded-md border px-3 py-2 text-left text-xs transition-colors ${targetJobId === job.id ? 'border-zinc-900 bg-zinc-900 text-white dark:border-white dark:bg-white dark:text-zinc-900' : 'border-zinc-200 text-zinc-700 hover:border-zinc-400 hover:bg-zinc-50 dark:border-zinc-700 dark:text-zinc-200 dark:hover:bg-zinc-800'}`}>
+                        <span className="block truncate font-medium">{job.title}</span>
+                        <span className="mt-0.5 block truncate opacity-70">{job.company}</span>
+                      </button>
+                    ))}
+                  </div>
+                </div>
+              )}
+              {applicationJobs.length > 0 && (
+                <div className="mb-3">
+                  <p className="mb-2 text-xs font-medium text-zinc-500">已添加岗位</p>
+                  <div className="flex flex-wrap gap-2">
+                    {applicationJobs.slice(0, 6).map((job) => (
+                      <button key={job.id} type="button" onClick={() => selectTargetJob(job)} className={`max-w-full rounded-md border px-3 py-2 text-left text-xs transition-colors ${targetJobId === job.id ? 'border-zinc-900 bg-zinc-900 text-white dark:border-white dark:bg-white dark:text-zinc-900' : 'border-zinc-200 text-zinc-700 hover:border-zinc-400 hover:bg-zinc-50 dark:border-zinc-700 dark:text-zinc-200 dark:hover:bg-zinc-800'}`}>
+                        <span className="block truncate font-medium">{job.title}</span>
+                        <span className="mt-0.5 block truncate opacity-70">{job.company}</span>
+                      </button>
+                    ))}
+                  </div>
+                </div>
+              )}
+              <div className="relative">
+                <Search className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-zinc-400" />
+                <Input value={jobQuery} onChange={(event) => setJobQuery(event.target.value)} className="h-10 pl-9" placeholder="搜索岗位或公司，例如 Product Manager / Google" />
+                {(searchingJobs || jobSearchResults.length > 0) && (
+                  <div className="absolute z-20 mt-2 max-h-72 w-full overflow-y-auto rounded-md border border-zinc-200 bg-white p-1 shadow-lg dark:border-zinc-700 dark:bg-zinc-950">
+                    {searchingJobs && <p className="px-3 py-2 text-xs text-zinc-500">正在搜索岗位...</p>}
+                    {!searchingJobs && jobSearchResults.length === 0 && <p className="px-3 py-2 text-xs text-zinc-500">未找到匹配岗位</p>}
+                    {!searchingJobs && jobSearchResults.map((job) => (
+                      <button key={job.id} type="button" onClick={() => selectTargetJob(job)} className="flex w-full items-center justify-between gap-3 rounded px-3 py-2.5 text-left transition-colors hover:bg-zinc-100 dark:hover:bg-zinc-800">
+                        <span className="min-w-0"><span className="block truncate text-sm font-medium text-zinc-900 dark:text-zinc-100">{job.title}</span><span className="mt-0.5 block truncate text-xs text-zinc-500">{job.company} · {job.region}</span></span>
+                        <Plus className="h-4 w-4 shrink-0 text-zinc-400" />
+                      </button>
+                    ))}
+                  </div>
+                )}
+              </div>
             </div>
-            <div className="grid grid-cols-1 md:grid-cols-3 gap-3 md:gap-4">
+            <div className="grid grid-cols-1 gap-3 md:grid-cols-3 md:gap-4">
               <div>
                 <label className="text-xs md:text-sm font-medium mb-1.5 md:mb-2 block">{t('optimize.selectResume')}</label>
                 <Select value={selectedResumeId} onValueChange={setSelectedResumeId}>
@@ -1581,13 +1665,16 @@ function OptimizeContent() {
                   </SelectContent>
                 </Select>
               </div>
-              <div>
+              <div className="md:col-span-2">
                 <label className="text-xs md:text-sm font-medium mb-1.5 md:mb-2 block">{t('optimize.targetCompany')}</label>
                 <div className="flex gap-2">
                   <Input
                     placeholder={t('optimize.targetCompanyPlaceholder')}
                     value={targetCompany}
-                    onChange={(e) => setTargetCompany(e.target.value)}
+                    onChange={(e) => {
+                      setTargetCompany(e.target.value);
+                      setTargetJobId(null);
+                    }}
                     className="h-9 md:h-10 flex-1"
                   />
                   <Button
@@ -1606,20 +1693,26 @@ function OptimizeContent() {
                   </Button>
                 </div>
               </div>
-              <div>
+              <div className="md:col-span-2">
                 <label className="text-xs md:text-sm font-medium mb-1.5 md:mb-2 block">{t('optimize.targetPosition')}</label>
                 <Input
                   placeholder={t('optimize.targetPositionPlaceholder')}
                   value={targetPosition}
-                  onChange={(e) => setTargetPosition(e.target.value)}
+                  onChange={(e) => {
+                    setTargetPosition(e.target.value);
+                    setTargetJobId(null);
+                  }}
                   className="h-9 md:h-10"
                 />
               </div>
             </div>
 
-            <div className="flex flex-wrap gap-3 md:gap-4 items-end">
-              <div className="w-32">
-                <Select value={targetRegion} onValueChange={setTargetRegion}>
+            <div className="flex flex-col gap-3 sm:flex-row sm:flex-wrap sm:items-end md:gap-4">
+              <div className="w-full sm:w-40">
+                <Select value={targetRegion} onValueChange={(value) => {
+                  setTargetRegion(value);
+                  setTargetJobId(null);
+                }}>
                   <SelectTrigger className="h-9 md:h-10">
                     <SelectValue placeholder={t('optimize.targetRegion')} />
                   </SelectTrigger>
@@ -1635,7 +1728,7 @@ function OptimizeContent() {
               <Button
                 onClick={handleOptimize}
                 disabled={!selectedResumeId || !targetPosition || optimizing}
-                className="h-9 md:h-10 bg-zinc-900 text-white hover:bg-zinc-800 dark:bg-white dark:text-zinc-900 dark:hover:bg-zinc-200"
+                className="h-9 w-full md:h-10 sm:w-auto bg-zinc-900 text-white hover:bg-zinc-800 dark:bg-white dark:text-zinc-900 dark:hover:bg-zinc-200"
               >
                 {optimizing ? (
                   <>
@@ -1658,7 +1751,7 @@ function OptimizeContent() {
                     setJdResults([]);
                     setSuggestions('');
                   }}
-                  className="h-9 md:h-10 border-zinc-200 dark:border-zinc-700 text-zinc-600 dark:text-zinc-300 hover:bg-zinc-100 hover:text-zinc-900 dark:hover:bg-zinc-800 dark:hover:text-zinc-100"
+                  className="h-9 w-full md:h-10 sm:w-auto border-zinc-200 dark:border-zinc-700 text-zinc-600 dark:text-zinc-300 hover:bg-zinc-100 hover:text-zinc-900 dark:hover:bg-zinc-800 dark:hover:text-zinc-100"
                 >
                   {t('optimize.clearJd')}
                 </Button>
@@ -1666,7 +1759,7 @@ function OptimizeContent() {
             </div>
 
             {optimizeError && (
-              <div className="flex items-start gap-2 rounded-xl border border-red-200 bg-red-50 px-3 py-2.5 text-sm text-red-700 dark:border-red-900/60 dark:bg-red-950/30 dark:text-red-300">
+              <div className="flex items-start gap-2 rounded-xl border border-primary/25 bg-primary/5 px-3 py-2.5 text-sm text-foreground dark:bg-primary/15">
                 <AlertCircle className="mt-0.5 h-4 w-4 flex-shrink-0" />
                 <span>{optimizeError}</span>
               </div>
@@ -1921,7 +2014,7 @@ function OptimizeContent() {
             )}
 
             {reviewWarning && (
-              <div className="mb-3 flex items-start gap-2 rounded-xl border border-amber-200 bg-amber-50 px-3 py-2.5 text-sm text-amber-800 dark:border-amber-900/60 dark:bg-amber-950/30 dark:text-amber-200">
+            <div className="mb-3 flex items-start gap-2 rounded-xl border border-primary/25 bg-primary/5 px-3 py-2.5 text-sm text-foreground dark:bg-primary/15">
                 <AlertCircle className="mt-0.5 h-4 w-4 flex-shrink-0" />
                 <span>{reviewWarning}</span>
               </div>

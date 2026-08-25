@@ -3,6 +3,7 @@ import { getAuthContext, unauthorizedResponse } from '@/lib/auth-server';
 import { createTextProviderClient } from '@/lib/ai/text-provider';
 import { configuredRegionScopeKeys, targetRegionScopeKeys } from '@/lib/job-region-scope';
 import { consumeTrackedTextStream } from '@/lib/ai-usage';
+import { betaEntitlementResponse } from '@/lib/beta-entitlements';
 import {
   AI_MATCH_RESPONSE_SCHEMA,
   parseModelMatches,
@@ -383,6 +384,8 @@ ${untrustedBusinessDataBlock('job_list', jobsList)}
       durationMs: Math.round(performance.now() - startedAt),
       error: error instanceof Error ? error.message : String(error),
     });
+    const betaResponse = betaEntitlementResponse(error);
+    if (betaResponse) return betaResponse;
     const message = error instanceof Error ? error.message : '';
     if (message.includes('timed out') || message.includes('statement timeout')) {
       return NextResponse.json({ error: 'AI匹配超时，请稍后重试或缩小筛选范围' }, { status: 504 });

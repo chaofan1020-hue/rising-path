@@ -2,6 +2,7 @@ import { createHash, randomBytes } from 'node:crypto';
 import { NextRequest, NextResponse } from 'next/server';
 import { getAuthContext, unauthorizedResponse } from '@/lib/auth-server';
 import { realtimeTicketRequestSchema } from '@/lib/interview-contracts';
+import { isBetaAccessEnforced, isBetaRealtimeVoiceEnabled } from '@/lib/beta-entitlements';
 
 const TICKET_TTL_MS = 60_000;
 
@@ -12,6 +13,12 @@ export async function POST(request: NextRequest) {
   try {
     const parsed = realtimeTicketRequestSchema.safeParse(await request.json());
     if (!parsed.success) return NextResponse.json({ error: '实时语音参数无效' }, { status: 400 });
+    if (isBetaAccessEnforced() && !isBetaRealtimeVoiceEnabled()) {
+      return NextResponse.json({
+        error: '内测期间实时语音暂未开放，请使用文字或标准语音模式',
+        code: 'BETA_REALTIME_VOICE_DISABLED',
+      }, { status: 503 });
+    }
 
     const sessionId = parsed.data.sessionId;
     const { data: session } = await auth.client

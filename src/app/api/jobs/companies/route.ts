@@ -18,53 +18,27 @@ async function loadCompanies(): Promise<CompanyOption[]> {
   }
 
   const supabase = getSupabaseClient();
-  const companyJobs = new Map<string, { jobCount: number; jobUrl: string | null }>();
-  const pageSize = 1000;
+  const { data, error } = await supabase.rpc('list_active_company_options');
+  if (error) throw new Error(`读取岗位品牌失败: ${error.message}`);
 
-  // Supabase limits an unbounded response. Aggregate in pages so a growing
-  // jobs table does not silently omit brands from the filter list.
-  for (let offset = 0; offset < 100_000; offset += pageSize) {
-    const { data, error } = await supabase
-      .from('jobs')
-      .select('company,job_url')
-      .eq('is_active', true)
-      .range(offset, offset + pageSize - 1);
-
-    if (error) throw new Error(`读取岗位品牌失败: ${error.message}`);
-    for (const job of data || []) {
-      const company = typeof job.company === 'string' ? job.company.trim() : '';
-      if (!company) continue;
-      const current = companyJobs.get(company);
-      if (current) {
-        current.jobCount += 1;
-        if (!current.jobUrl && typeof job.job_url === 'string') current.jobUrl = job.job_url;
-      } else {
-        companyJobs.set(company, {
-          jobCount: 1,
-          jobUrl: typeof job.job_url === 'string' ? job.job_url : null,
-        });
-      }
-    }
-    if (!data || data.length < pageSize) break;
-  }
-
-  const [{ data: logos, error: logoError }, { data: configured, error: configError }] = await Promise.all([
-    supabase.from('company_logos').select('company_name,logo_url'),
-    supabase.from('company_config').select('company_name,logo_url'),
-  ]);
-  if (logoError) throw new Error(`读取品牌 logo 失败: ${logoError.message}`);
-  if (configError) throw new Error(`读取品牌配置失败: ${configError.message}`);
-
-  const uploadedLogos = new Map((logos || []).map((row) => [row.company_name, row.logo_url]));
-  const configuredLogos = new Map((configured || []).map((row) => [row.company_name, row.logo_url]));
-  const companies = [...companyJobs.entries()]
-    .map(([company, details]) => ({
-      company_name: company,
-      logo_url: uploadedLogos.get(company) || configuredLogos.get(company) || getCompanyLogoUrl(company, details.jobUrl),
-      fallback_logo_url: getCompanyFaviconUrl(company, details.jobUrl),
-      job_count: details.jobCount,
-    }))
-    .sort((a, b) => b.job_count - a.job_count || a.company_name.localeCompare(b.company_name));
+  const rows = (data ?? []) as unknown as Array<{
+    company_name?: unknown;
+    job_url?: unknown;
+    job_count?: unknown;
+    logo_url?: unknown;
+  }>;
+  const companies: CompanyOption[] = rows
+    .map((row) => {
+      const company = typeof row.company_name === 'string' ? row.company_name.trim() : '';
+      const jobUrl = typeof row.job_url === 'string' ? row.job_url : null;
+      return {
+        company_name: company,
+        logo_url: typeof row.logo_url === 'string' && row.logo_url ? row.logo_url : getCompanyLogoUrl(company, jobUrl),
+        fallback_logo_url: getCompanyFaviconUrl(company, jobUrl),
+        job_count: Number(row.job_count) || 0,
+      };
+    })
+    .filter((company) => company.company_name);
 
   companiesCache = { expiresAt: Date.now() + COMPANIES_CACHE_MS, companies };
   return companies;
@@ -73,7 +47,10 @@ async function loadCompanies(): Promise<CompanyOption[]> {
 export async function GET() {
   try {
     const companies = await loadCompanies();
-    return NextResponse.json({ companies, total: companies.length });
+    return NextResponse.json(
+      { companies, total: companies.length },
+      { headers: { 'Cache-Control': 'public, s-maxage=300, stale-while-revalidate=600' } },
+    );
   } catch (error) {
     console.error('Error fetching job companies:', error);
     return NextResponse.json({ error: '获取品牌列表失败' }, { status: 500 });

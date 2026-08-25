@@ -8,6 +8,8 @@ const LOOKBACK_HOURS = 24;
 const RUN_SAMPLE_SIZE = 50;
 const CLOSED_PAGE_SIZE = 200;
 const MAX_CLOSED_PAGES = 10;
+const DEFAULT_CHANGE_PAGE_SIZE = 50;
+const MAX_CHANGE_PAGE_SIZE = 100;
 
 type RemoteRun = {
   id: string;
@@ -32,6 +34,38 @@ type RemoteJob = {
   updated_at: string;
 };
 
+type ChangeType = 'all' | 'new' | 'updated' | 'closed';
+
+type LocalJob = {
+  id: number;
+  title: string;
+  company: string;
+  region: string;
+  direction: string;
+  job_type: string | null;
+  job_url: string | null;
+  source_url: string | null;
+  valid_through: string | null;
+  is_active: boolean;
+  is_closed: boolean;
+  created_at: string;
+  updated_at: string | null;
+};
+
+type LocalSyncRecord = {
+  job_id: number;
+  last_verified_at: string | null;
+  last_link_checked_at: string | null;
+  last_link_status: number | null;
+  link_check_failures: number;
+  missing_feed_checks: number;
+  availability_status: 'valid' | 'closed' | 'blocked' | 'timeout' | 'unknown' | null;
+  link_health: 'healthy' | 'closed' | 'blocked' | 'timeout' | 'unknown' | null;
+  last_link_error: string | null;
+  last_link_http_status: number | null;
+  availability_checked_at: string | null;
+};
+
 type SourceDashboard = {
   open_jobs?: number;
   closed_jobs?: number;
@@ -39,8 +73,27 @@ type SourceDashboard = {
   latest_crawl?: { status?: string; completed_at?: string | null } | null;
 };
 
-function getSince() {
-  return new Date(Date.now() - LOOKBACK_HOURS * 60 * 60 * 1000).toISOString();
+function getSince(hours = LOOKBACK_HOURS) {
+  return new Date(Date.now() - hours * 60 * 60 * 1000).toISOString();
+}
+
+function parseLookbackHours(value: string | null): number {
+  const parsed = Number(value);
+  return Number.isFinite(parsed) ? Math.min(Math.max(parsed, 1), 168) : LOOKBACK_HOURS;
+}
+
+function parsePage(value: string | null): number {
+  const parsed = Number.parseInt(value || '1', 10);
+  return Number.isFinite(parsed) ? Math.min(Math.max(parsed, 1), 10_000) : 1;
+}
+
+function parsePageSize(value: string | null): number {
+  const parsed = Number.parseInt(value || String(DEFAULT_CHANGE_PAGE_SIZE), 10);
+  return Number.isFinite(parsed) ? Math.min(Math.max(parsed, 10), MAX_CHANGE_PAGE_SIZE) : DEFAULT_CHANGE_PAGE_SIZE;
+}
+
+function parseChangeType(value: string | null): ChangeType {
+  return value === 'new' || value === 'updated' || value === 'closed' ? value : 'all';
 }
 
 function getSourceBase(url: string) {
@@ -138,7 +191,13 @@ export async function GET(request: NextRequest) {
 
   try {
     const client = getSupabaseClient();
-    const since = getSince();
+    const searchParams = request.nextUrl.searchParams;
+    const lookbackHours = parseLookbackHours(searchParams.get('hours'));
+    const since = getSince(lookbackHours);
+    const changeType = parseChangeType(searchParams.get('change_type'));
+    const page = parsePage(searchParams.get('page'));
+    const pageSize = parsePageSize(searchParams.get('page_size'));
+    const offset = (page - 1) * pageSize;
     const [state, source, activeCount, feedActiveCount] = await Promise.all([
       getJobFeedState(client),
       readSourceActivity(since),
@@ -155,6 +214,63 @@ export async function GET(request: NextRequest) {
     const updatedInSample = sampledRuns.reduce((total, run) => total + (Number(run.updated_count) || 0), 0);
     const failedRuns = sampledRuns.filter((run) => run.status === 'failed').length;
 
+    let changesQuery = client
+      .from('jobs')
+      .select('id,title,company,region,direction,job_type,job_url,source_url,valid_through,is_active,is_closed,created_at,updated_at', { count: 'exact' })
+      .eq('source_system', SOURCE_SYSTEM);
+    if (changeType === 'new') {
+      changesQuery = changesQuery.gte('created_at', since);
+    } else if (changeType === 'updated') {
+      changesQuery = changesQuery.gte('updated_at', since).lt('created_at', since);
+    } else if (changeType === 'closed') {
+      changesQuery = changesQuery.eq('is_active', false).gte('updated_at', since);
+    } else {
+      changesQuery = changesQuery.or(`created_at.gte.${since},updated_at.gte.${since}`);
+    }
+    const { data: localRows, error: localError, count: localCount } = await changesQuery
+      .order('updated_at', { ascending: false, nullsFirst: false })
+      .order('created_at', { ascending: false })
+      .order('id', { ascending: false })
+      .range(offset, offset + pageSize - 1);
+    if (localError) throw new Error(`读取岗位轮换明细失败: ${localError.message}`);
+
+    const localJobs = (localRows || []) as LocalJob[];
+    const localJobIds = localJobs.map((job) => job.id);
+    const { data: syncRows, error: syncError } = localJobIds.length === 0
+      ? { data: [], error: null }
+      : await client
+        .from('job_sync_records')
+        .select('job_id,last_verified_at,last_link_checked_at,last_link_status,link_check_failures,missing_feed_checks,availability_status,link_health,last_link_error,last_link_http_status,availability_checked_at')
+        .in('job_id', localJobIds);
+    if (syncError) throw new Error(`读取岗位核验状态失败: ${syncError.message}`);
+    const syncByJobId = new Map((syncRows || []).map((row) => [row.job_id, row as LocalSyncRecord]));
+    const localChanges = localJobs.map((job) => {
+      const sync = syncByJobId.get(job.id);
+      const createdAt = Date.parse(job.created_at);
+      return {
+        ...job,
+        change_type: job.is_active === false ? 'closed' : Number.isFinite(createdAt) && createdAt >= Date.parse(since) ? 'new' : 'updated',
+        last_verified_at: sync?.last_verified_at || null,
+        last_link_checked_at: sync?.last_link_checked_at || null,
+        last_link_status: sync?.last_link_status ?? null,
+        link_check_failures: sync?.link_check_failures || 0,
+        missing_feed_checks: sync?.missing_feed_checks || 0,
+        availability_status: sync?.availability_status || null,
+        link_health: sync?.link_health || null,
+        last_link_error: sync?.last_link_error || null,
+        last_link_http_status: sync?.last_link_http_status ?? null,
+        availability_checked_at: sync?.availability_checked_at || null,
+      };
+    });
+
+    const [newCount, updatedCount, closedCount] = await Promise.all([
+      client.from('jobs').select('id', { count: 'exact', head: true }).eq('source_system', SOURCE_SYSTEM).gte('created_at', since),
+      client.from('jobs').select('id', { count: 'exact', head: true }).eq('source_system', SOURCE_SYSTEM).gte('updated_at', since).lt('created_at', since),
+      client.from('jobs').select('id', { count: 'exact', head: true }).eq('source_system', SOURCE_SYSTEM).eq('is_active', false).gte('updated_at', since),
+    ]);
+    const countError = newCount.error || updatedCount.error || closedCount.error;
+    if (countError) throw new Error(`统计岗位轮换明细失败: ${countError.message}`);
+
     return NextResponse.json({
       generatedAt: new Date().toISOString(),
       lookbackHours: LOOKBACK_HOURS,
@@ -166,6 +282,7 @@ export async function GET(request: NextRequest) {
         lastError: state.last_error,
         consecutiveFailures: state.consecutive_failures,
         syncInProgress: Boolean(state.lease_expires_at && Date.parse(state.lease_expires_at) > Date.now()),
+        updatedAt: state.updated_at,
       },
       source: {
         reachable: source.reachable,
@@ -186,10 +303,22 @@ export async function GET(request: NextRequest) {
         failedRuns,
         closed24h: source.closed.length,
         closedCapped: source.closedCapped,
+        lookbackHours,
+        localNew: newCount.count || 0,
+        localUpdated: updatedCount.count || 0,
+        localClosed: closedCount.count || 0,
       },
       changes: {
         runs: sampledRuns.slice(0, 8),
         removed: source.closed.slice(0, 8),
+        jobs: localChanges,
+        pagination: {
+          page,
+          pageSize,
+          total: localCount || 0,
+          totalPages: Math.ceil((localCount || 0) / pageSize),
+          changeType,
+        },
       },
     });
   } catch (error) {

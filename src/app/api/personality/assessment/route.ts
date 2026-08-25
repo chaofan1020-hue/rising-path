@@ -6,6 +6,7 @@ import {
   validatePersonalityAnswers,
   type PersonalityAssessment,
 } from '@/lib/personality-assessment';
+import { resolveActiveRegion } from '@/lib/user-region';
 
 function positiveInteger(value: unknown): number | null {
   if (value === undefined || value === null || value === '') return null;
@@ -84,7 +85,16 @@ export async function POST(request: NextRequest) {
       profile = data?.profile && typeof data.profile === 'object' ? data.profile : null;
       const segmentation = data?.segmentation as { regions?: string[] } | null;
       const overrides = data?.segmentation_overrides as { regions?: string[] } | null;
-      regionKey = overrides?.regions?.[0] || segmentation?.regions?.[0] || null;
+      const { data: userProfile } = await auth.client
+        .from('profiles')
+        .select('preferred_region')
+        .eq('id', auth.user.id)
+        .maybeSingle();
+      regionKey = resolveActiveRegion(userProfile?.preferred_region, {
+        profile,
+        segmentation,
+        segmentation_overrides: overrides,
+      });
     }
 
     const { data: jobs, error: jobsError } = await auth.client
@@ -132,6 +142,7 @@ export async function POST(request: NextRequest) {
           primaryDimension: computed.result.primaryDimension,
           summaryKey: computed.result.summaryKey,
           recommendations: computed.recommendations,
+          regionKey,
           completedAt: now,
         },
       };

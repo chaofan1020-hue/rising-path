@@ -7,7 +7,6 @@ import {
   consumeAuthRateLimit,
   isAuthRateLimitError,
   normalizeEmail,
-  verifyTurnstileToken,
 } from '@/lib/auth-security';
 
 export async function POST(request: NextRequest) {
@@ -24,17 +23,10 @@ export async function POST(request: NextRequest) {
     if (!ipLimit.allowed || !emailLimit.allowed) {
       return NextResponse.json({ error: '发送过于频繁，请稍后再试' }, { status: 429 });
     }
-    if (!(await verifyTurnstileToken(body.captchaToken, ip))) {
-      return NextResponse.json({ error: '请完成安全验证后再发送' }, { status: 400 });
-    }
-
     const supabase = getSupabaseAnonClient();
     const { error } = await supabase.auth.resend({
       type: 'signup',
       email,
-      options: {
-        captchaToken: typeof body.captchaToken === 'string' ? body.captchaToken : undefined,
-      },
     });
     if (error) {
       console.error('[Auth] Resend verification failed:', error.message);

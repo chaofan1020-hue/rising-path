@@ -3,6 +3,7 @@ import { getAuthContext, unauthorizedResponse } from '@/lib/auth-server';
 import { consumeAuthRateLimit } from '@/lib/auth-security';
 import { createTextProviderClient } from '@/lib/ai/text-provider';
 import { consumeTrackedTextStream } from '@/lib/ai-usage';
+import { betaEntitlementResponse } from '@/lib/beta-entitlements';
 import { buildDNABlock, type CompanyDNA } from '@/lib/company-dna';
 import { getCompanyDNA } from '@/lib/company-dna-service';
 import { buildSegmentBlock, type UserSegmentation } from '@/lib/user-segmentation';
@@ -62,6 +63,8 @@ import {
   buildInterviewRoundClosing,
   decideInterviewTurnAction,
 } from '@/lib/interview-round-flow';
+import { shouldEndInterviewEarly } from '@/lib/interview-answer-quality';
+import { resolveInterviewVoiceRoute } from '@/lib/interview-voice-routing';
 
 interface ChatMessage {
   role: 'interviewer' | 'candidate';
@@ -73,13 +76,21 @@ interface ChatMessage {
 }
 
 const QUESTIONS_PER_ROUND = 2;
-const COMPANY_DNA_LOOKUP_TIMEOUT_MS = 1_500;
+const COMPANY_DNA_LOOKUP_TIMEOUT_MS = 650;
 const INTERVIEW_JOB_CONTEXT_MAX_CHARS = 4_500;
 const INTERVIEW_RESUME_CONTEXT_MAX_CHARS = 4_500;
 const INTERVIEW_DNA_CONTEXT_MAX_CHARS = 2_200;
 const INTERVIEW_SEGMENT_CONTEXT_MAX_CHARS = 1_600;
 const INTERVIEW_HISTORY_MESSAGE_MAX_CHARS = 700;
 const INTERVIEW_HISTORY_MESSAGE_COUNT = 4;
+const SINGLE_ROUND_TIME_LIMIT_MINUTES = 8;
+
+function hasServerRoundTimedOut(roundStartedAt: unknown, role: RoundRole | null): boolean {
+  const startedAt = typeof roundStartedAt === 'string' ? Date.parse(roundStartedAt) : Number.NaN;
+  if (!Number.isFinite(startedAt)) return false;
+  const minutes = role ? ROUND_TIME_LIMIT[role] : SINGLE_ROUND_TIME_LIMIT_MINUTES;
+  return Date.now() >= startedAt + minutes * 60_000;
+}
 
 function boundInterviewPromptText(value: string, maxChars: number): string {
   if (value.length <= maxChars) return value;
@@ -315,6 +326,21 @@ function interviewerPayload(
   };
 }
 
+// The first spoken turn should never wait on a text model. It establishes the
+// room and asks a role-specific baseline question; subsequent questions still
+// use the full company, resume and interview-memory prompt.
+function buildFastOpening(
+  language: VoiceLanguage,
+  interviewer: Interviewer,
+  jobTitle: string,
+): string {
+  const title = jobTitle.trim() || (language === 'en' ? 'this role' : '这个岗位');
+  if (language === 'en') {
+    return `Hi, I’m ${interviewer.name} from ${interviewer.company}. To start, which experience best prepares you for the ${title} role?`;
+  }
+  return `你好，我是${interviewer.company}的${interviewer.name}。先说说，哪段经历最能说明你适合${title}这个岗位？`;
+}
+
 export async function POST(request: NextRequest) {
   try {
     const requestStartedAt = Date.now();
@@ -352,6 +378,7 @@ export async function POST(request: NextRequest) {
       totalRounds = 1,
       targetCompany,
       timeout = false,
+      endInterview = false,
       practiceMode = 'fresh',
       switchNext = false,
       clientRequestId,
@@ -416,13 +443,7 @@ export async function POST(request: NextRequest) {
       const company = jobCompany;
 
       const dnaResultPromise = getExistingCompanyDNA(company, request.headers, { userId: auth.user.id });
-      const recentQuestionsPromise = resolvedPracticeMode === 'review'
-        ? Promise.resolve([])
-        : getRecentInterviewQuestions(client, auth.user.id, company, selectedJobId);
-      const [dnaResult, recentQuestions] = await Promise.all([
-        dnaResultPromise,
-        recentQuestionsPromise,
-      ]);
+      const dnaResult = await dnaResultPromise;
       const companyContext = resolveInterviewCompanyContext({
         company,
         region: job.region,
@@ -434,6 +455,7 @@ export async function POST(request: NextRequest) {
       // The target vacancy's market owns the interview language. The browser
       // locale is only presentation chrome and cannot override this decision.
       language = companyContext.language;
+      const voiceRoute = resolveInterviewVoiceRoute(job.region);
       jdText = `${job.company} - ${job.title}\n\n${language === 'en' ? 'Job Description' : '岗位描述'}:\n${job.description || ''}\n\n${language === 'en' ? 'Requirements' : '岗位要求'}:\n${job.requirements || ''}`;
       const interviewType = String(requestedInterviewType || inferInterviewType(jdText));
 
@@ -451,9 +473,6 @@ export async function POST(request: NextRequest) {
       const script = isGauntlet ? GAUNTLET_SCRIPTS[rounds] ?? null : null;
       const firstRole: RoundRole | null = script ? script[0] : null;
 
-      const dnaBlock = dnaResult ? buildDNABlock(dnaResult.dna) : '';
-      const questionHistoryNote = buildQuestionHistoryNote(recentQuestions, language);
-      const segmentBlock = buildSegmentationBlock(resumeSegmentation, language);
       const contextDigest = buildInterviewContextDigest({
         language,
         company,
@@ -467,32 +486,6 @@ export async function POST(request: NextRequest) {
         resumeText: typeof confirmedResume.parsed_content === 'string' ? confirmedResume.parsed_content : null,
       });
       const openingLedger = emptyInterviewFactLedger();
-      const memoryBlock = buildInterviewMemoryPrompt({
-        digest: contextDigest,
-        ledger: openingLedger,
-      });
-      const systemPrompt = buildSystemPrompt(
-        interviewType,
-        jdText,
-        language,
-        firstInterviewer,
-        false,
-        firstRole,
-        rounds === 1,
-        dnaBlock,
-        segmentBlock,
-        memoryBlock,
-      );
-      const llmMessages = [
-        { role: 'system' as const, content: systemPrompt },
-        {
-          role: 'user' as const,
-          content: language === 'en'
-            ? 'The candidate has arrived. In one short sentence, introduce yourself (name + company) and ask the first interview question. Keep the complete opening under 45 words. Do NOT output any control markers — the interview has just begun.'
-            : '候选人已到。用一句简短的话完成自我介绍（姓名+公司）并提出第一个面试问题，开场总计不超过45个汉字。本场面试刚刚开始，不要输出任何控制标记。',
-        },
-      ];
-      llmMessages[1].content += questionHistoryNote;
       const dnaSnapshot = dnaResult?.dna ?? null;
 
       const { data: session, error: insertError } = await client
@@ -503,6 +496,7 @@ export async function POST(request: NextRequest) {
           job_description: jdText,
           job_id: selectedJobId,
           target_company: company,
+          round_started_at: new Date().toISOString(),
           messages: [],
           mode: isGauntlet ? 'gauntlet' : 'single',
           total_rounds: rounds,
@@ -523,7 +517,8 @@ export async function POST(request: NextRequest) {
            state_version: 1,
            context_digest: contextDigest,
            facts_ledger: openingLedger,
-           context_memory_version: 1,
+            context_memory_version: 1,
+            voice_route: voiceRoute.id,
          })
         .select('id')
         .single();
@@ -533,9 +528,9 @@ export async function POST(request: NextRequest) {
       }
 
       const currentSessionId = session.id;
-      const llmClient = createTextProviderClient({ requestHeaders: request.headers });
       const encoder = new TextEncoder();
       let fullContent = '';
+      const openingContent = buildFastOpening(language, firstInterviewer, job.title || '');
 
       const openingPreflightMs = Date.now() - requestStartedAt;
       const readableStream = new ReadableStream({
@@ -561,29 +556,8 @@ export async function POST(request: NextRequest) {
               { revision: 0 },
             );
 
-            // Obsolete provider protocol text is filtered from the candidate-visible stream.
-            let pendingTail = '';
-            const generation = await consumeTrackedTextStream(llmClient, llmMessages, { temperature: 0.6, thinking: 'disabled' }, {
-              userId: auth.user.id,
-              feature: 'interview_chat',
-              resumeId: confirmedResumeId,
-              interviewSessionId: currentSessionId,
-              phase: 'opening',
-              metadata: { mode: 'opening', round: 1 },
-            }, (text) => {
-              pendingTail += text;
-              const [emit, rest] = splitProtocolSafe(pendingTail);
-              pendingTail = rest;
-              if (emit) {
-                fullContent += emit;
-                sendSseEvent(controller, encoder, 'interviewer.delta', { content: emit }, { revision: 0 });
-              }
-            });
-            const openingTail = cleanProtocolTail(pendingTail);
-            if (openingTail) {
-              fullContent += openingTail;
-              sendSseEvent(controller, encoder, 'interviewer.delta', { content: openingTail }, { revision: 0 });
-            }
+            fullContent = openingContent;
+            sendSseEvent(controller, encoder, 'interviewer.delta', { content: fullContent }, { revision: 0 });
 
             const newMessages: ChatMessage[] = [
               {
@@ -641,12 +615,21 @@ export async function POST(request: NextRequest) {
             if (openingCommitError || typeof openingRevision !== 'number') {
               throw new Error(`保存面试开场失败: ${openingCommitError?.message || '未返回版本'}`);
             }
+            const { error: openingRoundStartError } = await client
+              .from('interview_sessions')
+              .update({ round_started_at: new Date().toISOString() })
+              .eq('id', currentSessionId)
+              .eq('revision', openingRevision)
+              .eq('status', 'in_progress');
+            if (openingRoundStartError) {
+              console.error('Failed to record opening interview round start:', openingRoundStartError.message);
+            }
 
             sendSseEvent(
               controller,
               encoder,
               'turn.completed',
-              { done: true, timing: { preflightMs: openingPreflightMs, ttfbMs: generation.ttfbMs, totalMs: generation.totalMs } },
+              { done: true, timing: { preflightMs: openingPreflightMs, ttfbMs: 0, totalMs: 0 } },
               { revision: openingRevision },
             );
             controller.close();
@@ -771,10 +754,19 @@ export async function POST(request: NextRequest) {
         : 'fresh';
 
     const currentInterviewerId = interviewerIds[currentRound - 1] || null;
-    // switchNext opens the next server-authorized round without a new candidate answer.
+    const script = sessionMode === 'gauntlet' ? GAUNTLET_SCRIPTS[rounds] ?? null : null;
+    const activeRole: RoundRole | null = script ? script[currentRound - 1] ?? null : null;
+    // The browser countdown is display-only. The server remains the authority
+    // for a round deadline so background-tab throttling cannot change results.
     const isSwitchNext = switchNext;
-    const isTimeout = timeout === true && !isSwitchNext;
-    if (!isSwitchNext && !isTimeout) {
+    const serverRoundTimedOut = hasServerRoundTimedOut(session.round_started_at, activeRole);
+    if (timeout === true && !isSwitchNext && !serverRoundTimedOut) {
+      return new Response(JSON.stringify({ error: '本轮尚未到时限', code: 'ROUND_NOT_EXPIRED' }), { status: 409 });
+    }
+    const isTimeout = !isSwitchNext && serverRoundTimedOut;
+    const isManualEnd = endInterview === true && !isSwitchNext;
+    const isCandidateAnswerTurn = !isSwitchNext && !isTimeout && !isManualEnd;
+    if (isCandidateAnswerTurn) {
       if (inputSource !== 'asr' && inputSource !== 'asr_fallback') {
         return new Response(JSON.stringify({ error: '模拟面试仅接受语音识别结果' }), { status: 400 });
       }
@@ -785,7 +777,6 @@ export async function POST(request: NextRequest) {
       messages.push({ role: 'candidate', content: String(answer), round: currentRound, interviewerId: currentInterviewerId ?? undefined, ts: Date.now() });
     }
 
-    const script = sessionMode === 'gauntlet' ? GAUNTLET_SCRIPTS[rounds] ?? null : null;
     const llmClient = createTextProviderClient({ requestHeaders: request.headers });
 
     const rawInterviewer = INTERVIEWERS.find((i) => i.id === currentInterviewerId) || null;
@@ -793,7 +784,6 @@ export async function POST(request: NextRequest) {
     const activeInterviewer: Interviewer | null =
       rawInterviewer && sessionCompany ? assignToCompany(rawInterviewer, sessionCompany) : rawInterviewer;
 
-    const activeRole: RoundRole | null = script ? script[currentRound - 1] ?? null : null;
     const isLastRound = currentRound >= rounds;
 
     // 企业面试基因：优先使用创建会话时保存的快照，保证同一场面试版本稳定。
@@ -864,7 +854,7 @@ export async function POST(request: NextRequest) {
     const currentQuestionClassification = latestQuestionBeforeAnswer
       ? classifyInterviewQuestion(latestQuestionBeforeAnswer)
       : null;
-    const verifiedTurnPlan = !isSwitchNext && !isTimeout && answer
+    const verifiedTurnPlan = isCandidateAnswerTurn && answer
       ? verifyInterviewTurnPlan(
           clientTurnPlan,
           turnPlanToken,
@@ -880,7 +870,7 @@ export async function POST(request: NextRequest) {
       ledger: currentLedger,
       currentIntent: currentQuestionClassification?.intentKey,
       currentDimension: currentQuestionClassification?.dimension,
-      currentAnswer: !isSwitchNext && !isTimeout ? String(answer || '') : null,
+      currentAnswer: isCandidateAnswerTurn ? String(answer || '') : null,
     });
     const systemPrompt = buildSystemPrompt(
       session.interview_type,
@@ -927,9 +917,24 @@ export async function POST(request: NextRequest) {
     // State transitions are server decisions, based on the configured round contract.
     const answersThisRound = messages.filter((m) => m.role === 'candidate' && m.round === currentRound).length;
     const questionQuota = activeRole ? ROUND_QUESTION_QUOTA[activeRole] : QUESTIONS_PER_ROUND + 1;
+    const previousAnswersThisRound = isCandidateAnswerTurn
+      ? messages
+        .filter((m) => m.role === 'candidate' && m.round === currentRound)
+        .slice(0, -1)
+        .map((m) => m.content)
+      : [];
+    const earlyExit = isCandidateAnswerTurn && shouldEndInterviewEarly({
+      answer: String(answer || ''),
+      previousAnswers: previousAnswersThisRound,
+      answersThisRound,
+    });
     const turnAction = isSwitchNext
       ? 'continue'
-      : decideInterviewTurnAction({ isTimeout, isLastRound, answersThisRound, questionQuota });
+      : isManualEnd
+        ? 'session_complete'
+      : earlyExit
+        ? 'session_complete'
+        : decideInterviewTurnAction({ isTimeout, isLastRound, answersThisRound, questionQuota });
     const closeNote = turnAction !== 'continue'
       ? (language === 'en'
           ? 'The server is closing this stage now. Do NOT ask a new question. Give only a natural candidate-visible closing sentence or two. Do not use brackets, markers, scores, or hiring decisions.'
@@ -999,6 +1004,7 @@ export async function POST(request: NextRequest) {
               language,
               action: turnAction,
               timedOut: isTimeout,
+              earlyExit,
             });
             sendSseEvent(controller, encoder, 'interviewer.delta', { content: fullContent }, { requestId: clientRequestId, revision: currentRevision });
           } else {
@@ -1109,12 +1115,12 @@ export async function POST(request: NextRequest) {
           const latestQuestionClassification = latestInterviewer?.role === 'interviewer' && latestInterviewer.questionHash && latestInterviewer.content?.trim()
             ? classifyInterviewQuestion(latestInterviewer.content)
             : null;
-          const candidateTurnIndex = !isSwitchNext && !isTimeout
+          const candidateTurnIndex = isCandidateAnswerTurn
             ? newMessages.findLastIndex((message) => message.role === 'candidate')
             : -1;
           const nextLedger = advanceInterviewFactLedger(
             currentLedger,
-            !isSwitchNext && !isTimeout
+            isCandidateAnswerTurn
               ? {
                   answer: String(answer || ''),
                   answerTurnIndex: candidateTurnIndex,
@@ -1136,7 +1142,9 @@ export async function POST(request: NextRequest) {
             p_messages: newMessages,
             p_current_round: turnAction === 'round_end' ? currentRound + 1 : currentRound,
             p_status: turnAction === 'session_complete' ? 'completed' : 'in_progress',
-            p_ended_reason: turnAction === 'session_complete' ? (isTimeout ? 'timeout' : 'round_end') : null,
+            p_ended_reason: turnAction === 'session_complete'
+              ? (isManualEnd ? 'manual' : earlyExit ? 'eliminated' : isTimeout ? 'timeout' : 'round_end')
+              : null,
             p_turns: turnRows,
             p_questions: questionRows,
             p_context_digest: contextDigest,
@@ -1159,11 +1167,28 @@ export async function POST(request: NextRequest) {
             throw new Error(`保存面试消息失败: ${commitError?.message || '未返回版本'}`);
           }
 
+          if (turnAction === 'round_end') {
+            const { error: roundStartError } = await client
+              .from('interview_sessions')
+              .update({ round_started_at: new Date().toISOString() })
+              .eq('id', sessionId)
+              .eq('revision', nextRevision)
+              .eq('current_round', currentRound + 1)
+              .eq('status', 'in_progress');
+            if (roundStartError) {
+              console.error('Failed to record next interview round start:', roundStartError.message);
+            }
+          }
+
           // State event frames are emitted from structured server decisions.
           if (turnAction === 'round_end') {
               sendSseEvent(controller, encoder, 'round.ended', { roundEnd: true, round: currentRound }, { requestId: clientRequestId, revision: nextRevision });
           } else if (turnAction === 'session_complete') {
-              sendSseEvent(controller, encoder, 'session.completed', { endedReason: isTimeout ? 'timeout' : 'round_end', round: currentRound }, { requestId: clientRequestId, revision: nextRevision });
+              sendSseEvent(controller, encoder, 'session.completed', {
+                endedReason: isManualEnd ? 'manual' : earlyExit ? 'eliminated' : isTimeout ? 'timeout' : 'round_end',
+                earlyExit,
+                round: currentRound,
+              }, { requestId: clientRequestId, revision: nextRevision });
             }
             sendSseEvent(
               controller,
@@ -1180,7 +1205,10 @@ export async function POST(request: NextRequest) {
             .update({ active_request_id: null, active_request_started_at: null, updated_at: new Date().toISOString() })
             .eq('id', sessionId)
             .eq('active_request_id', clientRequestId);
-          sendSseEvent(controller, encoder, 'error', { error: '面试生成失败，请重试' }, { requestId: clientRequestId, revision: currentRevision });
+            const betaError = betaEntitlementResponse(error);
+            sendSseEvent(controller, encoder, 'error', betaError
+              ? { error: (await betaError.json()).error }
+              : { error: '面试生成失败，请重试' }, { requestId: clientRequestId, revision: currentRevision });
           controller.close();
         }
       },
@@ -1195,6 +1223,8 @@ export async function POST(request: NextRequest) {
     });
   } catch (error) {
     console.error('Interview chat error:', error);
+    const betaResponse = betaEntitlementResponse(error);
+    if (betaResponse) return betaResponse;
     return new Response(JSON.stringify({ error: '服务器错误' }), { status: 500 });
   }
 }

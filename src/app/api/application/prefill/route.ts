@@ -6,10 +6,12 @@ import { extractFirstJsonObject } from '@/lib/json-extract';
 import {
   buildProfileFromResume,
   DEFAULT_PROFILE,
+  sourceKeyForSemanticKey,
   type ApplicationProfile,
   type ProfileSourceMap,
 } from '@/lib/application-profile';
 import { applicationPrefillRequestSchema } from '@/lib/application-contracts';
+import { consumeAuthRateLimit } from '@/lib/auth-security';
 
 function decayedConfidence(fieldSource?: { source?: string; confidence?: number; updatedAt?: string }): number {
   const base = typeof fieldSource?.confidence === 'number' ? fieldSource.confidence : 0.9;
@@ -29,7 +31,10 @@ interface PrefillField {
   id?: string;
   placeholder?: string;
   options?: string[];
-  selectorHints?: Record<string, string>;
+  selectorHints?: {
+    semanticKey?: string;
+    [key: string]: string | number | undefined;
+  };
 }
 
 interface PrefillResult {
@@ -49,7 +54,7 @@ function directProfileValue(
   profile: ApplicationProfile,
   semanticKey: string,
   sourceMap?: ProfileSourceMap
-): { value: string; confidence: number; source: 'resume' | 'manual' } | null {
+): { value: string; confidence: number; source: 'resume' | 'manual' | 'ai' } | null {
   const personalMap: Record<string, string> = {
     first_name: profile.personal.firstName || '',
     last_name: profile.personal.lastName || '',
@@ -88,27 +93,54 @@ function directProfileValue(
     skills: 'skills',
     languages: 'languages',
   };
-  const sourceKey = sourceKeyMap[semanticKey] || semanticKey;
+  const sourceKey = sourceKeyMap[semanticKey] || sourceKeyForSemanticKey(semanticKey);
   const fieldSource = sourceMap?.[sourceKey] || sourceMap?.[semanticKey];
-  if (personalMap[semanticKey]) {
+  if (Object.prototype.hasOwnProperty.call(personalMap, semanticKey) && personalMap[semanticKey]) {
+    const source = fieldSource?.source === 'manual'
+      ? 'manual'
+      : fieldSource?.source === 'ai'
+        ? 'ai'
+        : 'resume';
     return {
       value: personalMap[semanticKey],
-      confidence: fieldSource?.source === 'manual' ? decayedConfidence(fieldSource) : 0.95,
-      source: fieldSource?.source === 'manual' ? 'manual' : 'resume',
+      confidence: fieldSource?.source === 'manual'
+        ? decayedConfidence(fieldSource)
+        : fieldSource?.source === 'ai'
+          ? Math.min(fieldSource.confidence || 0.8, 0.8)
+          : 0.95,
+      source,
     };
   }
   if (semanticKey === 'skills' && profile.skills.length) {
+    const source = fieldSource?.source === 'manual'
+      ? 'manual'
+      : fieldSource?.source === 'ai'
+        ? 'ai'
+        : 'resume';
     return {
       value: profile.skills.join(', '),
-      confidence: fieldSource?.source === 'manual' ? decayedConfidence(fieldSource) : 0.95,
-      source: fieldSource?.source === 'manual' ? 'manual' : 'resume',
+      confidence: fieldSource?.source === 'manual'
+        ? decayedConfidence(fieldSource)
+        : fieldSource?.source === 'ai'
+          ? Math.min(fieldSource.confidence || 0.8, 0.8)
+          : 0.95,
+      source,
     };
   }
   if (semanticKey === 'languages' && profile.languages.length) {
+    const source = fieldSource?.source === 'manual'
+      ? 'manual'
+      : fieldSource?.source === 'ai'
+        ? 'ai'
+        : 'resume';
     return {
       value: profile.languages.join(', '),
-      confidence: fieldSource?.source === 'manual' ? decayedConfidence(fieldSource) : 0.95,
-      source: fieldSource?.source === 'manual' ? 'manual' : 'resume',
+      confidence: fieldSource?.source === 'manual'
+        ? decayedConfidence(fieldSource)
+        : fieldSource?.source === 'ai'
+          ? Math.min(fieldSource.confidence || 0.8, 0.8)
+          : 0.95,
+      source,
     };
   }
   return null;
@@ -118,6 +150,13 @@ export async function POST(request: NextRequest) {
   try {
     const auth = await getAuthContext(request);
     if (!auth) return unauthorizedResponse();
+    const rateLimit = await consumeAuthRateLimit(`application-prefill:${auth.user.id}`, 30, 60, 120);
+    if (!rateLimit.allowed) {
+      return NextResponse.json(
+        { error: '预填请求过于频繁，请稍后重试' },
+        { status: 429, headers: { 'Retry-After': String(rateLimit.retryAfterSeconds) } },
+      );
+    }
     const client = auth.client;
     const parsed = applicationPrefillRequestSchema.safeParse(await request.json());
     if (!parsed.success) return NextResponse.json({ error: '预填参数无效' }, { status: 400 });
@@ -126,7 +165,7 @@ export async function POST(request: NextRequest) {
 
     const { data: profileRow } = await client
       .from('application_profiles')
-      .select('profile, resume_id, source')
+    .select('profile, resume_id, source, version')
       .eq('user_id', auth.user.id)
       .maybeSingle();
 
@@ -196,7 +235,7 @@ export async function POST(request: NextRequest) {
           confidence: direct.confidence,
           needsReview: direct.confidence < 0.9,
         });
-      } else if ((sourceMap?.[semanticKey]?.ignoreCount || 0) >= 2) {
+      } else if ((sourceMap?.[sourceKeyForSemanticKey(semanticKey)]?.ignoreCount || 0) >= 2) {
         results.push({
           key: field.key,
           value: '',
@@ -286,7 +325,7 @@ export async function POST(request: NextRequest) {
       }
     }
 
-    return NextResponse.json({ fields: results });
+    return NextResponse.json({ fields: results, version: profileRow?.version || 0 });
   } catch (error) {
     console.error('Prefill error:', error);
     return NextResponse.json({ error: '生成预填数据失败' }, { status: 500 });

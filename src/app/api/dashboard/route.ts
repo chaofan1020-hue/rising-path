@@ -1,8 +1,14 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { resolveRegionKey, type RegionKey, REGION_DNA, shouldBeApplying } from '@/lib/region-dna';
+import { type RegionKey, REGION_DNA, shouldBeApplying } from '@/lib/region-dna';
 import { getAuthContext, unauthorizedResponse } from '@/lib/auth-server';
 import { buildCareerRoutePlan, type CareerRouteDiagnosis } from '@/lib/career-route-planner';
 import type { ResumeProfile, UserSegmentation } from '@/lib/resume-types';
+import { resolveActiveRegion } from '@/lib/user-region';
+import {
+  computePersonalityAssessment,
+  computeSponsorshipStatsByRole,
+  type PersonalityAnswer,
+} from '@/lib/personality-assessment';
 
 type Timeframe = 'now' | 'week' | 'month';
 type CareerStage = 'junior' | 'senior' | 'experienced' | 'returning_intern';
@@ -30,6 +36,7 @@ interface DashboardPlan {
 
 interface DashboardResume {
   id?: number;
+  segmentation_confirmed?: boolean | null;
   profile?: {
     personality?: {
       dimensions?: Record<string, number>;
@@ -42,6 +49,7 @@ interface DashboardResume {
         fit: string;
         reasons: string[];
       }>;
+      regionKey?: RegionKey | null;
       completedAt?: string;
     } | null;
     targetRegion?: string | null;
@@ -93,8 +101,16 @@ interface DashboardResume {
   } | null;
 }
 
-interface FavoriteRow {
-  jobs?: Array<{ updated_at?: string | null }> | { updated_at?: string | null } | null;
+interface DashboardOverview {
+  latest_resume: DashboardResume | null;
+  preferred_region?: string | null;
+  latest_interview: { id: number; status: string; updated_at: string; created_at: string } | null;
+  resume_count: number;
+  match_count: number;
+  avg_match_score: number;
+  interview_count: number;
+  weekly_application_count: number;
+  application_count: number;
 }
 
 const REGION_LABEL_KEYS: Record<RegionKey, string> = {
@@ -131,26 +147,6 @@ function getRoleCategory(targetRole?: string): string {
   if (/finance|investment|banking/i.test(targetRole)) return 'dashboard.role.finance';
   if (/consulting|consultant/i.test(targetRole)) return 'dashboard.role.consulting';
   return 'dashboard.role.other';
-}
-
-function resolveRegion(resume: DashboardResume | null | undefined): RegionKey | null {
-  const manualRegions = resume?.segmentation_overrides?.regions;
-  if (manualRegions && manualRegions.length > 0) return manualRegions[0];
-  const segRegions = resume?.segmentation?.regions;
-  if (segRegions && segRegions.length > 0) return segRegions[0];
-  const intentionRegion = resume?.profile?.targetRegion;
-  if (intentionRegion) return resolveRegionKey(intentionRegion);
-  // 尝试从 intention.locations 中提取
-  const locations = resume?.profile?.intention?.locations;
-  if (locations && locations.length > 0) {
-    for (const loc of locations) {
-      const resolved = resolveRegionKey(loc);
-      if (resolved) return resolved;
-    }
-  }
-  const inferredRegion = resume?.profile?.inferredRegion;
-  if (inferredRegion) return resolveRegionKey(inferredRegion);
-  return null;
 }
 
 function buildLegacyPlan(resume: DashboardResume | null, regionKey: RegionKey): DashboardPlan {
@@ -302,95 +298,80 @@ export async function GET(request: NextRequest) {
   const supabase = auth.client;
   const weekStart = getWeekStart(new Date());
 
-  // 这些数据互相独立，必须并行读取，避免 dashboard 首屏耗时叠加。
-  const [
-    { data: resumes },
-    { count: resumeCountResult },
-    { data: aiMatches },
-    { data: interviews },
-    { count: interviewCountResult },
-    { count: weeklyApplicationCountResult },
-    { count: applicationCountResult },
-    { data: interviewEvaluationsData },
-    { data: favorites },
-    { count: favoriteCountResult },
-  ] = await Promise.all([
-    supabase
-      .from('resumes')
-      .select('id, created_at, updated_at, file_name, profile, segmentation, segmentation_overrides')
-      .eq('user_id', auth.user.id)
-      .order('created_at', { ascending: false })
-      .limit(1),
-    supabase
-      .from('resumes')
-      .select('id', { count: 'exact', head: true })
-      .eq('user_id', auth.user.id),
-    supabase
-      .from('ai_matches')
-      .select('match_score, job_id')
-      .eq('user_id', auth.user.id)
-      .order('created_at', { ascending: false })
-      .limit(50),
-    supabase
-      .from('interview_sessions')
-      .select('id, status, updated_at, created_at')
-      .eq('user_id', auth.user.id)
-      .order('created_at', { ascending: false })
-      .limit(1),
-    supabase
-      .from('interview_sessions')
-      .select('id', { count: 'exact', head: true })
-      .eq('user_id', auth.user.id),
-    supabase
-      .from('applications')
-      .select('id', { count: 'exact', head: true })
-      .eq('user_id', auth.user.id)
-      .gte('created_at', weekStart.toISOString()),
-    supabase
-      .from('applications')
-      .select('id', { count: 'exact', head: true })
-      .eq('user_id', auth.user.id),
-    supabase
-      .from('interview_sessions')
-      .select('id, target_company, interview_type, overall_score, report_grade, updated_at, created_at, report')
-      .eq('user_id', auth.user.id)
-      .eq('status', 'completed')
-      .order('created_at', { ascending: false })
-      .limit(10),
-    supabase
-      .from('favorites')
-      .select('jobs!inner(updated_at)')
-      .eq('user_id', auth.user.id),
-    supabase
-      .from('favorites')
-      .select('id', { count: 'exact', head: true })
-      .eq('user_id', auth.user.id),
-  ]);
-
-  const latestResume = (resumes?.[0] as DashboardResume | undefined) ?? null;
+  // One SQL read model replaces several PostgREST requests on the critical path.
+  const { data: overviewData, error: overviewError } = await supabase.rpc('get_dashboard_overview', {
+    p_user_id: auth.user.id,
+    p_week_start: weekStart.toISOString(),
+  });
+  if (overviewError || !overviewData) {
+    console.error('[Dashboard] Failed to load overview:', overviewError);
+    return NextResponse.json({ error: 'Unable to load dashboard overview' }, { status: 500 });
+  }
+  const overview = overviewData as DashboardOverview;
+  const latestResume = overview.latest_resume ?? null;
   const latestResumeId = latestResume?.id ?? null;
-  const resumeCount = resumeCountResult ?? 0;
+  const resumeCount = overview.resume_count ?? 0;
+  const avgMatchScore = overview.avg_match_score ?? 0;
+  const interviewCount = overview.interview_count ?? 0;
+  const latestInterview = overview.latest_interview ?? null;
+  const applicationCount = overview.application_count ?? 0;
+  const weeklyApplications = overview.weekly_application_count ?? 0;
 
-  const avgMatchScore = aiMatches?.length
-    ? Math.round(aiMatches.reduce((s, m) => s + (m.match_score || 0), 0) / aiMatches.length)
+  const now = Date.now();
+  const daysSinceLogin = auth.user.last_sign_in_at
+    ? Math.floor((now - new Date(auth.user.last_sign_in_at).getTime()) / 86400000)
     : 0;
 
-  const interviewCount = interviewCountResult ?? 0;
-  const latestInterview = interviews?.[0] ?? null;
+  // 地区：账户级目标地区优先，简历画像仅作为兼容回退。
+  const selectedRegion = resolveActiveRegion(overview.preferred_region, latestResume);
+  const regionOptions = (Object.keys(REGION_DNA) as RegionKey[]).map((key) => ({
+    value: key,
+    labelKey: REGION_LABEL_KEYS[key],
+  }));
 
-  const applicationCount = applicationCountResult ?? 0;
-  const weeklyApplications = weeklyApplicationCountResult ?? 0;
-
-  const favoriteCount = favoriteCountResult ?? 0;
-  const favoriteRows = (favorites ?? []) as FavoriteRow[];
-  const recentlyUpdatedFavorites =
-    favoriteRows.filter((f) => {
-      const job = Array.isArray(f.jobs) ? f.jobs[0] : f.jobs;
-      const jobUpdated = new Date(job?.updated_at || 0);
-      return Date.now() - jobUpdated.getTime() < 7 * 24 * 60 * 60 * 1000;
-    }).length ?? 0;
-
-  const personalityProfile = latestResume?.profile?.personality ?? null;
+  // Personality recommendations include sponsor availability, so refresh the
+  // cached result when the account's active market changes.
+  let personalityProfile = latestResume?.profile?.personality ?? null;
+  if (personalityProfile && selectedRegion && personalityProfile.regionKey !== selectedRegion) {
+    const { data: assessment } = await supabase
+      .from('personality_assessments')
+      .select('answers')
+      .eq('user_id', auth.user.id)
+      .maybeSingle();
+    const answers = Array.isArray(assessment?.answers)
+      ? assessment.answers as PersonalityAnswer[]
+      : null;
+    if (answers && latestResume?.profile) {
+      const { data: jobs } = await supabase
+        .from('jobs')
+        .select('direction, sponsorship, region')
+        .eq('is_active', true);
+      const sponsorshipStats = computeSponsorshipStatsByRole(jobs || [], selectedRegion);
+      const computed = computePersonalityAssessment(
+        answers,
+        latestResume.profile as ResumeProfile,
+        sponsorshipStats,
+      );
+      personalityProfile = {
+        ...personalityProfile,
+        dimensions: computed.result.dimensions,
+        primaryDimension: computed.result.primaryDimension,
+        summaryKey: computed.result.summaryKey,
+        recommendations: computed.recommendations,
+        regionKey: selectedRegion,
+        completedAt: new Date().toISOString(),
+      };
+      const nextProfile = {
+        ...(latestResume.profile as Record<string, unknown>),
+        personality: personalityProfile,
+      };
+      await supabase
+        .from('resumes')
+        .update({ profile: nextProfile, updated_at: new Date().toISOString() })
+        .eq('id', latestResumeId)
+        .eq('user_id', auth.user.id);
+    }
+  }
   const personality = personalityProfile
     ? {
         hasAssessment: true,
@@ -401,18 +382,6 @@ export async function GET(request: NextRequest) {
         updatedAt: personalityProfile.completedAt || '',
       }
     : null;
-
-  const now = Date.now();
-  const daysSinceLogin = auth.user.last_sign_in_at
-    ? Math.floor((now - new Date(auth.user.last_sign_in_at).getTime()) / 86400000)
-    : 0;
-
-  // 地区：用户手动选择优先
-  const selectedRegion = resolveRegion(latestResume);
-  const regionOptions = (Object.keys(REGION_DNA) as RegionKey[]).map((key) => ({
-    value: key,
-    labelKey: REGION_LABEL_KEYS[key],
-  }));
 
   // 毕业年份（从简历画像提取）
   const gradYear = latestResume?.profile?.education?.[0]?.endYear ?? undefined;
@@ -510,14 +479,6 @@ export async function GET(request: NextRequest) {
       descriptionParams: { days: daysSinceLogin },
     });
   }
-  if (recentlyUpdatedFavorites > 0) {
-    reminders.push({
-      type: 'favorite_update',
-      titleKey: 'dashboard.reminder.favoriteUpdate.title',
-      descriptionKey: 'dashboard.reminder.favoriteUpdate.description',
-      descriptionParams: { count: recentlyUpdatedFavorites },
-    });
-  }
   if (
     latestInterview &&
     ['completed', 'ended', 'finished'].includes(latestInterview.status)
@@ -547,20 +508,6 @@ export async function GET(request: NextRequest) {
     mindsetParams: { count: applicationCount },
   };
 
-  // 面试评估记录（仅 completed 且有分数的）
-  const interviewEvaluations = (interviewEvaluationsData ?? [])
-    .filter((iv) => iv.overall_score != null || iv.report_grade != null)
-    .slice(0, 10)
-    .map((iv) => ({
-      id: iv.id,
-      targetCompany: iv.target_company ?? '',
-      interviewType: iv.interview_type ?? '',
-      overallScore: iv.overall_score,
-      reportGrade: iv.report_grade,
-      completedAt: iv.updated_at ?? iv.created_at,
-      report: iv.report,
-    }));
-
   // 求职规划
   const plan: DashboardPlan | null =
     latestResume && selectedRegion ? buildPlan(latestResume, selectedRegion) : null;
@@ -588,13 +535,14 @@ export async function GET(request: NextRequest) {
     plan,
     diagnosis: plan?.diagnosis ?? null,
     personality,
-    interviewEvaluations,
+    interviewEvaluations: [],
+    segmentationConfirmed: latestResume?.segmentation_confirmed === true,
     counts: {
       resumes: resumeCount,
-      matches: aiMatches?.length ?? 0,
+      matches: overview.match_count ?? 0,
       interviews: interviewCount,
       applications: applicationCount,
-      favorites: favoriteCount,
+      favorites: 0,
     },
   });
 }

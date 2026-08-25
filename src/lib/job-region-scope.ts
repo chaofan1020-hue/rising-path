@@ -1,5 +1,6 @@
 export const TARGET_REGION_KEYWORDS: Record<string, string[]> = {
   north_america: [
+    'North America', 'North-American', 'NorthAmerican',
     'United States', 'USA', 'U.S.', 'Canada',
     // 常见的仅城市/州缩写地址
     'New York', 'San Francisco', 'Los Angeles', 'Seattle', 'Chicago', 'Boston', 'Austin',
@@ -11,6 +12,7 @@ export const TARGET_REGION_KEYWORDS: Record<string, string[]> = {
   ],
   australia: ['Australia', 'Sydney', 'Melbourne', 'Brisbane', 'Perth', 'Adelaide', 'Canberra', 'Ballarat'],
   hong_kong: ['Hong Kong', 'Kowloon', 'Hong Kong Island'],
+  singapore: ['Singapore'],
   united_kingdom: [
     'United Kingdom', 'UK', 'U.K.', 'England', 'Scotland', 'Wales', 'Northern Ireland',
     'London', 'Bournemouth', 'Bristol', 'Manchester', 'Edinburgh', 'Glasgow', 'Birmingham',
@@ -20,9 +22,10 @@ export const TARGET_REGION_KEYWORDS: Record<string, string[]> = {
 };
 
 const TARGET_PATTERNS: Array<[string, RegExp]> = [
-  ['north_america', /\b(united states|usa|u\.s\.?|us|canada|new york|san francisco|los angeles|seattle|chicago|boston|austin|dallas|houston|atlanta|denver|miami|philadelphia|washington|jersey city|newark|palo alto|mountain view|arlington|raleigh|charlotte|tampa|orlando|columbus|wilmington|fort lauderdale|milwaukee|colorado springs|baton rouge|fresno|san antonio|jacksonville|san diego|toronto|vancouver|ottawa|montreal|mississauga|quebec)\b/i],
+  ['north_america', /\b(north america|north-american|northamerican|united states|usa|u\.s\.?|us|canada|new york|san francisco|los angeles|seattle|chicago|boston|austin|dallas|houston|atlanta|denver|miami|philadelphia|washington|jersey city|newark|palo alto|mountain view|arlington|raleigh|charlotte|tampa|orlando|columbus|wilmington|fort lauderdale|milwaukee|colorado springs|baton rouge|fresno|san antonio|jacksonville|san diego|toronto|vancouver|ottawa|montreal|mississauga|quebec)\b/i],
   ['australia', /\b(australia|sydney|melbourne|brisbane|perth|adelaide|canberra|ballarat)\b/i],
   ['hong_kong', /\b(hong kong|kowloon|hong kong island)\b/i],
+  ['singapore', /\bsingapore\b/i],
   ['united_kingdom', /\b(united kingdom|u\.k\.?|uk|england|scotland|wales|northern ireland|london|bournemouth|bristol|manchester|edinburgh|glasgow|birmingham|leeds|cardiff|belfast|cambridge|oxford|southampton|reading|guildford|crawley|aberdeen|newcastle|sheffield|liverpool)\b/i],
 ];
 
@@ -51,26 +54,28 @@ export function targetRegionPostgrestClauses(): string[] {
 }
 
 const CONFIGURED_REGION_KEYWORDS: Record<string, string[]> = {
+  '北美': ['North America', 'North-American', 'NorthAmerican', ...TARGET_REGION_KEYWORDS.north_america],
   '美国': TARGET_REGION_KEYWORDS.north_america.filter((keyword) => !['Canada', 'Toronto', 'Vancouver', 'Ottawa', 'Montreal', 'Mississauga', 'Quebec'].includes(keyword)),
   '加拿大': ['Canada', 'Toronto', 'Vancouver', 'Ottawa', 'Montreal', 'Mississauga', 'Quebec'],
   '英国': TARGET_REGION_KEYWORDS.united_kingdom,
   '澳大利亚': TARGET_REGION_KEYWORDS.australia,
   '香港': TARGET_REGION_KEYWORDS.hong_kong,
-  '新加坡': ['Singapore'],
+  '新加坡': TARGET_REGION_KEYWORDS.singapore,
 };
 
-const CONFIGURED_REGION_SCOPE_KEYS: Record<string, string> = {
-  '美国': 'us',
-  '加拿大': 'canada',
-  '英国': 'uk',
-  '澳大利亚': 'australia',
-  '香港': 'hong_kong',
-  '新加坡': 'singapore',
+const CONFIGURED_REGION_SCOPE_KEYS: Record<string, string[]> = {
+  '北美': ['us', 'canada'],
+  '美国': ['us'],
+  '加拿大': ['canada'],
+  '英国': ['uk'],
+  '澳大利亚': ['australia'],
+  '香港': ['hong_kong'],
+  '新加坡': ['singapore'],
 };
 
 /** Stable database values used by the AI-match retrieval RPC. */
 export function configuredRegionScopeKeys(regions: string[]): string[] {
-  return [...new Set(regions.map((region) => CONFIGURED_REGION_SCOPE_KEYS[region.trim()]).filter(Boolean))];
+  return [...new Set(regions.flatMap((region) => CONFIGURED_REGION_SCOPE_KEYS[region.trim()] || []))];
 }
 
 export function targetRegionScopeKeys(): string[] {

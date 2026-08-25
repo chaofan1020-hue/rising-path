@@ -18,6 +18,7 @@ function fallbackConfigs(configType: 'region' | 'direction', values: string[], i
 }
 
 const FALLBACK_REGION_CONFIGS = fallbackConfigs('region', [
+  '北美',
   '美国',
   '加拿大',
   '英国',

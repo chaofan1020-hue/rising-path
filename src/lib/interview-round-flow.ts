@@ -26,13 +26,18 @@ export function buildInterviewRoundClosing({
   language,
   action,
   timedOut,
+  earlyExit = false,
 }: {
   language: 'zh' | 'en';
   action: Exclude<InterviewTurnAction, 'continue'>;
   timedOut: boolean;
+  earlyExit?: boolean;
 }): string {
   if (language === 'en') {
     if (action === 'session_complete') {
+      if (earlyExit) {
+        return 'Thank you for your time today. Based on our conversation, we will conclude the interview here. We will follow up with the result.';
+      }
       return timedOut
         ? 'Time is up, so we will conclude the interview here. Thank you for your time today.'
         : 'Thank you for your answers. That concludes today\'s interview.';
@@ -43,6 +48,9 @@ export function buildInterviewRoundClosing({
   }
 
   if (action === 'session_complete') {
+    if (earlyExit) {
+      return '感谢你的时间。基于今天的交流，我们先在这里结束面试，后续结果会通过平台通知。';
+    }
     return timedOut
       ? '本场面试时间已到，今天的面试先到这里。感谢你的时间。'
       : '感谢你的回答，今天的面试到这里结束。';

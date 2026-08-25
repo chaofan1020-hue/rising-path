@@ -1,0 +1,28 @@
+[Unit]
+Description=Liorvix web application
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=simple
+User=__APP_USER__
+Group=__APP_USER__
+WorkingDirectory=/opt/liorvix
+EnvironmentFile=/opt/liorvix/.env.local
+Environment=NODE_ENV=production
+Environment=HOSTNAME=127.0.0.1
+Environment=PORT=5000
+Environment=JOBS_AUTO_WORKER=false
+ExecStart=/usr/bin/node /opt/liorvix/dist/server.js
+Restart=always
+RestartSec=5
+TimeoutStopSec=30
+KillSignal=SIGTERM
+NoNewPrivileges=true
+PrivateTmp=true
+ProtectHome=true
+ReadWritePaths=/opt/liorvix
+LimitNOFILE=65536
+
+[Install]
+WantedBy=multi-user.target

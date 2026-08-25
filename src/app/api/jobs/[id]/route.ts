@@ -4,6 +4,9 @@ import { getSupabaseClient } from '@/storage/database/supabase-client';
 import { sanitizeJobContent } from '@/lib/job-content';
 import { ADMIN_PERMISSIONS, requireAdminPermission } from '@/lib/admin-permissions';
 import { recordAdminAuditEvent, recordAdminAuditFailure } from '@/lib/admin-audit';
+import { ExternalFetchError, fetchSafeExternalPage } from '@/lib/safe-external-fetch';
+import { looksLikeClosedJobPage } from '@/lib/job-maintenance';
+import { nextLinkFailureCount, shouldCloseAfterLinkFailure } from '@/lib/job-link-health';
 
 // 本地 logo 缓存
 let localLogosCache: Record<string, string> = {};
@@ -80,6 +83,76 @@ export async function GET(
       );
     }
 
+    // Feed data can become stale between list render and a user's click.
+    // Recheck old links at the detail boundary before allowing auto-apply.
+    let linkCheck: { status: number | null; checkedAt: string; stale: boolean } | null = null;
+    if (data.source_system === 'collector_feed' && data.job_url) {
+      const { data: syncRecord } = await client
+        .from('job_sync_records')
+        .select('last_link_checked_at,last_link_status,link_check_failures,availability_status,link_health')
+        .eq('job_id', Number(id))
+        .maybeSingle();
+      const maxAgeHours = Math.min(Math.max(Number(process.env.JOBS_DETAIL_LINK_CHECK_MAX_AGE_HOURS) || 6, 1), 168);
+      const lastCheckedAt = syncRecord?.last_link_checked_at ? Date.parse(syncRecord.last_link_checked_at) : NaN;
+      const stale = !Number.isFinite(lastCheckedAt) || Date.now() - lastCheckedAt >= maxAgeHours * 3_600_000;
+      if (stale) {
+        const checkedAt = new Date().toISOString();
+        try {
+          const page = await fetchSafeExternalPage(data.job_url);
+          if (looksLikeClosedJobPage(page.title, page.content)) {
+            throw new ExternalFetchError('目标页面显示岗位已关闭', 422, 410);
+          }
+          await client
+            .from('job_sync_records')
+            .update({
+              last_link_checked_at: checkedAt,
+              last_link_status: page.httpStatus,
+              last_link_http_status: page.httpStatus,
+              link_check_failures: 0,
+              last_link_error: null,
+              availability_status: 'valid',
+              link_health: 'healthy',
+              availability_checked_at: checkedAt,
+              updated_at: checkedAt,
+            })
+            .eq('job_id', Number(id));
+          linkCheck = { status: page.httpStatus, checkedAt, stale: false };
+        } catch (linkError) {
+          const upstreamStatus = linkError instanceof ExternalFetchError ? linkError.upstreamStatus : undefined;
+          const failures = nextLinkFailureCount(upstreamStatus, syncRecord?.link_check_failures);
+          const isClosed = shouldCloseAfterLinkFailure({
+            httpStatus: upstreamStatus,
+            previousFailures: syncRecord?.link_check_failures,
+          });
+          const blocked = upstreamStatus === 401 || upstreamStatus === 403 || upstreamStatus === 429;
+          const timeout = upstreamStatus === 408 || upstreamStatus === 524;
+          await client
+            .from('job_sync_records')
+            .update({
+              last_link_checked_at: checkedAt,
+              last_link_status: upstreamStatus || null,
+              last_link_http_status: upstreamStatus || null,
+              link_check_failures: failures,
+              last_link_error: linkError instanceof Error ? linkError.message.slice(0, 2_000) : String(linkError).slice(0, 2_000),
+              availability_status: isClosed ? 'closed' : blocked ? 'blocked' : timeout ? 'timeout' : 'unknown',
+              link_health: isClosed ? 'closed' : blocked ? 'blocked' : timeout ? 'timeout' : 'unknown',
+              availability_checked_at: checkedAt,
+              updated_at: checkedAt,
+            })
+            .eq('job_id', Number(id));
+          if (isClosed) {
+            await client
+              .from('jobs')
+              .update({ is_active: false, is_closed: true, updated_at: checkedAt })
+              .eq('id', Number(id))
+              .eq('is_active', true);
+            return NextResponse.json({ error: '该岗位已下架或官网链接已失效', stale: true }, { status: 410 });
+          }
+          linkCheck = { status: upstreamStatus || null, checkedAt, stale: true };
+        }
+      }
+    }
+
     // 检查是否需要刷新缓存
     if (Date.now() - lastCacheTime > CACHE_DURATION) {
       await refreshLogoCache();
@@ -96,6 +169,7 @@ export async function GET(
         logo_url,
         logo_fallback_url,
       }),
+      linkCheck,
     });
   } catch (error) {
     console.error('Error fetching job:', error);

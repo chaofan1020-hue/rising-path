@@ -1,4 +1,5 @@
 import { createTextProviderClient } from '@/lib/ai/text-provider';
+import { invokeTrackedTextGeneration } from '@/lib/ai-usage';
 import { buildRegionBlock, type RegionKey } from '@/lib/region-dna';
 import { extractFirstJsonObject } from '@/lib/json-extract';
 import { buildVisaTimeline } from '@/lib/visa-timeline';
@@ -11,6 +12,7 @@ import type {
 } from '@/lib/resume-types';
 
 export interface RefineCareerPlanInput {
+  userId?: string | null;
   profile: ResumeProfile;
   segmentation: UserSegmentation;
   region: RegionKey | null;
@@ -85,10 +87,13 @@ export async function refineCareerPlan(
 ): Promise<PlanRefinement | null> {
   try {
     const client = createTextProviderClient();
-    const response = await client.invoke([
+    const response = await invokeTrackedTextGeneration(client, [
       { role: 'system', content: '你是一个严谨的求职规划顾问，只输出 JSON。' },
       { role: 'user', content: buildPrompt(input) },
-    ], { temperature: 0.3, thinking: 'disabled' });
+    ], { temperature: 0.3, thinking: 'disabled' }, {
+      userId: input.userId,
+      feature: 'career_plan_refine',
+    });
 
     const parsed = extractFirstJsonObject(response.content || '');
     if (!parsed || typeof parsed !== 'object') return null;

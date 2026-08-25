@@ -8,7 +8,6 @@ import {
   isAuthRateLimitError,
   normalizeEmail,
   validatePassword,
-  verifyTurnstileToken,
 } from '@/lib/auth-security';
 
 export async function POST(request: NextRequest) {
@@ -40,17 +39,12 @@ export async function POST(request: NextRequest) {
       );
     }
 
-    if (!(await verifyTurnstileToken(body.captchaToken, ip))) {
-      return NextResponse.json({ error: '请完成安全验证后再注册' }, { status: 400 });
-    }
-
     const supabase = getSupabaseAnonClient();
     const { data, error } = await supabase.auth.signUp({
       email,
       password,
       options: {
         data: { username },
-        captchaToken: typeof body.captchaToken === 'string' ? body.captchaToken : undefined,
       },
     });
 

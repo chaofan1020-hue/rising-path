@@ -2,21 +2,23 @@
 
 import { Button } from "@/components/ui/button";
 import {
-    NavigationMenu,
-    NavigationMenuContent,
-    NavigationMenuItem,
-    NavigationMenuLink,
-    NavigationMenuList,
-    NavigationMenuTrigger,
-} from "@/components/ui/navigation-menu";
-import { Menu, MoveRight, X, LogOut, User as UserIcon } from "lucide-react";
+    DropdownMenu,
+    DropdownMenuContent,
+    DropdownMenuTrigger,
+} from "@/components/ui/dropdown-menu";
+import { Menu, MoveRight, X, LogOut, LayoutDashboard, Search, FileText, Send, Sparkles, Wand2, MessageSquare, ChevronDown } from "lucide-react";
 import { useState, useEffect } from "react";
 import Link from "next/link";
+import { usePathname } from "next/navigation";
 import { ThemeToggle } from "@/components/theme-toggle";
 import { LanguageSwitcher } from "@/components/language-switcher";
 import { useLanguage } from "@/lib/language-context";
 import { getSupabaseBrowserClient } from "@/lib/supabase-browser";
 import type { User as SupabaseUser, AuthChangeEvent, Session } from "@supabase/supabase-js";
+import { cn } from "@/lib/utils";
+import { AccountCenter } from "@/components/account-center";
+
+let headerSessionCache: Session | null | undefined;
 
 function getDisplayName(user: SupabaseUser | null): string {
     if (!user) return "";
@@ -31,28 +33,28 @@ function getDisplayName(user: SupabaseUser | null): string {
 
 function Header1() {
     const { t } = useLanguage();
+    const pathname = usePathname();
     const [isOpen, setOpen] = useState(false);
-    const [isLoggedIn, setIsLoggedIn] = useState(false);
-    const [displayName, setDisplayName] = useState("");
-    const [user, setUser] = useState<SupabaseUser | null>(null);
+    const [toolsOpen, setToolsOpen] = useState(false);
+    const [session, setSession] = useState<Session | null | undefined>(() => headerSessionCache);
+    const isLoggedIn = Boolean(session);
+    const currentUser = session?.user ?? null;
+    const displayName = getDisplayName(currentUser);
 
     useEffect(() => {
         let mounted = true;
+        const applySession = (nextSession: Session | null) => {
+            headerSessionCache = nextSession;
+            if (mounted) setSession(nextSession);
+        };
+
         getSupabaseBrowserClient().then(supabase => {
             supabase.auth.getSession().then(({ data: { session } }: { data: { session: Session | null } }) => {
-                if (mounted) {
-                    setIsLoggedIn(!!session);
-                    setUser(session?.user ?? null);
-                    setDisplayName(getDisplayName(session?.user ?? null));
-                }
+                applySession(session);
             });
             const { data: { subscription } } = supabase.auth.onAuthStateChange(
                 (_event: AuthChangeEvent, session: Session | null) => {
-                    if (mounted) {
-                        setIsLoggedIn(!!session);
-                        setUser(session?.user ?? null);
-                        setDisplayName(getDisplayName(session?.user ?? null));
-                    }
+                    applySession(session);
                 }
             );
             return () => subscription.unsubscribe();
@@ -63,148 +65,118 @@ function Header1() {
         };
     }, []);
 
+    useEffect(() => {
+        setOpen(false);
+        setToolsOpen(false);
+    }, [pathname]);
+
     const handleLogout = async () => {
         const supabase = await getSupabaseBrowserClient();
         await supabase.auth.signOut();
-        setIsLoggedIn(false);
-        setUser(null);
-        setDisplayName("");
+        headerSessionCache = null;
+        setSession(null);
         window.location.href = '/';
     };
 
     const navigationItems: Array<{
         title: string;
-        href?: string;
-        description?: string;
-        highlighted?: boolean;
-        items?: Array<{ title: string; href: string }>;
+        href: string;
+        icon: typeof LayoutDashboard;
     }> = [
         {
-            title: t("nav.home"),
-            href: "/",
-            description: "",
+            title: t("nav.dashboard"),
+            href: "/dashboard",
+            icon: LayoutDashboard,
         },
         {
-            title: t("nav.mockInterview"),
-            href: "/mock-interview",
-            highlighted: true,
+            title: t("nav.jobSearch"),
+            href: "/jobs",
+            icon: Search,
         },
         {
-            title: t("nav.features"),
-            description: t("features.subtitle"),
-            items: [
-                {
-                    title: t("nav.jobSearch"),
-                    href: "/jobs",
-                },
-                {
-                    title: t("nav.resumeManager"),
-                    href: "/resume",
-                },
-                {
-                    title: t("nav.aiMatch"),
-                    href: "/ai-match",
-                },
-                {
-                    title: t("nav.atsOptimize"),
-                    href: "/optimize",
-                },
-                {
-                    title: t("nav.dashboard"),
-                    href: "/dashboard",
-                },
-            ],
+            title: t("nav.resumeManager"),
+            href: "/resume",
+            icon: FileText,
         },
         {
-            title: t("nav.more"),
-            description: "",
-            items: [
-                {
-                    title: t("nav.autoApplication"),
-                    href: "/field-mappings",
-                },
-            ],
+            title: t("nav.applications"),
+            href: "/field-mappings?tab=applications",
+            icon: Send,
         },
     ];
 
+    const toolItems = [
+        { title: t("nav.aiMatch"), href: "/ai-match", icon: Sparkles },
+        { title: t("nav.atsOptimize"), href: "/optimize", icon: Wand2 },
+        { title: t("nav.mockInterview"), href: "/mock-interview", icon: MessageSquare },
+    ];
+
+    const isActive = (href: string) => {
+        const basePath = href.split('?')[0];
+        return pathname === basePath || pathname.startsWith(`${basePath}/`);
+    };
+
     return (
-        <header className="w-full z-40 fixed top-0 left-0 bg-background">
-            <div className="container relative mx-auto min-h-14 flex gap-4 flex-row lg:grid lg:grid-cols-3 items-center">
-                <div className="justify-start items-center gap-4 lg:flex hidden flex-row">
-                    <NavigationMenu className="flex justify-start items-start">
-                        <NavigationMenuList className="flex justify-start gap-4 flex-row">
-                            {navigationItems.map((item) => (
-                                <NavigationMenuItem key={item.title}>
-                                    {item.href ? (
-                                        <>
-                                            <NavigationMenuLink href={item.href}>
-                                                <Button
-                                                    variant={item.highlighted ? "default" : "ghost"}
-                                                    className={item.highlighted
-                                                        ? "bg-zinc-900 text-white hover:bg-zinc-800 dark:bg-white dark:text-zinc-900 dark:hover:bg-zinc-200"
-                                                        : "text-black dark:text-white hover:bg-zinc-100 dark:hover:bg-zinc-800 hover:text-zinc-900 dark:hover:text-zinc-100"}
-                                                >
-                                                    {item.title}
-                                                </Button>
-                                            </NavigationMenuLink>
-                                        </>
-                                    ) : (
-                                        <>
-                                            <NavigationMenuTrigger className="font-medium text-sm text-black dark:text-white hover:bg-zinc-100 dark:hover:bg-zinc-800 hover:text-zinc-900 dark:hover:text-zinc-100 data-[state=open]:bg-zinc-100 dark:data-[state=open]:bg-zinc-800">
-                                                {item.title}
-                                            </NavigationMenuTrigger>
-                                            <NavigationMenuContent className="!w-[450px] p-4">
-                                                <div className="flex flex-col lg:grid grid-cols-2 gap-4">
-                                                    <div className="flex flex-col h-full justify-between">
-                                                        <div className="flex flex-col">
-                                                            <p className="text-base text-black dark:text-white">{item.title}</p>
-                                                            {item.description && (
-                                                                <p className="text-black/60 dark:text-white/60 text-sm">
-                                                                    {item.description}
-                                                                </p>
-                                                            )}
-                                                        </div>
-                                                    </div>
-                                                    <div className="flex flex-col text-sm h-full justify-end">
-                                                        {item.items?.map((subItem) => (
-                                                            <NavigationMenuLink
-                                                                href={subItem.href}
-                                                                key={subItem.title}
-                                                                className="flex flex-row justify-between items-center hover:bg-zinc-100 dark:hover:bg-zinc-800 py-2 px-4 rounded"
-                                                            >
-                                                                <span className="text-black dark:text-white">{subItem.title}</span>
-                                                                <MoveRight className="w-4 h-4 text-black/60 dark:text-white/60" />
-                                                            </NavigationMenuLink>
-                                                        ))}
-                                                    </div>
-                                                </div>
-                                            </NavigationMenuContent>
-                                        </>
-                                    )}
-                                </NavigationMenuItem>
-                            ))}
-                        </NavigationMenuList>
-                    </NavigationMenu>
-                </div>
-                <div className="flex lg:justify-center">
-                    <Link href="/" className="flex items-center gap-2 font-semibold text-lg text-black dark:text-white">
+        <header className="w-full z-40 fixed top-0 left-0 border-b border-zinc-200/80 bg-background/95 backdrop-blur supports-[backdrop-filter]:bg-background/80 dark:border-zinc-800/80">
+            <div className="container relative mx-auto min-h-16 flex gap-4 flex-row items-center px-4">
+                <div className="flex min-w-0 items-center gap-6">
+                    <Link href={isLoggedIn ? "/home" : "/"} className="flex shrink-0 items-center gap-2 font-semibold text-lg text-black dark:text-white">
                         <svg viewBox="0 0 40 20" fill="currentColor" aria-hidden="true" className="h-2.5 w-auto shrink-0">
                             <path d="M0 0h29a4 4 0 0 1 0 8H0V0z" />
                             <path d="M40 20H11a4 4 0 0 1 0-8h29v8z" />
                         </svg>
                         Liorvix
                     </Link>
+                    {isLoggedIn && <nav aria-label="Primary" className="hidden xl:flex items-center gap-1">
+                        {navigationItems.map((item) => {
+                            const Icon = item.icon;
+                            const active = isActive(item.href);
+                            return (
+                                <Link
+                                    key={item.href}
+                                    href={item.href}
+                                    aria-current={active ? "page" : undefined}
+                                    className={cn(
+                                        "inline-flex h-9 items-center gap-2 rounded-lg px-3 text-sm font-medium transition-colors",
+                                        active
+                                            ? "bg-zinc-900 text-white dark:bg-white dark:text-zinc-900"
+                                            : "text-zinc-600 hover:bg-zinc-100 hover:text-zinc-900 dark:text-zinc-300 dark:hover:bg-zinc-800 dark:hover:text-white",
+                                    )}
+                                >
+                                    <Icon className="h-3.5 w-3.5" aria-hidden="true" />
+                                    <span>{item.title}</span>
+                                </Link>
+                            );
+                        })}
+                        <DropdownMenu open={toolsOpen} onOpenChange={setToolsOpen}>
+                            <DropdownMenuTrigger asChild>
+                                <button type="button" aria-expanded={toolsOpen} className="inline-flex h-9 items-center gap-1.5 rounded-lg px-3 text-sm font-medium text-zinc-600 transition-colors hover:bg-zinc-100 hover:text-zinc-900 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-zinc-400 data-[state=open]:bg-zinc-100 dark:text-zinc-300 dark:hover:bg-zinc-800 dark:hover:text-white dark:data-[state=open]:bg-zinc-800">
+                                    {t("nav.tools")}
+                                    <ChevronDown className={`h-3.5 w-3.5 transition-transform duration-200 ${toolsOpen ? 'rotate-180' : ''}`} aria-hidden="true" />
+                                </button>
+                            </DropdownMenuTrigger>
+                            <DropdownMenuContent align="start" sideOffset={8} className="w-[280px] p-2 data-[state=closed]:animate-none data-[state=open]:animate-none">
+                                {toolItems.map((item) => {
+                                    const Icon = item.icon;
+                                    return (
+                                        <Link key={item.href} href={item.href} onClick={() => setToolsOpen(false)} className="flex items-center gap-3 rounded-md px-3 py-2.5 text-sm text-zinc-700 transition-colors hover:bg-zinc-100 dark:text-zinc-200 dark:hover:bg-zinc-800">
+                                            <Icon className="h-4 w-4 text-zinc-500" aria-hidden="true" />
+                                            <span>{item.title}</span>
+                                            <MoveRight className="ml-auto h-3.5 w-3.5 text-zinc-400" aria-hidden="true" />
+                                        </Link>
+                                    );
+                                })}
+                            </DropdownMenuContent>
+                        </DropdownMenu>
+                    </nav>}
                 </div>
-                <div className="flex justify-end w-full gap-3 items-center">
+                <div className="ml-auto flex items-center gap-2">
                     <LanguageSwitcher />
                     <ThemeToggle />
                     {isLoggedIn ? (
                         <>
-                            <div className="hidden md:flex items-center gap-2 text-sm text-black dark:text-white">
-                                <UserIcon className="w-4 h-4" />
-                                <span>{displayName}</span>
-                            </div>
-                            <Button variant="ghost" onClick={handleLogout} className="hidden md:inline-flex text-black dark:text-white hover:bg-zinc-100 dark:hover:bg-zinc-800 hover:text-zinc-900 dark:hover:text-zinc-100">
+                            {currentUser && <AccountCenter user={currentUser} displayName={displayName} onLogout={handleLogout} />}
+                            <Button variant="ghost" onClick={handleLogout} className="hidden xl:inline-flex text-black dark:text-white hover:bg-zinc-100 dark:hover:bg-zinc-800 hover:text-zinc-900 dark:hover:text-zinc-100">
                                 <LogOut className="w-4 h-4 mr-2" />
                                 {t("nav.logout")}
                             </Button>
@@ -215,48 +187,36 @@ function Header1() {
                         </Button>
                     )}
                 </div>
-                <div className="flex w-12 shrink lg:hidden justify-end items-center">
-                    <Button variant="ghost" onClick={() => setOpen(!isOpen)}>
+                    {isLoggedIn && <Button aria-label={isOpen ? "Close navigation" : "Open navigation"} variant="ghost" className="xl:hidden h-9 w-9 p-0" onClick={() => setOpen(!isOpen)}>
                         {isOpen ? <X className="w-5 h-5" /> : <Menu className="w-5 h-5" />}
-                    </Button>
-                    {isOpen && (
-                        <div className="absolute top-14 border-t flex flex-col w-full right-0 bg-background shadow-lg py-4 container gap-8">
+                    </Button>}
+                    {isLoggedIn && isOpen && (
+                        <div className="absolute left-0 right-0 top-16 border-t border-zinc-200 bg-background px-4 py-4 shadow-xl dark:border-zinc-800 xl:hidden">
+                            <div className="container mx-auto space-y-1">
                             {navigationItems.map((item) => (
-                                <div key={item.title}>
-                                    <div className="flex flex-col gap-2">
-                                        {item.href ? (
-                                            <Link
-                                                href={item.href}
-                                                className={`flex justify-between items-center ${
-                                                    item.highlighted
-                                                        ? "text-white bg-zinc-900 dark:bg-white dark:text-zinc-900 px-3 py-2 rounded-md"
-                                                        : ""
-                                                }`}
-                                            >
-                                                <span className="text-lg text-black dark:text-white">{item.title}</span>
-                                            </Link>
-                                        ) : (
-                                            <p className="text-lg text-black dark:text-white">{item.title}</p>
-                                        )}
-                                        {item.items &&
-                                            item.items.map((subItem) => (
-                                                <Link
-                                                    key={subItem.title}
-                                                    href={subItem.href}
-                                                    className="flex justify-between items-center"
-                                                >
-                                                    <span className="text-black/70 dark:text-white/70">
-                                                        {subItem.title}
-                                                    </span>
-                                                    <MoveRight className="w-4 h-4" />
-                                                </Link>
-                                            ))}
-                                    </div>
-                                </div>
+                                <Link key={item.href} href={item.href} onClick={() => setOpen(false)} aria-current={isActive(item.href) ? "page" : undefined} className={cn("flex items-center gap-3 rounded-lg px-3 py-3 text-sm font-medium", isActive(item.href) ? "bg-zinc-900 text-white dark:bg-white dark:text-zinc-900" : "text-zinc-700 dark:text-zinc-200")}>
+                                    <item.icon className="h-4 w-4" aria-hidden="true" />
+                                    <span>{item.title}</span>
+                                    <MoveRight className="ml-auto h-4 w-4 opacity-50" aria-hidden="true" />
+                                </Link>
                             ))}
+                            <div className="my-3 border-t border-zinc-200 dark:border-zinc-800" />
+                            {toolItems.map((item) => (
+                                <Link key={item.href} href={item.href} onClick={() => setOpen(false)} className="flex items-center gap-3 rounded-lg px-3 py-3 text-sm text-zinc-600 dark:text-zinc-300">
+                                    <item.icon className="h-4 w-4" aria-hidden="true" />
+                                    <span>{item.title}</span>
+                                    <MoveRight className="ml-auto h-4 w-4 opacity-50" aria-hidden="true" />
+                                </Link>
+                            ))}
+                            {isLoggedIn && (
+                                <Button variant="ghost" onClick={handleLogout} className="mt-2 w-full justify-start px-3 text-zinc-600 dark:text-zinc-300">
+                                    <LogOut className="mr-3 h-4 w-4" />
+                                    {t("nav.logout")}
+                                </Button>
+                            )}
+                            </div>
                         </div>
                     )}
-                </div>
             </div>
         </header>
     );

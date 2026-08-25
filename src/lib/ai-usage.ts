@@ -1,5 +1,6 @@
 import { randomUUID } from 'node:crypto';
 import { getSupabaseClient } from '@/storage/database/supabase-client';
+import { metricForFeature, reserveCredits, settleCredits } from '@/lib/credits';
 import type {
   TextGenerationOptions,
   TextMessage,
@@ -104,6 +105,12 @@ export async function invokeTrackedTextGeneration(
 ): Promise<TrackedTextGenerationResult> {
   const requestId = createAiUsageRequestId();
   const startedAt = Date.now();
+  const reservation = await reserveCredits({
+    userId: context.userId,
+    metric: metricForFeature(context.feature),
+    idempotencyKey: requestId,
+    metadata: { feature: context.feature, phase: context.phase || null },
+  });
 
   try {
     const chunk = await client.invoke(messages, { ...options, requestId });
@@ -125,8 +132,10 @@ export async function invokeTrackedTextGeneration(
       fallback: context.fallback,
       retryCount: context.retryCount,
     });
+    await settleCredits(reservation, 'committed');
     return { content: chunk.content, usage, requestId, ttfbMs: null, totalMs: Date.now() - startedAt };
   } catch (error) {
+    await settleCredits(reservation, 'released');
     await recordAiUsageError({
       ...context,
       requestId,
@@ -152,6 +161,12 @@ export async function consumeTrackedTextStream(
 ): Promise<TrackedTextGenerationResult> {
   const requestId = createAiUsageRequestId();
   const startedAt = Date.now();
+  const reservation = await reserveCredits({
+    userId: context.userId,
+    metric: metricForFeature(context.feature),
+    idempotencyKey: requestId,
+    metadata: { feature: context.feature, phase: context.phase || null },
+  });
   let latestUsage: TextUsage | null = null;
   let content = '';
   let firstContentAt: number | null = null;
@@ -185,6 +200,7 @@ export async function consumeTrackedTextStream(
       fallback: context.fallback,
       retryCount: context.retryCount,
     });
+    await settleCredits(reservation, 'committed');
 
     return {
       content,
@@ -194,6 +210,7 @@ export async function consumeTrackedTextStream(
       totalMs: Date.now() - startedAt,
     };
   } catch (error) {
+    await settleCredits(reservation, 'released');
     await recordAiUsageError({
       ...context,
       requestId,
@@ -428,6 +445,12 @@ export async function runTrackedTextGeneration(
   const requestId = createAiUsageRequestId();
   const startedAt = Date.now();
   let latestUsage: TextUsage | null = null;
+  const reservation = await reserveCredits({
+    userId: context.userId,
+    metric: metricForFeature(context.feature),
+    idempotencyKey: requestId,
+    metadata: { feature: context.feature, phase: context.phase || null },
+  });
 
   try {
     let content = '';
@@ -452,6 +475,7 @@ export async function runTrackedTextGeneration(
       },
       durationMs: Date.now() - startedAt,
     });
+    await settleCredits(reservation, 'committed');
 
     return {
       content,
@@ -461,6 +485,7 @@ export async function runTrackedTextGeneration(
       totalMs: Date.now() - startedAt,
     };
   } catch (error) {
+    await settleCredits(reservation, 'released');
     await recordAiUsageError({
       ...context,
       requestId,

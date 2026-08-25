@@ -63,11 +63,24 @@ export async function getJobFeedState(client = getSupabaseClient()): Promise<Job
 }
 
 async function updateState(client: SupabaseClient, patch: Partial<JobFeedState>) {
-  const { error } = await client
-    .from('job_sync_state')
-    .update({ ...patch, updated_at: new Date().toISOString() })
-    .eq('source_system', JOBS_FEED_SOURCE);
-  if (error) throw new Error(`保存岗位同步状态失败: ${error.message}`);
+  let lastError: unknown = null;
+  for (let attempt = 1; attempt <= 4; attempt += 1) {
+    try {
+      const { error } = await client
+        .from('job_sync_state')
+        .update({ ...patch, updated_at: new Date().toISOString() })
+        .eq('source_system', JOBS_FEED_SOURCE);
+      if (!error) return;
+      lastError = error;
+    } catch (error) {
+      lastError = error;
+    }
+    if (attempt < 4) {
+      await new Promise((resolve) => setTimeout(resolve, attempt * 1_000));
+    }
+  }
+  const message = lastError instanceof Error ? lastError.message : String(lastError || '未知数据库错误');
+  throw new Error(`保存岗位同步状态失败: ${message}`);
 }
 
 async function claimLease(client: SupabaseClient, owner: string) {
@@ -101,6 +114,7 @@ function emptyResult(mode: JobFeedSyncMode): JobFeedRunResult {
     next_cursor: null,
     has_more: false,
     open_seen: 0,
+    skipped_by_reason: {},
   };
 }
 
@@ -121,10 +135,15 @@ export async function runJobFeedSync(options: {
     let cursor: string | undefined;
     let since: string | undefined;
     let reconcileStartedAt: string | undefined;
+    let reconcileNeedsFinalize = false;
 
     if (mode === 'reconcile') {
       reconcileStartedAt = state.reconcile_started_at || new Date().toISOString();
       cursor = state.reconcile_cursor || undefined;
+      // A completed feed pass can have its cursor cleared before the final
+      // missing-job reconciliation finishes. Resume that finalization without
+      // replaying every feed page from the beginning.
+      reconcileNeedsFinalize = Boolean(state.reconcile_started_at && !state.reconcile_cursor && state.reconcile_pages > 0);
       if (!state.reconcile_started_at) {
         await updateState(client, {
           reconcile_started_at: reconcileStartedAt,
@@ -142,7 +161,7 @@ export async function runJobFeedSync(options: {
       }
     }
 
-    for (let pageIndex = 0; pageIndex < maxPages; pageIndex += 1) {
+    for (let pageIndex = 0; pageIndex < maxPages && !reconcileNeedsFinalize; pageIndex += 1) {
       await claimLease(client, owner);
       const page = await syncJobsFeed(client, {
         cursor,
@@ -159,9 +178,19 @@ export async function runJobFeedSync(options: {
       aggregate.skipped += page.skipped;
       aggregate.failed += page.failed;
       aggregate.open_seen += page.open_seen;
+      for (const [reason, count] of Object.entries(page.skipped_by_reason)) {
+        aggregate.skipped_by_reason[reason] = (aggregate.skipped_by_reason[reason] || 0) + count;
+      }
       aggregate.next_cursor = page.next_cursor;
       aggregate.has_more = page.has_more;
       cursor = page.next_cursor || undefined;
+
+      // Do not persist a cursor past a partially failed page. The successful
+      // rows are idempotent, so replaying this page on the next cycle is safe;
+      // advancing here would permanently hide transiently failed updates.
+      if (page.failed > 0) {
+        throw new Error(`岗位同步第 ${aggregate.pages} 页有 ${page.failed} 条写入失败，已保留游标等待重试`);
+      }
 
       if (mode === 'reconcile') {
         await updateState(client, {
@@ -187,14 +216,29 @@ export async function runJobFeedSync(options: {
       }
     }
 
-    if (mode === 'reconcile' && aggregate.completed && reconcileStartedAt) {
-      const { data, error } = await client.rpc('finalize_job_feed_reconcile', {
-        p_source_system: JOBS_FEED_SOURCE,
-        p_started_at: reconcileStartedAt,
-      });
-      if (error) throw new Error(`完成岗位全量对账失败: ${error.message}`);
-      aggregate.reconciliation = (data || { missing: 0, closed: 0 }) as { missing: number; closed: number };
-      aggregate.closed += aggregate.reconciliation.closed;
+    if (mode === 'reconcile' && (aggregate.completed || reconcileNeedsFinalize) && reconcileStartedAt) {
+      let done = false;
+      let missing = 0;
+      let closed = 0;
+      // Keep each RPC bounded. The database function returns `done` only after
+      // all active records missing from this pass have been marked and any
+      // second-miss records have been closed.
+      for (let batch = 0; batch < 10_000 && !done; batch += 1) {
+        const { data, error } = await client.rpc('finalize_job_feed_reconcile_batch', {
+          p_source_system: JOBS_FEED_SOURCE,
+          p_started_at: reconcileStartedAt,
+          p_batch_size: 1000,
+        });
+        if (error) throw new Error(`完成岗位全量对账失败: ${error.message}`);
+        const result = (data || {}) as { missing?: number; closed?: number; done?: boolean };
+        missing += Number(result.missing) || 0;
+        closed += Number(result.closed) || 0;
+        done = result.done === true;
+      }
+      if (!done) throw new Error('岗位全量对账批次超过安全上限，已保留进度等待下次继续');
+      aggregate.completed = true;
+      aggregate.reconciliation = { missing, closed };
+      aggregate.closed += closed;
       await updateState(client, {
         // A completed full pass is a new synchronization baseline. Start the
         // next incremental run with its overlap window instead of replaying

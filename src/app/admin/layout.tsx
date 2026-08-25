@@ -3,7 +3,7 @@ import { AdminAuthGuard } from '@/components/admin-auth-guard';
 import { AdminShell } from '@/components/admin-shell';
 
 export const metadata: Metadata = {
-  title: 'Liorvix后台管理',
+  title: 'Liorvix',
 };
 
 export default function AdminLayout({

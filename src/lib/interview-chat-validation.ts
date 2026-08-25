@@ -16,6 +16,7 @@ export const interviewChatRequestSchema = z.object({
   totalRounds: z.number().int().min(1).max(4).default(1),
   targetCompany: z.string().trim().max(255).optional(),
   timeout: z.boolean().default(false),
+  endInterview: z.boolean().default(false),
   practiceMode: z.enum(['fresh', 'targeted', 'review']).default('fresh'),
   evaluationMode: z.enum(['coach', 'committee', 'dual']).default('dual'),
   switchNext: z.boolean().default(false),

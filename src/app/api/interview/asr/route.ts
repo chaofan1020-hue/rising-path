@@ -7,6 +7,9 @@ import {
   recordAiUsageError,
   recordAiUsageEvent,
 } from '@/lib/ai-usage';
+import { betaEntitlementResponse } from '@/lib/beta-entitlements';
+import { reserveCredits, settleCredits } from '@/lib/credits';
+import { parseInterviewVoiceRoute, resolveInterviewVoiceRoute } from '@/lib/interview-voice-routing';
 
 export const runtime = 'nodejs';
 export const dynamic = 'force-dynamic';
@@ -28,7 +31,7 @@ export async function POST(request: NextRequest) {
     }
     const { data: session, error: sessionError } = await auth.client
       .from('interview_sessions')
-      .select('id, status, language')
+      .select('id, status, language, voice_route, job_id')
       .eq('id', parsedSessionId)
       .eq('user_id', auth.user.id)
       .maybeSingle();
@@ -36,8 +39,30 @@ export async function POST(request: NextRequest) {
     if (!session) return NextResponse.json({ error: '无权访问该面试会话' }, { status: 403 });
     if (session.status !== 'in_progress') return NextResponse.json({ error: '面试会话已结束' }, { status: 409 });
 
+    let voiceRoute = parseInterviewVoiceRoute(session.voice_route);
+    if (!voiceRoute && session.job_id) {
+      const { data: job } = await auth.client.from('jobs').select('region').eq('id', session.job_id).maybeSingle();
+      voiceRoute = resolveInterviewVoiceRoute(job?.region);
+    }
+    voiceRoute ||= resolveInterviewVoiceRoute(null);
+    if (voiceRoute.asrProvider === 'cartesia_ink') {
+      return NextResponse.json({
+        error: '海外岗位的语音识别仅使用 Cartesia Ink-2。实时连接暂不可用，请重新开始本次回答。',
+        code: 'OVERSEAS_REALTIME_ASR_REQUIRED',
+      }, { status: 503 });
+    }
+
     const requestId = createAiUsageRequestId();
     const startedAt = Date.now();
+    const audioPayload = audioBase64.includes(',') ? audioBase64.split(',').at(-1) || '' : audioBase64;
+    const estimatedMinutes = Math.max(1 / 60, Math.min(5, Buffer.byteLength(audioPayload, 'base64') / 32_000 / 60));
+    const reservation = await reserveCredits({
+      userId: auth.user.id,
+      metric: 'asr_minutes',
+      units: estimatedMinutes,
+      idempotencyKey: requestId,
+      metadata: { feature: 'interview_asr', session_id: parsedSessionId },
+    });
 
     try {
       const result = await recognizeWithAlibaba({
@@ -67,9 +92,11 @@ export async function POST(request: NextRequest) {
         metadata: { provider_request_id: result.usage.requestId, audio_mime_type: audioMimeType || null },
         durationMs: Date.now() - startedAt,
       });
+      await settleCredits(reservation, 'committed');
 
       return NextResponse.json({ text: result.text, silence: false });
     } catch (error) {
+      await settleCredits(reservation, 'released');
       await recordAiUsageError({
         userId: auth.user.id,
         feature: 'interview_asr',
@@ -87,6 +114,8 @@ export async function POST(request: NextRequest) {
       throw error;
     }
   } catch (error) {
+    const betaResponse = betaEntitlementResponse(error);
+    if (betaResponse) return betaResponse;
     const message = error instanceof Error ? error.message : '语音识别失败';
     const isSilence =
       message.includes('no valid speech') ||

@@ -51,12 +51,29 @@ export async function POST(request: NextRequest) {
     if (payload.status !== undefined && !isApplicationStatus(payload.status)) {
       return NextResponse.json({ error: '无效的网申状态' }, { status: 400 });
     }
+    if (payload.status !== undefined && payload.status !== 'pending') {
+      return NextResponse.json({ error: '新建网申只能从待投递状态开始' }, { status: 400 });
+    }
     const writableFields = ['job_id', 'resume_id', 'status', 'notes', 'submitted_at'] as const;
     const applicationData = Object.fromEntries(
       writableFields
         .filter((field) => payload[field] !== undefined)
         .map((field) => [field, payload[field]])
     );
+
+    const jobId = applicationData.job_id;
+    if (typeof jobId !== 'number' || !Number.isInteger(jobId) || jobId <= 0) {
+      return NextResponse.json({ error: '岗位 ID 为必填项且必须有效' }, { status: 400 });
+    }
+    const { data: job, error: jobError } = await client
+      .from('jobs')
+      .select('id, is_active, is_closed')
+      .eq('id', jobId)
+      .maybeSingle();
+    if (jobError) throw new Error(`验证岗位失败: ${jobError.message}`);
+    if (!job || job.is_active === false || job.is_closed === true) {
+      return NextResponse.json({ error: '岗位不存在或已关闭' }, { status: 404 });
+    }
 
     const resumeId = applicationData.resume_id;
     if (resumeId !== undefined && resumeId !== null) {
@@ -73,13 +90,6 @@ export async function POST(request: NextRequest) {
       if (!resume) return NextResponse.json({ error: '简历不存在或无权使用' }, { status: 404 });
     }
 
-    if (applicationData.job_id !== undefined && (
-      typeof applicationData.job_id !== 'number'
-      || !Number.isInteger(applicationData.job_id)
-      || applicationData.job_id <= 0
-    )) {
-      return NextResponse.json({ error: '无效的岗位 ID' }, { status: 400 });
-    }
     if (applicationData.notes !== undefined && (
       typeof applicationData.notes !== 'string' || applicationData.notes.length > 5_000
     )) {
@@ -91,17 +101,41 @@ export async function POST(request: NextRequest) {
     )) {
       return NextResponse.json({ error: '无效的提交时间' }, { status: 400 });
     }
+    if (applicationData.submitted_at !== undefined) {
+      return NextResponse.json({ error: '新建网申不能直接设置投递时间' }, { status: 400 });
+    }
+
+    const { data: existingApplication, error: existingError } = await client
+      .from('applications')
+      .select('*')
+      .eq('user_id', auth.user.id)
+      .eq('job_id', jobId)
+      .maybeSingle();
+    if (existingError) throw new Error(`检查重复网申失败: ${existingError.message}`);
+    if (existingApplication) {
+      return NextResponse.json({ application: existingApplication, duplicate: true });
+    }
 
     const { data, error } = await client
       .from('applications')
       .insert({
         ...applicationData,
+        status: 'pending',
         user_id: auth.user.id,
       })
       .select()
       .single();
 
     if (error) {
+      if (error.code === '23505') {
+        const { data: raced } = await client
+          .from('applications')
+          .select('*')
+          .eq('user_id', auth.user.id)
+          .eq('job_id', jobId)
+          .maybeSingle();
+        if (raced) return NextResponse.json({ application: raced, duplicate: true });
+      }
       throw new Error(`创建网申记录失败: ${error.message}`);
     }
 

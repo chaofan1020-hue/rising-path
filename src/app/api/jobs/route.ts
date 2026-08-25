@@ -3,35 +3,21 @@ import { getSupabaseClient } from '@/storage/database/supabase-client';
 import { detectSponsorship } from '@/lib/utils';
 import { ADMIN_PERMISSIONS, requireAdminPermission } from '@/lib/admin-permissions';
 import { sanitizeJobContent } from '@/lib/job-content';
-import { targetRegionPostgrestClauses } from '@/lib/job-region-scope';
+import { TARGET_REGION_KEYWORDS, targetRegionPostgrestClauses } from '@/lib/job-region-scope';
 import { recordAdminAuditEvent, recordAdminAuditFailure } from '@/lib/admin-audit';
 import { getCompanyFaviconUrl, getCompanyLogoUrl } from '@/lib/company-logo';
 
-// 本地 logo 缓存
-let localLogosCache: Record<string, string> = {};
-let lastCacheTime = 0;
-const CACHE_DURATION = 5 * 60 * 1000; // 5 分钟
+export const dynamic = 'force-dynamic';
+export const revalidate = 0;
 
-// 刷新 logo 缓存
-async function refreshLogoCache(): Promise<void> {
-  try {
-    const supabase = getSupabaseClient();
-    const { data } = await supabase.from('company_logos').select('company_name, logo_url');
-    
-    if (data) {
-      localLogosCache = {};
-      for (const item of data) {
-        localLogosCache[item.company_name] = item.logo_url;
-      }
-      lastCacheTime = Date.now();
-    }
-  } catch (error) {
-    console.error('Error refreshing logo cache:', error);
-  }
-}
+// Keep only logos seen on the current result pages in memory. Loading the
+// entire company_logos table before every cold jobs request added an extra
+// round trip without improving the response for most pages.
+const localLogosCache: Record<string, string> = {};
 
 // 地区映射：将具体地区映射到所属大地区
 const regionMapping: Record<string, string> = {
+  'North America': '北美',
   // 美国主要城市
   'San Francisco, CA': '美国',
   'Seattle, WA': '美国',
@@ -57,9 +43,13 @@ const regionMapping: Record<string, string> = {
   'Australia': '澳大利亚',
   // 香港
   'Hong Kong': '香港',
+  // 新加坡
+  'Singapore': '新加坡',
 };
 
 const regionKeywords: Record<string, string[]> = {
+  // 北美是美国、加拿大以及官方直接标注 North America 的合并筛选。
+  '北美': TARGET_REGION_KEYWORDS.north_america,
   // Keep these lists broad because the feed contains both country-qualified
   // locations ("New York, NY, United States") and city-only locations.
   '美国': [
@@ -88,6 +78,7 @@ const regionKeywords: Record<string, string[]> = {
     'Ballarat', 'Gold Coast', 'Newcastle, NSW', 'Hobart', 'Darwin',
   ],
   '香港': ['Hong Kong', 'Kowloon', 'Hong Kong Island'],
+  '新加坡': ['Singapore'],
 };
 
 // 方向映射：将子方向映射到父方向（SDE 包含所有工程方向）
@@ -141,6 +132,15 @@ function escapePostgrestSearchTerm(value: string): string {
     .replace(/_/g, '\\_');
 }
 
+function compactListDescription(value: unknown): string {
+  if (typeof value !== 'string') return '';
+  const maxLength = 480;
+  const normalized = value.trim();
+  return normalized.length > maxLength
+    ? `${normalized.slice(0, maxLength).trim()}…`
+    : normalized;
+}
+
 export async function GET(request: NextRequest) {
   try {
     const client = getSupabaseClient();
@@ -155,7 +155,9 @@ export async function GET(request: NextRequest) {
     const status = searchParams.get('status') || 'active';
     const regionScope = searchParams.get('region_scope') || 'target';
     const search = searchParams.get('search')?.trim() || '';
+    const summaryOnly = searchParams.get('summary') === '1';
     const exactCompanies = searchParams.getAll('company_exact').map((value) => value.trim()).filter(Boolean);
+    const diverseFeed = searchParams.get('diverse') === '1';
     const limit = searchParams.get('limit');
     const offsetParam = searchParams.get('offset');
     const requestedLimit = Number.parseInt(limit || '100', 10);
@@ -163,10 +165,22 @@ export async function GET(request: NextRequest) {
     const requestedOffset = Number.parseInt(offsetParam || '0', 10);
     const offset = Number.isFinite(requestedOffset) ? Math.max(requestedOffset, 0) : 0;
 
-    let query = client
-      .from('jobs')
-      .select('id,title,company,region,direction,audience,job_type,description,requirements,salary_range,job_url,sponsorship,is_active,is_closed,created_at,updated_at', { count: 'exact' })
-      .order('created_at', { ascending: false });
+    // Supabase's generated select parser requires a literal column string;
+    // the route intentionally chooses one of two fixed projections here.
+    let query = summaryOnly
+      ? client.from('jobs').select('id,title,company,region,direction,audience,job_type,description,salary_range,job_url,sponsorship,valid_through,is_active,is_closed,created_at,updated_at', { count: 'planned' })
+      : client.from('jobs').select('id,title,company,region,direction,audience,job_type,description,requirements,salary_range,job_url,sponsorship,valid_through,is_active,is_closed,created_at,updated_at', { count: 'planned' });
+
+    if (diverseFeed) {
+      // updated_at reflects the active feed refresh and naturally mixes the
+      // latest jobs from different companies better than import-time created_at.
+      query = query
+        .order('updated_at', { ascending: false, nullsFirst: false })
+        .order('created_at', { ascending: false })
+        .order('id', { ascending: false });
+    } else {
+      query = query.order('created_at', { ascending: false });
+    }
 
     // 默认只显示可投递岗位；管理员或筛选器可以显式请求全部/已关闭岗位。
     if (status === 'closed') query = query.eq('is_active', false);
@@ -229,7 +243,9 @@ export async function GET(request: NextRequest) {
 
     // 不允许把完整岗位库一次传回浏览器。全量同步后岗位数据可达数万条，
     // 因此前端按页请求，默认 100 条。
-    query = query.range(offset, offset + pageLimit - 1);
+    // Fetch one extra row so pagination remains correct even though the total
+    // count uses the planner estimate instead of a full-table exact count.
+    query = query.range(offset, offset + pageLimit);
 
     const { data, error, count } = await query;
 
@@ -243,12 +259,14 @@ export async function GET(request: NextRequest) {
       throw new Error(`查询岗位失败: ${error.message}`);
     }
 
-    const filteredJobs = data || [];
-
-    // 检查是否需要刷新缓存
-    if (Date.now() - lastCacheTime > CACHE_DURATION) {
-      await refreshLogoCache();
-    }
+    const jobRows = (data ?? []) as unknown as Array<{
+      region: string;
+      direction: string;
+      company: string;
+      [key: string]: unknown;
+    }>;
+    const hasMore = jobRows.length > pageLimit;
+    const filteredJobs = jobRows.slice(0, pageLimit);
 
     // 为每个岗位添加分类信息和 logo
     const companies = [...new Set(filteredJobs.map((job) => String((job as { company?: unknown }).company || '')).filter(Boolean))];
@@ -262,14 +280,18 @@ export async function GET(request: NextRequest) {
         if (row.logo_url) localLogosCache[row.company_name] = row.logo_url;
       }
     }
-    const jobsWithLogo = filteredJobs.map((job: { region: string; direction: string; company: string; [key: string]: unknown }) => ({
-      ...sanitizeJobContent(job),
-      region_category: getRegionCategory(job.region),
-      direction_category: getDirectionCategory(job.direction),
-      logo_url: localLogosCache[job.company]
-        || getCompanyLogoUrl(job.company, typeof job.job_url === 'string' ? job.job_url : null),
-      logo_fallback_url: getCompanyFaviconUrl(job.company, typeof job.job_url === 'string' ? job.job_url : null),
-    }));
+    const jobsWithLogo = filteredJobs.map((job) => {
+      const sanitizedJob = sanitizeJobContent(job);
+      return {
+        ...sanitizedJob,
+        ...(summaryOnly ? { description: compactListDescription(sanitizedJob.description) } : {}),
+        region_category: getRegionCategory(job.region),
+        direction_category: getDirectionCategory(job.direction),
+        logo_url: localLogosCache[job.company]
+          || getCompanyLogoUrl(job.company, typeof job.job_url === 'string' ? job.job_url : null),
+        logo_fallback_url: getCompanyFaviconUrl(job.company, typeof job.job_url === 'string' ? job.job_url : null),
+      };
+    });
 
     return NextResponse.json({
       jobs: jobsWithLogo,
@@ -278,8 +300,11 @@ export async function GET(request: NextRequest) {
         limit: pageLimit,
         returned: jobsWithLogo.length,
         total: count ?? 0,
-        has_more: offset + jobsWithLogo.length < (count ?? 0),
+        total_is_estimate: true,
+        has_more: hasMore,
       },
+    }, {
+      headers: { 'Cache-Control': 'private, no-store, max-age=0' },
     });
   } catch (error) {
     console.error('Error fetching jobs:', error);

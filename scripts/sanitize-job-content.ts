@@ -5,7 +5,7 @@ import { getSupabaseClient } from '@/storage/database/supabase-client';
 loadDotenv({ path: '.env.local' });
 
 const CONTENT_FIELDS = ['description', 'overview', 'responsibilities', 'requirements', 'nice_to_have'] as const;
-const PAGE_SIZE = 500;
+const PAGE_SIZE = 1000;
 const UPDATE_CONCURRENCY = 25;
 
 function cleanField(value: unknown): string | null {
@@ -24,6 +24,12 @@ async function main() {
     const { data, error } = await client
       .from('jobs')
       .select(`id, ${CONTENT_FIELDS.join(', ')}`)
+      // Existing feed rows are already plain text in the normal path. Limit
+      // the backfill to common UTF-8/Windows-1252 mojibake markers so a
+      // 40k-row catalog does not needlessly re-read every long description.
+      .or(CONTENT_FIELDS.flatMap((field) => (
+        ['Ã', 'Â', 'â', 'æ', 'ð', '�'].map((marker) => `${field}.ilike.%${marker}%`)
+      )).join(','))
       .order('id', { ascending: true })
       .range(offset, offset + PAGE_SIZE - 1);
     if (error) throw new Error(`读取岗位内容失败: ${error.message}`);

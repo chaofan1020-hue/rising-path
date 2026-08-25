@@ -42,7 +42,9 @@ export default function AuthCallbackPage() {
     let mounted = true;
     const finish = async () => {
       try {
-        const supabase = await getSupabaseBrowserClient();
+        // This page exchanges PKCE codes explicitly below. Disable the SDK's
+        // URL detector here so a one-time OAuth code cannot be exchanged twice.
+        const supabase = await getSupabaseBrowserClient({ detectSessionInUrl: false });
         const searchParams = new URLSearchParams(window.location.search);
         const hashParams = new URLSearchParams(window.location.hash.replace(/^#/, ''));
         const callbackError =

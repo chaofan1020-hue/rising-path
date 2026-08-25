@@ -1,9 +1,11 @@
 import { NextRequest } from 'next/server';
+import { randomUUID } from 'node:crypto';
 import { z } from 'zod';
 import { getAuthContext, unauthorizedResponse } from '@/lib/auth-server';
 import { interviewSummaryRequestSchema } from '@/lib/interview-contracts';
 import { createTextProviderClient } from '@/lib/ai/text-provider';
 import { consumeTrackedTextStream } from '@/lib/ai-usage';
+import { betaEntitlementResponse } from '@/lib/beta-entitlements';
 import { INTERVIEWERS, getPersona, ARCHETYPE_PARAMS, ROUND_ROLE_INFO, GAUNTLET_SCRIPTS } from '@/lib/interviewers';
 import type { SupabaseClient } from '@supabase/supabase-js';
 import { untrustedBusinessDataBlock, untrustedBusinessDataPolicy } from '@/lib/prompt-safety';
@@ -187,17 +189,16 @@ export async function POST(request: NextRequest) {
     if (sessionError || !session) {
       return new Response(JSON.stringify({ error: '面试会话不存在' }), { status: 404 });
     }
+    if (session.status !== 'completed') {
+      return new Response(JSON.stringify({ error: '请先正常结束面试，再生成报告' }), { status: 409 });
+    }
     const eliminatedRound = session.ended_reason === 'eliminated' ? session.current_round : null;
 
     const messages = (session.messages as ChatMessage[]) || [];
 
-    // 用户全程未作答：不生成 AI 评估，直接将会话标记为已完成（不写入报告与分数）
+    // 用户全程未作答：会话已由服务端结束动作标记完成，不生成 AI 评估。
     const hasCandidateAnswer = messages.some((m) => m.role === 'candidate' && m.content?.trim());
     if (!hasCandidateAnswer) {
-      await client
-        .from('interview_sessions')
-        .update({ status: 'completed', updated_at: new Date().toISOString() })
-        .eq('id', sessionId);
       const skipped = new ReadableStream({
         start(controller) {
           controller.enqueue(new TextEncoder().encode(`data: ${JSON.stringify({ skipped: true, done: true })}\n\n`));
@@ -277,6 +278,69 @@ export async function POST(request: NextRequest) {
       });
       return new Response(cached, { headers: sseHeaders });
     }
+
+    // A crashed worker must not leave the candidate unable to retrieve a
+    // report forever. Normal model timeouts are far below this window.
+    const staleGenerationBefore = new Date(Date.now() - 2 * 60_000).toISOString();
+    if (session.report_generation_status === 'generating') {
+      const startedAt = typeof session.report_generation_started_at === 'string'
+        ? Date.parse(session.report_generation_started_at)
+        : Number.NaN;
+      if (!Number.isFinite(startedAt) || startedAt < Date.parse(staleGenerationBefore)) {
+        const { error: reclaimError } = await client
+          .from('interview_sessions')
+          .update({
+            report_generation_status: 'idle',
+            report_generation_started_at: null,
+            report_generation_request_id: null,
+          })
+          .eq('id', sessionId)
+          .eq('user_id', auth.user.id)
+          .eq('report_generation_status', 'generating')
+          .lt('report_generation_started_at', staleGenerationBefore);
+        if (reclaimError) throw new Error(`报告生成状态恢复失败: ${reclaimError.message}`);
+      } else {
+        return new Response(JSON.stringify({ error: '报告正在生成，请稍后重试', code: 'REPORT_GENERATING' }), { status: 409 });
+      }
+    }
+
+    // Only one report generation may run for a completed session. The claim is
+    // an atomic conditional update, so a client retry cannot double-spend an
+    // LLM call while a slow request is still active.
+    const generationRequestId = randomUUID();
+    const { data: generationClaim, error: generationClaimError } = await client
+      .from('interview_sessions')
+      .update({
+        report_generation_status: 'generating',
+        report_generation_started_at: new Date().toISOString(),
+        report_generation_request_id: generationRequestId,
+      })
+      .eq('id', sessionId)
+      .eq('user_id', auth.user.id)
+      .eq('status', 'completed')
+      .eq('report_generation_status', 'idle')
+      .is('report', null)
+      .select('id')
+      .maybeSingle();
+    if (generationClaimError) {
+      throw new Error(`报告生成状态更新失败: ${generationClaimError.message}`);
+    }
+    if (!generationClaim) {
+      return new Response(JSON.stringify({ error: '报告正在生成，请稍后重试', code: 'REPORT_GENERATING' }), { status: 409 });
+    }
+    const releaseGenerationClaim = async () => {
+      const { error } = await client
+        .from('interview_sessions')
+        .update({
+          report_generation_status: 'idle',
+          report_generation_started_at: null,
+          report_generation_request_id: null,
+        })
+        .eq('id', sessionId)
+        .eq('user_id', auth.user.id)
+        .eq('report_generation_request_id', generationRequestId);
+      if (error) console.error('Failed to release interview report generation claim:', error.message);
+    };
 
     // ===== 构建 LLM prompt =====
     const dossier = panel
@@ -360,8 +424,17 @@ ${jsonSpec}
 
     const readableStream = new ReadableStream({
       async start(controller) {
+        let streamClosed = false;
+        const closeOnce = () => {
+          if (streamClosed) return;
+          streamClosed = true;
+          controller.close();
+        };
+        const enqueue = (value: Uint8Array) => {
+          if (!streamClosed) controller.enqueue(value);
+        };
         try {
-          controller.enqueue(encoder.encode(`data: ${JSON.stringify({ phase: 'writing' })}\n\n`));
+          enqueue(encoder.encode(`data: ${JSON.stringify({ phase: 'writing' })}\n\n`));
           await consumeTrackedTextStream(llmClient, [
             { role: 'system', content: systemPrompt },
             { role: 'user', content: userPrompt },
@@ -377,14 +450,15 @@ ${jsonSpec}
             metadata: { language, eliminated_round: eliminatedRound ?? null },
           }, (text) => {
             fullContent += text;
-            controller.enqueue(encoder.encode(`data: ${JSON.stringify({ content: text })}\n\n`));
+            enqueue(encoder.encode(`data: ${JSON.stringify({ content: text })}\n\n`));
           });
 
 
           const parsedReport = reportSchema.safeParse(extractJson(fullContent));
           if (!parsedReport.success) {
-            controller.enqueue(encoder.encode(`data: ${JSON.stringify({ error: '报告解析失败，请重试' })}\n\n`));
-            controller.close();
+            await releaseGenerationClaim();
+            enqueue(encoder.encode(`data: ${JSON.stringify({ error: '报告解析失败，请重试' })}\n\n`));
+            closeOnce();
             return;
           }
           const rawReport = parsedReport.data;
@@ -395,8 +469,9 @@ ${jsonSpec}
             && reportIds.every((id) => panelIds.has(id));
           const hasValidAnnotations = rawReport.annotations.every((annotation) => annotation.msgIndex < messages.length);
           if (!hasExpectedCommittee || !hasValidAnnotations) {
-            controller.enqueue(encoder.encode(`data: ${JSON.stringify({ error: '报告引用与本场面试不一致，请重试' })}\n\n`));
-            controller.close();
+            await releaseGenerationClaim();
+            enqueue(encoder.encode(`data: ${JSON.stringify({ error: '报告引用与本场面试不一致，请重试' })}\n\n`));
+            closeOnce();
             return;
           }
           // Attach trusted static panel data after model output passes schema validation.
@@ -434,7 +509,7 @@ ${jsonSpec}
             ? Math.round(radarScores.reduce((a, b) => a + b, 0) / radarScores.length)
             : gradeScore;
 
-          await client
+          const { data: savedReport, error: saveReportError } = await client
             .from('interview_sessions')
             .update({
               status: 'completed',
@@ -442,16 +517,29 @@ ${jsonSpec}
               summary: report.verdict.headline || '',
               overall_score: overallScore,
               report_grade: report.verdict.grade || null,
+              report_generation_status: 'completed',
               updated_at: new Date().toISOString(),
             })
-            .eq('id', sessionId);
+            .eq('id', sessionId)
+            .eq('user_id', auth.user.id)
+            .eq('report_generation_request_id', generationRequestId)
+            .select('id')
+            .maybeSingle();
+          if (saveReportError || !savedReport) {
+            throw new Error(saveReportError?.message || '报告生成状态已变更');
+          }
 
-          controller.enqueue(encoder.encode(`data: ${JSON.stringify({ report, stats, history, score: overallScore, done: true })}\n\n`));
-          controller.close();
+          enqueue(encoder.encode(`data: ${JSON.stringify({ report, stats, history, score: overallScore, done: true })}\n\n`));
+          closeOnce();
         } catch (error) {
           console.error('Summary stream error:', error);
-          controller.enqueue(encoder.encode(`data: ${JSON.stringify({ error: '报告生成失败，请重试' })}\n\n`));
-          controller.close();
+          await releaseGenerationClaim();
+          const betaError = betaEntitlementResponse(error);
+          const payload = betaError
+            ? { error: (await betaError.json()).error }
+            : { error: '报告生成失败，请重试' };
+          enqueue(encoder.encode(`data: ${JSON.stringify(payload)}\n\n`));
+          closeOnce();
         }
       },
     });
@@ -459,6 +547,8 @@ ${jsonSpec}
     return new Response(readableStream, { headers: sseHeaders });
   } catch (error) {
     console.error('Interview summary error:', error);
+    const betaResponse = betaEntitlementResponse(error);
+    if (betaResponse) return betaResponse;
     return new Response(JSON.stringify({ error: '服务器错误' }), { status: 500 });
   }
 }

@@ -6,7 +6,7 @@ import { AuthGuard } from "@/components/auth-guard";
 import { apiFetch } from "@/lib/api-client";
 import { Button } from "@/components/ui/button";
 import { Textarea } from "@/components/ui/textarea";
-import { Popover, PopoverAnchor, PopoverContent } from "@/components/ui/popover";
+import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
 import {
   Modal, ModalBody, ModalContent, ModalDescription,
   ModalFooter, ModalHeader, ModalTitle,
@@ -14,6 +14,7 @@ import {
 import { useLanguage } from "@/lib/language-context";
 import { createInterviewASRSocket, downsampleToPCM16 } from "@/lib/interview-asr-client";
 import { createInterviewTTSSocket } from "@/lib/interview-tts-client";
+import { isTranscriptLanguageUnexpected, mergeRecognizedTranscript } from "@/lib/interview-transcript";
 import {
   Bot, Loader2, RotateCcw, ClipboardList,
   Mic, MicOff, VolumeX, PhoneOff, Video, VideoOff, User, Square,
@@ -60,13 +61,16 @@ function OptionSelect({
   }, [open]);
   return (
     <Popover open={open} onOpenChange={(nextOpen) => { setOpen(nextOpen); if (!nextOpen) setQuery(""); }}>
-      <PopoverAnchor asChild>
+      <PopoverTrigger asChild>
         <div
           role="combobox"
           aria-expanded={open}
           aria-haspopup="listbox"
           aria-disabled={disabled || undefined}
-          onMouseDown={() => { if (!disabled) setOpen(true); }}
+          onClick={(event) => {
+            event.preventDefault();
+            if (!disabled) setOpen((current) => !current);
+          }}
           className={`w-full h-11 inline-flex items-center gap-2 px-4 rounded-xl border border-gray-200 dark:border-zinc-700 bg-white dark:bg-zinc-900 text-sm text-black dark:text-white transition-colors ${disabled ? "opacity-50 cursor-not-allowed" : "hover:border-zinc-400 dark:hover:border-zinc-500"}`}
         >
           <Icon className="h-4 w-4 text-gray-400 flex-shrink-0" />
@@ -77,7 +81,9 @@ function OptionSelect({
             placeholder={placeholder}
             disabled={disabled}
             aria-label={label}
-            onFocus={() => { if (!disabled) { setQuery(""); setOpen(true); } }}
+            onPointerDown={() => { if (!disabled) setOpen((current) => !current); }}
+            onClick={(event) => event.stopPropagation()}
+            onFocus={() => { if (!disabled && !open) { setQuery(""); setOpen(true); } }}
             onChange={(event) => { setQuery(event.target.value); if (!open) setOpen(true); }}
             onKeyDown={(event) => {
               if (event.key === "Escape") close();
@@ -91,7 +97,7 @@ function OptionSelect({
           />
           {loading ? <Loader2 className="h-4 w-4 text-gray-400 flex-shrink-0 animate-spin" /> : <ChevronDown className="h-4 w-4 text-gray-400 flex-shrink-0" />}
         </div>
-      </PopoverAnchor>
+      </PopoverTrigger>
       <PopoverContent
         className="w-[var(--radix-popover-trigger-width)] p-1 max-h-80 overflow-visible"
         align="start"
@@ -201,20 +207,25 @@ const pcm16Wav = (samples: Float32Array): Blob => {
 };
 const debugTextPreview = (text: string) => text.replace(/\s+/g, " ").trim().slice(0, 160);
 const ROUND_HANDOFF_DELAY_MS = 900;
-const TTS_START_BUFFER_SECONDS = 0.18;
+// Keep enough PCM queued to cover small network jitter between Cartesia
+// packets. The whole interviewer reply is synthesized as one request below.
+const TTS_START_BUFFER_SECONDS = 0.35;
 // RMS is now only an audio-level meter. It never accepts speech or ends a turn.
 const ASR_SEND_RMS_THRESHOLD = 0.009;
 const ASR_MIN_TRANSCRIPT_CHARS = 4;
-const ASR_MIN_SPEECH_MS = 280;
+const ASR_MIN_SPEECH_MS = 180;
 // A provider final represents one acoustic segment, not necessarily a complete
 // interview answer. Keep a longer grace period so a natural thinking pause can
 // be merged into the same answer before submitting it to the interviewer.
-const AUTO_SUBMIT_SETTLE_MS = 1_650;
+const AUTO_SUBMIT_SETTLE_MS = 650;
 const NEURAL_VAD_REDEMPTION_MS = 1_800;
-const NEURAL_VAD_ASR_SETTLE_MS = 850;
-const SEMANTIC_CONTINUATION_DELAY_MS = 900;
+const NEURAL_VAD_ASR_SETTLE_MS = 500;
+const SEMANTIC_CONTINUATION_DELAY_MS = 500;
 const LIVE_TRANSCRIPT_UPDATE_MS = 80;
 const SUMMARY_CLIENT_TIMEOUT_MS = 38_000;
+const REALTIME_ASR_RECONNECT_DELAY_MS = 12_000;
+const REALTIME_ASR_PREBUFFER_MAX_BYTES = 48_000;
+const REALTIME_ASR_TAIL_MS = 750;
 
 function microphoneConstraints(deviceId?: string): MediaTrackConstraints {
   return {
@@ -223,6 +234,11 @@ function microphoneConstraints(deviceId?: string): MediaTrackConstraints {
     noiseSuppression: true,
     autoGainControl: true,
     channelCount: 1,
+    sampleRate: { ideal: 48000 },
+    sampleSize: { ideal: 16 },
+    // Unsupported constraints are ignored by browsers. Where available,
+    // voice isolation reduces laptop-speaker echo before PCM conversion.
+    ...({ voiceIsolation: true } as MediaTrackConstraints),
   };
 }
 
@@ -554,7 +570,7 @@ function MockInterviewContent() {
   const answerSubmittingRef = useRef(false);
   const pendingAnswerRequestRef = useRef<{ text: string; requestId: string } | null>(null);
   const autoSubmitTimerRef = useRef<number | null>(null);
-  const submitPendingTranscriptRef = useRef<() => void>(() => {});
+  const submitPendingTranscriptRef = useRef<() => Promise<void>>(async () => {});
   const summaryAbortRef = useRef<AbortController | null>(null);
   const summaryRunningRef = useRef(false);
   const turnPlanCacheRef = useRef(new Map<string, { plan: unknown; token: string }>());
@@ -577,6 +593,7 @@ function MockInterviewContent() {
   // beginning of the candidate's first word.
   const realtimeAsrPrebufferRef = useRef<ArrayBuffer[]>([]);
   const realtimeAsrTransmittingRef = useRef(false);
+  const realtimeAsrTailUntilRef = useRef(0);
   const realtimeAsrCommandRef = useRef<(payload: Record<string, unknown>) => void>(() => {});
   const manualAsrFinalizeTimerRef = useRef<number | null>(null);
   const manualAsrFinalizingRef = useRef(false);
@@ -593,6 +610,7 @@ function MockInterviewContent() {
   const recognizingRef = useRef(false);
   const candidateTurnRef = useRef(false);
   const handoffRef = useRef(false);
+  const endingRef = useRef(false);
   const handoffRevealTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const audioQueueRef = useRef<Array<{
     text: string;
@@ -617,7 +635,9 @@ function MockInterviewContent() {
     && !organizing
     && !handoff
     && !ending
-    && !interviewCompleted;
+    && !interviewCompleted
+    // Final ASR segments are submitted automatically after a short tail.
+    // The stop button remains available for an explicit end-of-answer action.
 
   // ASR callbacks can arrive between React renders. The derived state above
   // is not sufficient during the hand-off from candidate -> interviewer;
@@ -749,6 +769,7 @@ function MockInterviewContent() {
     }
     realtimeAsrTransmittingRef.current = false;
     realtimeAsrPrebufferRef.current = [];
+    realtimeAsrTailUntilRef.current = 0;
     void vad.pause().then(() => {
       debugInterviewEvent("vad.candidate_gate_closed");
     }).catch(() => {});
@@ -997,6 +1018,7 @@ function MockInterviewContent() {
       micStreamRef.current?.getTracks().forEach((track) => track.stop());
       audioRef.current?.pause();
       stopRealtimeTts(true);
+      stopAmbience();
       audioCtxRef.current?.close().catch(() => {});
       audioCtxRef.current = null;
     };
@@ -1387,8 +1409,8 @@ function MockInterviewContent() {
   }, [stopRealtimeTts]);
 
   const enqueueInterviewerAudio = useCallback(
-    (text: string, speaker?: string, speechRate?: number, loudnessRate?: number, onStart?: () => void) => {
-      if (!text.trim()) return;
+    (text: string, speaker?: string, speechRate?: number, loudnessRate?: number, onStart?: () => void, allowWhileEnding = false) => {
+      if (!text.trim() || (endingRef.current && !allowWhileEnding)) return;
       interruptRef.current = false;
       audioQueueRef.current.push({ text, speaker, speechRate, loudnessRate, onStart });
       debugInterviewEvent("tts.queued", { queueDepth: audioQueueRef.current.length, chars: text.length, preview: debugTextPreview(text) });
@@ -1439,8 +1461,14 @@ function MockInterviewContent() {
   // 流式请求面试官（复用逻辑：开始面试 / 提交回答）
   const streamInterviewer = useCallback(
     async (payload: Record<string, unknown>) => {
+      const isEndRequest = payload.endInterview === true;
+      // The first interviewer prompt is deterministic and arrives in one SSE
+      // frame. Play it immediately instead of waiting for the server's
+      // post-stream persistence work to finish.
+      const isOpeningRequest = !Object.prototype.hasOwnProperty.call(payload, "sessionId");
       const isTurnRequest = Object.prototype.hasOwnProperty.call(payload, "answer")
         || payload.timeout === true
+        || payload.endInterview === true
         || payload.switchNext === true;
       const clientRequestId = typeof payload.clientRequestId === "string"
         ? payload.clientRequestId
@@ -1467,6 +1495,12 @@ function MockInterviewContent() {
         const error = new Error(err.error || "request failed") as Error & { code?: string; revision?: number };
         error.code = typeof err.code === "string" ? err.code : undefined;
         error.revision = typeof err.revision === "number" ? err.revision : undefined;
+        debugInterviewEvent("chat.http_error", {
+          requestId: streamMessageId,
+          status: res.status,
+          code: error.code || null,
+          message: error.message.slice(0, 180),
+        });
         throw error;
       }
       const reader = res.body?.getReader();
@@ -1481,22 +1515,23 @@ function MockInterviewContent() {
       let streamError: Error | null = null;
       let ttsPendingContent = "";
       let streamedSegmentIndex = 0;
+      const removeEmptyPlaceholder = () => {
+        setMessages((prev) => prev.filter((message) => !(
+          message.role === "interviewer"
+          && message.requestId === streamMessageId
+          && !message.content
+        )));
+      };
       const streamSpeaker = () => activeInterviewer ?? currentInterviewer;
       const flushStreamedAudio = (final = false) => {
+        // Subsequent model replies stay whole to avoid sentence-level TTS gaps.
+        // The fixed opening is already complete in its first SSE frame, so it
+        // can begin playback while the server persists the new session.
+        if (!final && !isOpeningRequest) return;
         const normalized = ttsPendingContent.trim();
         if (!normalized) return;
-        const boundary = Math.max(
-          normalized.lastIndexOf("。"),
-          normalized.lastIndexOf("！"),
-          normalized.lastIndexOf("？"),
-          normalized.lastIndexOf("!"),
-          normalized.lastIndexOf("?"),
-          normalized.lastIndexOf(". "),
-        );
-        if (!final && boundary < 7 && normalized.length < 120) return;
-        const length = final ? normalized.length : boundary >= 7 ? boundary + 1 : normalized.length;
-        const segment = normalized.slice(0, length).trim();
-        ttsPendingContent = normalized.slice(length).trimStart();
+        const segment = normalized;
+        ttsPendingContent = "";
         if (!segment) return;
         const segmentIndex = streamedSegmentIndex++;
         debugInterviewEvent("chat.tts_segment_ready", { requestId: streamMessageId, segmentIndex, chars: segment.length, preview: debugTextPreview(segment) });
@@ -1509,6 +1544,7 @@ function MockInterviewContent() {
           () => {
             revealInterviewerSubtitleSegment(streamMessageId, segmentIndex, segment);
           },
+          isEndRequest,
         );
       };
 
@@ -1569,6 +1605,10 @@ function MockInterviewContent() {
             }
             if (data.type === "error" || data.error) {
               streamError = new Error(typeof data.error === "string" ? data.error : "interview stream failed");
+              debugInterviewEvent("chat.stream_error", {
+                requestId: streamMessageId,
+                message: streamError.message.slice(0, 180),
+              });
               continue;
             }
             if (data.replay && typeof data.content === "string") {
@@ -1639,6 +1679,7 @@ function MockInterviewContent() {
       } catch (error) {
         streamingRef.current = false;
         setStreaming(false);
+        removeEmptyPlaceholder();
         throw error;
       }
       if (!interviewAliveRef.current) {
@@ -1649,6 +1690,7 @@ function MockInterviewContent() {
       if (streamError) {
         streamingRef.current = false;
         setStreaming(false);
+        removeEmptyPlaceholder();
         throw streamError;
       }
       flushStreamedAudio(true);
@@ -1726,6 +1768,8 @@ function MockInterviewContent() {
     // 先创建会话并播放面试官开场白；拿到 sessionId 后再启动 ASR，避免
     // 首次 ticket/HTTP fallback 绑定到 null 会话。
     setListening(false);
+    // Reset a module-level ambience source left by an interrupted attempt.
+    stopAmbience();
     startAmbience();
     try {
       const opening = await streamInterviewer({
@@ -1737,9 +1781,16 @@ function MockInterviewContent() {
       await waitForAudioDrain();
       finalizeInterviewerSubtitle(opening.messageId, opening.fullContent);
       if (interviewAliveRef.current && sessionIdRef.current) setListening(true);
-    } catch {
+    } catch (error) {
       if (interviewAliveRef.current) {
-        alert(t("mockInterview.startFailed"));
+        const message = error instanceof Error ? error.message : "unknown start error";
+        debugInterviewEvent("chat.start_error", { message: message.slice(0, 180) });
+        alert(
+          interviewLanguageRef.current === "en"
+            ? `Interview could not start: ${message}`
+            : `面试启动失败：${message}`,
+        );
+        interviewAliveRef.current = false;
         setStage("setup");
         setListening(false);
         sessionIdRef.current = null;
@@ -1747,6 +1798,7 @@ function MockInterviewContent() {
         interruptInterviewer();
         stopCamera();
         stopMicrophone();
+        clearPressure();
       }
     }
   };
@@ -1861,8 +1913,13 @@ function MockInterviewContent() {
         debugInterviewEvent("submit.cancelled", { epoch, activeEpoch: activeCandidateEpochRef.current, pendingEpoch: pendingTranscriptEpochRef.current });
         return;
       }
-      debugInterviewEvent("submit.timer_fired", { epoch, transcriptChars: pendingTranscriptRef.current.length });
-      submitPendingTranscriptRef.current();
+      const transcriptChars = pendingTranscriptRef.current.length;
+      if (!transcriptChars) {
+        debugInterviewEvent("submit.awaiting_final", { epoch });
+        return;
+      }
+      debugInterviewEvent("submit.auto_started", { epoch, transcriptChars });
+      void submitPendingTranscriptRef.current();
     }, delayMs);
   };
 
@@ -1893,13 +1950,8 @@ function MockInterviewContent() {
       return;
     }
     const existing = pendingTranscriptRef.current;
-    const next = !existing
-      ? text
-      : existing.includes(text)
-        ? existing
-        : text.includes(existing)
-          ? text
-          : `${existing} ${text}`;
+    const next = mergeRecognizedTranscript(existing, text);
+    const languageUnexpected = isTranscriptLanguageUnexpected(next, interviewLanguageRef.current);
     pendingTranscriptRef.current = next;
     if (manualAsrFinalizingRef.current && manualAsrFinalizeTimerRef.current) {
       window.clearTimeout(manualAsrFinalizeTimerRef.current);
@@ -1922,11 +1974,18 @@ function MockInterviewContent() {
       transcriptChars: next.length,
       preview: debugTextPreview(next),
       neuralEndpoint: neuralVadEndpointEpochRef.current === epoch,
+      languageUnexpected,
     });
+    if (languageUnexpected) {
+      debugInterviewEvent("asr.language_suspect", {
+        epoch,
+        expectedLanguage: interviewLanguageRef.current,
+        transcriptChars: next.length,
+      });
+    }
     setAnswerRetryRequired(false);
-    // Start planning while the candidate reviews the amber transcript. This
-    // keeps the plan off the critical submit path; if it is not ready, the
-    // final interviewer call still proceeds without blocking on planning.
+    // Start planning in parallel with the short ASR settle window. If it is
+    // not ready, the final interviewer call still proceeds without blocking.
     const planSessionId = sessionIdRef.current;
     const planRevision = sessionRevisionRef.current;
     if (planSessionId) {
@@ -1953,15 +2012,10 @@ function MockInterviewContent() {
       setVoiceActive(false);
       setRecording(false);
     }
-    // With Silero available, endpoint ownership stays on the neural VAD. The
-    // ASR provider may finalize a segment mid-answer, so it can only update
-    // the draft until Silero confirms the end of the utterance.
-    if (neuralVadReadyRef.current) {
-      if (neuralVadEndpointEpochRef.current === epoch) {
-        scheduleSemanticCandidateSubmit(epoch, NEURAL_VAD_ASR_SETTLE_MS);
-      }
-    } else {
+    if (!neuralVadReadyRef.current) {
       scheduleCandidateSubmit(epoch, submitDelayMs);
+    } else if (neuralVadEndpointEpochRef.current === epoch) {
+      scheduleSemanticCandidateSubmit(epoch, Math.min(submitDelayMs, NEURAL_VAD_ASR_SETTLE_MS));
     }
   };
 
@@ -1993,7 +2047,11 @@ function MockInterviewContent() {
       manualAsrFinalizeTimerRef.current = null;
     }
     const submittedEpoch = pendingTranscriptEpochRef.current;
-    if (submittedEpoch !== null && activeCandidateEpochRef.current !== submittedEpoch) return;
+    if (
+      submittedEpoch !== null
+      && activeCandidateEpochRef.current !== null
+      && activeCandidateEpochRef.current !== submittedEpoch
+    ) return;
     // Close the capture epoch synchronously, before React updates render the
     // interviewer state. Any old ASR final that arrives afterwards is ignored.
     if (submittedEpoch !== null) {
@@ -2001,6 +2059,7 @@ function MockInterviewContent() {
     }
     realtimeAsrTransmittingRef.current = false;
     realtimeAsrPrebufferRef.current = [];
+    realtimeAsrTailUntilRef.current = 0;
     manualAsrFinalizingRef.current = false;
     activeCandidateEpochRef.current = null;
     answerSubmittingRef.current = true;
@@ -2027,22 +2086,8 @@ function MockInterviewContent() {
   };
 
   useEffect(() => {
-    submitPendingTranscriptRef.current = () => {
-      void submitPendingTranscript();
-    };
+    submitPendingTranscriptRef.current = submitPendingTranscript;
   });
-
-  const discardPendingTranscript = () => {
-    if (autoSubmitTimerRef.current) {
-      window.clearTimeout(autoSubmitTimerRef.current);
-      autoSubmitTimerRef.current = null;
-    }
-    pendingTranscriptRef.current = "";
-    pendingTranscriptEpochRef.current = null;
-    setPendingTranscript("");
-    setAnswerRetryRequired(false);
-    setLiveTranscript("");
-  };
 
   const finishCandidateResponseManually = () => {
     if (!candidateTurnRef.current || answerSubmittingRef.current || streamingRef.current || manualAsrFinalizingRef.current) return;
@@ -2051,6 +2096,7 @@ function MockInterviewContent() {
     const confirmedPartial = (liveTranscriptPendingRef.current || liveTranscript).trim();
     if (staged) {
       debugInterviewEvent("submit.manual_requested", { epoch, source: "staged", transcriptChars: staged.length });
+      neuralVadEndpointEpochRef.current = epoch;
       void submitPendingTranscript();
       return;
     }
@@ -2058,7 +2104,6 @@ function MockInterviewContent() {
       debugInterviewEvent("submit.manual_requested", { epoch, source: "partial", transcriptChars: confirmedPartial.length });
       neuralVadEndpointEpochRef.current = epoch;
       stageRecognizedTranscript(confirmedPartial, "asr", epoch, 0);
-      scheduleCandidateSubmit(epoch, 0);
       return;
     }
 
@@ -2073,6 +2118,7 @@ function MockInterviewContent() {
     manualAsrFinalizingRef.current = true;
     neuralVadEndpointEpochRef.current = epoch;
     realtimeAsrTransmittingRef.current = false;
+    realtimeAsrTailUntilRef.current = 0;
     void neuralVadRef.current?.pause().catch(() => {});
     realtimeAsrCommandRef.current({ type: "commit" });
     debugInterviewEvent("asr.manual_commit_requested", { epoch });
@@ -2169,11 +2215,11 @@ function MockInterviewContent() {
           // ASR receives audio only after this gate confirms speech, so this
           // threshold can favor normal spoken voices without letting ambient
           // noise enter the provider stream.
-          positiveSpeechThreshold: 0.42,
-          negativeSpeechThreshold: 0.27,
+          positiveSpeechThreshold: 0.32,
+          negativeSpeechThreshold: 0.18,
           redemptionMs: NEURAL_VAD_REDEMPTION_MS,
           preSpeechPadMs: 400,
-          minSpeechMs: 300,
+          minSpeechMs: 180,
           submitUserSpeechOnPause: false,
           onSpeechStart: () => {
             if (!candidateTurnRef.current || manualAsrFinalizingRef.current || speakingRef.current || streamingRef.current || recognizingRef.current || answerSubmittingRef.current) return;
@@ -2188,10 +2234,18 @@ function MockInterviewContent() {
             const epoch = activeCandidateEpochRef.current;
             candidateSpeechEvidenceRef.current = true;
             realtimeAsrTransmittingRef.current = true;
+            realtimeAsrTailUntilRef.current = 0;
+            const realtimeSocket = realtimeSocketRef.current;
+            const bufferedFrames = realtimeAsrPrebufferRef.current.length;
+            if (realtimeSocket?.readyState === WebSocket.OPEN) {
+              const buffered = realtimeAsrPrebufferRef.current;
+              buffered.forEach((frame) => realtimeSocket.send(frame));
+              realtimeAsrPrebufferRef.current = [];
+            }
             debugInterviewEvent("vad.speech_confirmed", { epoch });
             debugInterviewEvent("asr.capture_transmitting", {
               epoch,
-              bufferedFrames: realtimeAsrPrebufferRef.current.length,
+              bufferedFrames,
             });
             setVoiceActive(true);
             setRecording(true);
@@ -2207,7 +2261,7 @@ function MockInterviewContent() {
             candidateSpeechStartedAtRef.current = null;
             neuralVadEndpointEpochRef.current = epoch;
             realtimeAsrTransmittingRef.current = false;
-            realtimeAsrPrebufferRef.current = [];
+            realtimeAsrTailUntilRef.current = Date.now() + REALTIME_ASR_TAIL_MS;
             debugInterviewEvent("vad.speech_end", { epoch, audioMs: Math.round(audio.length / 16) });
             setVoiceActive(false);
             setRecording(false);
@@ -2244,6 +2298,7 @@ function MockInterviewContent() {
               candidateSpeechStartedAtRef.current = null;
               realtimeAsrTransmittingRef.current = false;
               realtimeAsrPrebufferRef.current = [];
+              realtimeAsrTailUntilRef.current = 0;
               setVoiceActive(false);
               setRecording(false);
               // Keep the session in the candidate phase after a rejected
@@ -2360,6 +2415,7 @@ function MockInterviewContent() {
               text?: string;
               confirmedText?: string;
               draftText?: string;
+              provider?: string;
               language?: string;
               error?: string;
             };
@@ -2374,6 +2430,7 @@ function MockInterviewContent() {
               ready = true;
               debugInterviewEvent("asr.socket_ready", {
                 fallback: false,
+                provider: data.provider || null,
                 configuredLanguage: data.language || interviewLanguageRef.current,
               });
               heartbeat = window.setInterval(() => sendClientEvent({ type: "ping" }), 25_000);
@@ -2505,11 +2562,22 @@ function MockInterviewContent() {
             }
           };
           socket!.onerror = () => {
+            debugInterviewEvent("asr.socket_error", {
+              readyState: socket?.readyState ?? null,
+              sessionId: sessionIdRef.current,
+            });
             if (!ready) {
               fail(new Error("实时 ASR 连接失败"));
             }
           };
-          socket!.onclose = () => {
+          socket!.onclose = (event) => {
+            debugInterviewEvent("asr.socket_closed", {
+              code: event.code,
+              reason: event.reason || null,
+              wasClean: event.wasClean,
+              ready,
+              sessionId: sessionIdRef.current,
+            });
             if (!cancelled && !intentionalClose && ready) setRealtimeFallback(true);
             if (!ready) {
               fail(new Error("实时 ASR 连接已关闭"));
@@ -2586,6 +2654,21 @@ function MockInterviewContent() {
           // still decides whether any provider result may be accepted.
           const pcm = downsampleToPCM16(input, localCtx?.sampleRate || 16000, 16000);
           if (pcm.byteLength === 0) return;
+          if (neuralVadReadyRef.current && !realtimeAsrTransmittingRef.current) {
+            if (Date.now() < realtimeAsrTailUntilRef.current) {
+              // Send a short silent tail so provider VAD can emit its final
+              // transcript without continuing to ingest room noise.
+              socket.send(new ArrayBuffer(pcm.byteLength));
+            } else {
+              realtimeAsrPrebufferRef.current.push(pcm);
+              let bufferedBytes = realtimeAsrPrebufferRef.current.reduce((total, frame) => total + frame.byteLength, 0);
+              while (bufferedBytes > REALTIME_ASR_PREBUFFER_MAX_BYTES && realtimeAsrPrebufferRef.current.length > 1) {
+                const removed = realtimeAsrPrebufferRef.current.shift();
+                bufferedBytes -= removed?.byteLength || 0;
+              }
+            }
+            return;
+          }
           socket.send(pcm);
         };
       } catch (error) {
@@ -2614,6 +2697,18 @@ function MockInterviewContent() {
     // Transcript staging/getMicStream are stable for the lifetime of this page render.
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [listening, stage, realtimeFallback, sessionId, getRealtimeTicket]);
+
+  // A transient provider/network failure should not force the remainder of a
+  // long interview onto the slower HTTP fallback. Reconnect only between
+  // utterances so the candidate never loses a recording mid-answer.
+  useEffect(() => {
+    if (!realtimeFallback || !listening || stage !== "interview" || recording || recognizing || submittingAnswer || speaking || streaming) return;
+    const timer = window.setTimeout(() => {
+      debugInterviewEvent("asr.reconnect_attempt", { delayMs: REALTIME_ASR_RECONNECT_DELAY_MS });
+      setRealtimeFallback(false);
+    }, REALTIME_ASR_RECONNECT_DELAY_MS);
+    return () => window.clearTimeout(timer);
+  }, [realtimeFallback, listening, stage, recording, recognizing, submittingAnswer, speaking, streaming, debugInterviewEvent]);
 
   // Fallback keeps one VAD graph for the session. Non-answer phases only gate
   // recording, so a render transition cannot repeatedly acquire the microphone.
@@ -2782,6 +2877,7 @@ function MockInterviewContent() {
     candidateTurnRef.current = false;
     realtimeAsrTransmittingRef.current = false;
     realtimeAsrPrebufferRef.current = [];
+    realtimeAsrTailUntilRef.current = 0;
     setHandoff({ outgoing: currentInterviewer, incoming: null, nextRound: currentRound + 1 });
     setOrganizing(true);
     try {
@@ -3019,46 +3115,76 @@ function MockInterviewContent() {
   const handleEnd = async () => {
     if (ending) return;
     if (!confirm(t("mockInterview.endConfirm"))) return;
-    interviewAliveRef.current = false;
+    endingRef.current = true;
     setEnding(true);
+    interruptInterviewer();
     handoffRef.current = false;
     if (handoffRevealTimerRef.current) clearTimeout(handoffRevealTimerRef.current);
     setHandoff(null);
     setOrganizing(false);
-    setListening(false);
-    stopCamera();
-    stopMicrophone();
-    clearPressure();
-    audioRef.current?.pause();
-    setSpeaking(false);
-
     // 会话尚未创建（开场流还没返回 sessionId）：无需生成总结，直接回设置页
     if (!sessionId) {
+      interviewAliveRef.current = false;
+      setListening(false);
+      stopCamera();
+      stopMicrophone();
+      clearPressure();
       setEnding(false);
       handleRestart();
       return;
     }
 
-    // 全程未作答：不生成 AI 评估，标记会话结束后直接返回设置页
-    const hasAnswer = messages.some((m) => m.role === "candidate" && m.content.trim());
-    if (!hasAnswer) {
-      try {
-        const res = await apiFetch("/api/interview/summary", {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ sessionId, language }),
-        });
-        await res.text(); // 排空响应流（后端秒回 skipped）
-      } catch {
-        // 忽略网络异常：会话残留为 in_progress 无副作用
+    try {
+      // Ending can be clicked while the preceding streamed turn is committing.
+      // The server correctly rejects the stale revision; refresh it and retry
+      // briefly instead of making the candidate manually refresh the page.
+      let result: Awaited<ReturnType<typeof streamInterviewer>> | null = null;
+      let revision = sessionRevisionRef.current;
+      for (let attempt = 0; attempt < 6; attempt += 1) {
+        try {
+          result = await streamInterviewer({ sessionId, endInterview: true, revision });
+          break;
+        } catch (error) {
+          const requestError = error as Error & { code?: string; revision?: number };
+          const retryable = requestError.code === "REVISION_CONFLICT" || requestError.code === "REQUEST_IN_FLIGHT";
+          if (!retryable || attempt === 5) throw error;
+          if (typeof requestError.revision === "number") {
+            revision = requestError.revision;
+            sessionRevisionRef.current = revision;
+            setSessionRevision(revision);
+          }
+          await new Promise<void>((resolve) => window.setTimeout(resolve, 350));
+        }
       }
+      if (!result) throw new Error("结束面试请求未完成");
+      finalizeInterviewerSubtitle(result.messageId, result.fullContent);
+      interviewAliveRef.current = false;
+      setListening(false);
+      stopCamera();
+      stopMicrophone();
+      clearPressure();
+      audioRef.current?.pause();
+      setSpeaking(false);
+      const hasAnswer = messages.some((m) => m.role === "candidate" && m.content.trim());
+      if (!hasAnswer) {
+        setEnding(false);
+        alert(t("mockInterview.noAnswerSkip"));
+        handleRestart();
+        return;
+      }
+      // The session is already committed as completed. Move to the report view
+      // now and let the expensive evaluation stream continue in the background
+      // instead of keeping the end button in a blocking state.
+      setStage("summary");
+      void generateSummary(false);
+    } catch (error) {
+      endingRef.current = false;
       setEnding(false);
-      alert(t("mockInterview.noAnswerSkip"));
-      handleRestart();
-      return;
+      debugInterviewEvent("chat.end_failed", {
+        message: error instanceof Error ? error.message.slice(0, 180) : "unknown error",
+      });
+      alert(t("mockInterview.sendFailed"));
     }
-
-    await generateSummary();
   };
 
   // 提交真实度问卷：评分分流（<6 低真实度进人工审查队列 / >=6 高质量案例沉淀为训练数据）
@@ -3092,6 +3218,7 @@ function MockInterviewContent() {
       autoSubmitTimerRef.current = null;
     }
     interviewAliveRef.current = false;
+    endingRef.current = false;
     setEnding(false);
     setStreaming(false);
     setStage("setup");
@@ -3137,9 +3264,9 @@ function MockInterviewContent() {
     return (
         <div className="min-h-screen bg-white dark:bg-black">
           <Header1 />
-          <main className="py-8 md:py-12">
+          <main className="pb-8 pt-24 md:pb-12 md:pt-28">
             <div className="container mx-auto px-4 max-w-3xl">
-              <PageBackButton fallbackHref="/" className="mb-3" />
+              <PageBackButton fallbackHref="/home" className="mb-3" />
               <div className="mb-8 text-center">
                 <div className="inline-flex items-center justify-center h-12 w-12 rounded-2xl bg-zinc-900 dark:bg-white mb-3">
                   <Bot className="h-6 w-6 text-white dark:text-zinc-900" />
@@ -3534,8 +3661,10 @@ function MockInterviewContent() {
                         <p className="text-sm text-amber-100">{pendingTranscript}</p>
                         <p className="mt-1 text-[11px] text-amber-300/80">
                           {answerRetryRequired
-                            ? (interviewLanguageRef.current === "en" ? "Sending failed. Retry or discard this transcript." : "发送失败：可重试或丢弃本次识别结果。")
-                            : (interviewLanguageRef.current === "en" ? "Recognized. Sending automatically…" : "已识别，正在自动提交…")}
+                            ? (interviewLanguageRef.current === "en" ? "Sending failed. Tap the button below to retry." : "发送失败，请点击下方按钮重试。")
+                            : isTranscriptLanguageUnexpected(pendingTranscript, interviewLanguageRef.current)
+                              ? (interviewLanguageRef.current === "en" ? "Language may be off. Sending automatically…" : "识别语言可能不对，正在自动提交…")
+                              : (interviewLanguageRef.current === "en" ? "Recognized. Sending automatically…" : "已识别，正在自动提交…")}
                         </p>
                       </div>
                     )}
@@ -3632,15 +3761,6 @@ function MockInterviewContent() {
                       ? t("mockInterview.tapToSpeak")
                       : t("mockInterview.thinking")}
               </p>
-              {answerRetryRequired && pendingTranscript && (
-                <button
-                  type="button"
-                  onClick={discardPendingTranscript}
-                  className="text-[11px] text-zinc-500 hover:text-zinc-300 underline underline-offset-4"
-                >
-                  {interviewLanguageRef.current === "en" ? "Discard and continue speaking" : "丢弃并继续作答"}
-                </button>
-              )}
             </div>
           </div>
         </div>
@@ -3660,7 +3780,7 @@ function MockInterviewContent() {
   return (
     <div className="min-h-screen bg-white dark:bg-black">
         <Header1 />
-        <main className="py-8 md:py-12">
+        <main className="pt-24 pb-8 md:pt-28 md:pb-12">
           <div className="container mx-auto px-4 max-w-4xl">
             <div className="mb-8 text-center print:mb-4">
               <div className="inline-flex items-center justify-center h-12 w-12 rounded-2xl bg-gradient-to-br from-[#C46A4A] to-[#B5BEB0] mb-3">

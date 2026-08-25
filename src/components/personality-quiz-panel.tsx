@@ -306,8 +306,8 @@ export function PersonalityQuizPanel({
       </div>
 
       {error && (
-        <div className="mb-4 flex items-center justify-between gap-3 rounded-lg border border-red-200 bg-red-50 px-3 py-2 dark:border-red-900/60 dark:bg-red-950/30">
-          <p className="text-xs text-red-700 dark:text-red-300">{t('personality.failed')}</p>
+        <div className="mb-4 flex items-center justify-between gap-3 rounded-lg border border-primary/25 bg-primary/5 px-3 py-2 dark:bg-primary/15">
+          <p className="text-xs text-foreground">{t('personality.failed')}</p>
           <Button
             size="sm"
             variant="outline"

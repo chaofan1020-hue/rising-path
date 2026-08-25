@@ -12,5 +12,8 @@ assert.equal(/[？?]/.test(zhRoundClosing), false);
 assert.equal(/[？?]/.test(enFinalClosing), false);
 assert.match(zhRoundClosing, /下一位面试官/);
 assert.match(enFinalClosing, /concludes/);
+const zhEarlyClosing = buildInterviewRoundClosing({ language: 'zh', action: 'session_complete', timedOut: false, earlyExit: true });
+assert.match(zhEarlyClosing, /结束面试/);
+assert.equal(/[\[\]]/.test(zhEarlyClosing), false);
 
 console.log('interview round flow checks passed');

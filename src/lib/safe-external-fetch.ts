@@ -18,6 +18,7 @@ export interface ExternalPageContent {
   content: string;
   url: string;
   httpStatus: number;
+  metadata?: Record<string, unknown>;
 }
 
 interface ResolvedExternalUrl {
@@ -187,6 +188,77 @@ function extractTitle(value: string): string {
   return match ? htmlToText(match[1]).slice(0, 500) : '';
 }
 
+function decodeHtmlAttribute(value: string): string {
+  return value
+    .replace(/&quot;/gi, '"')
+    .replace(/&#39;/gi, "'")
+    .replace(/&lt;/gi, '<')
+    .replace(/&gt;/gi, '>')
+    .replace(/&amp;/gi, '&');
+}
+
+function decodeResponseBody(body: Buffer, contentType: string | null): string {
+  const declared = contentType?.match(/charset\s*=\s*["']?([^;"'\s]+)/i)?.[1]?.toLowerCase();
+  const hasUtf8Bom = body.length >= 3 && body[0] === 0xef && body[1] === 0xbb && body[2] === 0xbf;
+  const hasUtf16LeBom = body.length >= 2 && body[0] === 0xff && body[1] === 0xfe;
+  const hasUtf16BeBom = body.length >= 2 && body[0] === 0xfe && body[1] === 0xff;
+  const label = hasUtf8Bom
+    ? 'utf-8'
+    : hasUtf16LeBom
+      ? 'utf-16le'
+      : hasUtf16BeBom
+        ? 'utf-16be'
+        : declared === 'gb2312' || declared === 'gbk'
+          ? 'gb18030'
+          : declared === 'latin1' || declared === 'iso-8859-1'
+            ? 'windows-1252'
+            : declared || 'utf-8';
+  try {
+    return new TextDecoder(label, { fatal: false }).decode(body);
+  } catch {
+    return body.toString('utf8');
+  }
+}
+
+export function extractPageMetadata(value: string): Record<string, unknown> {
+  const metadata: Record<string, unknown> = {};
+  const metaPattern = /<meta\b[^>]*>/gi;
+  for (const match of value.matchAll(metaPattern)) {
+    const tag = match[0];
+    const keyMatch = /(?:name|property|itemprop)\s*=\s*["']([^"']+)["']/i.exec(tag);
+    const contentMatch = /content\s*=\s*["']([^"']+)["']/i.exec(tag);
+    if (!keyMatch || !contentMatch) continue;
+    const key = keyMatch[1].trim();
+    const content = decodeHtmlAttribute(contentMatch[1].trim());
+    if (/(deadline|closing|close|expire|expiration|expiry|valid.?through)/i.test(key)) {
+      metadata[key] = content;
+    }
+  }
+
+  const timePattern = /<time\b([^>]*)datetime\s*=\s*["']([^"']+)["'][^>]*>([\s\S]*?)<\/time>/gi;
+  for (const match of value.matchAll(timePattern)) {
+    const label = htmlToText(match[3]);
+    if (/(deadline|closing|close|expire|expiration|expiry|截止|申请)/i.test(label)) {
+      metadata.deadline = decodeHtmlAttribute(match[2].trim());
+    }
+  }
+
+  const jsonLdPattern = /<script\b([^>]*)>([\s\S]*?)<\/script>/gi;
+  const structuredData: unknown[] = [];
+  for (const match of value.matchAll(jsonLdPattern)) {
+    if (!/type\s*=\s*["']application\/ld\+json["']/i.test(match[1])) continue;
+    const raw = decodeHtmlAttribute(match[2].trim());
+    try {
+      const parsed = JSON.parse(raw) as unknown;
+      structuredData.push(parsed);
+    } catch {
+      // Some portals embed invalid JSON-LD. Visible text remains available.
+    }
+  }
+  if (structuredData.length > 0) metadata.structured_data = structuredData;
+  return metadata;
+}
+
 export async function fetchSafeExternalPage(rawUrl: string): Promise<ExternalPageContent> {
   let currentUrl = rawUrl;
 
@@ -206,12 +278,15 @@ export async function fetchSafeExternalPage(rawUrl: string): Promise<ExternalPag
       throw new ExternalFetchError(`目标页面返回 HTTP ${response.statusCode}`, 422, response.statusCode);
     }
 
-    const rawContent = response.body.toString('utf8');
+    const rawContent = decodeResponseBody(response.body, response.headers.get('content-type'));
+    const metadata = extractPageMetadata(rawContent);
+    const pageContent = htmlToText(rawContent);
     return {
       title: extractTitle(rawContent),
-      content: htmlToText(rawContent).slice(0, 5_000),
+      content: pageContent.slice(0, 20_000),
       url: resolved.url.toString(),
       httpStatus: response.statusCode,
+      metadata,
     };
   }
 

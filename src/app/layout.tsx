@@ -4,10 +4,7 @@ import { LanguageProvider } from '@/lib/language-context';
 import './globals.css';
 
 export const metadata: Metadata = {
-  title: {
-    default: 'Liorvix求职平台',
-    template: '%s | Liorvix',
-  },
+  title: 'Liorvix',
   description:
     '专为海外留学生打造的一站式求职平台，提供岗位查询、AI选岗、简历优化、自动网申等功能',
   keywords: [

@@ -4,10 +4,12 @@ import {
   bumpFieldStats,
   DEFAULT_PROFILE,
   setProfileValueBySemanticKey,
+  sourceKeyForSemanticKey,
   type ApplicationProfile,
   type ProfileSourceMap,
 } from '@/lib/application-profile';
 import { prefillFeedbackRequestSchema } from '@/lib/application-contracts';
+import { getSupabaseClient } from '@/storage/database/supabase-client';
 
 export async function POST(request: NextRequest) {
   try {
@@ -16,6 +18,16 @@ export async function POST(request: NextRequest) {
     const parsed = prefillFeedbackRequestSchema.safeParse(await request.json());
     if (!parsed.success) return NextResponse.json({ error: '预填反馈参数无效' }, { status: 400 });
     const { fields, jobId, domain, version: expectedVersion } = parsed.data;
+
+    if (jobId) {
+      const { data: job, error: jobError } = await getSupabaseClient()
+        .from('jobs')
+        .select('id')
+        .eq('id', jobId)
+        .maybeSingle();
+      if (jobError) throw new Error(`验证反馈岗位失败: ${jobError.message}`);
+      if (!job) return NextResponse.json({ error: '反馈岗位不存在' }, { status: 404 });
+    }
 
     const { data: profileRow } = await auth.client
       .from('application_profiles')
@@ -45,9 +57,9 @@ export async function POST(request: NextRequest) {
 
       if (action !== 'ignored' && finalValue) {
         profile = setProfileValueBySemanticKey(profile, semanticKey, finalValue);
-        source = bumpFieldStats(source, semanticKey, action === 'edited' ? 'edit' : 'confirm');
+        source = bumpFieldStats(source, sourceKeyForSemanticKey(semanticKey), action === 'edited' ? 'edit' : 'confirm');
       } else if (action === 'ignored' && field.suggestedValue) {
-        source = bumpFieldStats(source, semanticKey, 'ignore');
+        source = bumpFieldStats(source, sourceKeyForSemanticKey(semanticKey), 'ignore');
       }
 
     }

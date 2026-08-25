@@ -26,6 +26,31 @@ export interface ProfileFieldSource {
 
 export type ProfileSourceMap = Record<string, ProfileFieldSource>;
 
+const semanticSourceKeys: Record<string, string> = {
+  first_name: 'personal.firstName',
+  last_name: 'personal.lastName',
+  full_name: 'personal.fullName',
+  email: 'personal.email',
+  phone: 'personal.phone',
+  address: 'personal.address',
+  city: 'personal.city',
+  state: 'personal.state',
+  zip_code: 'personal.zipCode',
+  country: 'personal.country',
+  linkedin: 'links.linkedin',
+  github: 'links.github',
+  portfolio: 'links.portfolio',
+  work_authorization: 'workAuthorization',
+  visa_status: 'visaStatus',
+  summary: 'summary',
+  skills: 'skills',
+  languages: 'languages',
+};
+
+export function sourceKeyForSemanticKey(semanticKey: string): string {
+  return semanticSourceKeys[semanticKey] || semanticKey;
+}
+
 export interface ProfileChange {
   fieldKey: string;
   oldValue: string;
@@ -145,6 +170,67 @@ export function buildSourceMapFromProfile(profile: ApplicationProfile): ProfileS
   source.visaStatus = ai(profile.visaStatus);
   source.summary = ai(profile.summary);
   return source;
+}
+
+/** Preserve values the user explicitly edited when AI regenerates a profile. */
+export function mergeAiProfilePreservingManual(
+  aiProfile: ApplicationProfile,
+  currentProfile: ApplicationProfile,
+  currentSource: ProfileSourceMap,
+): { profile: ApplicationProfile; source: ProfileSourceMap } {
+  const profile: ApplicationProfile = {
+    ...aiProfile,
+    personal: { ...aiProfile.personal },
+    links: { ...aiProfile.links },
+  };
+  const manualValues: Record<string, unknown> = {
+    'personal.firstName': currentProfile.personal?.firstName,
+    'personal.lastName': currentProfile.personal?.lastName,
+    'personal.fullName': currentProfile.personal?.fullName,
+    'personal.email': currentProfile.personal?.email,
+    'personal.phone': currentProfile.personal?.phone,
+    'personal.address': currentProfile.personal?.address,
+    'personal.city': currentProfile.personal?.city,
+    'personal.state': currentProfile.personal?.state,
+    'personal.zipCode': currentProfile.personal?.zipCode,
+    'personal.country': currentProfile.personal?.country,
+    'links.linkedin': currentProfile.links?.linkedin,
+    'links.github': currentProfile.links?.github,
+    'links.portfolio': currentProfile.links?.portfolio,
+    education: currentProfile.education,
+    experience: currentProfile.experience,
+    skills: currentProfile.skills,
+    languages: currentProfile.languages,
+    workAuthorization: currentProfile.workAuthorization,
+    visaStatus: currentProfile.visaStatus,
+    summary: currentProfile.summary,
+  };
+
+  for (const [key, source] of Object.entries(currentSource)) {
+    if (source.source !== 'manual' || !(key in manualValues)) continue;
+    const value = manualValues[key];
+    if (key.startsWith('personal.')) {
+      profile.personal[key.slice('personal.'.length)] = String(value || '');
+    } else if (key.startsWith('links.')) {
+      profile.links[key.slice('links.'.length)] = String(value || '');
+    } else if (key === 'education' || key === 'experience') {
+      const entries = Array.isArray(value) ? value as Array<Record<string, string>> : [];
+      if (key === 'education') profile.education = entries;
+      else profile.experience = entries;
+    } else if (key === 'skills' || key === 'languages') {
+      const values = Array.isArray(value) ? value as string[] : [];
+      if (key === 'skills') profile.skills = values;
+      else profile.languages = values;
+    } else if (key === 'workAuthorization' || key === 'visaStatus' || key === 'summary') {
+      profile[key] = String(value || '');
+    }
+  }
+
+  const source = buildSourceMapFromProfile(profile);
+  for (const [key, fieldSource] of Object.entries(currentSource)) {
+    if (fieldSource.source === 'manual') source[key] = fieldSource;
+  }
+  return { profile, source };
 }
 
 function splitName(name?: string): { firstName: string; lastName: string } {

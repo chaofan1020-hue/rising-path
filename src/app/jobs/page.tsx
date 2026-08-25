@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, useEffect, useCallback, type ComponentType, type ReactNode } from 'react';
+import { useState, useEffect, useCallback, useRef, type ComponentType, type ReactNode } from 'react';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent } from '@/components/ui/card';
 import { Input } from '@/components/ui/input';
@@ -15,12 +15,13 @@ import {
   SheetTrigger,
   SheetTitle,
 } from '@/components/ui/sheet';
-import { Search, MapPin, Briefcase, Building2, Users, SlidersHorizontal, RotateCcw, ExternalLink, ChevronLeft, ChevronRight, X, Plus, Check, Loader2, Heart } from 'lucide-react';
+import { Search, MapPin, Briefcase, Building2, Users, SlidersHorizontal, RotateCcw, ExternalLink, ChevronLeft, ChevronRight, X, Plus, Check, Loader2, Heart, Sparkles, Calendar } from 'lucide-react';
 import Link from 'next/link';
 import { AuthGuard } from '@/components/auth-guard';
 import { apiFetch } from '@/lib/api-client';
 import { Header1 } from '@/components/header1';
 import { useLanguage } from '@/lib/language-context';
+import { getJobDeadlineRemaining } from '@/lib/job-deadline';
 
 interface Job {
   id: number;
@@ -36,8 +37,35 @@ interface Job {
   logo_url?: string;
   logo_fallback_url?: string;
   sponsorship?: 'yes' | 'no' | 'unknown';
+  valid_through?: string | null;
   is_active?: boolean;
   created_at: string;
+  updated_at?: string;
+}
+
+function getDeadlineDate(value: string | null | undefined): Date | null {
+  if (!value) return null;
+  const normalized = value.trim();
+  const dateOnly = normalized.match(/^(\d{4})-(\d{2})-(\d{2})$/);
+  const timestamp = dateOnly
+    ? new Date(Number(dateOnly[1]), Number(dateOnly[2]) - 1, Number(dateOnly[3]), 23, 59, 59, 999).getTime()
+    : Date.parse(normalized);
+  return Number.isFinite(timestamp) ? new Date(timestamp) : null;
+}
+
+function formatDeadline(value: string | null | undefined): string | null {
+  const date = getDeadlineDate(value);
+  return date
+    ? new Intl.DateTimeFormat(undefined, { year: 'numeric', month: '2-digit', day: '2-digit', timeZone: 'UTC' }).format(date)
+    : null;
+}
+
+function formatDeadlineRemaining(value: string | null | undefined, now: number, t: (key: string, params?: Record<string, string | number>) => string): string | null {
+  if (!now) return null;
+  const remaining = getJobDeadlineRemaining(value, now);
+  if (!remaining) return null;
+  if (remaining.expired) return t('jobs.deadlineExpired');
+  return t('jobs.daysLeft', { days: remaining.days });
 }
 
 interface JobConfig {
@@ -89,6 +117,9 @@ function CompanyLogo({ company, logoUrl, fallbackLogoUrl }: { company: string; l
         <img
           src={logoSource}
           alt={company}
+          loading="lazy"
+          decoding="async"
+          referrerPolicy="no-referrer"
           className="w-full h-full object-contain p-1"
           onError={() => {
             setFailedSource(logoSource === logoUrl && fallbackLogoUrl ? 'primary' : 'fallback');
@@ -110,11 +141,13 @@ function CompanyLogo({ company, logoUrl, fallbackLogoUrl }: { company: string; l
 
 // 大地区选项（用于筛选）
 const mainRegions = [
-  { id: -1, config_type: 'region', config_value: '美国', sort_order: 1, is_active: true },
-  { id: -2, config_type: 'region', config_value: '英国', sort_order: 2, is_active: true },
-  { id: -3, config_type: 'region', config_value: '加拿大', sort_order: 3, is_active: true },
-  { id: -4, config_type: 'region', config_value: '澳大利亚', sort_order: 4, is_active: true },
-  { id: -6, config_type: 'region', config_value: '香港', sort_order: 5, is_active: true },
+  { id: -7, config_type: 'region', config_value: '北美', sort_order: 1, is_active: true },
+  { id: -1, config_type: 'region', config_value: '美国', sort_order: 2, is_active: true },
+  { id: -2, config_type: 'region', config_value: '英国', sort_order: 3, is_active: true },
+  { id: -3, config_type: 'region', config_value: '加拿大', sort_order: 4, is_active: true },
+  { id: -4, config_type: 'region', config_value: '澳大利亚', sort_order: 5, is_active: true },
+  { id: -6, config_type: 'region', config_value: '香港', sort_order: 6, is_active: true },
+  { id: -8, config_type: 'region', config_value: '新加坡', sort_order: 7, is_active: true },
 ];
 
 const TARGET_REGION_LABELS = new Set(mainRegions.map((region) => region.config_value));
@@ -134,6 +167,47 @@ const sponsorshipOptions: JobConfig[] = [
 // 获取地区对应的显示文本
 function getRegionDisplayText(region: string): string {
   return region;
+}
+
+// Keep each page varied without changing the order of jobs within a company.
+// The hash makes the company rotation stable across renders while changing it
+// between pages, so React never reshuffles cards during an unrelated update.
+function diversifyJobs(jobs: Job[], page: number): Job[] {
+  const buckets = new Map<string, Job[]>();
+
+  for (const job of jobs) {
+    const company = job.company.trim() || `job-${job.id}`;
+    const bucket = buckets.get(company);
+    if (bucket) bucket.push(job);
+    else buckets.set(company, [job]);
+  }
+
+  const companyNames = [...buckets.keys()].sort((a, b) => {
+    const hash = (value: string) => {
+      let result = 2166136261 ^ page;
+      for (let index = 0; index < value.length; index += 1) {
+        result ^= value.charCodeAt(index);
+        result = Math.imul(result, 16777619);
+      }
+      return result >>> 0;
+    };
+    return hash(a) - hash(b);
+  });
+
+  const diversified: Job[] = [];
+  let hasJobs = true;
+  while (hasJobs) {
+    hasJobs = false;
+    for (const company of companyNames) {
+      const nextJob = buckets.get(company)?.shift();
+      if (nextJob) {
+        diversified.push(nextJob);
+        hasJobs = true;
+      }
+    }
+  }
+
+  return diversified;
 }
 
 function FilterSection({
@@ -240,6 +314,7 @@ function BrandOptions({
   loading,
   onSearchChange,
   onChange,
+  t,
 }: {
   options: CompanyOption[];
   selected: string[];
@@ -247,6 +322,7 @@ function BrandOptions({
   loading: boolean;
   onSearchChange: (value: string) => void;
   onChange: (values: string[]) => void;
+  t: (key: string) => string;
 }) {
   const toggle = (company: string) => {
     onChange(selected.includes(company)
@@ -268,16 +344,16 @@ function BrandOptions({
         <Input
           value={search}
           onChange={(event) => onSearchChange(event.target.value)}
-          placeholder="搜索品牌名称"
+          placeholder={t('jobs.companySearchPlaceholder')}
           className="h-10 border-zinc-200 pl-9 dark:border-zinc-700"
         />
       </div>
       {loading ? (
         <div className="flex items-center justify-center gap-2 py-8 text-sm text-zinc-400">
-          <Loader2 className="h-4 w-4 animate-spin" />正在加载品牌
+          <Loader2 className="h-4 w-4 animate-spin" />{t('jobs.companyLoading')}
         </div>
       ) : visibleOptions.length === 0 ? (
-        <p className="py-6 text-center text-sm text-zinc-400">没有匹配的品牌</p>
+        <p className="py-6 text-center text-sm text-zinc-400">{t('jobs.companyNoMatch')}</p>
       ) : (
         <div className="grid max-h-[22rem] grid-cols-1 gap-2 overflow-y-auto pr-1 sm:grid-cols-2">
           {visibleOptions.map((option) => {
@@ -302,7 +378,7 @@ function BrandOptions({
                 <span className="min-w-0 flex-1">
                   <span className="block truncate text-sm font-medium">{option.company_name}</span>
                   <span className={`block text-xs ${checked ? 'text-white/70 dark:text-zinc-500' : 'text-zinc-400'}`}>
-                    {option.job_count} 个岗位
+                    {option.job_count} {t('jobs.jobsUnit')}
                   </span>
                 </span>
                 {checked && <Check className="h-4 w-4 shrink-0" />}
@@ -312,7 +388,7 @@ function BrandOptions({
         </div>
       )}
       {matchingOptions.length > visibleOptions.length && (
-        <p className="text-xs text-zinc-400">请输入品牌名称继续缩小范围</p>
+        <p className="text-xs text-zinc-400">{t('jobs.companySearchHint')}</p>
       )}
     </div>
   );
@@ -323,9 +399,12 @@ function JobsContent() {
   const [jobs, setJobs] = useState<Job[]>([]);
   const [loading, setLoading] = useState(true);
   const [searchTerm, setSearchTerm] = useState('');
+  const [debouncedSearchTerm, setDebouncedSearchTerm] = useState('');
   const [page, setPage] = useState(0);
   const pageSize = 30;
   const [totalJobs, setTotalJobs] = useState(0);
+  const [totalJobsIsEstimate, setTotalJobsIsEstimate] = useState(false);
+  const [hasMoreJobs, setHasMoreJobs] = useState(false);
   const [selectedRegions, setSelectedRegions] = useState<string[]>([]);
   const [selectedDirections, setSelectedDirections] = useState<string[]>([]);
   const [selectedJobType, setSelectedJobType] = useState('');
@@ -340,10 +419,12 @@ function JobsContent() {
   const [brandSearch, setBrandSearch] = useState('');
   const [companyOptions, setCompanyOptions] = useState<CompanyOption[]>([]);
   const [companyOptionsLoading, setCompanyOptionsLoading] = useState(true);
+  const [companyOptionsLoaded, setCompanyOptionsLoaded] = useState(false);
   const [applyingJobId, setApplyingJobId] = useState<number | null>(null);
   const [appliedJobIds, setAppliedJobIds] = useState<Set<number>>(new Set());
   const [favoriteJobIds, setFavoriteJobIds] = useState<Set<number>>(new Set());
   const [favoriteLoadingJobId, setFavoriteLoadingJobId] = useState<number | null>(null);
+  const [deadlineNow, setDeadlineNow] = useState(0);
   
   // 动态配置
   const [configs, setConfigs] = useState<{
@@ -351,8 +432,16 @@ function JobsContent() {
     direction: JobConfig[];
     audience: JobConfig[];
   }>({ region: [], direction: [], audience: [] });
+  const jobsRequestIdRef = useRef(0);
+  const previousFilterKeyRef = useRef<string | null>(null);
 
   const { t } = useLanguage();
+
+  useEffect(() => {
+    setDeadlineNow(Date.now());
+    const timer = window.setInterval(() => setDeadlineNow(Date.now()), 60_000);
+    return () => window.clearInterval(timer);
+  }, []);
 
   useEffect(() => {
     if (filterOpen) {
@@ -383,6 +472,11 @@ function JobsContent() {
     setFilterOpen(false);
   };
 
+  useEffect(() => {
+    const timeoutId = window.setTimeout(() => setDebouncedSearchTerm(searchTerm), 300);
+    return () => window.clearTimeout(timeoutId);
+  }, [searchTerm]);
+
   const activeFilterCount = selectedRegions.length
     + selectedDirections.length
     + (selectedJobType ? 1 : 0)
@@ -390,18 +484,20 @@ function JobsContent() {
     + selectedCompanies.length;
 
   const activeFilterSummaries = [
-    selectedRegions.length > 0 ? { id: 'region', label: `地区：${selectedRegions.join('、')}` } : null,
-    selectedDirections.length > 0 ? { id: 'direction', label: `${t('jobs.direction')}：${selectedDirections.join('、')}` } : null,
-    selectedCompanies.length > 0 ? { id: 'company', label: `品牌：${selectedCompanies.join('、')}` } : null,
-    selectedJobType ? { id: 'job-type', label: `岗位类型：${selectedJobType}` } : null,
+    selectedRegions.length > 0 ? { id: 'region', label: `${t('jobs.region')}: ${selectedRegions.join(', ')}` } : null,
+    selectedDirections.length > 0 ? { id: 'direction', label: `${t('jobs.direction')}: ${selectedDirections.join(', ')}` } : null,
+    selectedCompanies.length > 0 ? { id: 'company', label: `${t('jobs.company')}: ${selectedCompanies.join(', ')}` } : null,
+    selectedJobType ? { id: 'job-type', label: `${t('jobs.jobType')}: ${selectedJobType}` } : null,
     selectedSponsorship ? {
       id: 'sponsorship',
-      label: `签证：${selectedSponsorship === 'yes' ? '支持签证' : selectedSponsorship === 'no' ? '不支持签证' : '未注明'}`,
+      label: `${t('jobs.sponsorship')}: ${selectedSponsorship === 'yes' ? t('jobs.sponsorshipYes') : selectedSponsorship === 'no' ? t('jobs.sponsorshipNo') : t('jobs.sponsorshipUnknown')}`,
     } : null,
   ].filter((summary): summary is { id: string; label: string } => summary !== null);
 
-  const fetchJobs = useCallback(async () => {
-    setLoading(true);
+  const fetchJobs = useCallback(async (options: { background?: boolean } = {}) => {
+    const background = options.background === true;
+    const requestId = ++jobsRequestIdRef.current;
+    if (!background) setLoading(true);
     try {
       const params = new URLSearchParams();
       if (selectedRegions.length > 0) {
@@ -415,24 +511,50 @@ function JobsContent() {
       }
       if (selectedJobType) params.append('job_type', selectedJobType);
       if (selectedSponsorship) params.append('sponsorship', selectedSponsorship);
-      if (searchTerm.trim()) params.set('search', searchTerm.trim());
+      if (debouncedSearchTerm.trim()) params.set('search', debouncedSearchTerm.trim());
+      params.set('diverse', '1');
+      params.set('summary', '1');
       params.set('limit', String(pageSize));
       params.set('offset', String(page * pageSize));
 
-      const response = await apiFetch(`/api/jobs?${params.toString()}`);
+      const response = await apiFetch(`/api/jobs?${params.toString()}`, { cache: 'no-store' });
       const data = await response.json();
+      if (requestId !== jobsRequestIdRef.current) return;
       setJobs(data.jobs || []);
       setTotalJobs(data.pagination?.total || 0);
+      setTotalJobsIsEstimate(Boolean(data.pagination?.total_is_estimate));
+      setHasMoreJobs(Boolean(data.pagination?.has_more));
     } catch (error) {
+      if (requestId !== jobsRequestIdRef.current) return;
       console.error('Failed to fetch jobs:', error);
     } finally {
-      setLoading(false);
+      if (requestId === jobsRequestIdRef.current) setLoading(false);
     }
-  }, [page, pageSize, searchTerm, selectedRegions, selectedDirections, selectedCompanies, selectedJobType, selectedSponsorship]);
+  }, [page, pageSize, debouncedSearchTerm, selectedRegions, selectedDirections, selectedCompanies, selectedJobType, selectedSponsorship]);
+
+  const activeFilterKey = JSON.stringify([
+    debouncedSearchTerm,
+    selectedRegions,
+    selectedDirections,
+    selectedCompanies,
+    selectedJobType,
+    selectedSponsorship,
+  ]);
 
   useEffect(() => {
-    setPage(0);
-  }, [searchTerm, selectedRegions, selectedDirections, selectedCompanies, selectedJobType, selectedSponsorship]);
+    const filtersChanged = previousFilterKeyRef.current !== null
+      && previousFilterKeyRef.current !== activeFilterKey;
+    previousFilterKeyRef.current = activeFilterKey;
+    if (filtersChanged && page !== 0) {
+      setPage(0);
+      return;
+    }
+    void fetchJobs();
+  }, [activeFilterKey, fetchJobs, page]);
+
+  useEffect(() => {
+    window.scrollTo({ top: 0, behavior: 'auto' });
+  }, [page]);
 
   // 获取已投递的岗位ID列表
   const fetchAppliedJobIds = useCallback(async () => {
@@ -494,10 +616,19 @@ function JobsContent() {
   }, [fetchAppliedJobIds, fetchFavoriteJobIds]);
 
   useEffect(() => {
-    fetchJobs();
+    const refresh = () => {
+      if (document.visibilityState === 'visible') void fetchJobs({ background: true });
+    };
+    const timer = window.setInterval(refresh, 60_000);
+    window.addEventListener('focus', refresh);
+    return () => {
+      window.clearInterval(timer);
+      window.removeEventListener('focus', refresh);
+    };
   }, [fetchJobs]);
 
   useEffect(() => {
+    if (!filterOpen || companyOptionsLoaded) return;
     let cancelled = false;
     setCompanyOptionsLoading(true);
     apiFetch('/api/jobs/companies')
@@ -510,12 +641,15 @@ function JobsContent() {
         if (!cancelled) setCompanyOptions([]);
       })
       .finally(() => {
-        if (!cancelled) setCompanyOptionsLoading(false);
+        if (!cancelled) {
+          setCompanyOptionsLoading(false);
+          setCompanyOptionsLoaded(true);
+        }
       });
     return () => {
       cancelled = true;
     };
-  }, []);
+  }, [companyOptionsLoaded, filterOpen]);
 
   const handleFavorite = async (jobId: number) => {
     const isFavorite = favoriteJobIds.has(jobId);
@@ -578,26 +712,22 @@ function JobsContent() {
     }
   };
 
-  const filteredJobs = [...jobs].sort((a, b) => {
-      // 首先按投递状态排序：可投递排在前面
-      const aActive = a.is_active !== false;
-      const bActive = b.is_active !== false;
-      if (aActive !== bActive) {
-        return aActive ? -1 : 1;
-      }
-      // 然后按创建时间排序：最新排在前面
-      return new Date(b.created_at).getTime() - new Date(a.created_at).getTime();
-    });
+  const filteredJobs = diversifyJobs(jobs, page);
 
   return (
     <div className="min-h-screen bg-white dark:bg-zinc-950">
       <Header1 />
-      <main className="relative container mx-auto px-4 pt-16 md:pt-20 pb-16">
+      <main className="relative container mx-auto px-4 pt-20 pb-16 sm:px-6 md:pt-24">
         {/* Hero：左对齐 eyebrow + 大标题（Tailark 式） */}
-        <div className="relative mb-8 md:mb-10">
+        <div className="relative mb-8 max-w-3xl md:mb-10">
           <p className="text-sm font-medium text-zinc-400 dark:text-zinc-500 mb-3">{t('page.jobs.eyebrow')}</p>
-          <h1 className="text-2xl md:text-4xl font-bold tracking-tight text-zinc-900 dark:text-zinc-50 mb-4">{t('page.jobs.title')}</h1>
+          <h1 className="break-words text-2xl font-bold tracking-tight text-zinc-900 dark:text-zinc-50 md:text-4xl mb-4">{t('page.jobs.title')}</h1>
           <p className="text-zinc-500 dark:text-zinc-400 max-w-2xl md:text-lg leading-relaxed">{t('page.jobs.subtitle')}</p>
+          <Link href="/ai-match" className="mt-4 inline-flex items-center gap-2 text-sm font-medium text-zinc-700 hover:text-zinc-950 dark:text-zinc-300 dark:hover:text-white">
+            <Sparkles className="h-4 w-4 text-amber-500" />
+            {t('jobs.aiMatchHint')}
+            <ChevronRight className="h-4 w-4" />
+          </Link>
         </div>
 
         {/* Filters */}
@@ -631,8 +761,8 @@ function JobsContent() {
                   </SheetTrigger>
                   <SheetContent side="right" className="w-full border-zinc-200 p-0 dark:border-zinc-800 sm:max-w-md">
                     <SheetHeader className="border-b border-zinc-100 px-5 py-5 text-left dark:border-zinc-800">
-                      <SheetTitle className="flex items-center gap-2 text-lg"><SlidersHorizontal className="h-5 w-5" />筛选岗位</SheetTitle>
-                      <SheetDescription>组合多个条件，结果将在应用后按页加载。</SheetDescription>
+                      <SheetTitle className="flex items-center gap-2 text-lg"><SlidersHorizontal className="h-5 w-5" />{t('jobs.filterTitle')}</SheetTitle>
+                      <SheetDescription>{t('jobs.filterDescription')}</SheetDescription>
                     </SheetHeader>
                     <div className="flex-1 space-y-6 overflow-y-auto px-5 py-5">
                       <FilterSection label={t('jobs.region')} icon={MapPin}>
@@ -641,7 +771,7 @@ function JobsContent() {
                       <FilterSection label={t('jobs.direction')} icon={Briefcase}>
                         <CheckboxOptions options={configs.direction || []} selected={draftDirections} onChange={setDraftDirections} />
                       </FilterSection>
-                      <FilterSection label="品牌" icon={Building2}>
+                      <FilterSection label={t('jobs.company')} icon={Building2}>
                         <BrandOptions
                           options={companyOptions}
                           selected={draftCompanies}
@@ -649,20 +779,21 @@ function JobsContent() {
                           loading={companyOptionsLoading}
                           onSearchChange={setBrandSearch}
                           onChange={setDraftCompanies}
+                          t={t}
                         />
                       </FilterSection>
-                      <FilterSection label="岗位类型" icon={Briefcase}>
-                        <RadioOptions value={draftJobType} options={jobTypeOptions} allLabel="不限" onChange={setDraftJobType} />
+                      <FilterSection label={t('jobs.jobType')} icon={Briefcase}>
+                        <RadioOptions value={draftJobType} options={jobTypeOptions} allLabel={t('jobs.any')} onChange={setDraftJobType} />
                       </FilterSection>
-                      <FilterSection label="签证支持" icon={Users}>
-                        <RadioOptions value={draftSponsorship} options={sponsorshipOptions} allLabel="不限" onChange={setDraftSponsorship} formatValue={(value) => value === 'yes' ? '支持签证' : value === 'no' ? '不支持签证' : '未注明'} />
+                      <FilterSection label={t('jobs.sponsorship')} icon={Users}>
+                        <RadioOptions value={draftSponsorship} options={sponsorshipOptions} allLabel={t('jobs.any')} onChange={setDraftSponsorship} formatValue={(value) => value === 'yes' ? t('jobs.sponsorshipYes') : value === 'no' ? t('jobs.sponsorshipNo') : t('jobs.sponsorshipUnknown')} />
                       </FilterSection>
                     </div>
                     <SheetFooter className="border-t border-zinc-100 px-5 py-4 dark:border-zinc-800 sm:flex-row sm:justify-between">
                       <Button type="button" variant="ghost" onClick={() => { setDraftRegions([]); setDraftDirections([]); setDraftJobType(''); setDraftSponsorship(''); setDraftCompanies([]); setBrandSearch(''); }}>
-                        <RotateCcw className="mr-2 h-4 w-4" />重置
+                        <RotateCcw className="mr-2 h-4 w-4" />{t('jobs.reset')}
                       </Button>
-                      <Button type="button" onClick={applyDraftFilters} className="bg-zinc-900 text-white hover:bg-zinc-800 dark:bg-white dark:text-zinc-900 dark:hover:bg-zinc-200">应用筛选</Button>
+                      <Button type="button" onClick={applyDraftFilters} className="bg-zinc-900 text-white hover:bg-zinc-800 dark:bg-white dark:text-zinc-900 dark:hover:bg-zinc-200">{t('jobs.apply')}</Button>
                     </SheetFooter>
                   </SheetContent>
                 </Sheet>
@@ -742,6 +873,12 @@ function JobsContent() {
                             {job.sponsorship === 'yes' ? t('jobs.sponsor') : t('jobs.noSponsor')}
                           </Badge>
                         )}
+                        {formatDeadline(job.valid_through) && (
+                          <Badge variant="outline" className="border-zinc-200 dark:border-zinc-700 text-zinc-600 dark:text-zinc-300 rounded-md text-xs">
+                            <Calendar className="h-3 w-3 mr-1" />
+                            {t('jobs.deadline')} {formatDeadline(job.valid_through)}
+                          </Badge>
+                        )}
                         {job.is_active === false ? (
                           <Badge variant="secondary" className="bg-zinc-100 text-zinc-400 dark:bg-zinc-800 dark:text-zinc-500 rounded-md text-xs hover:bg-zinc-100">
                             {t('jobs.inactive')}
@@ -757,6 +894,11 @@ function JobsContent() {
                       {job.description && (
                         <p className="text-xs md:text-sm text-zinc-400 dark:text-zinc-500 line-clamp-2">
                           {job.description}
+                        </p>
+                      )}
+                      {formatDeadlineRemaining(job.valid_through, deadlineNow, t) && (
+                        <p className="text-sm font-semibold text-red-600 dark:text-red-400">
+                          {formatDeadlineRemaining(job.valid_through, deadlineNow, t)}
                         </p>
                       )}
                     </div>
@@ -808,7 +950,7 @@ function JobsContent() {
                       </Button>
                       {job.job_url && (
                         <Button size="sm" variant="outline" asChild className="rounded-lg text-xs md:text-sm h-9 whitespace-nowrap border-zinc-200 dark:border-zinc-700 text-zinc-600 dark:text-zinc-300 hover:bg-zinc-100 hover:text-zinc-900 dark:hover:bg-zinc-800 dark:hover:text-zinc-100">
-                          <a href={job.job_url} target="_blank" rel="noopener noreferrer">
+                          <a href={`/api/jobs/${job.id}/open`} target="_blank" rel="noopener noreferrer">
                             <ExternalLink className="h-3.5 w-3.5 mr-1 flex-shrink-0" />
                             {t('jobs.originalLink')}
                           </a>
@@ -825,7 +967,7 @@ function JobsContent() {
         {/* Results count */}
         {!loading && totalJobs > 0 && (
           <div className="relative mt-4 md:mt-6 flex flex-col items-center gap-3 text-xs md:text-sm text-zinc-400 dark:text-zinc-500">
-            <span>{t('jobs.foundJobs')} {totalJobs} {t('jobs.jobsUnit')} · 第 {page + 1} 页</span>
+            <span>{t('jobs.foundJobs')} {totalJobsIsEstimate ? '约 ' : ''}{totalJobs} {t('jobs.jobsUnit')} · {t('jobs.page')} {page + 1}</span>
             <div className="flex items-center gap-2">
               <Button
                 type="button"
@@ -833,19 +975,19 @@ function JobsContent() {
                 size="sm"
                 onClick={() => setPage((current) => Math.max(0, current - 1))}
                 disabled={page === 0 || loading}
-                aria-label="上一页"
+                aria-label={t('jobs.previous')}
               >
-                <ChevronLeft className="h-4 w-4 mr-1" />上一页
+                <ChevronLeft className="h-4 w-4 mr-1" />{t('jobs.previous')}
               </Button>
               <Button
                 type="button"
                 variant="outline"
                 size="sm"
                 onClick={() => setPage((current) => current + 1)}
-                disabled={loading || (page + 1) * pageSize >= totalJobs}
-                aria-label="下一页"
+                disabled={loading || !hasMoreJobs}
+                aria-label={t('jobs.next')}
               >
-                下一页<ChevronRight className="h-4 w-4 ml-1" />
+                {t('jobs.next')}<ChevronRight className="h-4 w-4 ml-1" />
               </Button>
             </div>
           </div>
