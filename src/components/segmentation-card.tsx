@@ -25,7 +25,7 @@ import {
   ChevronUp,
 } from 'lucide-react';
 import { useLanguage } from '@/lib/language-context';
-import type { RegionKey } from '@/lib/region-dna';
+import { REGION_DNA, type RegionKey } from '@/lib/region-dna';
 import type {
   CareerStage,
   MajorMatch,
@@ -41,25 +41,27 @@ interface SegmentationCardProps {
   resumeId: number;
   segmentation: Segmentation;
   confirmed?: boolean;
+  defaultEditing?: boolean;
   skills?: string[];
   schoolLine?: string;  // 如 "墨尔本大学 · 数据分析硕士"
   onUpdated: (seg: Segmentation, metadata?: ResumeProfileUpdateMetadata) => void;
 }
 
 const STAGE_KEYS: CareerStage[] = ['junior', 'senior', 'experienced', 'returning_intern'];
-const REGION_KEYS: RegionKey[] = ['us', 'uk', 'sg', 'cn_t1', 'cn_t2'];
+const REGION_KEYS: RegionKey[] = Object.keys(REGION_DNA) as RegionKey[];
 const MATCH_KEYS: MajorMatch[] = ['aligned', 'related', 'unrelated'];
 
 export function SegmentationCard({
   resumeId,
   segmentation,
   confirmed,
+  defaultEditing = false,
   skills,
   schoolLine,
   onUpdated,
 }: SegmentationCardProps) {
   const { t } = useLanguage();
-  const [editing, setEditing] = useState(false);
+  const [editing, setEditing] = useState(defaultEditing);
   const [saving, setSaving] = useState(false);
   const [draft, setDraft] = useState<{
     careerStage: CareerStage;
@@ -74,7 +76,7 @@ export function SegmentationCard({
   });
 
   const stageLabel = (s: CareerStage) => t(`resume.segStage_${s}`);
-  const regionLabel = (r: RegionKey) => t(`resume.segRegion_${r}`);
+  const regionLabel = (r: RegionKey) => t(`region.${r}`);
   const matchLabel = (m: MajorMatch) => t(`resume.segMatch_${m}`);
 
   const save = async () => {

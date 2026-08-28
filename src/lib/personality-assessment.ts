@@ -1,4 +1,11 @@
 import type { ResumeProfile } from '@/lib/resume-types';
+import type { RegionKey } from '@/lib/region-dna';
+import {
+  classifyVisaStatus,
+  getVisaFeasibility,
+  type VisaFeasibility,
+} from '@/lib/career-route-planner';
+import { resolveVisaStatusForRegion } from '@/lib/visa-timeline';
 
 export type PersonalityDimension =
   | 'analytical'
@@ -56,9 +63,45 @@ export interface PersonalityRecommendation {
   roleKey: PersonalityRoleKey;
   labelKey: string;
   score: number;
+  personalityFit: number;
+  resumeFit: number;
+  marketScore: number;
+  feasibilityScore: number;
+  feasibilityBlocked?: boolean;
+  feasibilityLabelKey?: string;
   fit: 'strong' | 'medium' | 'explore';
   reasons: string[];
   sponsorship?: PersonalitySponsorshipInfo;
+}
+
+export interface PersonalityFeasibility {
+  score: number;
+  blocked: boolean;
+  labelKey: string;
+}
+
+export function buildPersonalityFeasibility(
+  regionKey: RegionKey | null,
+  intention?: ResumeProfile['intention'] | null,
+): PersonalityFeasibility {
+  if (!regionKey) {
+    return { score: 50, blocked: false, labelKey: 'personality.feasibility.unknown' };
+  }
+  const visaStatusCode = resolveVisaStatusForRegion(intention, regionKey);
+  const category = classifyVisaStatus(intention?.workAuthorization, visaStatusCode);
+  const level = getVisaFeasibility(category, regionKey, visaStatusCode);
+  const scoreMap: Record<VisaFeasibility, number> = {
+    not_applicable: 100,
+    likely: 90,
+    conditional: 70,
+    uncertain: 50,
+    blocked: 0,
+  };
+  return {
+    score: scoreMap[level],
+    blocked: level === 'blocked',
+    labelKey: `personality.feasibility.${level}`,
+  };
 }
 
 export interface PersonalitySponsorshipInfo {
@@ -602,13 +645,30 @@ export function computeSponsorshipStatsByRole(
   return result;
 }
 
-function buildSponsorshipInfo(stats?: SponsorshipAggregate): PersonalitySponsorshipInfo {
+function buildSponsorshipInfo(
+  stats?: SponsorshipAggregate,
+  regionKey?: RegionKey | null,
+): PersonalitySponsorshipInfo {
   if (!stats || stats.activeJobCount === 0) {
     return {
       level: 'unknown',
       sponsorJobCount: 0,
       activeJobCount: 0,
       noteKey: 'personality.sponsor.unknown',
+    };
+  }
+  if (regionKey === 'hk') {
+    const level: PersonalitySponsorshipInfo['level'] =
+      stats.activeJobCount >= 20
+        ? 'high'
+        : stats.activeJobCount >= 8
+          ? 'medium'
+          : 'low';
+    return {
+      level,
+      sponsorJobCount: stats.activeJobCount,
+      activeJobCount: stats.activeJobCount,
+      noteKey: `personality.sponsor.hk_${level}`,
     };
   }
   const knownTotal = stats.sponsorJobCount + stats.nonSponsorJobCount;
@@ -641,17 +701,61 @@ export function computePersonalityRecommendations(
   answers: PersonalityAnswer[],
   profile?: ResumeProfile | null,
   sponsorshipStatsByRole?: SponsorshipStatsByRole,
+  regionKey?: RegionKey | null,
+  feasibility?: PersonalityFeasibility,
 ): PersonalityRecommendation[] {
   const result = computePersonalityResult(answers);
+  const resolvedFeasibility = feasibility ?? buildPersonalityFeasibility(regionKey ?? null, profile?.intention);
+  const roleCounts = ROLE_CONFIGS.map((config) => ({
+    key: config.key,
+    count: sponsorshipStatsByRole?.[config.key]?.activeJobCount || 0,
+  }));
+  const totalRegionJobs = roleCounts.reduce((sum, item) => sum + item.count, 0);
+  const marketScoreByRole = new Map<PersonalityRoleKey, number>();
+  if (totalRegionJobs < 10) {
+    ROLE_CONFIGS.forEach((config) => marketScoreByRole.set(config.key, 50));
+  } else {
+    const positiveCount = roleCounts.filter((item) => item.count > 0).length;
+    roleCounts
+      .filter((item) => item.count > 0)
+      .sort((left, right) => right.count - left.count)
+      .forEach((item, index) => {
+        marketScoreByRole.set(
+          item.key,
+          clampScore(100 - (index / Math.max(1, positiveCount - 1)) * 100),
+        );
+      });
+    roleCounts
+      .filter((item) => item.count === 0)
+      .forEach((item) => marketScoreByRole.set(item.key, 0));
+  }
   const all = ROLE_CONFIGS
     .map((config) => {
       const personalityFit = computePersonalityFit(config, result.dimensions);
       const resumeFit = computeResumeFit(config, profile);
-      const score = clampScore(personalityFit * 0.6 + resumeFit * 0.4);
+      const marketStats = sponsorshipStatsByRole?.[config.key];
+      const marketScore = marketScoreByRole.get(config.key) ?? 50;
+      const feasibilityBlocked = resolvedFeasibility.blocked;
+      const score = clampScore(
+        personalityFit * 0.3
+        + resumeFit * 0.25
+        + marketScore * 0.35
+        + resolvedFeasibility.score * 0.1,
+      );
       const reasons = [
         `personality.reason.role.${config.key}`,
         `personality.reason.dimension.${result.primaryDimension}`,
       ];
+      if (marketScore >= 70) {
+        reasons.push('personality.reason.market');
+      } else if (marketStats && marketStats.activeJobCount > 0 && marketScore < 40) {
+        reasons.push('personality.reason.marketLow');
+      }
+      if (feasibilityBlocked) {
+        reasons.push('personality.reason.feasibilityBlocked');
+      } else if (resolvedFeasibility.score >= 90) {
+        reasons.push('personality.reason.feasibility');
+      }
       if (profile && computeExperienceScore(config, profile) >= 100) {
         reasons.push('personality.reason.experience');
       }
@@ -659,22 +763,25 @@ export function computePersonalityRecommendations(
         roleKey: config.key,
         labelKey: `personality.role.${config.key}`,
         score,
-        fit: (score >= 75 ? 'strong' : score >= 60 ? 'medium' : 'explore') as PersonalityRecommendation['fit'],
-        reasons: reasons.slice(0, 3),
-        sponsorship: buildSponsorshipInfo(sponsorshipStatsByRole?.[config.key]),
+        personalityFit: Math.round(personalityFit),
+        resumeFit: Math.round(resumeFit),
+        marketScore: Math.round(marketScore),
+        feasibilityScore: resolvedFeasibility.score,
+        feasibilityBlocked,
+        feasibilityLabelKey: resolvedFeasibility.labelKey,
+        fit: feasibilityBlocked
+          ? 'explore' as const
+          : (score >= 75 ? 'strong' : score >= 60 ? 'medium' : 'explore') as PersonalityRecommendation['fit'],
+        reasons: reasons.slice(0, 4),
+        sponsorship: buildSponsorshipInfo(sponsorshipStatsByRole?.[config.key], regionKey),
       };
     })
     .sort((left, right) => right.score - left.score);
 
-  const core = all.slice(0, 3);
-  const remaining = all.slice(3);
-  const sponsorFriendly = remaining.filter((item) => (
-    item.sponsorship?.level === 'high' || item.sponsorship?.level === 'medium'
-  ));
-  const alternativesPool = [
-    ...sponsorFriendly,
-    ...remaining.filter((item) => !sponsorFriendly.includes(item)),
-  ];
+  const eligible = all.filter((item) => !item.feasibilityBlocked);
+  const blocked = all.filter((item) => item.feasibilityBlocked);
+  const core = eligible.slice(0, 3);
+  const alternativesPool = [...eligible.slice(3), ...blocked].sort((left, right) => right.score - left.score);
 
   return [...core, ...alternativesPool.slice(0, 2)];
 }
@@ -683,13 +790,15 @@ export function computePersonalityAssessment(
   answers: PersonalityAnswer[],
   profile?: ResumeProfile | null,
   sponsorshipStatsByRole?: SponsorshipStatsByRole,
+  regionKey?: RegionKey | null,
+  feasibility?: PersonalityFeasibility,
 ): {
   result: PersonalityResult;
   recommendations: PersonalityRecommendation[];
 } {
   return {
     result: computePersonalityResult(answers),
-    recommendations: computePersonalityRecommendations(answers, profile, sponsorshipStatsByRole),
+    recommendations: computePersonalityRecommendations(answers, profile, sponsorshipStatsByRole, regionKey, feasibility),
   };
 }
 

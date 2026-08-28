@@ -20,14 +20,17 @@ import type {
 } from '@/lib/resume-types';
 import { useLanguage } from '@/lib/language-context';
 import type { RegionKey } from '@/lib/region-dna';
-import { VISA_STATUS_OPTIONS } from '@/lib/visa-timeline';
+import { regionRequiresIdentity, VISA_STATUS_OPTIONS } from '@/lib/visa-timeline';
 import type { VisaDates } from '@/lib/resume-types';
 
 interface ResumeProfileCardProps {
+  id?: string;
   resumeId: number;
   profile: ResumeProfile;
-  region?: RegionKey | null;
+  regions?: RegionKey[];
   confirmed?: boolean;
+  defaultEditing?: boolean;
+  highlighted?: boolean;
   onUpdated: (
     profile: ResumeProfile,
     segmentation?: UserSegmentation,
@@ -47,17 +50,18 @@ function joinList(value?: string[]): string {
   return value?.join('、') || '';
 }
 
-const fallbackVisaOptions = [
-  { value: 'permanent', labelKey: 'resume.visa.permanent' },
-  { value: 'student', labelKey: 'resume.visa.student' },
-  { value: 'work_visa', labelKey: 'resume.visa.workVisa' },
-  { value: 'none', labelKey: 'resume.visa.none' },
-  { value: 'unknown', labelKey: 'resume.visa.unknown' },
-];
-
-export function ResumeProfileCard({ resumeId, profile, region, confirmed, onUpdated }: ResumeProfileCardProps) {
+export function ResumeProfileCard({
+  id,
+  resumeId,
+  profile,
+  regions = [],
+  confirmed,
+  defaultEditing = false,
+  highlighted = false,
+  onUpdated,
+}: ResumeProfileCardProps) {
   const { t } = useLanguage();
-  const [editing, setEditing] = useState(false);
+  const [editing, setEditing] = useState(defaultEditing);
   const [saving, setSaving] = useState(false);
   const [roles, setRoles] = useState('');
   const [locations, setLocations] = useState('');
@@ -65,6 +69,8 @@ export function ResumeProfileCard({ resumeId, profile, region, confirmed, onUpda
   const [targetCompanies, setTargetCompanies] = useState('');
   const [workAuthorization, setWorkAuthorization] = useState('');
   const [visaStatus, setVisaStatus] = useState('');
+  const [visaByRegion, setVisaByRegion] = useState<Record<string, string>>({});
+  const [sameVisaAcrossRegions, setSameVisaAcrossRegions] = useState(true);
   const [visaDates, setVisaDates] = useState<VisaDates>({});
   const [availableFrom, setAvailableFrom] = useState('');
 
@@ -75,9 +81,45 @@ export function ResumeProfileCard({ resumeId, profile, region, confirmed, onUpda
     setTargetCompanies(joinList(profile.intention?.targetCompanies));
     setWorkAuthorization(profile.intention?.workAuthorization || '');
     setVisaStatus(profile.intention?.visaStatus || '');
+    setVisaByRegion(profile.intention?.visaByRegion || {});
+    const byRegionValues = Object.values(profile.intention?.visaByRegion || {}).filter(Boolean);
+    setSameVisaAcrossRegions(byRegionValues.length <= 1);
     setVisaDates(profile.intention?.visaDates || {});
     setAvailableFrom(profile.intention?.availableFrom || '');
   }, [profile]);
+
+  const identityRegions = regions.filter(regionRequiresIdentity);
+  const hasIdentityFields = identityRegions.length > 0;
+
+  const updateRegionVisa = (region: RegionKey, value: string) => {
+    setVisaByRegion((current) => {
+      const next = { ...current };
+      if (sameVisaAcrossRegions) {
+        identityRegions.forEach((item) => {
+          next[item] = value;
+        });
+        setVisaStatus(value);
+      } else {
+        next[region] = value;
+      }
+      return next;
+    });
+  };
+
+  const applySameVisaAcrossRegions = (checked: boolean) => {
+    setSameVisaAcrossRegions(checked);
+    if (checked) {
+      const firstValue = Object.values(visaByRegion).find(Boolean);
+      setVisaByRegion((current) => {
+        const next = { ...current };
+        identityRegions.forEach((region) => {
+          next[region] = firstValue || '';
+        });
+        if (firstValue) setVisaStatus(firstValue);
+        return next;
+      });
+    }
+  };
 
   const save = async () => {
     setSaving(true);
@@ -87,8 +129,11 @@ export function ResumeProfileCard({ resumeId, profile, region, confirmed, onUpda
         locations: parseList(locations),
         industries: parseList(industries),
         targetCompanies: parseList(targetCompanies),
-        workAuthorization: workAuthorization.trim() || undefined,
-        visaStatus: visaStatus || undefined,
+        workAuthorization: hasIdentityFields ? workAuthorization.trim() || undefined : undefined,
+        visaStatus: hasIdentityFields ? visaStatus || undefined : undefined,
+        visaByRegion: hasIdentityFields
+          ? Object.fromEntries(Object.entries(visaByRegion).filter(([, value]) => Boolean(value)))
+          : undefined,
         visaDates: {
           programEndDate: visaDates.programEndDate || undefined,
           visaStartDate: visaDates.visaStartDate || undefined,
@@ -130,17 +175,22 @@ export function ResumeProfileCard({ resumeId, profile, region, confirmed, onUpda
   };
 
   return (
-    <section className="rounded-xl border border-zinc-200 dark:border-zinc-800 bg-white dark:bg-zinc-950 p-3 md:p-4">
+    <section id={id} className={`rounded-xl border p-3 md:p-4 ${highlighted ? 'border-orange-600/80 bg-white ring-1 ring-orange-300/70 dark:border-orange-600 dark:bg-zinc-950 dark:ring-orange-800/60' : 'border-zinc-200 bg-white dark:border-zinc-800 dark:bg-zinc-950'}`}>
       <div className="flex items-start justify-between gap-3">
         <div className="min-w-0">
           <div className="flex items-center gap-2">
             <h4 className="text-sm font-semibold text-zinc-900 dark:text-zinc-50">{t('resume.segTitle')}</h4>
             {confirmed && <Badge variant="secondary" className="text-[10px]">{t('resume.segConfirmed')}</Badge>}
+            {highlighted && !editing && (
+              <Badge className="text-[10px] bg-orange-200 text-orange-900 dark:bg-orange-800/60 dark:text-orange-100">
+                {t('resume.profileEdit')}
+              </Badge>
+            )}
           </div>
           <p className="mt-1 text-xs text-zinc-500 dark:text-zinc-400">{t('resume.profileEditHint')}</p>
         </div>
         {!editing && (
-          <Button variant="ghost" size="sm" className="h-7 px-2 text-xs" onClick={() => setEditing(true)}>
+          <Button size="sm" className="h-8 bg-zinc-900 px-3 text-xs text-white hover:bg-zinc-800 dark:bg-white dark:text-zinc-900 dark:hover:bg-zinc-200" onClick={() => setEditing(true)}>
             <PencilLine className="mr-1 h-3 w-3" />
             {t('resume.profileEdit')}
           </Button>
@@ -174,26 +224,51 @@ export function ResumeProfileCard({ resumeId, profile, region, confirmed, onUpda
             <span>{t('resume.profileTargetCompanies')}</span>
             <Input value={targetCompanies} onChange={(event) => setTargetCompanies(event.target.value)} placeholder="Microsoft, LinkedIn" />
           </label>
-          <label className="space-y-1 text-xs text-zinc-500 dark:text-zinc-400">
+          <label className={`space-y-1 text-xs text-zinc-500 dark:text-zinc-400 ${hasIdentityFields ? '' : 'hidden'}`}>
             <span>{t('resume.profileWorkAuthorization')}</span>
             <Input value={workAuthorization} onChange={(event) => setWorkAuthorization(event.target.value)} placeholder="可工作签证 / 需要雇主担保" />
           </label>
-          <label className="space-y-1 text-xs text-zinc-500 dark:text-zinc-400">
-            <span>{t('resume.profileVisaStatus')}</span>
-            <Select value={visaStatus || undefined} onValueChange={setVisaStatus}>
-              <SelectTrigger className="h-9 text-sm">
-                <SelectValue placeholder={t('resume.profileVisaPlaceholder')} />
-              </SelectTrigger>
-              <SelectContent>
-                {(region ? VISA_STATUS_OPTIONS[region] : fallbackVisaOptions).map((option) => (
-                  <SelectItem key={option.value} value={option.value}>
-                    {t(option.labelKey)}
-                  </SelectItem>
+          {hasIdentityFields && (
+            <div className="space-y-2 md:col-span-2">
+              <div className="flex flex-wrap items-center justify-between gap-2">
+                <span className="text-xs text-zinc-500 dark:text-zinc-400">{t('resume.profileVisaStatus')}</span>
+                {identityRegions.length > 1 && (
+                  <label className="flex items-center gap-2 text-xs text-zinc-500 dark:text-zinc-400">
+                    <input
+                      type="checkbox"
+                      className="accent-zinc-900"
+                      checked={sameVisaAcrossRegions}
+                      onChange={(event) => applySameVisaAcrossRegions(event.target.checked)}
+                    />
+                    {t('resume.profileSameVisa')}
+                  </label>
+                )}
+              </div>
+              <div className="grid grid-cols-1 gap-2 md:grid-cols-2">
+                {identityRegions.map((region) => (
+                  <div key={region} className="flex flex-col gap-1">
+                    <span className="text-xs text-zinc-500 dark:text-zinc-400">{t(`region.${region}`)}</span>
+                    <Select
+                      value={visaByRegion[region] || (sameVisaAcrossRegions ? visaStatus : undefined) || undefined}
+                      onValueChange={(value) => updateRegionVisa(region, value)}
+                    >
+                      <SelectTrigger className="h-9 text-sm">
+                        <SelectValue placeholder={t('resume.profileVisaPlaceholder')} />
+                      </SelectTrigger>
+                      <SelectContent>
+                        {VISA_STATUS_OPTIONS[region].map((option) => (
+                          <SelectItem key={option.value} value={option.value}>
+                            {t(option.labelKey)}
+                          </SelectItem>
+                        ))}
+                      </SelectContent>
+                    </Select>
+                  </div>
                 ))}
-              </SelectContent>
-            </Select>
-          </label>
-          <label className="space-y-1 text-xs text-zinc-500 dark:text-zinc-400">
+              </div>
+            </div>
+          )}
+          <label className={`space-y-1 text-xs text-zinc-500 dark:text-zinc-400 ${hasIdentityFields ? '' : 'hidden'}`}>
             <span>{t('resume.profileProgramEndDate')}</span>
             <Input
               type="date"
@@ -201,7 +276,7 @@ export function ResumeProfileCard({ resumeId, profile, region, confirmed, onUpda
               onChange={(event) => setVisaDates({ ...visaDates, programEndDate: event.target.value })}
             />
           </label>
-          <label className="space-y-1 text-xs text-zinc-500 dark:text-zinc-400">
+          <label className={`space-y-1 text-xs text-zinc-500 dark:text-zinc-400 ${hasIdentityFields ? '' : 'hidden'}`}>
             <span>{t('resume.profileVisaStartDate')}</span>
             <Input
               type="date"
@@ -209,7 +284,7 @@ export function ResumeProfileCard({ resumeId, profile, region, confirmed, onUpda
               onChange={(event) => setVisaDates({ ...visaDates, visaStartDate: event.target.value })}
             />
           </label>
-          <label className="space-y-1 text-xs text-zinc-500 dark:text-zinc-400">
+          <label className={`space-y-1 text-xs text-zinc-500 dark:text-zinc-400 ${hasIdentityFields ? '' : 'hidden'}`}>
             <span>{t('resume.profileVisaEndDate')}</span>
             <Input
               type="date"
@@ -217,7 +292,7 @@ export function ResumeProfileCard({ resumeId, profile, region, confirmed, onUpda
               onChange={(event) => setVisaDates({ ...visaDates, visaEndDate: event.target.value })}
             />
           </label>
-          <label className="flex items-center gap-2 text-xs text-zinc-500 dark:text-zinc-400">
+          <label className={`flex items-center gap-2 text-xs text-zinc-500 dark:text-zinc-400 ${identityRegions.includes('us') ? '' : 'hidden'}`}>
             <input
               type="checkbox"
               className="accent-zinc-900"

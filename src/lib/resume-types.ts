@@ -13,6 +13,7 @@ export type TargetSchoolBand = 'target' | 'semi_target' | 'non_target' | 'unknow
 export type PlanLocale = 'zh-CN' | 'zh-TW' | 'en';
 export type LocalizedPlanText = Partial<Record<PlanLocale, string>>;
 export type VisaStatusCategory = 'none' | 'student' | 'work_visa' | 'permanent' | 'unknown';
+export type VisaStatusByRegion = Partial<Record<RegionKey, string>>;
 
 export interface VisaDates {
   programEndDate?: string;
@@ -30,6 +31,7 @@ export interface CareerSignals {
 }
 
 export interface PlanRefinement {
+  regionKey?: RegionKey;
   narrative?: string;
   backupRoute?: string;
   verificationNote?: string;
@@ -49,6 +51,12 @@ export interface ResumePersonalityProfile {
     roleKey: string;
     labelKey: string;
     score: number;
+    personalityFit: number;
+    resumeFit: number;
+    marketScore: number;
+    feasibilityScore: number;
+    feasibilityBlocked?: boolean;
+    feasibilityLabelKey?: string;
     fit: 'strong' | 'medium' | 'explore';
     reasons: string[];
     sponsorship?: {
@@ -113,6 +121,7 @@ export interface ResumeProfile {
     targetCompanies?: string[];
     workAuthorization?: string;
     visaStatus?: string;
+    visaByRegion?: VisaStatusByRegion;
     visaDates?: VisaDates;
     availableFrom?: string;
     salaryExpectation?: string;

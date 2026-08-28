@@ -1,12 +1,15 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { getAuthContext, unauthorizedResponse } from '@/lib/auth-server';
 import {
+  buildPersonalityFeasibility,
   computePersonalityAssessment,
   computeSponsorshipStatsByRole,
   validatePersonalityAnswers,
   type PersonalityAssessment,
 } from '@/lib/personality-assessment';
 import { resolveActiveRegion } from '@/lib/user-region';
+import type { RegionKey } from '@/lib/region-dna';
+import type { ResumeProfile } from '@/lib/resume-types';
 
 function positiveInteger(value: unknown): number | null {
   if (value === undefined || value === null || value === '') return null;
@@ -73,7 +76,7 @@ export async function POST(request: NextRequest) {
     }
 
     let profile: Record<string, unknown> | null = null;
-    let regionKey: string | null = null;
+    let regionKey: RegionKey | null = null;
     if (resumeId !== null) {
       const { data, error } = await auth.client
         .from('resumes')
@@ -104,10 +107,16 @@ export async function POST(request: NextRequest) {
     if (jobsError) throw new Error(`读取岗位 sponsor 数据失败: ${jobsError.message}`);
 
     const sponsorshipStatsByRole = computeSponsorshipStatsByRole(jobs || [], regionKey);
+    const feasibility = buildPersonalityFeasibility(
+      regionKey,
+      (profile?.intention ?? null) as ResumeProfile['intention'] | null,
+    );
     const computed = computePersonalityAssessment(
       answers,
       profile as Parameters<typeof computePersonalityAssessment>[1],
       sponsorshipStatsByRole,
+      regionKey,
+      feasibility,
     );
 
     const { data, error } = await auth.client
