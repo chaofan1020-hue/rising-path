@@ -2,7 +2,7 @@ import { createTextProviderClient } from '@/lib/ai/text-provider';
 import { invokeTrackedTextGeneration } from '@/lib/ai-usage';
 import { buildRegionBlock, type RegionKey } from '@/lib/region-dna';
 import { extractFirstJsonObject } from '@/lib/json-extract';
-import { buildVisaTimeline } from '@/lib/visa-timeline';
+import { buildVisaTimeline, resolveVisaStatusForRegion } from '@/lib/visa-timeline';
 import type {
   LocalizedPlanText,
   PlanLocale,
@@ -40,11 +40,14 @@ function buildPrompt(input: RefineCareerPlanInput): string {
   const visaTimeline = input.region
     ? buildVisaTimeline({
         region: input.region,
-        visaStatus: input.profile.intention?.visaStatus,
+        visaStatus: resolveVisaStatusForRegion(input.profile.intention, input.region),
         visaDates: input.profile.intention?.visaDates,
         programEndYear: latestEducation?.endYear,
         now,
       })
+    : null;
+  const regionVisaStatus = input.region
+    ? resolveVisaStatusForRegion(input.profile.intention, input.region)
     : null;
   const profileSummary = [
     `Education: ${(input.profile.education || []).map((item) => [item.school, item.degree, item.major, item.endYear].filter(Boolean).join(' / ')).join('; ')}`,
@@ -53,7 +56,7 @@ function buildPrompt(input: RefineCareerPlanInput): string {
     `Skills: ${(input.profile.skills || []).join(', ')}`,
     `Intention: ${JSON.stringify(input.profile.intention || {})}`,
     `Signals: ${JSON.stringify(input.profile.careerSignals || {})}`,
-    `Identity/visa: ${input.profile.intention?.workAuthorization || input.profile.intention?.visaStatus || 'unknown'}`,
+    `Identity/visa: ${input.profile.intention?.workAuthorization || regionVisaStatus || 'unknown'}`,
     `Visa timeline: ${JSON.stringify(visaTimeline?.entries || [])}`,
   ].join('\n');
   const regionBlock = input.region ? buildRegionBlock(input.region, 'zh') : '';
@@ -119,6 +122,7 @@ export async function refineCareerPlan(
       refinement.visaNotes = visaNotes;
       refinement.visaNote = visaNotes['zh-CN'];
     }
+    refinement.regionKey = input.region ?? undefined;
     return Object.keys(refinement).length > 0 ? refinement : null;
   } catch (error) {
     console.error('[CareerPlanRefiner] LLM refinement failed:', error);

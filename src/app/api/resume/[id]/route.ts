@@ -47,6 +47,14 @@ export async function PATCH(
           return NextResponse.json({ error: `无效的求职意向字段: ${field}` }, { status: 400 });
         }
       }
+      if (profileIntention.visaByRegion !== undefined) {
+        const visaByRegion = profileIntention.visaByRegion as unknown;
+        if (!isRecord(visaByRegion) || Object.entries(visaByRegion).some(([region, value]) => (
+          !resolveRegionKey(region) || typeof value !== 'string' || value.trim().length === 0
+        ))) {
+          return NextResponse.json({ error: '无效的地区身份状态' }, { status: 400 });
+        }
+      }
       for (const field of ['workAuthorization', 'availableFrom', 'salaryExpectation'] as const) {
         const value = profileIntention[field];
         if (value !== undefined && (typeof value !== 'string' || value.length > 200)) {
@@ -122,6 +130,7 @@ export async function PATCH(
             ...currentProfile.intention,
             ...profileIntention,
           },
+          ...((normalizedOverrides.regions || profileIntention) ? { planRefinement: undefined } : {}),
         }
       : currentProfile;
 
@@ -201,6 +210,19 @@ export async function PATCH(
 
     if (updateError) {
       throw new Error(`更新分层失败: ${updateError.message}`);
+    }
+
+    if (confirmRequested && next?.regions?.length) {
+      const { error: profileError } = await client
+        .from('profiles')
+        .upsert({
+          id: auth.user.id,
+          preferred_region: next.regions[0],
+          updated_at: now,
+        }, { onConflict: 'id' });
+      if (profileError) {
+        console.error('[Resume] Failed to sync preferred region:', profileError);
+      }
     }
 
     const { error: supersedeError } = await client

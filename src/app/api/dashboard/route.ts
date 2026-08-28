@@ -4,7 +4,9 @@ import { getAuthContext, unauthorizedResponse } from '@/lib/auth-server';
 import { buildCareerRoutePlan, type CareerRouteDiagnosis } from '@/lib/career-route-planner';
 import type { ResumeProfile, UserSegmentation } from '@/lib/resume-types';
 import { resolveActiveRegion } from '@/lib/user-region';
+import { regionRequiresIdentity, resolveVisaStatusForRegion } from '@/lib/visa-timeline';
 import {
+  buildPersonalityFeasibility,
   computePersonalityAssessment,
   computeSponsorshipStatsByRole,
   type PersonalityAnswer,
@@ -18,6 +20,7 @@ interface PlanItem {
   timeframe: Timeframe;
   titleKey: string;
   descriptionKey: string;
+  descriptionText?: string;
   params?: Record<string, string | number>;
   href?: string;
 }
@@ -34,6 +37,12 @@ interface DashboardPlan {
   diagnosis: CareerRouteDiagnosis | null;
 }
 
+interface PlanRegionData {
+  region: RegionKey;
+  plan: DashboardPlan;
+  feasibilityLabelKey: string;
+}
+
 interface DashboardResume {
   id?: number;
   segmentation_confirmed?: boolean | null;
@@ -46,8 +55,20 @@ interface DashboardResume {
         roleKey: string;
         labelKey: string;
         score: number;
+        personalityFit?: number;
+        resumeFit?: number;
+        marketScore?: number;
+        feasibilityScore?: number;
+        feasibilityBlocked?: boolean;
+        feasibilityLabelKey?: string;
         fit: string;
         reasons: string[];
+        sponsorship?: {
+          level: string;
+          noteKey?: string;
+          sponsorJobCount?: number;
+          activeJobCount?: number;
+        } | null;
       }>;
       regionKey?: RegionKey | null;
       completedAt?: string;
@@ -62,6 +83,7 @@ interface DashboardResume {
       targetCompanies?: string[] | null;
       workAuthorization?: string | null;
       visaStatus?: string | null;
+      visaByRegion?: Record<string, string> | null;
       visaDates?: {
         programEndDate?: string | null;
         visaStartDate?: string | null;
@@ -323,7 +345,23 @@ export async function GET(request: NextRequest) {
     : 0;
 
   // 地区：账户级目标地区优先，简历画像仅作为兼容回退。
-  const selectedRegion = resolveActiveRegion(overview.preferred_region, latestResume);
+  const fallbackRegion = resolveActiveRegion(overview.preferred_region, latestResume);
+  const overrideRegions = latestResume?.segmentation_overrides?.regions ?? [];
+  const segmentationRegions = latestResume?.segmentation?.regions ?? [];
+  const resumeRegions = [...new Set<RegionKey>([...overrideRegions, ...segmentationRegions])];
+  const rawRegions = resumeRegions.length ? resumeRegions : (fallbackRegion ? [fallbackRegion] : []);
+  const sortedRegions = rawRegions
+    .map((region, index) => ({
+      region,
+      index,
+      feasibility: buildPersonalityFeasibility(
+        region,
+        (latestResume?.profile?.intention ?? null) as ResumeProfile['intention'] | null,
+      ),
+    }))
+    .sort((left, right) => right.feasibility.score - left.feasibility.score || left.index - right.index);
+  const selectedRegions = sortedRegions.map((item) => item.region);
+  const selectedRegion = selectedRegions[0] ?? null;
   const regionOptions = (Object.keys(REGION_DNA) as RegionKey[]).map((key) => ({
     value: key,
     labelKey: REGION_LABEL_KEYS[key],
@@ -332,7 +370,15 @@ export async function GET(request: NextRequest) {
   // Personality recommendations include sponsor availability, so refresh the
   // cached result when the account's active market changes.
   let personalityProfile = latestResume?.profile?.personality ?? null;
-  if (personalityProfile && selectedRegion && personalityProfile.regionKey !== selectedRegion) {
+  const needsScoringRefresh = personalityProfile?.recommendations?.some((item) => (
+    item.personalityFit === undefined || item.feasibilityScore === undefined || item.feasibilityBlocked === undefined
+  ));
+  const needsMarketRefresh = selectedRegion
+    && personalityProfile?.recommendations?.some((item) => (
+      !item.reasons?.includes('personality.reason.market')
+      && !item.reasons?.includes('personality.reason.marketLow')
+    ));
+  if (personalityProfile && selectedRegion && (personalityProfile.regionKey !== selectedRegion || needsMarketRefresh || needsScoringRefresh)) {
     const { data: assessment } = await supabase
       .from('personality_assessments')
       .select('answers')
@@ -347,10 +393,16 @@ export async function GET(request: NextRequest) {
         .select('direction, sponsorship, region')
         .eq('is_active', true);
       const sponsorshipStats = computeSponsorshipStatsByRole(jobs || [], selectedRegion);
+      const feasibility = buildPersonalityFeasibility(
+        selectedRegion,
+        (latestResume.profile?.intention ?? null) as ResumeProfile['intention'] | null,
+      );
       const computed = computePersonalityAssessment(
         answers,
         latestResume.profile as ResumeProfile,
         sponsorshipStats,
+        selectedRegion,
+        feasibility,
       );
       personalityProfile = {
         ...personalityProfile,
@@ -384,6 +436,18 @@ export async function GET(request: NextRequest) {
     : null;
 
   // 毕业年份（从简历画像提取）
+  const explicitRegion = selectedRegions[0] ?? null;
+  const profileReady = Boolean(latestResume && latestResume.segmentation_confirmed === true && explicitRegion);
+  const missingSteps: string[] = [];
+  if (!latestResume) missingSteps.push('resume');
+  else if (latestResume.segmentation_confirmed !== true) missingSteps.push('confirm');
+  if (!explicitRegion) missingSteps.push('region');
+  else if (latestResume && selectedRegions.some((region) => (
+    regionRequiresIdentity(region) && !resolveVisaStatusForRegion(latestResume.profile?.intention, region)
+  ))) {
+    missingSteps.push('identity');
+  }
+
   const gradYear = latestResume?.profile?.education?.[0]?.endYear ?? undefined;
   const nowDate = new Date();
   const currentYear = nowDate.getFullYear();
@@ -426,8 +490,17 @@ export async function GET(request: NextRequest) {
   }
 
   // 行动建议
+  if (!profileReady) {
+    phase = 'setup';
+    phaseTitleKey = 'dashboard.phase.setup.title';
+    phaseDescriptionKey = 'dashboard.phase.setup.description';
+    phaseDescriptionParams = {};
+  }
+
   const actions: { titleKey: string; href: string; priority: 'high' | 'medium' | 'low' }[] = [];
-  if (resumeCount === 0) {
+  if (!profileReady) {
+    actions.push({ titleKey: 'dashboard.action.onboarding', href: '/resume', priority: 'high' });
+  } else if (resumeCount === 0) {
     actions.push({ titleKey: 'dashboard.action.uploadResume', href: '/resume', priority: 'high' });
     actions.push({ titleKey: 'dashboard.action.browseJobs', href: '/jobs', priority: 'medium' });
   } else {
@@ -452,6 +525,10 @@ export async function GET(request: NextRequest) {
     titleKey: 'dashboard.nextAction',
     href: actions[0]?.href || '/resume',
   };
+  if (!profileReady) {
+    nextAction.titleKey = 'dashboard.nextAction.onboarding';
+    nextAction.href = '/resume';
+  }
   if (phase === 'positioning') {
     nextAction.titleKey = 'dashboard.nextAction.uploadResume';
     nextAction.href = '/resume';
@@ -509,8 +586,17 @@ export async function GET(request: NextRequest) {
   };
 
   // 求职规划
-  const plan: DashboardPlan | null =
-    latestResume && selectedRegion ? buildPlan(latestResume, selectedRegion) : null;
+  const planRegions: PlanRegionData[] = profileReady && latestResume
+    ? selectedRegions.map((region) => {
+        const feasibility = sortedRegions.find((item) => item.region === region)?.feasibility;
+        return {
+          region,
+          plan: buildPlan(latestResume, region),
+          feasibilityLabelKey: feasibility?.labelKey ?? 'personality.feasibility.unknown',
+        };
+      })
+    : [];
+  const plan: DashboardPlan | null = planRegions[0]?.plan ?? null;
 
   return NextResponse.json({
     phase,
@@ -526,6 +612,8 @@ export async function GET(request: NextRequest) {
     weeklyApplications,
     weeklyGoal: resumeCount > 0 && phase === 'applying' ? 10 : 0,
     selectedRegion,
+    selectedRegions,
+    planRegions,
     regionOptions,
     latestResumeId,
     actions,
@@ -537,6 +625,8 @@ export async function GET(request: NextRequest) {
     personality,
     interviewEvaluations: [],
     segmentationConfirmed: latestResume?.segmentation_confirmed === true,
+    profileReady,
+    missingSteps,
     counts: {
       resumes: resumeCount,
       matches: overview.match_count ?? 0,

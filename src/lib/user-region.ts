@@ -28,17 +28,19 @@ export function resolveActiveRegion(
   preferredRegion: unknown,
   resume: RegionResumeLike,
 ): RegionKey | null {
+  const resumeExplicit = firstRegion(resume?.segmentation_overrides?.regions)
+    || (typeof resume?.profile?.targetRegion === 'string'
+      ? resolveRegionKey(resume.profile.targetRegion)
+      : null);
+  if (resumeExplicit) return resumeExplicit;
+
   if (typeof preferredRegion === 'string') {
     const explicit = resolveRegionKey(preferredRegion);
     if (explicit) return explicit;
   }
 
   return (
-    firstRegion(resume?.segmentation_overrides?.regions)
-    || (typeof resume?.profile?.targetRegion === 'string'
-      ? resolveRegionKey(resume.profile.targetRegion)
-      : null)
-    || firstRegion(resume?.segmentation?.regions)
+    firstRegion(resume?.segmentation?.regions)
     || firstRegion(resume?.profile?.intention?.locations)
     || (typeof resume?.profile?.inferredRegion === 'string'
       ? resolveRegionKey(resume.profile.inferredRegion)

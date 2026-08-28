@@ -5,6 +5,7 @@ import Link from 'next/link';
 import { Header1 } from '@/components/header1';
 import { AuthGuard } from '@/components/auth-guard';
 import { apiFetch } from '@/lib/api-client';
+import { REGION_DNA, type RegionKey } from '@/lib/region-dna';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent } from '@/components/ui/card';
 import { Skeleton } from '@/components/ui/skeleton';
@@ -18,13 +19,6 @@ import {
   DialogTitle,
 } from '@/components/ui/dialog';
 
-import {
-  Select,
-  SelectContent,
-  SelectItem,
-  SelectTrigger,
-  SelectValue,
-} from '@/components/ui/select';
 import { useLanguage } from '@/lib/language-context';
 import { getSupabaseBrowserClient } from '@/lib/supabase-browser';
 import { getLocalizedText, type CareerRouteDiagnosis } from '@/lib/career-route-planner';
@@ -50,8 +44,10 @@ import {
 
 interface PlanItem {
   timeframe: 'now' | 'week' | 'month';
+  region?: string;
   titleKey: string;
   descriptionKey: string;
+  descriptionText?: string;
   params?: Record<string, string | number>;
   href?: string;
 }
@@ -61,10 +57,30 @@ interface RegionOption {
   labelKey: string;
 }
 
+interface PlanRegionData {
+  region: string;
+  plan: {
+    context: {
+      region: string;
+      stage: string;
+      role: string;
+    };
+    items: PlanItem[];
+    diagnosis?: CareerRouteDiagnosis | null;
+  };
+  feasibilityLabelKey: string;
+}
+
 interface PersonalityRecommendation {
   roleKey: string;
   labelKey: string;
   score: number;
+  personalityFit?: number;
+  resumeFit?: number;
+  marketScore?: number;
+  feasibilityScore?: number;
+  feasibilityBlocked?: boolean;
+  feasibilityLabelKey?: string;
   fit: 'strong' | 'medium' | 'explore';
   reasons: string[];
   sponsorship?: {
@@ -127,8 +143,12 @@ interface DashboardData {
   weeklyApplications: number;
   weeklyGoal: number;
   selectedRegion: string | null;
+  selectedRegions: string[];
+  planRegions: PlanRegionData[];
   regionOptions: RegionOption[];
   latestResumeId: number | null;
+  profileReady?: boolean;
+  missingSteps?: string[];
   plan: {
     context: {
       region: string;
@@ -243,7 +263,6 @@ export default function DashboardPage() {
   const [error, setError] = useState<string | null>(null);
   const [dashboardLoadVersion, setDashboardLoadVersion] = useState(0);
   const dashboardCacheOwnerRef = useRef<string | null>(null);
-  const [savingRegion, setSavingRegion] = useState(false);
   const [networking, setNetworking] = useState<NetworkingRecommendation | null>(null);
   const [networkingByStage, setNetworkingByStage] = useState<Record<string, NetworkingRecommendation>>({});
   const [activeNetworkingStage, setActiveNetworkingStage] = useState(1);
@@ -463,41 +482,19 @@ export default function DashboardPage() {
     if (rec) setNetworking(rec);
   }, [networkingByStage]);
 
-  const handleRegionChange = useCallback(
-    async (value: string) => {
-      setSavingRegion(true);
-      try {
-        const res = await apiFetch('/api/account/profile', {
-          method: 'PATCH',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ preferredRegion: value }),
-        });
-        const json = await res.json().catch(() => ({}));
-        if (!res.ok) {
-          setError(json.error || '保存地区失败');
-        } else {
-          // Recommendations are generated for a specific market. Clear the
-          // previous result immediately so an old-region card cannot linger.
-          setNetworking(null);
-          setNetworkingByStage({});
-          setNetworkingError(null);
-          fetchDashboard();
-        }
-      } catch (err) {
-        setError((err as Error)?.message || '保存地区失败');
-      } finally {
-        setSavingRegion(false);
-      }
-    },
-    [fetchDashboard]
-  );
-
   const planGroups = useMemo(() => {
-    if (!data?.plan) return null;
+    if (!data?.planRegions?.length) return null;
+    const flatten = (timeframe: 'now' | 'week' | 'month') => (
+      data.planRegions.flatMap((regionPlan) => (
+        regionPlan.plan.items
+          .filter((item) => item.timeframe === timeframe)
+          .map((item) => ({ ...item, region: data.planRegions.length > 1 ? regionPlan.region : undefined }))
+      ))
+    );
     return {
-      now: data.plan.items.filter((i) => i.timeframe === 'now'),
-      week: data.plan.items.filter((i) => i.timeframe === 'week'),
-      month: data.plan.items.filter((i) => i.timeframe === 'month'),
+      now: flatten('now'),
+      week: flatten('week'),
+      month: flatten('month'),
     };
   }, [data]);
 
@@ -573,6 +570,26 @@ export default function DashboardPage() {
                     </div>
                   </div>
             </section>
+            {data.profileReady === false && (
+              <section className="order-2 rounded-lg border border-zinc-200 bg-zinc-50/60 dark:border-zinc-800 dark:bg-zinc-900/20">
+                <div className="flex flex-col gap-4 px-4 py-4 md:flex-row md:items-center md:justify-between md:px-5">
+                  <div className="min-w-0">
+                    <p className="text-sm font-semibold text-zinc-900 dark:text-zinc-100">
+                      {t('dashboard.onboardingRequired')}
+                    </p>
+                    <p className="mt-1 text-xs text-zinc-500 dark:text-zinc-400">
+                      {(data.missingSteps || []).map((step) => t(`dashboard.onboardingStep.${step}`)).join(' / ')}
+                    </p>
+                  </div>
+                  <Button asChild size="sm" className="bg-zinc-900 text-white hover:bg-zinc-800 dark:bg-white dark:text-zinc-900 dark:hover:bg-zinc-200">
+                    <Link href="/resume">
+                      {t('dashboard.action.onboarding')}
+                      <ArrowRight className="ml-1.5 h-3.5 w-3.5" />
+                    </Link>
+                  </Button>
+                </div>
+              </section>
+            )}
             {data.diagnosis && (
               <details id="diagnosis" className="order-4 group rounded-lg border border-zinc-200 bg-zinc-50/60 dark:border-zinc-800 dark:bg-zinc-900/20">
                 <summary className="flex cursor-pointer list-none items-center justify-between gap-4 px-4 py-3.5 marker:hidden md:px-5">
@@ -588,6 +605,140 @@ export default function DashboardPage() {
                   <ArrowRight className="h-4 w-4 text-zinc-400 transition-transform group-open:rotate-90" />
                 </summary>
                 <section className="border-t border-zinc-200 p-4 dark:border-zinc-800 md:p-5">
+                {data.selectedRegion && (data.planRegions?.length ?? 0) <= 1 && REGION_DNA[data.selectedRegion as RegionKey] && (
+                  <div className="mb-4 rounded-lg border border-zinc-200 p-4 dark:border-zinc-800">
+                    <div className="mb-3 flex items-center justify-between gap-2">
+                      <p className="text-sm font-semibold text-zinc-900 dark:text-zinc-100">
+                        {t('dashboard.diagnosis.regionLogic')}
+                      </p>
+                      <Badge variant="outline" className="text-[10px]">
+                        {t(`region.${data.selectedRegion}`)}
+                      </Badge>
+                    </div>
+                    <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-4">
+                      {[
+                        { labelKey: 'dashboard.diagnosis.atsPrefs', items: REGION_DNA[data.selectedRegion as RegionKey].atsPreferences },
+                        { labelKey: 'dashboard.diagnosis.resumeStyle', items: REGION_DNA[data.selectedRegion as RegionKey].resumeStyle },
+                        { labelKey: 'dashboard.diagnosis.interviewRhythm', items: REGION_DNA[data.selectedRegion as RegionKey].interviewRhythm },
+                        { labelKey: 'dashboard.diagnosis.keySignals', items: REGION_DNA[data.selectedRegion as RegionKey].keySignals },
+                      ].map((section) => (
+                        <div key={section.labelKey}>
+                          <p className="mb-2 text-xs font-medium text-zinc-500">{t(section.labelKey)}</p>
+                          <ul className="space-y-1.5">
+                            {section.items.map((item) => (
+                              <li key={item} className="text-xs leading-5 text-zinc-700 dark:text-zinc-300">
+                                {item}
+                              </li>
+                            ))}
+                          </ul>
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+                )}
+                {data.planRegions && data.planRegions.length > 1 && (
+                  <div className="mb-4 space-y-4">
+                    {data.planRegions.map((regionPlan) => {
+                      const diagnosis = regionPlan.plan.diagnosis;
+                      if (!diagnosis) return null;
+                      return (
+                        <div key={regionPlan.region} className="rounded-lg border border-zinc-200 p-4 dark:border-zinc-800">
+                          <div className="mb-3 flex flex-wrap items-center justify-between gap-2">
+                            <div className="flex items-center gap-2">
+                              <span className="text-sm font-semibold text-zinc-900 dark:text-zinc-100">
+                                {t(`region.${regionPlan.region}`)}
+                              </span>
+                              <Badge variant="outline" className="text-[10px]">
+                                {t(regionPlan.feasibilityLabelKey)}
+                              </Badge>
+                            </div>
+                            <span className="text-xs text-zinc-500">
+                              {t(diagnosis.windowLabelKey)} · {t(diagnosis.mainRouteLabelKey)}
+                            </span>
+                          </div>
+                          <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
+                            <div className="space-y-2">
+                              <p className="text-xs font-medium text-zinc-500">{t('dashboard.diagnosis.mainRoute')}</p>
+                              <p className="text-sm font-medium text-zinc-900 dark:text-zinc-100">
+                                {t(diagnosis.mainRouteLabelKey)}
+                              </p>
+                              {diagnosis.backupRoute && (
+                                <>
+                                  <p className="text-xs font-medium text-zinc-500">{t('dashboard.diagnosis.backupRoute')}</p>
+                                  <p className="text-sm text-zinc-700 dark:text-zinc-300">
+                                    {t(diagnosis.backupRoute.labelKey)}
+                                  </p>
+                                </>
+                              )}
+                              {diagnosis.mainSeason && (
+                                <>
+                                  <p className="text-xs font-medium text-zinc-500">{t('dashboard.diagnosis.mainSeason')}</p>
+                                  <p className="text-sm text-zinc-700 dark:text-zinc-300">
+                                    {t(diagnosis.mainSeason.labelKey)}
+                                  </p>
+                                </>
+                              )}
+                            </div>
+                            <div className="space-y-2">
+                              <p className="text-xs font-medium text-zinc-500">{t('dashboard.diagnosis.visaStatus')}</p>
+                              <p className="text-sm text-zinc-900 dark:text-zinc-100">
+                                {t(diagnosis.visaStatusLabelKey || `dashboard.visaStatus.${diagnosis.visaStatus}`)}
+                              </p>
+                              <p className="text-xs font-medium text-zinc-500">{t('dashboard.diagnosis.risks')}</p>
+                              {diagnosis.risks.length > 0 ? (
+                                <ul className="space-y-1">
+                                  {diagnosis.risks.map((risk) => (
+                                    <li key={risk.key} className="flex items-start gap-1.5 text-xs text-zinc-600 dark:text-zinc-300">
+                                      <span className={`mt-1.5 h-1.5 w-1.5 rounded-full flex-shrink-0 ${riskLevelColor[risk.level]}`} />
+                                      {t(risk.labelKey)}
+                                    </li>
+                                  ))}
+                                </ul>
+                              ) : (
+                                <p className="text-xs text-zinc-500">{t('dashboard.diagnosis.noRisks')}</p>
+                              )}
+                              {diagnosis.visaTimeline && diagnosis.visaTimeline.entries.length > 0 && (
+                                <div>
+                                  <p className="text-xs font-medium text-zinc-500">{t('dashboard.diagnosis.visaTimeline')}</p>
+                                  <div className="mt-1 space-y-1">
+                                    {diagnosis.visaTimeline.entries.map((entry) => (
+                                      <div key={entry.key} className="flex items-start gap-1.5 text-xs text-zinc-600 dark:text-zinc-300">
+                                        <span className="mt-1.5 h-1.5 w-1.5 rounded-full bg-zinc-400 flex-shrink-0" />
+                                        <div>
+                                          <p>{t(entry.labelKey)}</p>
+                                          {entry.actionKey && <p className="text-zinc-500">{t(entry.actionKey)}</p>}
+                                        </div>
+                                      </div>
+                                    ))}
+                                  </div>
+                                </div>
+                              )}
+                            </div>
+                          </div>
+                          <div className="mt-4 grid grid-cols-1 gap-3 border-t border-zinc-200 pt-4 sm:grid-cols-2 lg:grid-cols-4 dark:border-zinc-800">
+                            {[
+                              { labelKey: 'dashboard.diagnosis.atsPrefs', items: REGION_DNA[regionPlan.region as RegionKey].atsPreferences },
+                              { labelKey: 'dashboard.diagnosis.resumeStyle', items: REGION_DNA[regionPlan.region as RegionKey].resumeStyle },
+                              { labelKey: 'dashboard.diagnosis.interviewRhythm', items: REGION_DNA[regionPlan.region as RegionKey].interviewRhythm },
+                              { labelKey: 'dashboard.diagnosis.keySignals', items: REGION_DNA[regionPlan.region as RegionKey].keySignals },
+                            ].map((section) => (
+                              <div key={section.labelKey}>
+                                <p className="mb-2 text-xs font-medium text-zinc-500">{t(section.labelKey)}</p>
+                                <ul className="space-y-1.5">
+                                  {section.items.map((item) => (
+                                    <li key={item} className="text-xs leading-5 text-zinc-700 dark:text-zinc-300">
+                                      {item}
+                                    </li>
+                                  ))}
+                                </ul>
+                              </div>
+                            ))}
+                          </div>
+                        </div>
+                      );
+                    })}
+                  </div>
+                )}
                 <div className="grid grid-cols-1 lg:grid-cols-3 gap-4">
                   <Card className="rounded-2xl border-zinc-200 dark:border-zinc-800">
                     <CardContent className="p-5 space-y-3">
@@ -658,7 +809,7 @@ export default function DashboardPage() {
                           <p className="text-xs text-zinc-500">
                             {t('dashboard.diagnosis.visaStatus')}
                             <span className="ml-2 font-medium text-zinc-900 dark:text-zinc-900">
-                              {t(`dashboard.visaStatus.${data.diagnosis.visaStatus}`)}
+                              {t(data.diagnosis.visaStatusLabelKey || `dashboard.visaStatus.${data.diagnosis.visaStatus}`)}
                             </span>
                           </p>
                           <p className="text-xs text-zinc-500">
@@ -748,6 +899,9 @@ export default function DashboardPage() {
                           {(() => {
                             const core = (data.personality?.recommendations || []).slice(0, 3);
                             const alternatives = (data.personality?.recommendations || []).slice(3, 5);
+                            const isHk = data.selectedRegion === 'hk';
+                            const allBlocked = (data.personality?.recommendations || []).length > 0
+                              && data.personality.recommendations.every((item) => item.feasibilityBlocked);
                             const renderCard = (recommendation: typeof core[number]) => (
                               <div key={recommendation.roleKey} className="rounded-lg border border-zinc-200 p-3">
                                 <div className="flex items-start justify-between gap-2 mb-1">
@@ -759,6 +913,30 @@ export default function DashboardPage() {
                                   </Badge>
                                 </div>
                                 <p className="text-xs text-zinc-500 mb-2">{recommendation.score}%</p>
+                                {recommendation.feasibilityBlocked && (
+                                  <Badge className="mb-2 bg-red-100 text-red-800 dark:bg-red-900/40 dark:text-red-200">
+                                    {t('personality.feasibilityBlocked')}
+                                  </Badge>
+                                )}
+                                <div className="mb-3 space-y-1">
+                                  {[
+                                    { labelKey: 'personality.scorePersonality', value: recommendation.personalityFit ?? 0 },
+                                    { labelKey: 'personality.scoreResume', value: recommendation.resumeFit ?? 0 },
+                                    { labelKey: 'personality.scoreMarket', value: recommendation.marketScore ?? 0 },
+                                    { labelKey: 'personality.scoreFeasibility', value: recommendation.feasibilityScore ?? 0 },
+                                  ].map((dimension) => (
+                                    <div key={dimension.labelKey} className="flex items-center gap-2">
+                                      <span className="w-16 text-[10px] text-zinc-400">{t(dimension.labelKey)}</span>
+                                      <div className="h-1 flex-1 overflow-hidden rounded-full bg-zinc-100 dark:bg-zinc-800">
+                                        <div
+                                          className="h-full rounded-full bg-zinc-900 dark:bg-white"
+                                          style={{ width: `${dimension.value}%` }}
+                                        />
+                                      </div>
+                                      <span className="w-6 text-right text-[10px] text-zinc-500">{dimension.value}</span>
+                                    </div>
+                                  ))}
+                                </div>
                                 <ul className="space-y-1">
                                   {recommendation.reasons.map((reason) => (
                                     <li key={reason} className="text-xs text-zinc-500 leading-relaxed">
@@ -769,11 +947,13 @@ export default function DashboardPage() {
                                 {recommendation.sponsorship && (
                                   <div className="mt-2 flex flex-wrap items-center gap-1.5">
                                     <Badge variant="outline" className="text-[10px]">
-                                      {t(`personality.sponsor.${recommendation.sponsorship.level}`)}
+                                      {t(isHk ? `personality.sponsor.hk_${recommendation.sponsorship.level}` : `personality.sponsor.${recommendation.sponsorship.level}`)}
                                     </Badge>
                                     {recommendation.sponsorship.activeJobCount > 0 && (
                                       <span className="text-[10px] text-zinc-500">
-                                        {recommendation.sponsorship.sponsorJobCount} / {recommendation.sponsorship.activeJobCount}
+                                        {isHk
+                                          ? t('personality.jobCount', { count: recommendation.sponsorship.activeJobCount })
+                                          : `${recommendation.sponsorship.sponsorJobCount} / ${recommendation.sponsorship.activeJobCount}`}
                                       </span>
                                     )}
                                   </div>
@@ -782,12 +962,20 @@ export default function DashboardPage() {
                             );
                             return (
                               <>
-                                <p className="text-xs font-medium text-zinc-500 mb-2">
-                                  {t('personality.recommendationsCore')}
-                                </p>
-                                <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
-                                  {core.map(renderCard)}
-                                </div>
+                                {allBlocked ? (
+                                  <div className="mb-3 rounded-lg border border-red-200 bg-red-50 p-3 text-xs text-red-700 dark:border-red-800 dark:bg-red-950/30 dark:text-red-300">
+                                    {t('personality.identityFirst')}
+                                  </div>
+                                ) : (
+                                  <>
+                                    <p className="text-xs font-medium text-zinc-500 mb-2">
+                                      {t('personality.recommendationsCore')}
+                                    </p>
+                                    <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
+                                      {core.map(renderCard)}
+                                    </div>
+                                  </>
+                                )}
                                 {alternatives.length > 0 && (
                                   <>
                                     <p className="mt-3 text-xs font-medium text-zinc-500 mb-2">
@@ -1022,26 +1210,13 @@ export default function DashboardPage() {
                         <span className="text-xs text-zinc-500">
                           {t('dashboard.regionLabel')}
                         </span>
-                        <Select
-                          value={data.selectedRegion || undefined}
-                          onValueChange={handleRegionChange}
-                          disabled={savingRegion}
-                        >
-                          <SelectTrigger className="h-8 min-w-[10rem] rounded-full border-zinc-200 bg-white text-xs text-zinc-900 hover:border-zinc-400 focus:ring-zinc-400 dark:border-zinc-200 dark:bg-zinc-900 dark:text-zinc-900">
-                            <SelectValue placeholder={t('dashboard.regionPlaceholder')} />
-                          </SelectTrigger>
-                          <SelectContent className="rounded-2xl border-zinc-200 dark:border-zinc-800">
-                            {data.regionOptions.map((option) => (
-                              <SelectItem
-                                key={option.value}
-                                value={option.value}
-                                className="text-xs focus:bg-zinc-100 focus:text-zinc-900 dark:focus:bg-zinc-800 dark:focus:text-zinc-900"
-                              >
-                                {t(option.labelKey)}
-                              </SelectItem>
-                            ))}
-                          </SelectContent>
-                        </Select>
+                        <div className="flex flex-wrap gap-1.5">
+                          {(data.selectedRegions || []).map((region) => (
+                            <Badge key={region} variant="outline" className="text-[10px]">
+                              {t(`region.${region}`)}
+                            </Badge>
+                          ))}
+                        </div>
                       </div>
                     ) : (
                       <span className="text-xs text-zinc-500">
@@ -1599,20 +1774,30 @@ function PlanColumn({
               {item.href ? (
                 <Link href={item.href} className="block hover:opacity-80 transition-opacity">
                   <p className="text-sm font-medium text-zinc-900 dark:text-zinc-100 mb-1 flex items-center gap-1">
+                    {item.region && (
+                      <span className="text-[10px] font-semibold text-zinc-400 dark:text-zinc-500">
+                        {translate(`region.${item.region}`)} ·
+                      </span>
+                    )}
                     {translate(item.titleKey, item.params)}
                     <ArrowRight className="h-3 w-3 text-zinc-400 opacity-0 -translate-x-1 group-hover:opacity-100 group-hover:translate-x-0 transition-all" />
                   </p>
                   <p className="text-xs text-zinc-500 leading-relaxed">
-                    {translate(item.descriptionKey, item.params)}
+                    {item.descriptionText || translate(item.descriptionKey, item.params)}
                   </p>
                 </Link>
               ) : (
                 <>
                   <p className="text-sm font-medium text-zinc-900 dark:text-zinc-100 mb-1">
+                    {item.region && (
+                      <span className="text-[10px] font-semibold text-zinc-400 dark:text-zinc-500">
+                        {translate(`region.${item.region}`)} ·
+                      </span>
+                    )}
                     {translate(item.titleKey, item.params)}
                   </p>
                   <p className="text-xs text-zinc-500 leading-relaxed">
-                    {translate(item.descriptionKey, item.params)}
+                    {item.descriptionText || translate(item.descriptionKey, item.params)}
                   </p>
                 </>
               )}

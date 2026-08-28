@@ -1,4 +1,4 @@
-import { HIRING_SEASONS, type RegionKey } from '@/lib/region-dna';
+import { HIRING_SEASONS, REGION_DNA, type RegionKey } from '@/lib/region-dna';
 import type {
   CareerSignals,
   LocalizedPlanText,
@@ -9,7 +9,11 @@ import type {
   VisaStatusCategory,
 } from '@/lib/resume-types';
 import { classifyRole } from '@/lib/user-segmentation';
-import { buildVisaTimeline, type VisaTimeline } from '@/lib/visa-timeline';
+import {
+  buildVisaTimeline,
+  resolveVisaStatusForRegion,
+  type VisaTimeline,
+} from '@/lib/visa-timeline';
 
 export type RecruitingWindow =
   | 'preparation'
@@ -52,6 +56,7 @@ export interface CareerRouteDiagnosis {
   };
   risks: CareerRisk[];
   visaStatus: VisaStatusCategory;
+  visaStatusLabelKey?: string;
   requiresSponsorship: boolean;
   visaFeasibility: VisaFeasibility;
   visaNote?: string | LocalizedPlanText;
@@ -108,7 +113,7 @@ export function classifyVisaStatus(
   if (text === 'permanent' || text.includes('permanent status')) return 'permanent';
   if (text === 'work_visa' || text.includes('work visa status')) return 'work_visa';
   if (text === 'student' || text.includes('student status')) return 'student';
-  if (text === 'none' || text.includes('need employer sponsorship')) return 'none';
+  if (text.trim() === 'none' || text.includes('need employer sponsorship')) return 'none';
   if (
     /citizen|green card|permanent resident|\bpr\b|permanent|\u6c38\u4e45|\u6c38\u5c45|\u65e0\u9700\u5de5\u4f5c\u8bb8\u53ef/.test(text)
   ) {
@@ -146,6 +151,10 @@ export function getVisaFeasibility(
   visaStatusCode?: string | null,
 ): VisaFeasibility {
   if (region === 'cn_t1' || region === 'cn_t2') return 'not_applicable';
+  if (region === 'hk') {
+    if (visaStatus === 'permanent' || visaStatus === 'work_visa') return 'likely';
+    return 'conditional';
+  }
   if (visaStatusCode && /psw|pgwp|iang|485|_opt|student/.test(visaStatusCode)) return 'conditional';
   if (visaStatus === 'permanent' || visaStatus === 'work_visa') return 'likely';
   if (visaStatus === 'student') return 'conditional';
@@ -175,6 +184,7 @@ export interface CareerPlanItem {
   timeframe: 'now' | 'week' | 'month';
   titleKey: string;
   descriptionKey: string;
+  descriptionText?: string;
   params?: Record<string, string | number>;
   href?: string;
 }
@@ -344,23 +354,32 @@ function buildRisks(
   const lowGradeFocus = segmentation?.careerStage === 'junior'
     || (window === 'preparation' && yearsUntilGraduation !== null && yearsUntilGraduation >= 2);
   if (!lowGradeFocus) {
+    const regionVisaStatus = resolveVisaStatusForRegion(profile?.intention, region);
     const visaStatus = classifyVisaStatus(
       profile?.intention?.workAuthorization,
-      profile?.intention?.visaStatus,
+      regionVisaStatus,
     );
     const requiresSponsorship = requiresSponsorshipForRegion(region, visaStatus);
     if (requiresSponsorship && visaStatus === 'unknown') {
-      risks.push({ key: 'visa_unknown', labelKey: 'dashboard.risk.visa_unknown', level: 'high' });
+      risks.push({
+        key: 'visa_unknown',
+        labelKey: region === 'hk' ? 'dashboard.risk.visa_unknown_hk' : 'dashboard.risk.visa_unknown',
+        level: 'high',
+      });
     } else if (visaStatus === 'none') {
-      risks.push({ key: 'visa_blocker', labelKey: 'dashboard.risk.visa_blocker', level: 'high' });
+      risks.push({
+        key: 'visa_blocker',
+        labelKey: region === 'hk' ? 'dashboard.risk.visa_blocker_hk' : 'dashboard.risk.visa_blocker',
+        level: 'high',
+      });
     } else if (visaStatus === 'student' && requiresSponsorship) {
-      const rawStatusCode = profile?.intention?.visaStatus;
+      const rawStatusCode = regionVisaStatus;
       const statusCode = rawStatusCode && !['student', 'work_visa', 'permanent', 'none', 'unknown'].includes(rawStatusCode)
         ? rawStatusCode
         : 'unspecified';
       risks.push({
         key: `visa_conditional_${statusCode}`,
-        labelKey: getVisaConditionalRiskLabel(profile?.intention?.visaStatus),
+        labelKey: getVisaConditionalRiskLabel(regionVisaStatus),
         level: 'medium',
       });
     }
@@ -412,12 +431,21 @@ function buildPlanItems(
   const push = (item: CareerPlanItem) => items.push(item);
   const targetRole = profile?.intention?.roles?.[0] || segmentation?.targetRole || '';
   const roleKey = getRoleLabelKey(profile, segmentation);
+  const regionVisaStatus = resolveVisaStatusForRegion(profile?.intention, region);
   const visaStatus = classifyVisaStatus(
     profile?.intention?.workAuthorization,
-    profile?.intention?.visaStatus,
+    regionVisaStatus,
   );
   const requiresSponsorship = requiresSponsorshipForRegion(region, visaStatus);
   const lowGrade = Boolean(lowGradeFocus);
+  const regionDna = REGION_DNA[region];
+
+  push({
+    timeframe: 'now',
+    titleKey: 'dashboard.plan.nowRegionStrategy.title',
+    descriptionKey: 'dashboard.plan.nowRegionStrategy.desc',
+    descriptionText: `ATS 偏好：${regionDna.atsPreferences.join('；')}。简历写法：${regionDna.resumeStyle.join('；')}。面试节奏：${regionDna.interviewRhythm.join('；')}。关键信号：${regionDna.keySignals.join('、')}。`,
+  });
 
   if (!targetRole) {
     push({
@@ -432,8 +460,8 @@ function buildPlanItems(
     if (requiresSponsorship && visaStatus === 'unknown') {
       push({
         timeframe: 'now',
-        titleKey: 'dashboard.plan.nowConfirmVisa.title',
-        descriptionKey: 'dashboard.plan.nowConfirmVisa.desc',
+        titleKey: region === 'hk' ? 'dashboard.plan.nowConfirmHkVisa.title' : 'dashboard.plan.nowConfirmVisa.title',
+        descriptionKey: region === 'hk' ? 'dashboard.plan.nowConfirmHkVisa.desc' : 'dashboard.plan.nowConfirmVisa.desc',
         href: '/resume',
       });
     }
@@ -518,12 +546,21 @@ function buildPlanItems(
     requiresSponsorship
     && (visaStatus === 'none' || visaStatus === 'student' || visaStatus === 'work_visa')
   ) {
-    push({
-      timeframe: 'week',
-      titleKey: 'dashboard.plan.weekSponsorshipBackup.title',
-      descriptionKey: 'dashboard.plan.weekSponsorshipBackup.desc',
-      href: '/jobs?sponsorship=yes',
-    });
+    if (region === 'hk') {
+      push({
+        timeframe: 'week',
+        titleKey: 'dashboard.plan.weekHkVisaBackup.title',
+        descriptionKey: 'dashboard.plan.weekHkVisaBackup.desc',
+        href: '/jobs',
+      });
+    } else {
+      push({
+        timeframe: 'week',
+        titleKey: 'dashboard.plan.weekSponsorshipBackup.title',
+        descriptionKey: 'dashboard.plan.weekSponsorshipBackup.desc',
+        href: '/jobs?sponsorship=yes',
+      });
+    }
   }
 
   if (window === 'main_application') {
@@ -638,6 +675,7 @@ export function buildCareerRoutePlan(
   now = new Date(),
   planRefinement?: PlanRefinement | null,
 ): CareerRoutePlan {
+  const activePlanRefinement = planRefinement?.regionKey === region ? planRefinement : undefined;
   const latestEducation = getLatestEducation(profile);
   const programType = getProgramType(latestEducation?.degree);
   const programDurationMonths = inferProgramDuration(latestEducation, programType);
@@ -647,13 +685,14 @@ export function buildCareerRoutePlan(
   const fulltimeMonths = (profile?.workExperience || [])
     .filter((item) => !item.isInternship)
     .reduce((sum, item) => sum + (item.months || 0), 0);
+  const regionVisaStatus = resolveVisaStatusForRegion(profile?.intention, region);
   const visaStatus = classifyVisaStatus(
     profile?.intention?.workAuthorization,
-    profile?.intention?.visaStatus,
+    regionVisaStatus,
   );
   const visaTimeline = buildVisaTimeline({
     region,
-    visaStatus: profile?.intention?.visaStatus,
+    visaStatus: regionVisaStatus,
     visaDates: profile?.intention?.visaDates,
     programEndYear: gradYear,
     now,
@@ -662,7 +701,7 @@ export function buildCareerRoutePlan(
   const visaFeasibility = getVisaFeasibility(
     visaStatus,
     region,
-    profile?.intention?.visaStatus,
+    regionVisaStatus,
   );
 
   let window: RecruitingWindow = 'preparation';
@@ -734,17 +773,18 @@ export function buildCareerRoutePlan(
       yearsUntilGraduation,
     ),
     visaStatus,
+    visaStatusLabelKey: region === 'hk' && visaStatus === 'none' ? 'dashboard.visaStatus.hk_none' : undefined,
     requiresSponsorship,
     visaFeasibility,
     visaTimeline,
-    visaNote: planRefinement?.visaNotes ?? planRefinement?.visaNote,
+    visaNote: activePlanRefinement?.visaNotes ?? activePlanRefinement?.visaNote ?? REGION_DNA[region].visaNotes,
     lowGradeFocus,
     yearsUntilGraduation,
     programType,
     programDurationMonths,
-    llmNarrative: planRefinement?.narratives ?? planRefinement?.narrative,
-    llmBackupRoute: planRefinement?.backupRoutes ?? planRefinement?.backupRoute,
-    verificationNote: planRefinement?.verificationNotes ?? planRefinement?.verificationNote,
+    llmNarrative: activePlanRefinement?.narratives ?? activePlanRefinement?.narrative,
+    llmBackupRoute: activePlanRefinement?.backupRoutes ?? activePlanRefinement?.backupRoute,
+    verificationNote: activePlanRefinement?.verificationNotes ?? activePlanRefinement?.verificationNote,
   };
 
   return {

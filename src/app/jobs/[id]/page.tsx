@@ -516,12 +516,12 @@ function JobDetailContent() {
                   {job.sponsorship === 'yes' ? (
                     <span className="flex items-center gap-1">
                       <CheckCircle className="h-3 w-3" />
-                      可提供Sponsor
+                      可提供 Visa Sponsorship
                     </span>
                   ) : (
                     <span className="flex items-center gap-1">
                       <AlertTriangle className="h-3 w-3" />
-                      不提供Sponsor - 不适合留学生
+                      不提供 Visa Sponsorship - 不适合需要签证担保的留学生
                     </span>
                   )}
                 </Badge>

@@ -30,33 +30,39 @@ export const VISA_STATUS_OPTIONS: Record<RegionKey, VisaStatusOption[]> = {
     { value: 'us_f1_stem_opt', labelKey: 'resume.visaOption.us_f1_stem_opt', category: 'student' },
     { value: 'us_h1b', labelKey: 'resume.visaOption.us_h1b', category: 'work_visa' },
     { value: 'us_permanent', labelKey: 'resume.visaOption.us_permanent', category: 'permanent' },
+    { value: 'none', labelKey: 'resume.visaOption.none', category: 'none' },
   ],
   uk: [
     { value: 'uk_student', labelKey: 'resume.visaOption.uk_student', category: 'student' },
     { value: 'uk_psw', labelKey: 'resume.visaOption.uk_psw', category: 'work_visa' },
     { value: 'uk_skilled_worker', labelKey: 'resume.visaOption.uk_skilled_worker', category: 'work_visa' },
     { value: 'uk_permanent', labelKey: 'resume.visaOption.uk_permanent', category: 'permanent' },
+    { value: 'none', labelKey: 'resume.visaOption.none', category: 'none' },
   ],
   sg: [
     { value: 'sg_student_pass', labelKey: 'resume.visaOption.sg_student_pass', category: 'student' },
     { value: 'sg_ep', labelKey: 'resume.visaOption.sg_ep', category: 'work_visa' },
     { value: 'sg_permanent', labelKey: 'resume.visaOption.sg_permanent', category: 'permanent' },
+    { value: 'none', labelKey: 'resume.visaOption.none', category: 'none' },
   ],
   ca: [
     { value: 'ca_study_permit', labelKey: 'resume.visaOption.ca_study_permit', category: 'student' },
     { value: 'ca_pgwp', labelKey: 'resume.visaOption.ca_pgwp', category: 'work_visa' },
     { value: 'ca_permanent', labelKey: 'resume.visaOption.ca_permanent', category: 'permanent' },
+    { value: 'none', labelKey: 'resume.visaOption.none', category: 'none' },
   ],
   hk: [
     { value: 'hk_student_visa', labelKey: 'resume.visaOption.hk_student_visa', category: 'student' },
     { value: 'hk_iang', labelKey: 'resume.visaOption.hk_iang', category: 'work_visa' },
     { value: 'hk_dependent', labelKey: 'resume.visaOption.hk_dependent', category: 'work_visa' },
     { value: 'hk_permanent', labelKey: 'resume.visaOption.hk_permanent', category: 'permanent' },
+    { value: 'none', labelKey: 'resume.visaOption.hk_none', category: 'none' },
   ],
   au: [
     { value: 'au_student_visa', labelKey: 'resume.visaOption.au_student_visa', category: 'student' },
     { value: 'au_485', labelKey: 'resume.visaOption.au_485', category: 'work_visa' },
     { value: 'au_permanent', labelKey: 'resume.visaOption.au_permanent', category: 'permanent' },
+    { value: 'none', labelKey: 'resume.visaOption.none', category: 'none' },
   ],
   cn_t1: [
     { value: 'cn_no_visa', labelKey: 'resume.visaOption.cn_no_visa', category: 'permanent' },
@@ -65,6 +71,23 @@ export const VISA_STATUS_OPTIONS: Record<RegionKey, VisaStatusOption[]> = {
     { value: 'cn_no_visa', labelKey: 'resume.visaOption.cn_no_visa', category: 'permanent' },
   ],
 };
+
+export function regionRequiresIdentity(region: RegionKey): boolean {
+  return region !== 'cn_t1' && region !== 'cn_t2';
+}
+
+export function resolveVisaStatusForRegion(
+  intention:
+    | {
+        visaStatus?: string | null;
+        visaByRegion?: Partial<Record<RegionKey, string>> | null;
+      }
+    | null
+    | undefined,
+  region: RegionKey,
+): string | null | undefined {
+  return intention?.visaByRegion?.[region] ?? intention?.visaStatus ?? undefined;
+}
 
 export interface BuildVisaTimelineInput {
   region: RegionKey;
@@ -268,12 +291,21 @@ export function buildVisaTimeline(input: BuildVisaTimelineInput): VisaTimeline {
       risk: 'info',
     }];
   } else if (statusCode === 'none') {
-    entries = [{
-      key: 'sponsorship_required',
-      labelKey: 'visaTimeline.sponsorshipRequired',
-      actionKey: 'visaTimeline.action.confirmSponsorship',
-      risk: 'high',
-    }];
+    if (input.region === 'hk') {
+      entries = [{
+        key: 'hk_work_visa_required',
+        labelKey: 'visaTimeline.hkWorkVisaRequired',
+        actionKey: 'visaTimeline.action.confirmHkVisa',
+        risk: 'medium',
+      }];
+    } else {
+      entries = [{
+        key: 'sponsorship_required',
+        labelKey: 'visaTimeline.sponsorshipRequired',
+        actionKey: 'visaTimeline.action.confirmSponsorship',
+        risk: 'high',
+      }];
+    }
   } else {
     entries = unknownEntries();
   }

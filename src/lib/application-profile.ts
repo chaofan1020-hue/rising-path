@@ -1,5 +1,7 @@
 import type { ResumeUserInfo } from '@/lib/resume-parser';
 import type { ResumeProfile } from '@/lib/user-segmentation';
+import { resolveRegionKey } from '@/lib/region-dna';
+import { resolveVisaStatusForRegion } from '@/lib/visa-timeline';
 
 export interface ApplicationProfile {
   personal: Record<string, string>;
@@ -247,6 +249,9 @@ export function buildProfileFromResume(
   const info = userInfo || {};
   const name = info.name || '';
   const { firstName, lastName } = splitName(name);
+  const primaryRegion = (profile?.intention?.locations || [])
+    .map((location) => resolveRegionKey(location))
+    .find(Boolean) ?? null;
 
   const profileData: ApplicationProfile = {
     personal: {
@@ -267,7 +272,9 @@ export function buildProfileFromResume(
     skills: info.skills || [],
     languages: profile?.languages || [],
     workAuthorization: profile?.intention?.workAuthorization || '',
-    visaStatus: profile?.intention?.visaStatus || '',
+    visaStatus: (primaryRegion
+      ? resolveVisaStatusForRegion(profile?.intention, primaryRegion)
+      : profile?.intention?.visaStatus) || '',
     summary: profile?.meta ? '' : '',
   };
 

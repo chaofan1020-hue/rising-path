@@ -153,7 +153,7 @@ export async function processResume(input: ProcessResumeInput): Promise<{
     const nextSegmentation = storedOverrides
       ? applyOverrides(parsed.segmentation, storedOverrides)
       : parsed.segmentation;
-    const region = parsed.segmentation.regions[0]
+    const region = nextSegmentation.regions[0]
       ?? resolveRegionKey(parsed.profile.intention?.locations?.[0])
       ?? null;
     const planRefinement = await refineCareerPlan({

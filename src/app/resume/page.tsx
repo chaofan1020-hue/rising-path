@@ -120,6 +120,7 @@ function ResumeContent() {
   const [reparsingId, setReparsingId] = useState<number | null>(null);
   const [personality, setPersonality] = useState<PersonalityAssessment | null>(null);
   const [personalityLoaded, setPersonalityLoaded] = useState(false);
+  const [profileFocusId, setProfileFocusId] = useState<number | null>(null);
   const { t } = useLanguage();
   const searchParams = useSearchParams();
   const autoOpenQuiz = searchParams.get('quiz') === '1';
@@ -283,6 +284,29 @@ function ResumeContent() {
   const hasConfirmedResume = resumes.some((resume) =>
     resume.segmentation_confirmed === true && resume.processing_status === 'ready',
   );
+  const needsConfirmationId = resumes.find((resume) => resume.processing_status === 'needs_confirmation')?.id;
+
+  useEffect(() => {
+    if (!needsConfirmationId) return;
+    const timer = window.setTimeout(() => {
+      document.getElementById(`resume-card-${needsConfirmationId}`)?.scrollIntoView({
+        behavior: 'smooth',
+        block: 'start',
+      });
+    }, 300);
+    return () => window.clearTimeout(timer);
+  }, [needsConfirmationId]);
+
+  useEffect(() => {
+    if (!profileFocusId) return;
+    const timer = window.setTimeout(() => {
+      document.getElementById(`resume-profile-${profileFocusId}`)?.scrollIntoView({
+        behavior: 'smooth',
+        block: 'start',
+      });
+    }, 300);
+    return () => window.clearTimeout(timer);
+  }, [profileFocusId]);
 
   return (
     <div className="min-h-screen bg-white dark:bg-zinc-950">
@@ -418,8 +442,17 @@ function ResumeContent() {
               <p className="text-sm">{t('resume.noResumes')}</p>
             </div>
           ) : (
-            resumes.map((resume) => (
-              <Card key={resume.id} className="border-zinc-200 dark:border-zinc-800 shadow-none hover:shadow-xl hover:shadow-zinc-900/[0.06] dark:hover:shadow-black/30 transition-shadow duration-300 rounded-2xl">
+            resumes.map((resume) => {
+              const intention = resume.profile?.intention;
+              const intentionIncomplete = !intention?.roles?.length
+                && !intention?.locations?.length
+                && !intention?.industries?.length
+                && !intention?.targetCompanies?.length
+                && !intention?.visaStatus
+                && !Object.keys(intention?.visaByRegion || {}).length;
+              const profileHighlighted = profileFocusId === resume.id || (resume.segmentation_confirmed === true && intentionIncomplete);
+              return (
+              <Card key={resume.id} id={`resume-card-${resume.id}`} className="border-zinc-200 dark:border-zinc-800 shadow-none hover:shadow-xl hover:shadow-zinc-900/[0.06] dark:hover:shadow-black/30 transition-shadow duration-300 rounded-2xl">
                 <CardContent className="p-4 md:p-5">
                   <div className="flex flex-col gap-3 md:gap-4">
                     {/* 文件信息 */}
@@ -470,7 +503,7 @@ function ResumeContent() {
                     {personalityLoaded && resume.segmentation_confirmed === true && resume.processing_status === 'ready' && (
                       <PersonalityQuizPanel
                         resumeId={resume.id}
-                        assessment={personality}
+                        assessment={personality?.resumeId === resume.id ? personality : null}
                         autoStart={personalityLoaded && autoOpenQuiz && confirmedResumeId === resume.id}
                         showRecommendations={false}
                         onCompleted={(assessment, profile) => {
@@ -488,20 +521,26 @@ function ResumeContent() {
                     {/* 分层确认卡片：求职画像透明展示 + 可修正 */}
                     {resume.profile && (
                       <ResumeProfileCard
+                        id={`resume-profile-${resume.id}`}
                         resumeId={resume.id}
                         profile={resume.profile}
-                        region={resume.segmentation?.regions?.[0] ?? null}
+                        regions={resume.segmentation?.regions ?? []}
                         confirmed={resume.segmentation_confirmed}
-                        onUpdated={(profile, segmentation, metadata: ResumeProfileUpdateMetadata = {}) => setResumes((prev) => prev.map((item) => item.id === resume.id ? {
-                          ...item,
-                          profile,
-                          segmentation: segmentation || item.segmentation,
-                          processing_status: metadata.processingStatus || 'ready',
-                          processing_stage: metadata.processingStage || 'complete',
-                          profile_version: metadata.profileVersion || item.profile_version,
-                          profile_confirmed_at: metadata.profileConfirmedAt ?? item.profile_confirmed_at,
-                          segmentation_confirmed: metadata.confirmed ?? true,
-                        } : item))}
+                        defaultEditing={profileFocusId === resume.id}
+                        highlighted={profileHighlighted}
+                        onUpdated={(profile, segmentation, metadata: ResumeProfileUpdateMetadata = {}) => {
+                          setProfileFocusId(null);
+                          setResumes((prev) => prev.map((item) => item.id === resume.id ? {
+                            ...item,
+                            profile,
+                            segmentation: segmentation || item.segmentation,
+                            processing_status: metadata.processingStatus || 'ready',
+                            processing_stage: metadata.processingStage || 'complete',
+                            profile_version: metadata.profileVersion || item.profile_version,
+                            profile_confirmed_at: metadata.profileConfirmedAt ?? item.profile_confirmed_at,
+                            segmentation_confirmed: metadata.confirmed ?? true,
+                          } : item));
+                        }}
                       />
                     )}
                     {resume.segmentation && (
@@ -509,11 +548,13 @@ function ResumeContent() {
                         resumeId={resume.id}
                         segmentation={resume.segmentation}
                         confirmed={resume.segmentation_confirmed}
+                        defaultEditing={resume.processing_status === 'needs_confirmation'}
                         skills={resume.profile?.skills}
                         schoolLine={resume.profile?.education?.[0]
                           ? `${resume.profile.education[0].school}${resume.profile.education[0].major ? ` · ${resume.profile.education[0].major}` : ''}${resume.profile.education[0].degree ? ` · ${resume.profile.education[0].degree}` : ''}`
                           : undefined}
-                        onUpdated={(seg, metadata: ResumeProfileUpdateMetadata = {}) =>
+                        onUpdated={(seg, metadata: ResumeProfileUpdateMetadata = {}) => {
+                          if (metadata.confirmed) setProfileFocusId(resume.id);
                           setResumes((prev) => prev.map((r) => r.id === resume.id ? {
                             ...r,
                             segmentation: seg,
@@ -523,7 +564,7 @@ function ResumeContent() {
                             profile_version: metadata.profileVersion || r.profile_version,
                             profile_confirmed_at: metadata.profileConfirmedAt ?? r.profile_confirmed_at,
                           } : r))
-                        }
+                        }}
                       />
                     )}
                     
@@ -829,7 +870,8 @@ function ResumeContent() {
                   </div>
                 </CardContent>
               </Card>
-            ))
+              );
+            })
           )}
         </div>
       </main>
