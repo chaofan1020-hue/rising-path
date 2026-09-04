@@ -1,7 +1,7 @@
 # 全公司岗位字段完善计划
 
-更新时间：2026-09-01  
-状态：Wells Fargo、Accenture 已完成生产字段回填与严格回归；官方详情队列继续按公司独立游标自动追平新增岗位；按来源族逐批执行，不做全站批量回填
+更新时间：2026-09-05  
+状态：Wells Fargo、Accenture 已完成生产字段回填与严格回归；MongoDB、Okta、Elastic、Duolingo、Roblox 五家 Greenhouse 公司已于 2026-09-05 完成生产回填与验收；按来源族逐批执行，不做全站批量回填
 
 ## 1. 目标与边界
 
@@ -29,11 +29,11 @@
 
 ### A. 已完成生产回填的官方 ATS 来源
 
-Greenhouse、Ashby 与 Lever 的以下 26 家已完成生产抽样、全量只补缺失字段的回填，以及数据库、公开 API、岗位页三处验收。Cloudflare 的经验字段生产修复也已完成。它们进入常规观察，不应再次盲目全量回填。
+Greenhouse、Ashby 与 Lever 的以下 31 家已完成生产抽样、全量只补缺失字段的回填，以及数据库、公开 API、岗位页三处验收。Cloudflare 的经验字段生产修复也已完成。它们进入常规观察，不应再次盲目全量回填。
 
 | 来源族 | 已确认公司 | 当前处理方式 |
 | --- | --- | --- |
-| Greenhouse | Cloudflare、Stripe、Datadog、Coinbase、Asana、Brex、Databricks、Figma、GitLab、Point72、Reddit、Robinhood、Twilio、Discord、TPG、Bridgewater Associates、General Atlantic | `src/lib/job-connectors/greenhouse.ts` + 详情页补充 |
+| Greenhouse | Cloudflare、Stripe、Datadog、Coinbase、Asana、Brex、Databricks、Figma、GitLab、Point72、Reddit、Robinhood、Twilio、Discord、TPG、Bridgewater Associates、General Atlantic、MongoDB、Okta、Elastic、Duolingo、Roblox | `src/lib/job-connectors/greenhouse.ts` + 详情页补充 |
 | Ashby | OpenAI、Cursor、Notion、Perplexity、Ramp、Vanta、Runway、Linear | `src/lib/job-connectors/ashby.ts` + 详情页补充 |
 | Lever | Palantir | `src/lib/job-connectors/lever.ts` + 详情页补充 |
 
