@@ -61,6 +61,7 @@ const navigationGroups: { label: string; items: NavigationItem[] }[] = [
       { label: '岗位工作台', href: '/admin?tab=jobs', icon: BriefcaseBusiness, permission: ADMIN_PERMISSIONS.jobsRead },
       { label: '投稿审核', href: '/admin?tab=job-submissions', icon: ClipboardList, permission: ADMIN_PERMISSIONS.jobsRead },
       { label: '岗位轮换', href: '/admin/job-rotation', icon: Radio, permission: ADMIN_PERMISSIONS.dashboardRead },
+      { label: '同步大屏', href: '/admin/job-sync-dashboard', icon: Activity, permission: ADMIN_PERMISSIONS.dashboardRead },
       { label: '面试基因', href: '/admin/dna-review', icon: Dna, permission: ADMIN_PERMISSIONS.dnaRead },
     ],
   },

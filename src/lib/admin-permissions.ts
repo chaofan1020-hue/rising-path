@@ -9,7 +9,7 @@ const ROLE_PERMISSIONS: Record<AdminRole, ReadonlySet<AdminPermission>> = {
   super_admin: new Set(Object.values(ADMIN_PERMISSIONS)),
   legacy_super_admin: new Set(Object.values(ADMIN_PERMISSIONS)),
   content_admin: new Set([
-    ADMIN_PERMISSIONS.dashboardRead, ADMIN_PERMISSIONS.dnaRead, ADMIN_PERMISSIONS.dnaWrite,
+    ADMIN_PERMISSIONS.dashboardRead, ADMIN_PERMISSIONS.jobSyncWrite, ADMIN_PERMISSIONS.dnaRead, ADMIN_PERMISSIONS.dnaWrite,
     ADMIN_PERMISSIONS.dnaPublish, ADMIN_PERMISSIONS.feedbackRead, ADMIN_PERMISSIONS.feedbackReview,
     ADMIN_PERMISSIONS.jobsRead, ADMIN_PERMISSIONS.jobsWrite,
   ]),

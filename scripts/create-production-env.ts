@@ -55,6 +55,15 @@ async function main() {
   env.SUPABASE_DB_URL = databaseUrl;
   env.INTERVIEW_DEBUG_LOGGING = 'false';
   env.JOBS_AUTO_WORKER = 'true';
+  env.JOBS_OFFICIAL_DETAILS_AUTO_SYNC = 'true';
+  env.JOBS_OFFICIAL_DETAILS_INTERVAL_MINUTES = '0.1';
+  env.JOB_BACKFILL_WRITE_ENABLED = 'true';
+  env.JOB_BACKFILL_REQUEST_DELAY_MS = '1200';
+  env.JOBS_OFFICIAL_DETAILS_BATCH_SIZE = '100';
+  env.JOB_BACKFILL_CONCURRENCY = '3';
+  env.JOBS_OFFICIAL_DETAILS_COMPANIES_PER_CYCLE = '3';
+  env.JOBS_OFFICIAL_DETAILS_FOCUS_COMPANY = '';
+  env.JOBS_OFFICIAL_DETAILS_CHILD_TIMEOUT_MS = '240000';
 
   const output = [
     '# Generated from .env.local plus production-only Supabase and domain configuration.',

@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from 'next/server';
 import { getAuthContext, unauthorizedResponse } from '@/lib/auth-server';
 import { deriveMajorMatch, deriveSegmentation, type SegmentationOverrides } from '@/lib/user-segmentation';
 import { resolveRegionKey } from '@/lib/region-dna';
+import { refineCareerPlan } from '@/lib/career-plan-refiner';
 import { isRecord } from '@/lib/resume-parser';
 import type { ResumeProfile } from '@/lib/resume-types';
 import { deleteResumeFile } from '@/lib/resume-storage';
@@ -83,6 +84,7 @@ export async function PATCH(
         .map((region) => (['us', 'uk', 'sg', 'cn_t1', 'cn_t2'].includes(region) ? region : resolveRegionKey(region)))
         .filter((region): region is NonNullable<typeof region> => !!region) as SegmentationOverrides['regions'];
     }
+    const hasRegionOverride = Boolean(normalizedOverrides.regions?.length);
 
     const { data: resume, error: fetchError } = await client
       .from('resumes')
@@ -123,18 +125,21 @@ export async function PATCH(
       ...currentOverrides,
       ...normalizedOverrides,
     };
-    const nextProfile: ResumeProfile = currentProfile && profileIntention
+    const nextProfile: ResumeProfile = currentProfile && (profileIntention || hasRegionOverride)
       ? {
           ...currentProfile,
           intention: {
             ...currentProfile.intention,
             ...profileIntention,
+            ...(hasRegionOverride ? { locations: normalizedOverrides.regions } : {}),
           },
-          ...((normalizedOverrides.regions || profileIntention) ? { planRefinement: undefined } : {}),
+          ...((hasRegionOverride || profileIntention) ? { planRefinement: undefined } : {}),
         }
       : currentProfile;
 
-    const current = profileIntention ? deriveSegmentation(nextProfile) : resume.segmentation;
+    const current = profileIntention || hasRegionOverride
+      ? deriveSegmentation(nextProfile, profileIntention?.roles?.[0] || nextProfile.intention?.roles?.[0])
+      : resume.segmentation;
     const next = current ? { ...current } : null;
     if (!next) {
       return NextResponse.json({ error: '简历画像尚未生成，暂时不能确认' }, { status: 409 });
@@ -156,6 +161,12 @@ export async function PATCH(
         next.majorMatchNote = match.note;
       }
     }
+
+    // The cockpit narrative is an AI task. Do not hold the profile save open
+    // while waiting for it; the confirmed profile is useful immediately.
+    const shouldRefineCareerPlan = Boolean(
+      confirmRequested && next.regions?.[0] && (profileIntention || hasRegionOverride),
+    );
 
     const stageLabel: Record<string, string> = {
       junior: '低年级（实习预备）',
@@ -235,6 +246,49 @@ export async function PATCH(
       console.error('[Resume] failed to mark previous profile version superseded:', supersedeError);
     }
 
+    if (shouldRefineCareerPlan) {
+      void refineCareerPlan({
+        userId: auth.user.id,
+        profile: nextProfile,
+        segmentation: next,
+        region: next.regions[0],
+      }).then(async (planRefinement) => {
+        if (!planRefinement) return;
+
+        // A later save owns the newer version. Never let a slower AI response
+        // write its outdated cockpit plan over that newer profile.
+        const { data: latestResume, error: latestResumeError } = await client
+          .from('resumes')
+          .select('profile_version')
+          .eq('id', id)
+          .eq('user_id', auth.user.id)
+          .maybeSingle();
+        if (latestResumeError) throw latestResumeError;
+        if (Number(latestResume?.profile_version || 0) !== version) return;
+
+        const refinedProfile = { ...nextProfile, planRefinement };
+        const [{ error: resumePlanError }, { error: versionPlanError }] = await Promise.all([
+          client
+            .from('resumes')
+            .update({ profile: refinedProfile, updated_at: new Date().toISOString() })
+            .eq('id', id)
+            .eq('user_id', auth.user.id)
+            .eq('profile_version', version),
+          client
+            .from('resume_profile_versions')
+            .update({ profile: refinedProfile })
+            .eq('resume_id', id)
+            .eq('user_id', auth.user.id)
+            .eq('version', version),
+        ]);
+        if (resumePlanError || versionPlanError) {
+          throw new Error(resumePlanError?.message || versionPlanError?.message || '更新驾驶舱规划失败');
+        }
+      }).catch((error: unknown) => {
+        console.error('[Resume] background career plan refinement failed:', error);
+      });
+    }
+
     return NextResponse.json({
       success: true,
       profile: nextProfile,
@@ -243,6 +297,7 @@ export async function PATCH(
       segmentation_confirmed: confirmRequested,
       processing_status: confirmRequested ? 'ready' : 'needs_confirmation',
       profile_confirmed_at: confirmRequested ? now : null,
+      plan_refinement_pending: shouldRefineCareerPlan,
     });
   } catch (error) {
     console.error('Error updating resume profile:', error);

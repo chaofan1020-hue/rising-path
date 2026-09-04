@@ -3,6 +3,7 @@ import { getSupabaseClient } from '@/storage/database/supabase-client';
 import { ExternalFetchError, fetchSafeExternalPage } from '@/lib/safe-external-fetch';
 import { looksLikeClosedJobPage } from '@/lib/job-maintenance';
 import { nextLinkFailureCount, shouldCloseAfterLinkFailure } from '@/lib/job-link-health';
+import { hasMatchingPhenomDetailPayload, isRegisteredPhenomJobUrl } from '@/lib/job-connectors';
 
 const LINK_CHECK_MAX_AGE_MS = 30 * 60 * 1000;
 
@@ -21,7 +22,7 @@ export async function GET(
   const client = getSupabaseClient();
   const { data: job, error } = await client
     .from('jobs')
-    .select('id,job_url,source_system,is_active')
+    .select('id,company,job_url,source_system,is_active')
     .eq('id', id)
     .maybeSingle();
   if (error) return NextResponse.json({ error: '读取岗位链接失败' }, { status: 500 });
@@ -52,7 +53,9 @@ export async function GET(
       const checked = new Date().toISOString();
       try {
         const page = await fetchSafeExternalPage(target.toString());
-        if (looksLikeClosedJobPage(page.title, page.content)) {
+        if (looksLikeClosedJobPage(page.title, page.content)
+          && !isRegisteredPhenomJobUrl(job.company || '', job.job_url)
+          && !hasMatchingPhenomDetailPayload(job.job_url, page.content)) {
           throw new ExternalFetchError('目标页面显示岗位已关闭', 422, 410);
         }
         const blocked = looksLikeBlockedPage(page.title, page.content);

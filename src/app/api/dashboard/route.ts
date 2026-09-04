@@ -135,6 +135,116 @@ interface DashboardOverview {
   application_count: number;
 }
 
+interface DashboardPersonalization {
+  roles: string[];
+  locations: string[];
+  industries: string[];
+  companies: string[];
+  education: string[];
+  skillCount: number;
+  internshipCount: number;
+  internshipMonths: number;
+  workMonths: number;
+  projectCount: number;
+  focusAreas: Array<{
+    key: string;
+    titleKey: string;
+    descriptionKey: string;
+    descriptionParams: Record<string, string | number>;
+    href: string;
+  }>;
+}
+
+function cleanProfileValues(values?: string[] | null): string[] {
+  return [...new Set((values || []).map((value) => value.trim()).filter(Boolean))].slice(0, 12);
+}
+
+function buildDashboardPersonalization(resume: DashboardResume | null, regions: RegionKey[] = []): DashboardPersonalization | null {
+  const profile = resume?.profile;
+  if (!profile) return null;
+  const intention = profile.intention;
+  const roles = cleanProfileValues(intention?.roles);
+  const locations = regions.length > 0
+    ? regions.map((region) => `region.${region}`)
+    : cleanProfileValues(intention?.locations);
+  const industries = cleanProfileValues(intention?.industries);
+  const companies = cleanProfileValues(intention?.targetCompanies);
+  const latestEducation = (profile.education || [])
+    .filter((item) => item.school || item.degree || item.major)
+    .sort((left, right) => (right.endYear || 0) - (left.endYear || 0))
+    .slice(0, 2)
+    .map((item) => [item.school, item.degree, item.major, item.endYear].filter(Boolean).join(' / '));
+  const internships = profile.internships || [];
+  const workExperience = profile.workExperience || [];
+  const focusAreas: DashboardPersonalization['focusAreas'] = [];
+  if (roles.length > 0) {
+    focusAreas.push({
+      key: 'roles',
+      titleKey: 'dashboard.personalization.focus.roles.title',
+      descriptionKey: 'dashboard.personalization.focus.roles.description',
+      descriptionParams: { roles: roles.slice(0, 3).join('、') },
+      href: '/optimize',
+    });
+  } else {
+    focusAreas.push({
+      key: 'roles_missing',
+      titleKey: 'dashboard.personalization.focus.rolesMissing.title',
+      descriptionKey: 'dashboard.personalization.focus.rolesMissing.description',
+      descriptionParams: {},
+      href: '/resume',
+    });
+  }
+  if (companies.length > 0) {
+    focusAreas.push({
+      key: 'companies',
+      titleKey: 'dashboard.personalization.focus.companies.title',
+      descriptionKey: 'dashboard.personalization.focus.companies.description',
+      descriptionParams: { companies: companies.slice(0, 3).join('、') },
+      href: '/jobs',
+    });
+  }
+  if (industries.length > 0) {
+    focusAreas.push({
+      key: 'industries',
+      titleKey: 'dashboard.personalization.focus.industries.title',
+      descriptionKey: 'dashboard.personalization.focus.industries.description',
+      descriptionParams: { industries: industries.slice(0, 3).join('、') },
+      href: '/jobs',
+    });
+  }
+  const quantifiedDensity = resume.segmentation?.experienceQuality?.quantifiedDensity;
+  if (internships.length === 0 || quantifiedDensity === 'low') {
+    focusAreas.push({
+      key: 'evidence',
+      titleKey: 'dashboard.personalization.focus.evidence.title',
+      descriptionKey: 'dashboard.personalization.focus.evidence.description',
+      descriptionParams: { internships: internships.length, projects: profile.projects?.length || 0 },
+      href: '/resume',
+    });
+  } else if ((profile.skills || []).length < 5) {
+    focusAreas.push({
+      key: 'skills',
+      titleKey: 'dashboard.personalization.focus.skills.title',
+      descriptionKey: 'dashboard.personalization.focus.skills.description',
+      descriptionParams: { count: profile.skills?.length || 0 },
+      href: '/resume',
+    });
+  }
+  return {
+    roles,
+    locations,
+    industries,
+    companies,
+    education: latestEducation,
+    skillCount: profile.skills?.length || 0,
+    internshipCount: internships.length,
+    internshipMonths: internships.reduce((sum, item) => sum + (item.months || 0), 0),
+    workMonths: workExperience.reduce((sum, item) => sum + (item.months || 0), 0),
+    projectCount: profile.projects?.length || 0,
+    focusAreas: focusAreas.slice(0, 4),
+  };
+}
+
 const REGION_LABEL_KEYS: Record<RegionKey, string> = {
   us: 'region.us',
   uk: 'region.uk',
@@ -173,7 +283,10 @@ function getRoleCategory(targetRole?: string): string {
 
 function buildLegacyPlan(resume: DashboardResume | null, regionKey: RegionKey): DashboardPlan {
   const stage: CareerStage = resume?.segmentation?.careerStage ?? 'senior';
-  const targetRole: string = resume?.profile?.targetRole ?? resume?.segmentation?.targetRole ?? '';
+  const targetRole: string = resume?.profile?.intention?.roles?.[0]
+    ?? resume?.profile?.targetRole
+    ?? resume?.segmentation?.targetRole
+    ?? '';
   const roleKey = getRoleCategory(targetRole);
   const majorMatch: MajorMatch = resume?.segmentation?.majorMatch ?? 'aligned';
 
@@ -293,7 +406,10 @@ function buildPlan(
     resume?.profile?.planRefinement,
   );
   const stage: CareerStage = resume?.segmentation?.careerStage ?? 'senior';
-  const targetRole = resume?.profile?.targetRole ?? resume?.segmentation?.targetRole ?? '';
+  const targetRole = resume?.profile?.intention?.roles?.[0]
+    ?? resume?.profile?.targetRole
+    ?? resume?.segmentation?.targetRole
+    ?? '';
   return {
     context: {
       region: REGION_LABEL_KEYS[regionKey],
@@ -437,14 +553,23 @@ export async function GET(request: NextRequest) {
 
   // 毕业年份（从简历画像提取）
   const explicitRegion = selectedRegions[0] ?? null;
-  const profileReady = Boolean(latestResume && latestResume.segmentation_confirmed === true && explicitRegion);
+  const targetRoles = latestResume?.profile?.intention?.roles?.filter(Boolean) || [];
+  const identityMissing = Boolean(latestResume && selectedRegions.some((region) => (
+    regionRequiresIdentity(region) && !resolveVisaStatusForRegion(latestResume.profile?.intention, region)
+  )));
+  const profileReady = Boolean(
+    latestResume
+    && latestResume.segmentation_confirmed === true
+    && explicitRegion
+    && targetRoles.length > 0
+    && !identityMissing,
+  );
   const missingSteps: string[] = [];
   if (!latestResume) missingSteps.push('resume');
   else if (latestResume.segmentation_confirmed !== true) missingSteps.push('confirm');
   if (!explicitRegion) missingSteps.push('region');
-  else if (latestResume && selectedRegions.some((region) => (
-    regionRequiresIdentity(region) && !resolveVisaStatusForRegion(latestResume.profile?.intention, region)
-  ))) {
+  if (targetRoles.length === 0) missingSteps.push('role');
+  if (identityMissing) {
     missingSteps.push('identity');
   }
 
@@ -627,6 +752,7 @@ export async function GET(request: NextRequest) {
     segmentationConfirmed: latestResume?.segmentation_confirmed === true,
     profileReady,
     missingSteps,
+    personalization: buildDashboardPersonalization(latestResume, selectedRegions),
     counts: {
       resumes: resumeCount,
       matches: overview.match_count ?? 0,

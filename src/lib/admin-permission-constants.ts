@@ -1,5 +1,6 @@
 export const ADMIN_PERMISSIONS = {
   dashboardRead: 'admin.dashboard.read',
+  jobSyncWrite: 'admin.job-sync.write',
   dnaRead: 'admin.dna.read',
   dnaWrite: 'admin.dna.write',
   dnaPublish: 'admin.dna.publish',

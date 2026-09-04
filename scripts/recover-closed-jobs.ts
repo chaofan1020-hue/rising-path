@@ -1,9 +1,10 @@
 import { config as loadDotenv } from 'dotenv';
 import { fetchSafeExternalPage, ExternalFetchError } from '@/lib/safe-external-fetch';
-import { isJobDeadlineExpired, resolveJobDeadline } from '@/lib/job-deadline';
+import { resolveJobDeadline } from '@/lib/job-deadline';
 import { looksLikeBlockedPage, looksLikeClosedJobPage } from '@/lib/job-maintenance';
 import { JOBS_FEED_SOURCE } from '@/lib/jobs-feed';
 import { getSupabaseClient } from '@/storage/database/supabase-client';
+import { hasMatchingPhenomDetailPayload, isRegisteredPhenomJobUrl } from '@/lib/job-connectors';
 
 loadDotenv({ path: '.env.local' });
 
@@ -35,7 +36,20 @@ function numberEnv(name: string, fallback: number, max: number): number {
   return Number.isInteger(value) && value > 0 ? Math.min(value, max) : fallback;
 }
 
+function argument(name: string): string | null {
+  const prefix = `--${name}=`;
+  const value = process.argv.find((item) => item.startsWith(prefix));
+  return value ? value.slice(prefix.length).trim() || null : null;
+}
+
+function hasFlag(name: string): boolean {
+  return process.argv.includes(`--${name}`);
+}
+
 function looksLikeJobPage(job: ClosedJob, title: string, content: string, url: string): boolean {
+  // A valid Phenom detail envelope is stronger than visible copy. Some
+  // tenants include a dormant expired-job panel in every large HTML page.
+  if (hasMatchingPhenomDetailPayload(url, content)) return true;
   const sample = `${title} ${content}`.toLowerCase();
   const titleTokens = job.title
     .toLowerCase()
@@ -69,6 +83,16 @@ async function main() {
   const client = getSupabaseClient();
   const maxJobs = numberEnv('JOBS_RECOVERY_MAX', 2000, 5000);
   const concurrency = numberEnv('JOBS_RECOVERY_CONCURRENCY', 8, 20);
+  const jobIdValue = argument('job-id');
+  const jobId = jobIdValue == null ? null : Number(jobIdValue);
+  const company = argument('company');
+  const allowRegisteredPhenom = hasFlag('allow-registered-phenom');
+  if (jobIdValue != null && (!Number.isInteger(jobId) || jobId == null || jobId < 1)) {
+    throw new Error('--job-id 必须是正整数');
+  }
+  if (allowRegisteredPhenom && jobId == null) {
+    throw new Error('--allow-registered-phenom 只能与单个 --job-id 一起使用');
+  }
   const result: RecoveryResult = {
     checked: 0,
     restored: 0,
@@ -79,14 +103,16 @@ async function main() {
     failed: 0,
   };
 
-  const { data, error } = await client
+  let query = client
     .from('jobs')
     .select('id,title,company,job_url,valid_through')
     .eq('source_system', JOBS_FEED_SOURCE)
     .eq('is_active', false)
     .not('job_url', 'is', null)
-    .order('updated_at', { ascending: true })
-    .limit(maxJobs);
+    .order('updated_at', { ascending: true });
+  if (jobId != null) query = query.eq('id', jobId);
+  if (company) query = query.eq('company', company);
+  const { data, error } = await query.limit(jobId != null ? 1 : maxJobs);
   if (error) throw new Error(`读取待恢复岗位失败: ${error.message}`);
   const jobs = (data || []) as ClosedJob[];
   const ids = jobs.map((job) => job.id);
@@ -108,13 +134,12 @@ async function main() {
         result.inconclusive += 1;
         return;
       }
-      if (isJobDeadlineExpired(job.valid_through)) {
-        result.expired += 1;
-        return;
-      }
       try {
         const page = await fetchSafeExternalPage(job.job_url);
-        if (looksLikeClosedJobPage(page.title, page.content)) {
+        const trustedRegisteredPhenom = allowRegisteredPhenom && isRegisteredPhenomJobUrl(job.company, job.job_url);
+        if (looksLikeClosedJobPage(page.title, page.content)
+          && !trustedRegisteredPhenom
+          && !hasMatchingPhenomDetailPayload(job.job_url, page.content)) {
           await client.from('job_sync_records').update({
             last_link_checked_at: checkedAt,
             last_link_status: page.httpStatus,
@@ -142,7 +167,7 @@ async function main() {
           }).eq('job_id', job.id);
           return;
         }
-        if (!looksLikeJobPage(job, page.title, page.content, page.url)) {
+        if (!trustedRegisteredPhenom && !looksLikeJobPage(job, page.title, page.content, page.url)) {
           result.inconclusive += 1;
           await client.from('job_sync_records').update({
             last_link_checked_at: checkedAt,
@@ -157,21 +182,11 @@ async function main() {
           return;
         }
 
-        const deadline = resolveJobDeadline({ description: page.content, raw_payload: page.metadata });
-        if (deadline && isJobDeadlineExpired(deadline.value)) {
-          result.expired += 1;
-          await client.from('job_sync_records').update({
-            last_link_checked_at: checkedAt,
-            last_link_status: page.httpStatus,
-            last_link_http_status: page.httpStatus,
-            last_link_error: '官网复核成功，但截止日期已过',
-            availability_status: 'closed',
-            link_health: 'closed',
-            availability_checked_at: checkedAt,
-            updated_at: checkedAt,
-          }).eq('job_id', job.id);
-          return;
-        }
+        const deadline = resolveJobDeadline({
+          description: page.content,
+          raw_payload: page.metadata,
+          source_evidence: { structured_field_sources: { deadline: 'official_payload', description: 'official_description' } },
+        });
 
         const { error: restoreError } = await client
           .from('jobs')

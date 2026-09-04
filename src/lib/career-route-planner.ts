@@ -675,7 +675,13 @@ export function buildCareerRoutePlan(
   now = new Date(),
   planRefinement?: PlanRefinement | null,
 ): CareerRoutePlan {
-  const activePlanRefinement = planRefinement?.regionKey === region ? planRefinement : undefined;
+  // Older profiles predate regionKey. They only had one active market, so keep
+  // their refinement usable while still isolating newer refinements by region.
+  const activePlanRefinement = planRefinement && (
+    !planRefinement.regionKey || planRefinement.regionKey === region
+  )
+    ? planRefinement
+    : undefined;
   const latestEducation = getLatestEducation(profile);
   const programType = getProgramType(latestEducation?.degree);
   const programDurationMonths = inferProgramDuration(latestEducation, programType);

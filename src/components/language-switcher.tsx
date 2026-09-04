@@ -26,13 +26,14 @@ export function LanguageSwitcher() {
   }, []);
 
   const currentLanguage = languageOptions.find((opt) => opt.value === locale);
+  const ariaLabel = locale === "en" ? "Switch language" : locale === "zh-TW" ? "切換語言" : "切换语言";
 
   return (
     <div className="relative" ref={dropdownRef}>
       <button
         onClick={() => setIsOpen(!isOpen)}
-        className="flex items-center gap-2 px-2 py-2 text-sm text-black dark:text-white hover:text-zinc-900 dark:hover:text-zinc-100 transition-colors"
-        aria-label="Switch language"
+        className="flex items-center gap-2 px-2 py-2 text-sm text-foreground hover:text-foreground transition-colors"
+        aria-label={ariaLabel}
       >
         <Languages className="w-4 h-4" />
         <span className="hidden sm:inline">{currentLanguage?.label}</span>

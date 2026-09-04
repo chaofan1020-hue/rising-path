@@ -1,8 +1,9 @@
 {
   "manifest_version": 3,
   "name": "Liorvix Auto Apply",
-  "version": "0.1.0",
+  "version": "0.1.1",
   "description": "识别网申表单并只填不提交，所有字段在提交前由用户确认。",
+  "homepage_url": "https://liorvix.com/extension",
   "permissions": ["storage", "activeTab", "scripting", "tabs"],
   "host_permissions": ["http://*/*", "https://*/*"],
   "background": {

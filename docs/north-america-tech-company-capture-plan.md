@@ -93,6 +93,9 @@ Anthropic、Cohere、Scale AI、Hugging Face、xAI、Mistral AI、Anduril、Ramp
 
 ## 5. 单家公司接入流程
 
+详细的字段解析、真实样本、dry-run、回填、测试和部署要求统一遵循
+[`job-company-field-connector-runbook.md`](job-company-field-connector-runbook.md)。本节只保留北美公司批次的执行顺序。
+
 1. **登记**：写入 `companies` 与 `company_sources`，记录公司名、行业、官网 careers URL、来源类型、地区 scope 和 connector 配置；重复执行必须幂等。
 2. **源探测**：优先检测官方 JSON/API，其次是 Greenhouse、Lever、Ashby、Workday、SmartRecruiters、iCIMS 等公开 ATS，再退回 sitemap/RSS/公开详情页。
 3. **小样本验证**：先抓一页或不超过 20 条，确认标题、稳定外部 ID、URL、地点、部门和正文都能解析。
@@ -100,6 +103,8 @@ Anthropic、Cohere、Scale AI、Hugging Face、xAI、Mistral AI、Anduril、Ramp
 5. **详情修复**：对短描述、未验证详情和结构化字段缺失执行有界 repair；对 401/403/404 记录 `detail_unavailable`，不要无限重试。
 6. **质量验收**：外部 ID 重复为 0，覆盖率达到来源报告值，详情完整率达到目标，错误原因可追踪；通过后才纳入夜间全量任务。
 7. **上线观察**：连续 3 个周期稳定后再把公司标记为常规来源；每周复核来源 URL、分页总量、关闭岗位同步和详情错误率。
+
+所有回填在执行第 6 步前，必须按运行手册的“生产环境回填防呆”完成环境确认：本地 `.env.local` 不等于生产，dry-run、写入和验收查询必须指向同一个生产 Supabase 项目；仅有脚本成功输出不能作为上线依据。
 
 ## 6. 运行指标与告警
 

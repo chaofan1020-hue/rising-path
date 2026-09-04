@@ -5,6 +5,7 @@ import { useRouter } from 'next/navigation';
 import { Loader2 } from 'lucide-react';
 import type { EmailOtpType } from '@supabase/supabase-js';
 import { getSupabaseBrowserClient } from '@/lib/supabase-browser';
+import { type Locale, useLanguage } from '@/lib/language-context';
 
 const EMAIL_OTP_TYPES = new Set<EmailOtpType>([
   'signup',
@@ -15,12 +16,19 @@ const EMAIL_OTP_TYPES = new Set<EmailOtpType>([
   'email',
 ]);
 
-function getCallbackErrorMessage(error: unknown): string {
+const CALLBACK_COPY: Record<Locale, { invalid: string; expired: string; back: string; finishing: string }> = {
+  'zh-CN': { invalid: '验证链接无效或已过期，请返回登录页重新发送验证邮件。', expired: '验证链接已失效，请返回登录页重新发送验证邮件。', back: '返回登录', finishing: '正在完成验证...' },
+  'zh-TW': { invalid: '驗證連結無效或已過期，請返回登入頁重新傳送驗證信。', expired: '驗證連結已失效，請返回登入頁重新傳送驗證信。', back: '返回登入', finishing: '正在完成驗證...' },
+  en: { invalid: 'This verification link is invalid or expired. Return to sign in and request a new email.', expired: 'This verification link has expired. Return to sign in and request a new email.', back: 'Back to sign in', finishing: 'Finishing verification...' },
+};
+
+function getCallbackErrorMessage(error: unknown, copy: (typeof CALLBACK_COPY)[Locale]): string {
   if (!(error instanceof Error)) {
-    return '验证链接无效或已过期，请返回登录页重新发送验证邮件。';
+    return copy.invalid;
   }
 
   const message = error.message.toLowerCase();
+  if (message === copy.invalid.toLowerCase()) return copy.invalid;
   if (
     message.includes('expired') ||
     message.includes('invalid') ||
@@ -29,13 +37,15 @@ function getCallbackErrorMessage(error: unknown): string {
     message.includes('验证链接无效') ||
     message.includes('验证链接已失效')
   ) {
-    return '验证链接已失效，请返回登录页重新发送验证邮件。';
+    return copy.expired;
   }
-  return error.message;
+  return /[\u3400-\u9fff]/.test(error.message) ? copy.invalid : error.message;
 }
 
 export default function AuthCallbackPage() {
   const router = useRouter();
+  const { locale } = useLanguage();
+  const copy = CALLBACK_COPY[locale];
   const [error, setError] = useState<string | null>(null);
 
   useEffect(() => {
@@ -62,7 +72,7 @@ export default function AuthCallbackPage() {
         } else if (searchParams.get('token_hash')) {
           const type = searchParams.get('type');
           if (!type || !EMAIL_OTP_TYPES.has(type as EmailOtpType)) {
-            throw new Error('验证链接无效或已过期');
+            throw new Error(copy.invalid);
           }
           const { error: verifyError } = await supabase.auth.verifyOtp({
             token_hash: searchParams.get('token_hash')!,
@@ -78,20 +88,20 @@ export default function AuthCallbackPage() {
         } else {
           const { data, error: sessionError } = await supabase.auth.getSession();
           if (sessionError) throw sessionError;
-          if (!data.session) throw new Error('验证链接无效或已过期');
+          if (!data.session) throw new Error(copy.invalid);
         }
         const next = searchParams.get('next') || hashParams.get('next');
         const safeNext = next && next.startsWith('/') && !next.startsWith('//') ? next : '/home';
         if (mounted) router.replace(safeNext);
       } catch (callbackError) {
-        if (mounted) setError(getCallbackErrorMessage(callbackError));
+        if (mounted) setError(getCallbackErrorMessage(callbackError, copy));
       }
     };
     void finish();
     return () => {
       mounted = false;
     };
-  }, [router]);
+  }, [copy, router]);
 
   return (
     <main className="min-h-screen flex items-center justify-center px-6">
@@ -100,13 +110,13 @@ export default function AuthCallbackPage() {
           <>
             <p className="text-sm text-destructive">{error}</p>
             <button className="text-sm underline" onClick={() => router.replace('/login')}>
-              返回登录
+              {copy.back}
             </button>
           </>
         ) : (
           <>
             <Loader2 className="mx-auto h-6 w-6 animate-spin" />
-            <p className="text-sm text-muted-foreground">正在完成验证...</p>
+            <p className="text-sm text-muted-foreground">{copy.finishing}</p>
           </>
         )}
       </div>

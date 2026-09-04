@@ -116,6 +116,7 @@ function ResumeContent() {
   const [loading, setLoading] = useState(false);
   const [uploading, setUploading] = useState(false);
   const [selectedFile, setSelectedFile] = useState<File | null>(null);
+  const [isDragging, setIsDragging] = useState(false);
   const [translatingId, setTranslatingId] = useState<number | null>(null);
   const [reparsingId, setReparsingId] = useState<number | null>(null);
   const [personality, setPersonality] = useState<PersonalityAssessment | null>(null);
@@ -123,6 +124,7 @@ function ResumeContent() {
   const [profileFocusId, setProfileFocusId] = useState<number | null>(null);
   const { t } = useLanguage();
   const searchParams = useSearchParams();
+  const uploadInputRef = useRef<HTMLInputElement>(null);
   const autoOpenQuiz = searchParams.get('quiz') === '1';
   const confirmedResumeId = resumes.find((resume) => (
     resume.segmentation_confirmed === true && resume.processing_status === 'ready'
@@ -134,6 +136,24 @@ function ResumeContent() {
       setSelectedFile(file);
     }
   }, []);
+
+  const handleDragOver = useCallback((e: React.DragEvent<HTMLLabelElement>) => {
+    e.preventDefault();
+    if (!uploading) setIsDragging(true);
+  }, [uploading]);
+
+  const handleDragLeave = useCallback((e: React.DragEvent<HTMLLabelElement>) => {
+    e.preventDefault();
+    setIsDragging(false);
+  }, []);
+
+  const handleDrop = useCallback((e: React.DragEvent<HTMLLabelElement>) => {
+    e.preventDefault();
+    setIsDragging(false);
+    if (uploading) return;
+    const file = e.dataTransfer.files?.[0];
+    if (file) setSelectedFile(file);
+  }, [uploading]);
 
   const handleUpload = async () => {
     if (!selectedFile) return;
@@ -154,6 +174,7 @@ function ResumeContent() {
       if (response.ok && data.resume) {
         setResumes((prev) => [data.resume as Resume, ...prev]);
         setSelectedFile(null);
+        if (uploadInputRef.current) uploadInputRef.current.value = '';
       } else if (data.error) {
         const message = typeof data.error === 'string'
           ? data.error
@@ -323,11 +344,16 @@ function ResumeContent() {
         {/* 上传 Dropzone */}
         <div className="relative mb-8 md:mb-10 max-w-2xl mx-auto">
           <label
-            className={`block rounded-2xl border-2 border-dashed border-zinc-200 dark:border-zinc-800 bg-white/60 dark:bg-zinc-950/60 backdrop-blur-sm transition-colors cursor-pointer hover:border-zinc-400 dark:hover:border-zinc-600 ${uploading ? 'pointer-events-none opacity-60' : ''}`}
+            onDragOver={handleDragOver}
+            onDragLeave={handleDragLeave}
+            onDrop={handleDrop}
+            className={`block rounded-2xl border-2 border-dashed bg-white/60 dark:bg-zinc-950/60 backdrop-blur-sm transition-colors cursor-pointer ${isDragging ? 'border-zinc-900 bg-zinc-50 dark:border-white dark:bg-zinc-900' : 'border-zinc-200 dark:border-zinc-800 hover:border-zinc-400 dark:hover:border-zinc-600'} ${uploading ? 'pointer-events-none opacity-60' : ''}`}
           >
             <input
+              ref={uploadInputRef}
               type="file"
               accept=".pdf,.doc,.docx,.txt"
+              onClick={(event) => { event.currentTarget.value = ''; }}
               onChange={handleFileSelect}
               disabled={uploading}
               className="hidden"
@@ -448,8 +474,7 @@ function ResumeContent() {
                 && !intention?.locations?.length
                 && !intention?.industries?.length
                 && !intention?.targetCompanies?.length
-                && !intention?.visaStatus
-                && !Object.keys(intention?.visaByRegion || {}).length;
+                && !intention?.visaStatus;
               const profileHighlighted = profileFocusId === resume.id || (resume.segmentation_confirmed === true && intentionIncomplete);
               return (
               <Card key={resume.id} id={`resume-card-${resume.id}`} className="border-zinc-200 dark:border-zinc-800 shadow-none hover:shadow-xl hover:shadow-zinc-900/[0.06] dark:hover:shadow-black/30 transition-shadow duration-300 rounded-2xl">
@@ -518,8 +543,33 @@ function ResumeContent() {
                       />
                     )}
 
-                    {/* 分层确认卡片：求职画像透明展示 + 可修正 */}
-                    {resume.profile && (
+                    {resume.segmentation && (
+                      <SegmentationCard
+                        resumeId={resume.id}
+                        segmentation={resume.segmentation}
+                        confirmed={resume.segmentation_confirmed}
+                        defaultEditing={resume.processing_status === 'needs_confirmation'}
+                        skills={resume.profile?.skills}
+                        schoolLine={resume.profile?.education?.[0]
+                          ? `${resume.profile.education[0].school}${resume.profile.education[0].major ? ` · ${resume.profile.education[0].major}` : ''}${resume.profile.education[0].degree ? ` · ${resume.profile.education[0].degree}` : ''}`
+                          : undefined}
+                        onUpdated={(seg, metadata: ResumeProfileUpdateMetadata = {}, profile) => {
+                          if (metadata.confirmed) setProfileFocusId(resume.id);
+                          setResumes((prev) => prev.map((r) => r.id === resume.id ? {
+                            ...r,
+                            profile: profile || r.profile,
+                            segmentation: seg,
+                            segmentation_confirmed: metadata.confirmed ?? true,
+                            processing_status: metadata.processingStatus || 'ready',
+                            processing_stage: metadata.processingStage || 'complete',
+                            profile_version: metadata.profileVersion || r.profile_version,
+                            profile_confirmed_at: metadata.profileConfirmedAt ?? r.profile_confirmed_at,
+                          } : r))
+                        }}
+                      />
+                    )}
+                    {/* 地区确认后再填写求职画像：地区会决定后续岗位匹配与材料策略。 */}
+                    {resume.profile && resume.segmentation_confirmed === true && (
                       <ResumeProfileCard
                         id={`resume-profile-${resume.id}`}
                         resumeId={resume.id}
@@ -540,30 +590,6 @@ function ResumeContent() {
                             profile_confirmed_at: metadata.profileConfirmedAt ?? item.profile_confirmed_at,
                             segmentation_confirmed: metadata.confirmed ?? true,
                           } : item));
-                        }}
-                      />
-                    )}
-                    {resume.segmentation && (
-                      <SegmentationCard
-                        resumeId={resume.id}
-                        segmentation={resume.segmentation}
-                        confirmed={resume.segmentation_confirmed}
-                        defaultEditing={resume.processing_status === 'needs_confirmation'}
-                        skills={resume.profile?.skills}
-                        schoolLine={resume.profile?.education?.[0]
-                          ? `${resume.profile.education[0].school}${resume.profile.education[0].major ? ` · ${resume.profile.education[0].major}` : ''}${resume.profile.education[0].degree ? ` · ${resume.profile.education[0].degree}` : ''}`
-                          : undefined}
-                        onUpdated={(seg, metadata: ResumeProfileUpdateMetadata = {}) => {
-                          if (metadata.confirmed) setProfileFocusId(resume.id);
-                          setResumes((prev) => prev.map((r) => r.id === resume.id ? {
-                            ...r,
-                            segmentation: seg,
-                            segmentation_confirmed: metadata.confirmed ?? true,
-                            processing_status: metadata.processingStatus || 'ready',
-                            processing_stage: metadata.processingStage || 'complete',
-                            profile_version: metadata.profileVersion || r.profile_version,
-                            profile_confirmed_at: metadata.profileConfirmedAt ?? r.profile_confirmed_at,
-                          } : r))
                         }}
                       />
                     )}
@@ -601,7 +627,7 @@ function ResumeContent() {
                           </>
                         )}
                       </Button>
-                      <Link href="/field-mappings" className="hidden sm:block">
+                        <Link href="/auto-apply" className="hidden sm:block">
                         <Button variant="outline" size="sm" className="text-xs h-7 px-2.5 border-zinc-200 dark:border-zinc-700 text-zinc-600 dark:text-zinc-300 hover:bg-zinc-100 hover:text-zinc-900 dark:hover:bg-zinc-800 dark:hover:text-zinc-100">
                           <Map className="h-3 w-3 mr-1" />
                           {t('resume.fieldMapping')}
@@ -703,7 +729,7 @@ function ResumeContent() {
                                 )}
 
                                 <div className="mt-3 pt-3 border-t border-zinc-100 dark:border-zinc-800">
-                                  <Link href="/field-mappings">
+                                  <Link href="/auto-apply">
                                     <Button variant="outline" size="sm" className="w-full border-zinc-200 dark:border-zinc-700 text-zinc-600 dark:text-zinc-300 hover:bg-zinc-100 hover:text-zinc-900 dark:hover:bg-zinc-800 dark:hover:text-zinc-100">
                                       <Map className="h-4 w-4 mr-2" />
                                       {t('resume.configureMapping')}
@@ -752,7 +778,7 @@ function ResumeContent() {
                                       {[...resume.profile.internships, ...resume.profile.workExperience].map((experience, index) => (
                                         <p key={`${experience.company}-${experience.role}-${index}`} className="text-sm text-zinc-800 dark:text-zinc-100">
                                           <strong>{experience.company}</strong> · {experience.role}
-                                          {experience.months ? <span className="text-zinc-400"> · {experience.months}个月</span> : null}
+                                          {experience.months ? <span className="text-zinc-400"> · {experience.months} {t('resume.months')}</span> : null}
                                         </p>
                                       ))}
                                     </div>
@@ -772,11 +798,11 @@ function ResumeContent() {
 
                                 {resume.profile.intention && (
                                   <div className="text-sm text-zinc-800 dark:text-zinc-100 space-y-1">
-                                    {resume.profile.intention.roles?.length ? <p><strong>岗位：</strong>{resume.profile.intention.roles.join('、')}</p> : null}
-                                    {resume.profile.intention.locations?.length ? <p><strong>地区：</strong>{resume.profile.intention.locations.join('、')}</p> : null}
-                                    {resume.profile.intention.industries?.length ? <p><strong>行业：</strong>{resume.profile.intention.industries.join('、')}</p> : null}
-                                    {resume.profile.intention.workAuthorization ? <p><strong>工作权限：</strong>{resume.profile.intention.workAuthorization}</p> : null}
-                                    {resume.profile.intention.availableFrom ? <p><strong>可入职：</strong>{resume.profile.intention.availableFrom}</p> : null}
+                                    {resume.profile.intention.roles?.length ? <p><strong>{t('resume.profileRoles')}:</strong> {resume.profile.intention.roles.join('、')}</p> : null}
+                                    {resume.profile.intention.locations?.length ? <p><strong>{t('resume.profileLocations')}:</strong> {resume.profile.intention.locations.join('、')}</p> : null}
+                                    {resume.profile.intention.industries?.length ? <p><strong>{t('resume.profileIndustries')}:</strong> {resume.profile.intention.industries.join('、')}</p> : null}
+                                    {resume.profile.intention.workAuthorization ? <p><strong>{t('resume.profileWorkAuthorization')}:</strong> {resume.profile.intention.workAuthorization}</p> : null}
+                                    {resume.profile.intention.availableFrom ? <p><strong>{t('resume.profileAvailableFrom')}:</strong> {resume.profile.intention.availableFrom}</p> : null}
                                   </div>
                                 )}
 

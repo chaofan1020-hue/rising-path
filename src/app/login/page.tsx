@@ -33,7 +33,60 @@ const AUTH_FEEDBACK: Record<Locale, {
   en: { verifyBeforeLogin: 'Verify your email before signing in.', codeSentForSignup: 'A verification code was sent. Enter it here to finish registration.', signupNeedsVerification: 'Please verify your email code first.', verificationSuccess: 'Email verified. Set a new sign-in password.', emailSent: 'Verification email sent. Check your inbox.', codeSent: 'Code sent. Check your inbox.', resetSent: 'Password reset email sent. Check your inbox.', passwordsMismatch: 'Passwords do not match', acceptTerms: 'Please accept the terms and privacy policy', signInFailed: 'Sign in failed', signUpFailed: 'Sign up failed', invalidCode: 'Invalid code', updatePasswordFailed: 'Failed to update password', githubFailed: 'GitHub sign in failed', signOutFailed: 'Sign out failed', passwordRules: { '密码至少需要 12 位': 'Password must be at least 12 characters', '密码不能超过 128 位': 'Password cannot exceed 128 characters', '密码不能包含空格': 'Password cannot contain spaces', '密码需要包含小写字母': 'Password needs a lowercase letter', '密码需要包含大写字母': 'Password needs an uppercase letter', '密码需要包含数字': 'Password needs a number', '密码需要包含特殊字符': 'Password needs a special character' } },
 };
 
-function localizeAuthError(error: string | undefined, feedback: (typeof AUTH_FEEDBACK)[Locale], fallback: string): string {
+const AUTH_ERROR_TRANSLATIONS: Record<Locale, Record<string, string>> = {
+  'zh-CN': {},
+  'zh-TW': {
+    '请输入有效的邮箱地址': '請輸入有效的信箱地址',
+    '请输入邮箱和密码': '請輸入信箱和密碼',
+    '用户名长度需要在 2 到 40 个字符之间': '使用者名稱長度需介於 2 到 40 個字元',
+    '注册请求过于频繁，请稍后再试': '註冊請求過於頻繁，請稍後再試',
+    '登录尝试过于频繁，请稍后再试': '登入嘗試過於頻繁，請稍後再試',
+    '请求过于频繁，请稍后再试': '請求過於頻繁，請稍後再試',
+    '验证尝试过于频繁，请稍后再试': '驗證嘗試過於頻繁，請稍後再試',
+    '发送过于频繁，请稍后再试': '傳送過於頻繁，請稍後再試',
+    '发送失败，请稍后重试': '傳送失敗，請稍後重試',
+    '验证码发送失败，请稍后重试': '驗證碼傳送失敗，請稍後重試',
+    '验证码验证失败，请稍后重试': '驗證碼驗證失敗，請稍後重試',
+    '邮箱验证失败，请稍后重试': '信箱驗證失敗，請稍後重試',
+    '注册失败，请稍后重试': '註冊失敗，請稍後重試',
+    '登录失败，请稍后重试': '登入失敗，請稍後重試',
+    '请求失败，请稍后重试': '請求失敗，請稍後重試',
+    '邮箱或密码不正确': '信箱或密碼不正確',
+    '请先完成邮箱验证': '請先完成信箱驗證',
+    '该邮箱尚未注册，请先使用“创建账户”完成注册': '此信箱尚未註冊，請先使用「建立帳號」完成註冊',
+    '该邮箱已注册，请直接登录': '此信箱已註冊，請直接登入',
+    '密码不符合安全要求': '密碼不符合安全要求',
+    '验证码无效或已过期，请重新发送': '驗證碼無效或已過期，請重新傳送',
+    '验证邮件发送失败，请稍后重试；若持续失败请检查 Supabase SMTP 配置': '驗證信傳送失敗，請稍後重試；若持續失敗，請檢查 Supabase SMTP 設定',
+  },
+  en: {
+    '请输入有效的邮箱地址': 'Enter a valid email address',
+    '请输入邮箱和密码': 'Enter your email and password',
+    '用户名长度需要在 2 到 40 个字符之间': 'Your name must be between 2 and 40 characters',
+    '注册请求过于频繁，请稍后再试': 'Too many registration attempts. Please try again later.',
+    '登录尝试过于频繁，请稍后再试': 'Too many sign-in attempts. Please try again later.',
+    '请求过于频繁，请稍后再试': 'Too many requests. Please try again later.',
+    '验证尝试过于频繁，请稍后再试': 'Too many verification attempts. Please try again later.',
+    '发送过于频繁，请稍后再试': 'Too many messages sent. Please try again later.',
+    '发送失败，请稍后重试': 'Could not send the email. Please try again later.',
+    '验证码发送失败，请稍后重试': 'Could not send the code. Please try again later.',
+    '验证码验证失败，请稍后重试': 'Could not verify the code. Please try again later.',
+    '邮箱验证失败，请稍后重试': 'Email verification failed. Please try again later.',
+    '注册失败，请稍后重试': 'Sign up failed. Please try again later.',
+    '登录失败，请稍后重试': 'Sign in failed. Please try again later.',
+    '请求失败，请稍后重试': 'Request failed. Please try again later.',
+    '获取 Supabase 配置失败': 'Could not load the authentication configuration.',
+    '邮箱或密码不正确': 'Incorrect email or password',
+    '请先完成邮箱验证': 'Verify your email before signing in.',
+    '该邮箱尚未注册，请先使用“创建账户”完成注册': 'This email is not registered. Create an account first.',
+    '该邮箱已注册，请直接登录': 'This email is already registered. Sign in instead.',
+    '密码不符合安全要求': 'Password does not meet the security requirements.',
+    '验证码无效或已过期，请重新发送': 'The code is invalid or expired. Please send a new one.',
+    '验证邮件发送失败，请稍后重试；若持续失败请检查 Supabase SMTP 配置': 'The verification email could not be sent. Check the Supabase SMTP configuration if this continues.',
+  },
+};
+
+function localizeAuthError(error: string | undefined, feedback: (typeof AUTH_FEEDBACK)[Locale], fallback: string, locale: Locale): string {
   if (!error) return fallback;
   const known: Record<string, string> = {
     '请先完成邮箱验证': feedback.verifyBeforeLogin,
@@ -41,7 +94,11 @@ function localizeAuthError(error: string | undefined, feedback: (typeof AUTH_FEE
     '邮箱验证码无效或已过期': feedback.invalidCode,
     '验证码无效或已过期': feedback.invalidCode,
   };
-  return known[error] || error;
+  if (known[error]) return known[error];
+  if (AUTH_ERROR_TRANSLATIONS[locale][error]) return AUTH_ERROR_TRANSLATIONS[locale][error];
+  // Do not leak a server-side Chinese fallback into the English auth UI.
+  if (locale === 'en' && /[\u3400-\u9fff]/.test(error)) return fallback;
+  return error;
 }
 
 export default function LoginPage() {
@@ -83,15 +140,20 @@ export default function LoginPage() {
       } else if (verificationRequested) {
         setMode('verify');
       }
+    }).catch((error: unknown) => {
+      if (mounted) setError(localizeAuthError(error instanceof Error ? error.message : undefined, feedback, feedback.signInFailed, locale));
     });
     return () => {
       mounted = false;
     };
-  }, [router]);
+  }, [feedback, locale, router]);
 
   useEffect(() => {
-    if (mode === 'signup') preloadRegistrationSuccess();
-  }, [mode]);
+    // Begin downloading the 3D success card while the auth form is visible.
+    // Registration mode keeps this warm; starting on mount also covers users
+    // who switch to sign-up and submit quickly.
+    preloadRegistrationSuccess();
+  }, []);
 
   const handleLogin = async (email: string, password: string) => {
     setLoading(true);
@@ -113,14 +175,14 @@ export default function LoginPage() {
           setMessage(feedback.verifyBeforeLogin);
           return;
         }
-        throw new Error(localizeAuthError(result.error, feedback, feedback.signInFailed));
+        throw new Error(localizeAuthError(result.error, feedback, feedback.signInFailed, locale));
       }
       const supabase = await getSupabaseBrowserClient();
       const { error: sessionError } = await supabase.auth.setSession(result.session);
       if (sessionError) throw sessionError;
       router.replace('/home');
     } catch (err) {
-      setError(err instanceof Error ? err.message : feedback.signInFailed);
+      setError(localizeAuthError(err instanceof Error ? err.message : undefined, feedback, feedback.signInFailed, locale));
     } finally {
       setLoading(false);
     }
@@ -157,7 +219,7 @@ export default function LoginPage() {
         error?: string;
         requiresEmailConfirmation?: boolean;
       };
-      if (!response.ok) throw new Error(localizeAuthError(result.error, feedback, feedback.signUpFailed));
+      if (!response.ok) throw new Error(localizeAuthError(result.error, feedback, feedback.signUpFailed, locale));
       if (!result.requiresEmailConfirmation) {
         throw new Error(feedback.signupNeedsVerification);
       }
@@ -165,7 +227,7 @@ export default function LoginPage() {
       setVerificationEmail(data.email);
       setMessage(feedback.codeSentForSignup);
     } catch (err) {
-      setError(err instanceof Error ? err.message : feedback.signUpFailed);
+      setError(localizeAuthError(err instanceof Error ? err.message : undefined, feedback, feedback.signUpFailed, locale));
     } finally {
       setLoading(false);
     }
@@ -183,12 +245,12 @@ export default function LoginPage() {
       });
       const result = (await response.json()) as { error?: string };
       if (!response.ok) {
-        throw new Error(localizeAuthError(result.error, feedback, feedback.emailSent));
+        throw new Error(localizeAuthError(result.error, feedback, feedback.emailSent, locale));
       }
       setMessage(feedback.emailSent);
       return true;
     } catch (err) {
-      setError(err instanceof Error ? err.message : 'Failed to resend verification email');
+      setError(localizeAuthError(err instanceof Error ? err.message : undefined, feedback, 'Failed to resend verification email', locale));
       return false;
     } finally {
       setLoading(false);
@@ -206,11 +268,11 @@ export default function LoginPage() {
         body: JSON.stringify({ email }),
       });
       const result = (await response.json()) as { error?: string };
-      if (!response.ok) throw new Error(localizeAuthError(result.error, feedback, feedback.codeSent));
+      if (!response.ok) throw new Error(localizeAuthError(result.error, feedback, feedback.codeSent, locale));
       setMessage(feedback.codeSent);
       return true;
     } catch (err) {
-      setError(err instanceof Error ? err.message : 'Failed to send code');
+      setError(localizeAuthError(err instanceof Error ? err.message : undefined, feedback, 'Failed to send code', locale));
       return false;
     } finally {
       setLoading(false);
@@ -231,14 +293,14 @@ export default function LoginPage() {
         error?: string;
         session?: { access_token: string; refresh_token: string };
       };
-      if (!response.ok || !result.session) throw new Error(localizeAuthError(result.error, feedback, feedback.invalidCode));
+      if (!response.ok || !result.session) throw new Error(localizeAuthError(result.error, feedback, feedback.invalidCode, locale));
       const supabase = await getSupabaseBrowserClient();
       const { error: sessionError } = await supabase.auth.setSession(result.session);
       if (sessionError) throw sessionError;
       setMode('update-password');
       setMessage(feedback.verificationSuccess);
     } catch (err) {
-      setError(err instanceof Error ? err.message : feedback.invalidCode);
+      setError(localizeAuthError(err instanceof Error ? err.message : undefined, feedback, feedback.invalidCode, locale));
     } finally {
       setLoading(false);
     }
@@ -259,14 +321,14 @@ export default function LoginPage() {
         session?: { access_token: string; refresh_token: string };
       };
       if (!response.ok || !result.session) {
-        throw new Error(localizeAuthError(result.error, feedback, feedback.invalidCode));
+        throw new Error(localizeAuthError(result.error, feedback, feedback.invalidCode, locale));
       }
       const supabase = await getSupabaseBrowserClient();
       const { error: sessionError } = await supabase.auth.setSession(result.session);
       if (sessionError) throw sessionError;
       setShowRegistrationSuccess(true);
     } catch (err) {
-      setError(err instanceof Error ? err.message : 'Invalid verification code');
+      setError(localizeAuthError(err instanceof Error ? err.message : undefined, feedback, feedback.invalidCode, locale));
     } finally {
       setLoading(false);
     }
@@ -291,7 +353,7 @@ export default function LoginPage() {
       if (updateError) throw updateError;
       router.replace('/home');
     } catch (err) {
-      setError(err instanceof Error ? err.message : feedback.updatePasswordFailed);
+      setError(localizeAuthError(err instanceof Error ? err.message : undefined, feedback, feedback.updatePasswordFailed, locale));
     } finally {
       setLoading(false);
     }
@@ -308,10 +370,10 @@ export default function LoginPage() {
         body: JSON.stringify({ email }),
       });
       const result = (await response.json()) as { error?: string };
-      if (!response.ok) throw new Error(localizeAuthError(result.error, feedback, feedback.resetSent));
+      if (!response.ok) throw new Error(localizeAuthError(result.error, feedback, feedback.resetSent, locale));
       setMessage(feedback.resetSent);
     } catch (err) {
-      setError(err instanceof Error ? err.message : feedback.updatePasswordFailed);
+      setError(localizeAuthError(err instanceof Error ? err.message : undefined, feedback, feedback.updatePasswordFailed, locale));
     } finally {
       setLoading(false);
     }
@@ -338,7 +400,7 @@ export default function LoginPage() {
       });
       if (oauthError) throw oauthError;
     } catch (err) {
-      setError(err instanceof Error ? err.message : feedback.githubFailed);
+      setError(localizeAuthError(err instanceof Error ? err.message : undefined, feedback, feedback.githubFailed, locale));
       setLoading(false);
     }
   };
@@ -354,7 +416,7 @@ export default function LoginPage() {
       setError(null);
       setMessage(null);
     } catch (err) {
-      setError(err instanceof Error ? err.message : feedback.signOutFailed);
+      setError(localizeAuthError(err instanceof Error ? err.message : undefined, feedback, feedback.signOutFailed, locale));
     } finally {
       setLoading(false);
     }
@@ -390,7 +452,7 @@ export default function LoginPage() {
           onClick={() => setShowRegistrationSuccess(true)}
           className="fixed bottom-4 left-4 z-[10000] rounded-md border border-border bg-background px-3 py-2 text-xs text-muted-foreground shadow-sm transition-colors hover:bg-muted"
         >
-          测试卡片展示
+          {locale === 'en' ? 'Preview success card' : locale === 'zh-TW' ? '測試卡片展示' : '测试卡片展示'}
         </button>
       )}
       {showRegistrationSuccess && (

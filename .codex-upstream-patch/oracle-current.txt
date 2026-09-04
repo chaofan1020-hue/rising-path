@@ -1,0 +1,276 @@
+class OracleHCMConnector(Connector):
+    """Fetch jobs from Oracle HCM Candidate Experience's public REST endpoint."""
+
+    @staticmethod
+    def resource_base_url(api_base_url: str) -> str:
+        """Return Oracle's public Candidate Experience REST resource base."""
+        base = str(api_base_url or "").rstrip("/")
+        if base.endswith("/hcmRestApi/resources/latest"):
+            return base
+        if base.endswith("/hcmRestApi"):
+            return f"{base}/resources/latest"
+        return f"{base}/hcmRestApi/resources/latest"
+
+    @staticmethod
+    def detail_finder(job_id: str, site_number: str) -> str:
+        # This is the finder shape emitted by Oracle's Candidate Experience
+        # frontend. The quoted Id is accepted with or without URL encoding.
+        return f'ById;Id="{job_id}",siteNumber={site_number}'
+
+    @staticmethod
+    def _plain_text(value: Any) -> str | None:
+        if value in (None, ""):
+            return None
+        parser = _VisibleTextParser()
+        parser.feed(str(value))
+        text = parser.text.strip()
+        return text or str(value).strip() or None
+
+    @classmethod
+    def _detail_location(cls, detail: dict[str, Any]) -> str | None:
+        values: list[str] = []
+        for key in ("PrimaryLocation",):
+            if detail.get(key):
+                values.append(str(detail[key]))
+        for key in ("secondaryLocations", "otherWorkLocations"):
+            entries = detail.get(key) or []
+            if isinstance(entries, dict):
+                entries = [entries]
+            for entry in entries:
+                if not isinstance(entry, dict):
+                    continue
+                value = entry.get("Name") or entry.get("LocationName") or entry.get("TownOrCity")
+                if value:
+                    values.append(str(value))
+        work_location = detail.get("workLocation")
+        if isinstance(work_location, dict):
+            value = work_location.get("LocationName") or work_location.get("Name")
+            if value:
+                values.append(str(value))
+        return "; ".join(dict.fromkeys(value.strip() for value in values if value.strip())) or None
+
+    @staticmethod
+    def _detail_department(detail: dict[str, Any]) -> str | None:
+        for key in ("Department", "JobFamily", "JobFunction", "Category", "BusinessUnit", "Organization"):
+            value = detail.get(key)
+            if value:
+                return str(value)
+        return None
+
+    @classmethod
+    def _detail_description(cls, detail: dict[str, Any]) -> tuple[str | None, dict[str, Any]]:
+        description_html = detail.get("ExternalDescriptionStr") or detail.get("ExternalResponsibilitiesStr")
+        description = cls._plain_text(description_html)
+        sections: list[tuple[str, str | None]] = [("Description", description)]
+        responsibilities = cls._plain_text(detail.get("ExternalResponsibilitiesStr"))
+        qualifications = cls._plain_text(detail.get("ExternalQualificationsStr"))
+        if responsibilities and responsibilities != description:
+            sections.append(("Responsibilities", responsibilities))
+        if qualifications:
+            sections.append(("Qualifications", qualifications))
+        if not description:
+            short = cls._plain_text(detail.get("ShortDescriptionStr"))
+            if short:
+                sections[0] = ("Description", short)
+        merged = "\n\n".join(f"{label}:\n{value}" for label, value in sections if value)
+        normalized = {
+            "description_html": str(description_html) if description_html else None,
+            "responsibilities": responsibilities,
+            "qualifications": qualifications,
+            "education": cls._plain_text(detail.get("StudyLevel")),
+            "experience": cls._plain_text(detail.get("Experience")),
+            "employment_type": detail.get("JobSchedule") or detail.get("WorkerType") or detail.get("JobType"),
+            "workplace_type": detail.get("WorkplaceType") or detail.get("WorkplaceTypeCode"),
+            "date_posted": detail.get("ExternalPostedStartDate"),
+            "valid_through": detail.get("ExternalPostedEndDate"),
+            "additional_locations": detail.get("secondaryLocations") or detail.get("otherWorkLocations") or [],
+        }
+        return merged or None, normalized
+
+    @classmethod
+    async def fetch_detail(cls, client: httpx.AsyncClient, raw: RawJob, config: dict[str, Any]) -> RawJob:
+        api_base_url = str(config.get("api_base_url") or "").rstrip("/")
+        site_number = str(config.get("site_number") or "")
+        job_id = str(raw.external_job_id or raw.payload.get("Id") or "")
+        if not api_base_url or not site_number or not job_id:
+            raise ValueError("Oracle HCM detail requires api_base_url, site_number and job ID")
+        endpoint = f"{cls.resource_base_url(api_base_url)}/recruitingCEJobRequisitionDetails"
+        headers = {
+            "Accept": "application/json",
+            "Accept-Language": str(config.get("language", "en")),
+            "Ora-Irc-Language": str(config.get("language", "en")),
+        }
+        attempts = max(1, min(int(config.get("detail_retry_attempts", 3)), 5))
+        response: httpx.Response | None = None
+        for attempt in range(attempts):
+            response = await client.get(endpoint, params={
+                "expand": "all",
+                "onlyData": "true",
+                "finder": cls.detail_finder(job_id, site_number),
+            }, headers=headers)
+            if response.status_code < 500 and response.status_code != 429:
+                break
+            if attempt < attempts - 1:
+                await asyncio.sleep(0.5 * (attempt + 1))
+        if response is None:
+            raise RuntimeError("Oracle HCM detail request did not return a response")
+        response.raise_for_status()
+        data = response.json()
+        items = data.get("items", []) if isinstance(data, dict) else []
+        if not items or not isinstance(items[0], dict):
+            raise ValueError("Oracle HCM detail response did not contain a requisition")
+        detail = items[0]
+        description, normalized = cls._detail_description(detail)
+        payload = dict(raw.payload or {})
+        payload.update(normalized)
+        payload.update({
+            "detail_status": "fetched",
+            "detail_url": str(response.url),
+            "detail_payload": detail,
+            "oracle_requisition_id": detail.get("RequisitionId"),
+        })
+        return RawJob(
+            raw.external_job_id,
+            str(detail.get("Title") or raw.title),
+            raw.url,
+            raw.location or cls._detail_location(detail),
+            raw.department or cls._detail_department(detail),
+            description or raw.description,
+            payload,
+        )
+
+    async def fetch(self, source_url: str, config: dict[str, Any]) -> list[RawJob]:
+        api_base_url = str(config.get("api_base_url") or "").rstrip("/")
+        site_number = config.get("site_number")
+        if not api_base_url or not site_number:
+            raise ValueError("Oracle HCM requires connector_config.api_base_url and site_number")
+        page_size = max(1, min(int(config.get("page_size", 100)), 100))
+        request_retries = max(1, min(int(config.get("listing_retry_attempts", 4)), 6))
+        # A few Workday tenants return a transient empty page at a valid
+        # offset (often around the 1,000th result). Treat it as a transport
+        # boundary and retry with backoff before declaring the feed partial.
+        pagination_retries = max(0, min(int(config.get("pagination_retry_attempts", 6)), 8))
+        coverage_retry_passes = max(0, min(int(config.get("coverage_retry_passes", 1)), 3))
+        endpoint = (
+            f"{self.resource_base_url(api_base_url)}/recruitingCEJobRequisitions"
+            "?onlyData=true&expand=requisitionList.workLocation,requisitionList.otherWorkLocations,"
+            "requisitionList.secondaryLocations,requisitionList.requisitionFlexFields&finder=findReqs"
+        )
+        headers = {
+            "User-Agent": get_settings().crawler_user_agent, "Accept-Language": str(config.get("language", "en")),
+            "Ora-Irc-Language": str(config.get("language", "en")),
+        }
+        raw_jobs: list[dict[str, Any]] = []
+        seen_keys: set[str] = set()
+        duplicate_count = 0
+        invalid_count = 0
+        total: int | None = None
+        source_complete = False
+        jobs_base_url = source_url.rstrip("/")
+        if jobs_base_url.endswith("/jobs"):
+            jobs_base_url = jobs_base_url[:-5]
+
+        async def fetch_page(client: httpx.AsyncClient, offset: int) -> tuple[list[dict[str, Any]], int | None]:
+            response: httpx.Response | None = None
+            for attempt in range(request_retries):
+                try:
+                    response = await client.get(f"{endpoint};siteNumber={site_number},limit={page_size},offset={offset}")
+                    if response.status_code < 500 and response.status_code != 429:
+                        break
+                except httpx.HTTPError:
+                    if attempt == request_retries - 1:
+                        raise
+                if attempt < request_retries - 1:
+                    await asyncio.sleep(0.5 * (attempt + 1))
+            if response is None:
+                raise RuntimeError("Oracle HCM listing request did not return a response")
+            response.raise_for_status()
+            items = response.json().get("items", [])
+            if not isinstance(items, list) or not items or not isinstance(items[0], dict):
+                return [], None
+            result = items[0]
+            reported = result.get("TotalJobsCount")
+            try:
+                page_total = int(reported or 0) or None
+            except (TypeError, ValueError):
+                page_total = None
+            page = result.get("requisitionList", [])
+            return ([item for item in page if isinstance(item, dict)] if isinstance(page, list) else []), page_total
+
+        async with httpx.AsyncClient(headers=headers, timeout=45) as client:
+            for pass_number in range(coverage_retry_passes + 1):
+                offset = 0
+                boundary_retries = 0
+                pass_complete = False
+                while True:
+                    page, page_total = await fetch_page(client, offset)
+                    if page_total:
+                        total = max(total or 0, page_total)
+                    if not page:
+                        if total is not None and offset < total and boundary_retries < pagination_retries:
+                            boundary_retries += 1
+                            await asyncio.sleep(0.5 * boundary_retries)
+                            continue
+                        break
+                    for item in page:
+                        job_id = item.get("Id") or item.get("RequisitionId") or item.get("JobId")
+                        if not job_id:
+                            invalid_count += 1
+                            continue
+                        key = str(job_id)
+                        if key in seen_keys:
+                            duplicate_count += 1
+                            continue
+                        seen_keys.add(key)
+                        raw_jobs.append(item)
+                    offset += len(page)
+                    if total is not None and offset >= total:
+                        pass_complete = True
+                        break
+                    if len(page) < page_size:
+                        if total is not None and offset < total and boundary_retries < pagination_retries:
+                            boundary_retries += 1
+                            await asyncio.sleep(0.5 * boundary_retries)
+                            continue
+                        break
+                    boundary_retries = 0
+                source_complete = source_complete or pass_complete
+                if total is None or len(seen_keys) >= total or pass_number >= coverage_retry_passes:
+                    break
+                # Oracle can change the result set while it is being paged. A
+                # complete retry pass recovers IDs omitted by a transient page
+                # response without treating a small mismatch as an empty feed.
+                await asyncio.sleep(0.75 * (pass_number + 1))
+
+        canonical_count = len(raw_jobs)
+        # A source total is a publisher-reported count, not a guaranteed
+        # stable snapshot. Preserve the usable rows and expose the exact
+        # mismatch instead of failing the whole company crawl and losing the
+        # records that were returned.
+        coverage_complete = bool(total is not None and canonical_count >= total and source_complete)
+        if total is not None:
+            for item in raw_jobs:
+                item["source_reported_count"] = total
+                item["source_expected_count"] = canonical_count
+                item["source_complete"] = coverage_complete
+                item["source_invalid_count"] = invalid_count
+                item["source_duplicate_count"] = duplicate_count
+                item["source_missing_count"] = max(total - canonical_count, 0)
+        jobs: list[RawJob] = []
+        for job in raw_jobs:
+            # The listing de-duplication above accepts Oracle's alternate
+            # requisition identifiers too. Preserve the same stable key when
+            # constructing the canonical URL, otherwise records without
+            # ``Id`` collapse into the source URL during remote ingest.
+            job_id = job.get("Id") or job.get("RequisitionId") or job.get("JobId")
+            locations = [job.get("PrimaryLocation")]
+            locations.extend(item.get("Name") for item in job.get("secondaryLocations", []) if isinstance(item, dict))
+            locations.extend(item.get("TownOrCity") for item in job.get("otherWorkLocations", []) if isinstance(item, dict))
+            location = "; ".join(str(value) for value in dict.fromkeys(locations) if value)
+            description = job.get("ShortDescriptionStr") or job.get("ExternalResponsibilitiesStr") or job.get("ExternalQualificationsStr")
+            jobs.append(RawJob(str(job_id) if job_id else None, job.get("Title", "Untitled"),
+                               f"{jobs_base_url}/job/{job_id}" if job_id else source_url, location or None,
+                               job.get("JobFamily") or job.get("JobFunction"), description, job))
+        return jobs
+
+

@@ -5,8 +5,8 @@ Wants=network-online.target
 
 [Service]
 Type=oneshot
-User=liorvix
-Group=liorvix
+User=ubuntu
+Group=ubuntu
 WorkingDirectory=/opt/liorvix
 EnvironmentFile=/opt/liorvix/.env.local
 ExecStart=/usr/bin/env corepack pnpm run maintain:jobs

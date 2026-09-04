@@ -6,10 +6,12 @@ import { type Locale, useLanguage } from '@/lib/language-context';
 
 type LanyardModule = typeof import('@/components/Lanyard');
 
-let lanyardModulePromise: Promise<LanyardModule> | null = null;
+// Start the 3D chunk as soon as the auth page imports this client component.
+// The same promise is reused by the modal, so opening it does not trigger a
+// second module request after registration completes.
+const lanyardModulePromise: Promise<LanyardModule> = import('@/components/Lanyard');
 
 function loadLanyardModule(): Promise<LanyardModule> {
-  lanyardModulePromise ??= import('@/components/Lanyard');
   return lanyardModulePromise;
 }
 

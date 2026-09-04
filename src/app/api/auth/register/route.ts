@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { getSupabaseAnonClient } from '@/storage/database/supabase-client';
-import { getClientIp } from '@/lib/auth-server';
+import { getAuthRedirectOrigin, getClientIp } from '@/lib/auth-server';
 import { isValidEmail } from '@/lib/auth-shared';
 import {
   authErrorMessage,
@@ -40,11 +40,15 @@ export async function POST(request: NextRequest) {
     }
 
     const supabase = getSupabaseAnonClient();
+    const redirectOrigin = getAuthRedirectOrigin(request);
     const { data, error } = await supabase.auth.signUp({
       email,
       password,
       options: {
         data: { username },
+        // Keep confirmation links on our callback so both Supabase link
+        // templates and the six-digit code flow finish in the app.
+        emailRedirectTo: `${redirectOrigin}/auth/callback?next=${encodeURIComponent('/login?verify=1')}`,
       },
     });
 

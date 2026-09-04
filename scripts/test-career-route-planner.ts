@@ -170,6 +170,17 @@ function testLocalizedPlanRefinement() {
   assert.equal(getLocalizedText(plan.diagnosis.verificationNote, 'zh-TW'), '中文核实');
 }
 
+function testLegacyPlanRefinementWithoutRegion() {
+  const plan = buildCareerRoutePlan(
+    baseProfile({ intention: { roles: ['Data Analyst'] } }),
+    segmentation(),
+    'us',
+    now(2026, 8),
+    { narrative: '历史规划说明' },
+  );
+  assert.equal(getLocalizedText(plan.diagnosis.llmNarrative, 'zh-CN'), '历史规划说明');
+}
+
 function testVisaClassification() {
   assert.equal(classifyVisaStatus('F1 OPT', undefined), 'student');
   assert.equal(classifyVisaStatus('H1B', undefined), 'work_visa');
@@ -294,6 +305,7 @@ testHongKongNonTargetFinanceRisk();
 testExperiencedSwitch();
 testLocalizedTextSelection();
 testLocalizedPlanRefinement();
+testLegacyPlanRefinementWithoutRegion();
 testVisaClassification();
 testVisaAwarePlan();
 testVisaTimelineInDiagnosis();

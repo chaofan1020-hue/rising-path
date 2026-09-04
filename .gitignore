@@ -10,6 +10,7 @@ dist/
 build/
 out/
 .next/
+.next-*/
 .rsbuild/
 
 # Testing
@@ -100,6 +101,8 @@ Desktop.ini
 # Preview files
 .preview
 .codegraph
+output/
+.codex-runtime/
 
 # Local browser QA artifacts
 .playwright-cli/
@@ -110,4 +113,5 @@ output/playwright/
 最终部署美国服务器账号密码以及域名.txt
 Supabase正式环境配置.txt
 正式发布服务器密钥.pem
-{console.error(e.message)
+[{]console.error(e.message)
+[{]console.error(e)

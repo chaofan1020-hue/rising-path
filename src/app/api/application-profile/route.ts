@@ -1,4 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server';
+import type { SupabaseClient } from '@supabase/supabase-js';
 import { getAuthContext, unauthorizedResponse } from '@/lib/auth-server';
 import {
   buildProfileFromResume,
@@ -8,6 +9,34 @@ import {
   type ProfileSourceMap,
 } from '@/lib/application-profile';
 import { applicationProfilePatchSchema } from '@/lib/application-contracts';
+
+function serializeAiJob(row: Record<string, unknown> | null) {
+  if (!row) return null;
+  return {
+    id: Number(row.id),
+    resumeId: Number(row.resume_id),
+    status: row.status,
+    error: row.last_error || null,
+    createdAt: row.created_at,
+    updatedAt: row.updated_at,
+    completedAt: row.completed_at,
+  };
+}
+
+async function getLatestAiJob(client: SupabaseClient, userId: string) {
+  const { data, error } = await client
+    .from('application_profile_jobs')
+    .select('id, resume_id, status, last_error, created_at, updated_at, completed_at')
+    .eq('user_id', userId)
+    .order('created_at', { ascending: false })
+    .limit(1)
+    .maybeSingle();
+  if (error) {
+    console.error('[ApplicationProfile] failed to read AI job:', error.message);
+    return null;
+  }
+  return serializeAiJob(data as Record<string, unknown> | null);
+}
 
 export async function GET(request: NextRequest) {
   try {
@@ -28,6 +57,7 @@ export async function GET(request: NextRequest) {
       .select('*')
       .eq('user_id', auth.user.id)
       .maybeSingle();
+    const aiJob = await getLatestAiJob(client, auth.user.id);
 
     if (existing) {
       return NextResponse.json({
@@ -36,6 +66,7 @@ export async function GET(request: NextRequest) {
         fieldStats: existing.field_stats || existing.source || {},
         version: existing.version,
         resumeId: existing.resume_id,
+        aiJob,
       });
     }
 
@@ -68,6 +99,7 @@ export async function GET(request: NextRequest) {
           fieldStats: raced.field_stats || raced.source || {},
           version: raced.version,
           resumeId: raced.resume_id,
+          aiJob,
         });
       }
     }
@@ -79,6 +111,7 @@ export async function GET(request: NextRequest) {
       fieldStats: inserted?.field_stats || inserted?.source || built.source,
       version: inserted?.version || 1,
       resumeId: inserted?.resume_id || null,
+      aiJob,
     });
   } catch (error) {
     console.error('Error fetching application profile:', error);

@@ -21,8 +21,13 @@ export const TARGET_REGION_KEYWORDS: Record<string, string[]> = {
   ],
 };
 
+// ATS feeds frequently use only a US state or territory abbreviation, for
+// example "Albany, NY". Treat those location-only records as US roles without
+// expanding database ILIKE filters to ambiguous two-letter abbreviations.
+const US_STATE_OR_TERRITORY_CODES = 'al|ak|as|az|ar|ca|co|ct|de|dc|fl|ga|gu|hi|id|il|in|ia|ks|ky|la|me|md|ma|mi|mn|ms|mo|mt|ne|nv|nh|nj|nm|ny|nc|nd|mp|oh|ok|or|pa|pr|ri|sc|sd|tn|tx|ut|vt|vi|va|wa|wv|wi|wy';
+
 const TARGET_PATTERNS: Array<[string, RegExp]> = [
-  ['north_america', /\b(north america|north-american|northamerican|united states|usa|u\.s\.?|us|canada|new york|san francisco|los angeles|seattle|chicago|boston|austin|dallas|houston|atlanta|denver|miami|philadelphia|washington|jersey city|newark|palo alto|mountain view|arlington|raleigh|charlotte|tampa|orlando|columbus|wilmington|fort lauderdale|milwaukee|colorado springs|baton rouge|fresno|san antonio|jacksonville|san diego|toronto|vancouver|ottawa|montreal|mississauga|quebec)\b/i],
+  ['north_america', new RegExp(`\\b(north america|north-american|northamerican|united states|usa|u\\.s\\.?|us|canada|new york|san francisco|los angeles|seattle|chicago|boston|austin|dallas|houston|atlanta|denver|miami|philadelphia|washington|jersey city|newark|palo alto|mountain view|arlington|raleigh|charlotte|tampa|orlando|columbus|wilmington|fort lauderdale|milwaukee|colorado springs|baton rouge|fresno|san antonio|jacksonville|san diego|toronto|vancouver|ottawa|montreal|mississauga|quebec|${US_STATE_OR_TERRITORY_CODES})\\b`, 'i')],
   ['australia', /\b(australia|sydney|melbourne|brisbane|perth|adelaide|canberra|ballarat)\b/i],
   ['hong_kong', /\b(hong kong|kowloon|hong kong island)\b/i],
   ['singapore', /\bsingapore\b/i],

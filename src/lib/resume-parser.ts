@@ -790,7 +790,7 @@ export async function parseResumeText(
     parsed_content: content,
     user_info: extraction.userInfo,
     profile: extraction.profile,
-    segmentation: deriveSegmentation(extraction.profile),
+    segmentation: deriveSegmentation(extraction.profile, extraction.profile.intention?.roles?.[0]),
     profile_evidence: extraction.evidence,
     profile_confidence: extraction.confidence,
     pages,

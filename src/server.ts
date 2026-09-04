@@ -5,6 +5,7 @@ import { attachInterviewASRWebSocket } from './lib/interview-asr-ws-server';
 import { attachInterviewTTSWebSocket } from './lib/interview-tts-ws-server';
 import { startResumeProcessingWorker } from './lib/resume-processing-worker';
 import { startJobBackgroundWorker } from './lib/job-background-worker';
+import { startApplicationProfileWorker } from './lib/application-profile-worker';
 
 const dev = process.env.NODE_ENV !== 'production';
 const hostname = process.env.HOSTNAME || '0.0.0.0';
@@ -55,6 +56,7 @@ app.prepare().then(() => {
   server.listen(port, hostname, () => {
     startResumeProcessingWorker();
     startJobBackgroundWorker();
+    startApplicationProfileWorker();
     console.log(
       `> Server listening at http://${hostname}:${port} as ${
         dev ? 'development' : 'production'

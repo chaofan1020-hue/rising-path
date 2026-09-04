@@ -1,0 +1,537 @@
+{
+  "task": "official-job-field-backfill",
+  "updated_at": "2026-09-02T02:32:28Z",
+  "status": "automated_queue_running",
+  "completed_company": "Accenture",
+  "completed_source_family": "Workday",
+  "production": {
+    "server": "43.172.117.125",
+    "directory": "/opt/liorvix",
+    "supabase_project_ref": "weqvdtdjdzmqflhwobec",
+    "active_jobs_after_completion": 2380
+  },
+  "automation": {
+    "status": "enabled_in_production",
+    "feed_sync": "incremental_cursor_continues_after_single-record-field-errors",
+    "official_details": "rotating_workday_company_queue",
+    "batch_size": 100,
+    "companies_per_cycle": 3,
+    "interval_minutes": 0.1,
+    "parallel_different_official_hosts": true,
+    "first_observed_company": "Accenture",
+    "first_observed_updated": 17,
+    "first_observed_failed": 0,
+    "latest_observed_companies": ["Accenture", "Bain Capital", "Ares Management", "Intel", "Wells Fargo", "PIMCO"],
+    "latest_observed_failed": 0,
+    "latest_observed_failure_scope": "本次运行复核失败队列为 0；旧租约按 TTL 自然过期，没有强制释放有效租约",
+    "focus_company": null,
+    "connector_cursor_support": true
+  },
+  "barclays": {
+    "official_url": "https://barclays.wd3.myworkdayjobs.com/External_Career_Site_Barclays",
+    "written": 142,
+    "skipped_no_public_description": 13,
+    "skipped_no_missing_fields": 3,
+    "failed": 0,
+    "coverage_present": {
+      "location": 158,
+      "employment_category": 146,
+      "experience": 15,
+      "salary": 0,
+      "deadline": 74,
+      "workplace_type": 1
+    },
+    "coverage_verified": {
+      "location": 158,
+      "employment_category": 144,
+      "experience": 14,
+      "salary": 0,
+      "deadline": 74,
+      "workplace_type": 1
+    },
+    "lifecycle": {
+      "active": 158,
+      "closed": 0
+    }
+  },
+  "ares_management": {
+    "official_url": "https://aresmgmt.wd1.myworkdayjobs.com/en-US/External",
+    "official_host": "aresmgmt.wd1.myworkdayjobs.com",
+    "tenant": "aresmgmt",
+    "site": "External",
+    "written": 167,
+    "first_sample_written": 20,
+    "remaining_written": 147,
+    "skipped_no_public_description": 5,
+    "skipped_no_missing_fields": 9,
+    "failed": 0,
+    "remaining_dry_run_candidates": 161,
+    "remaining_dry_run_fetched": 147,
+    "coverage_present": {
+      "location": 181,
+      "employment_category": 176,
+      "experience": 165,
+      "salary": 132,
+      "deadline": 0,
+      "workplace_type": 1
+    },
+    "coverage_verified_with_value": {
+      "location": 181,
+      "employment_category": 176,
+      "experience": 165,
+      "salary": 132,
+      "deadline": 0,
+      "workplace_type": 1
+    },
+    "stale_verified_evidence_without_value": [
+      {
+        "job_id": 58367,
+        "field": "experience",
+        "status": "待复核"
+      }
+    ],
+    "lifecycle": {
+      "active": 181,
+      "closed": 0,
+      "historical_closed_rows": 14
+    }
+  },
+  "intel": {
+    "official_url": "https://intel.wd1.myworkdayjobs.com/External",
+    "official_host": "intel.wd1.myworkdayjobs.com",
+    "tenant": "intel",
+    "site": "External",
+    "written": 221,
+    "first_sample_written": 20,
+    "batch_written": [20, 19, 19, 20, 20, 20, 18, 19, 19, 20, 16, 11],
+    "skipped_no_public_description": 12,
+    "skipped_no_missing_fields": 3,
+    "failed": 0,
+    "active_jobs": 236,
+    "historical_closed_rows": 58,
+    "last_processed_job_id": 57874,
+    "full_dry_run_would_update": 0,
+    "coverage_present": {
+      "location": 236,
+      "employment_category": 225,
+      "experience": 203,
+      "salary": 0,
+      "deadline": 0,
+      "workplace_type": 6
+    },
+    "coverage_verified_with_value": {
+      "location": 236,
+      "employment_category": 225,
+      "experience": 203,
+      "salary": 0,
+      "deadline": 0,
+      "workplace_type": 6
+    },
+    "lifecycle": {
+      "active": 236,
+      "closed": 0,
+      "historical_closed_rows": 58
+    },
+    "regression": {
+      "server_file": "/opt/liorvix/output/connector-regression-after-intel-final.json",
+      "company_count": 75,
+      "regressions": []
+    }
+  },
+  "state_street": {
+    "official_url": "https://statestreet.wd1.myworkdayjobs.com/Global",
+    "official_host": "statestreet.wd1.myworkdayjobs.com",
+    "tenant": "statestreet",
+    "site": "Global",
+    "initial_active_jobs": 257,
+    "final_active_jobs": 252,
+    "historical_closed_rows": 28,
+    "written": 215,
+    "first_sample_written": 20,
+    "batch_written": [20, 20, 16, 16, 18, 15, 16, 15, 13, 17, 18, 18, 13],
+    "skipped_no_public_description": 35,
+    "skipped_no_missing_fields": 5,
+    "failed": 0,
+    "last_processed_job_id": 57963,
+    "full_dry_run_would_update": 0,
+    "coverage_present": {
+      "location": 252,
+      "employment_category": 217,
+      "experience": 137,
+      "salary": 0,
+      "deadline": 0,
+      "workplace_type": 0
+    },
+    "coverage_verified_with_value": {
+      "location": 252,
+      "employment_category": 217,
+      "experience": 137,
+      "salary": 0,
+      "deadline": 0,
+      "workplace_type": 0
+    },
+    "lifecycle_note": "在招数量从 257 变为 252，发生于生产源刷新期间；回填脚本只在 is_active=true 条件下补字段，不更新 is_active 或 is_closed。",
+    "regression": {
+      "server_file": "/opt/liorvix/output/connector-regression-after-state-street-final.json",
+      "same_time_baseline": "/opt/liorvix/output/connector-regression-before-state-street-final.json",
+      "company_count": 75,
+      "regressions": []
+    }
+  },
+  "fidelity_investments": {
+    "official_url": "https://fmr.wd1.myworkdayjobs.com/en-US/fidelitycareers",
+    "official_host": "fmr.wd1.myworkdayjobs.com",
+    "tenant": "fmr",
+    "site": "fidelitycareers",
+    "initial_active_jobs": 377,
+    "final_active_jobs": 381,
+    "external_ids": 444,
+    "historical_closed_rows": 63,
+    "first_sample_written": 18,
+    "first_sample_skipped_no_public_description": 2,
+    "first_sample_failed": 0,
+    "first_sample_last_processed_job_id": 27098,
+    "first_pass_after_id": 27145,
+    "first_pass_candidates": 324,
+    "first_pass_fetched": 323,
+    "first_pass_written": 243,
+    "first_pass_skipped_no_public_description": 1,
+    "first_pass_skipped_no_missing_fields": 80,
+    "first_pass_failed": 0,
+    "last_processed_job_id": 60765,
+    "salary_parser_fix": {
+      "file": "scripts/backfill-official-job-details.ts",
+      "rule": "extractSalary(details.salaryRange) || extractSalaryFromDescription(details.description)",
+      "deployed": true
+    },
+    "salary_recheck_dry_run": {
+      "candidates": 381,
+      "fetched": 381,
+      "would_update": 316,
+      "candidate_salary": 127,
+      "failed": 0
+    },
+    "salary_recheck_write": {
+      "fetched": 380,
+      "updated": 314,
+      "skipped_no_public_description": 1,
+      "skipped_no_missing_fields": 66,
+      "salary_backfilled": 127,
+      "failed": 0
+    },
+    "coverage_present": {
+      "location": 381,
+      "employment_category": 380,
+      "experience": 177,
+      "salary": 128,
+      "deadline": 0,
+      "workplace_type": 35
+    },
+    "coverage_verified": {
+      "location": 381,
+      "employment_category": 380,
+      "experience": 191,
+      "salary": 128,
+      "deadline": 0,
+      "workplace_type": 35
+    },
+    "coverage_verified_with_value": {
+      "location": 381,
+      "employment_category": 380,
+      "experience": 177,
+      "salary": 128,
+      "deadline": 0,
+      "workplace_type": 35
+    },
+    "stale_verified_evidence_without_value": [
+      {
+        "field": "experience",
+        "count": 14,
+        "status": "待复核"
+      }
+    ],
+    "lifecycle": {
+      "active": 381,
+      "closed": 0,
+      "historical_closed_rows": 63
+    },
+    "regression": {
+      "server_file": "/opt/liorvix/output/connector-regression-after-fidelity-final2.json",
+      "same_time_baseline": "/opt/liorvix/output/connector-regression-before-fidelity-final2.json",
+      "company_count": 75,
+      "regressions": []
+    }
+  },
+  "bank_of_america": {
+    "official_url": "https://careers.bankofamerica.com/en-us/job-search.html?ref=search&search=getAllJobs",
+    "official_workday_url_pattern": "https://ghr.wd1.myworkdayjobs.com/en-us/lateral-us/job/...",
+    "official_host": "ghr.wd1.myworkdayjobs.com",
+    "tenant": "ghr",
+    "site": "lateral-us",
+    "active_jobs": 459,
+    "historical_closed_rows": 43,
+    "first_sample_dry_run": {
+      "selected": 20,
+      "fetched": 16,
+      "would_update": 0,
+      "no_new_fields": 16,
+      "no_public_description": 4,
+      "failed": 0
+    },
+    "first_sample_after_cursor_write": {
+      "after_id": 26982,
+      "updated": 17,
+      "failed": 0,
+      "last_processed_job_id": 27002
+    },
+    "remaining_write": {
+      "after_id": 27002,
+      "candidate_jobs": 159,
+      "fetched": 150,
+      "updated": 144,
+      "no_public_description": 9,
+      "no_new_fields": 6,
+      "failed": 0,
+      "last_processed_job_id": 62429
+    },
+    "total_written": 161,
+    "coverage_present": {
+      "location": 459,
+      "employment_category": 409,
+      "experience": 211,
+      "salary": 232,
+      "deadline": 0,
+      "workplace_type": 54
+    },
+    "coverage_verified_with_value": {
+      "location": 459,
+      "employment_category": 406,
+      "experience": 211,
+      "salary": 232,
+      "deadline": 0,
+      "workplace_type": 54
+    },
+    "salary_parser_guard": "排除 revenue/assets/portfolio/loan 等业务指标语境中的金额区间；本地连接器、标准字段和 TypeScript 检查通过，生产源码已核对部署",
+    "final_dry_run_after_id": 62429,
+    "final_dry_run_candidates": 0,
+    "regression": {
+      "server_file": "/opt/liorvix/output/connector-regression-after-bank-of-america-final.json",
+      "same_time_baseline": "/opt/liorvix/output/connector-regression-before-bank-of-america-final.json",
+      "company_count": 75,
+      "regressions": []
+    },
+    "lifecycle": {
+      "active": 459,
+      "closed": 0,
+      "historical_closed_rows": 43
+    }
+  },
+  "vanguard": {
+    "official_url": "https://vanguard.wd5.myworkdayjobs.com/vanguard_external",
+    "official_host": "vanguard.wd5.myworkdayjobs.com",
+    "tenant": "vanguard",
+    "site": "vanguard_external",
+    "active_jobs": 415,
+    "first_sample_written": 20,
+    "batch_written": [20, 99, 99, 92],
+    "total_written": 310,
+    "failed": 0,
+    "final_dry_run_after_id": 62077,
+    "final_dry_run_candidates": 0,
+    "coverage_present": {
+      "location": 415,
+      "employment_category": 413,
+      "experience": 310,
+      "salary": 3,
+      "deadline": 0,
+      "workplace_type": 77
+    },
+    "coverage_verified_with_value": {
+      "location": 411,
+      "employment_category": 413,
+      "experience": 310,
+      "salary": 3,
+      "deadline": 0,
+      "workplace_type": 77
+    },
+    "verified_evidence_without_value_note": "经验审计的 verified 总数包含历史证据但当前没有可展示值的记录；不据此补猜测",
+    "lifecycle": {
+      "active": 415,
+      "closed": 0
+    },
+    "regression": {
+      "server_file": "/opt/liorvix/output/connector-regression-after-vanguard-final.json",
+      "same_time_baseline": "/opt/liorvix/output/connector-regression-before-vanguard-final.json",
+      "company_count": 75,
+      "regressions": []
+    }
+  },
+  "nvidia": {
+    "official_url": "https://nvidia.wd5.myworkdayjobs.com/NVIDIAExternalCareerSite",
+    "official_host": "nvidia.wd5.myworkdayjobs.com",
+    "tenant": "nvidia",
+    "site": "NVIDIAExternalCareerSite",
+    "initial_active_jobs": 932,
+    "final_active_jobs": 938,
+    "historical_closed_rows": 101,
+    "external_ids": 1039,
+    "preexisting_sample_dry_run": {
+      "selected": 40,
+      "fetched": 40,
+      "would_update": 0,
+      "failed": 0
+    },
+    "batch_written": [19, 98, 100, 97, 100, 56],
+    "total_written": 470,
+    "failed": 0,
+    "final_dry_run_after_id": 62639,
+    "final_dry_run_candidates": 0,
+    "coverage_present": {
+      "location": 938,
+      "employment_category": 841,
+      "experience": 524,
+      "salary": 0,
+      "deadline": 0,
+      "workplace_type": 15
+    },
+    "coverage_verified": {
+      "location": 938,
+      "employment_category": 841,
+      "experience": 528,
+      "salary": 0,
+      "deadline": 0,
+      "workplace_type": 15
+    },
+    "verified_evidence_without_value_note": "经验审计的 verified 总数包含历史证据但当前没有可展示值的记录；不据此补猜测",
+    "lifecycle": {
+      "active": 938,
+      "closed": 0,
+      "historical_closed_rows": 101
+    },
+    "regression": {
+      "server_file": "/opt/liorvix/output/connector-regression-after-nvidia-final.json",
+      "same_time_baseline": "/opt/liorvix/output/connector-regression-before-nvidia-final.json",
+      "company_count": 75,
+      "regressions": []
+    }
+  },
+  "regression": {
+    "server_file": "/opt/liorvix/output/connector-regression-after-nvidia-final.json",
+    "baseline_file": "/opt/liorvix/output/connector-regression-before-nvidia-final.json",
+    "legacy_baseline_file": "/opt/liorvix/output/connector-regression-production.json",
+    "company_count": 75,
+    "regressions": []
+  },
+  "next_company": {
+    "name": "Citigroup及其他已登记公司（自动轮转）",
+    "source_family": "Workday",
+    "active_jobs_baseline": 2328,
+    "official_host_observed": "以生产来源台账实时值为准",
+    "first_command": "不人工启动脚本；由生产官方详情队列按公司独立游标继续处理。若来源台账新增公司，先按 runbook 独立确认官方 host、tenant、site、稳定 ID 和真实样本，再执行生产 dry-run"
+  },
+  "wells_fargo": {
+    "name": "Wells Fargo",
+    "official_host": "wf.wd1.myworkdayjobs.com",
+    "tenant": "wf",
+    "site": "wellsfargojobs",
+    "active_jobs_snapshot": 1076,
+    "queue_cursor_observed": "51811",
+    "manual_final_cursor": "62650",
+    "sample_writes": [1, 17, 16, 17, 19, 20, 19, 93, 228],
+    "sample_failed": 0,
+    "sample_last_processed_job_id": 62650,
+    "full_dry_run": {
+      "candidate_jobs": 507,
+      "fetched": 474,
+      "would_update": 235,
+      "skipped": 272,
+      "failed": 0,
+      "last_processed_job_id": 62650
+    },
+    "full_write": {
+      "fetched": 463,
+      "updated": 228,
+      "skipped": 279,
+      "failed": 0,
+      "last_processed_job_id": 62650
+    },
+    "final_dry_run_candidates": 0,
+    "coverage_after_samples": {
+      "location": 1076,
+      "workplace_type": 47,
+      "employment_category": 1042,
+      "experience": 1032,
+      "salary": 363,
+      "deadline": 0
+    },
+    "coverage_verified": {
+      "location": 1076,
+      "workplace_type": 46,
+      "employment_category": 1042,
+      "experience": 1041,
+      "salary": 363,
+      "deadline": 0
+    },
+    "historical_closed_rows": 668,
+    "regression": {
+      "server_file": "/opt/liorvix/output/connector-regression-after-wells-fargo-final.json",
+      "same_time_baseline": "/opt/liorvix/output/connector-regression-before-wells-fargo-final.json",
+      "company_count": 75,
+      "regressions": []
+    },
+    "lifecycle": {
+      "active": 1076,
+      "closed": 668,
+      "note": "字段回填只更新官方证据支持的字段，未修改岗位 ID、is_active 或 is_closed。"
+    },
+    "status_note": "已完成 Workday 官方来源确认、20 条真实样本、生产 dry-run、全量只补字段写入、最终 dry-run=0、字段审计、公网/API/官方详情抽样和全公司 strict 回归；下一家公司为 Accenture。"
+  },
+  "in_progress_company": {
+    "name": "Accenture",
+    "official_url": "https://accenture.wd103.myworkdayjobs.com/AccentureCareers",
+    "official_host": "accenture.wd103.myworkdayjobs.com",
+    "tenant": "accenture",
+    "site": "AccentureCareers",
+    "active_jobs_snapshot": 2380,
+    "queue_cursor_observed": "64264",
+    "sample_dry_run": {
+      "selected": 20,
+      "fetched": 15,
+      "would_update": 8,
+      "skipped": 12,
+      "failed": 0,
+      "last_processed_job_id": 47168,
+      "candidate_fields": {
+        "location": 0,
+        "workplace_type": 0,
+        "employment_category": 0,
+        "experience": 0,
+        "salary": 7,
+        "deadline": 0
+      }
+    },
+    "sample_write": {
+      "updated": 8,
+      "skipped": 12,
+      "failed": 0,
+      "last_processed_job_id": 47168
+    },
+    "latest_accelerated_batch": {
+      "selected": 100,
+      "fetched": 94,
+      "updated": 0,
+      "skipped": 100,
+      "failed": 0,
+      "last_processed_job_id": 64264,
+      "focus_mode": false,
+      "batch_size": 100
+    },
+    "status_note": "Accenture 已完成官方来源确认、生产 dry-run、字段回填、末端 dry-run、公网/API 抽样和 strict 回归；末端游标保留为 64264，进入 10 分钟复查冷却。"
+  },
+  "handoff_documents": [
+    "docs/job-field-task-completion-summary.md",
+    "docs/job-field-task-handoff.md",
+    "docs/job-company-field-execution-log.md",
+    "docs/job-company-field-connector-runbook.md"
+  ]
+}

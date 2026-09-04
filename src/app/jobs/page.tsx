@@ -37,7 +37,12 @@ interface Job {
   logo_url?: string;
   logo_fallback_url?: string;
   sponsorship?: 'yes' | 'no' | 'unknown';
+  employment_category?: string | null;
+  experience_min_years?: number | null;
+  experience_max_years?: number | null;
+  experience_text?: string | null;
   valid_through?: string | null;
+  deadline_time_zone?: string | null;
   is_active?: boolean;
   created_at: string;
   updated_at?: string;
@@ -53,10 +58,10 @@ function getDeadlineDate(value: string | null | undefined): Date | null {
   return Number.isFinite(timestamp) ? new Date(timestamp) : null;
 }
 
-function formatDeadline(value: string | null | undefined): string | null {
+function formatDeadline(value: string | null | undefined, timeZone?: string | null): string | null {
   const date = getDeadlineDate(value);
   return date
-    ? new Intl.DateTimeFormat(undefined, { year: 'numeric', month: '2-digit', day: '2-digit', timeZone: 'UTC' }).format(date)
+    ? new Intl.DateTimeFormat(undefined, { year: 'numeric', month: '2-digit', day: '2-digit', timeZone: timeZone || 'UTC' }).format(date)
     : null;
 }
 
@@ -64,8 +69,22 @@ function formatDeadlineRemaining(value: string | null | undefined, now: number, 
   if (!now) return null;
   const remaining = getJobDeadlineRemaining(value, now);
   if (!remaining) return null;
-  if (remaining.expired) return t('jobs.deadlineExpired');
+  // A deadline is informational and must never imply that the job is closed.
+  // Only an explicit upstream lifecycle close event controls is_active.
+  if (remaining.expired) return null;
+  if (remaining.days > 7) return null;
   return t('jobs.daysLeft', { days: remaining.days });
+}
+
+function formatExperienceLabel(job: Pick<Job, 'experience_min_years' | 'experience_max_years' | 'experience_text'>): string | null {
+  if (job.experience_min_years != null && job.experience_max_years != null) {
+    return `${job.experience_min_years}-${job.experience_max_years} 年经验`;
+  }
+  if (job.experience_min_years != null) return `${job.experience_min_years}+ 年经验`;
+  if (job.experience_max_years != null) return `不超过 ${job.experience_max_years} 年经验`;
+  const text = job.experience_text?.replace(/\s+/g, ' ').trim();
+  if (!text) return null;
+  return text.length > 96 ? `${text.slice(0, 96).trim()}…` : text;
 }
 
 interface JobConfig {
@@ -860,6 +879,16 @@ function JobsContent() {
                           <Users className="h-3 w-3 mr-1" />
                           {job.audience}
                         </Badge>
+                        {job.employment_category && job.employment_category !== '未知' && (
+                          <Badge variant="outline" className="rounded-md text-xs border-zinc-200 dark:border-zinc-700 text-zinc-600 dark:text-zinc-300">
+                            {job.employment_category}
+                          </Badge>
+                        )}
+                        {formatExperienceLabel(job) && (
+                          <Badge variant="outline" className="rounded-md text-xs border-zinc-200 dark:border-zinc-700 text-zinc-600 dark:text-zinc-300">
+                            {formatExperienceLabel(job)}
+                          </Badge>
+                        )}
                         {job.salary_range && (
                           <Badge variant="outline" className="border-zinc-200 dark:border-zinc-700 text-zinc-600 dark:text-zinc-300 rounded-md text-xs">
                             {job.salary_range}
@@ -873,10 +902,10 @@ function JobsContent() {
                             {job.sponsorship === 'yes' ? t('jobs.sponsor') : t('jobs.noSponsor')}
                           </Badge>
                         )}
-                        {formatDeadline(job.valid_through) && (
+                        {formatDeadline(job.valid_through, job.deadline_time_zone) && (
                           <Badge variant="outline" className="border-zinc-200 dark:border-zinc-700 text-zinc-600 dark:text-zinc-300 rounded-md text-xs">
                             <Calendar className="h-3 w-3 mr-1" />
-                            {t('jobs.deadline')} {formatDeadline(job.valid_through)}
+                            {t('jobs.deadline')} {formatDeadline(job.valid_through, job.deadline_time_zone)}
                           </Badge>
                         )}
                         {job.is_active === false ? (

@@ -1,16 +1,19 @@
 "use client";
 
 import { useTheme } from "@/lib/theme-context";
+import { useLanguage } from "@/lib/language-context";
 import { Sun, Moon } from "lucide-react";
 
 export function ThemeToggle() {
   const { theme, toggleTheme } = useTheme();
+  const { locale } = useLanguage();
+  const ariaLabel = locale === "en" ? "Switch theme" : locale === "zh-TW" ? "切換主題" : "切换主题";
 
   return (
     <button
       onClick={toggleTheme}
       className="relative p-2 rounded-lg bg-white/5 border border-white/10 hover:bg-white/10 transition-all duration-300"
-      aria-label="切换主题"
+      aria-label={ariaLabel}
     >
       <div className="relative w-5 h-5">
         <Sun

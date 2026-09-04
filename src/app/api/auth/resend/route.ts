@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { getSupabaseAnonClient } from '@/storage/database/supabase-client';
-import { getClientIp } from '@/lib/auth-server';
+import { getAuthRedirectOrigin, getClientIp } from '@/lib/auth-server';
 import { isValidEmail } from '@/lib/auth-shared';
 import {
   authErrorMessage,
@@ -24,9 +24,13 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ error: '发送过于频繁，请稍后再试' }, { status: 429 });
     }
     const supabase = getSupabaseAnonClient();
+    const redirectOrigin = getAuthRedirectOrigin(request);
     const { error } = await supabase.auth.resend({
       type: 'signup',
       email,
+      options: {
+        emailRedirectTo: `${redirectOrigin}/auth/callback?next=${encodeURIComponent('/login?verify=1')}`,
+      },
     });
     if (error) {
       console.error('[Auth] Resend verification failed:', error.message);

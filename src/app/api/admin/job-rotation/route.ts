@@ -198,13 +198,18 @@ export async function GET(request: NextRequest) {
     const page = parsePage(searchParams.get('page'));
     const pageSize = parsePageSize(searchParams.get('page_size'));
     const offset = (page - 1) * pageSize;
-    const [state, source, activeCount, feedActiveCount] = await Promise.all([
+    const [state, source, activeCount, feedActiveCount, officialStateQuery] = await Promise.all([
       getJobFeedState(client),
       readSourceActivity(since),
       client.from('jobs').select('*', { count: 'exact', head: true }).eq('is_active', true),
       client.from('jobs').select('*', { count: 'exact', head: true }).eq('source_system', SOURCE_SYSTEM).eq('is_active', true),
+      client.from('job_sync_state')
+        .select('source_system,cursor,last_error,consecutive_failures,last_attempted_at,last_success_at,next_retry_at,priority,lease_owner,lease_expires_at,updated_at')
+        .like('source_system', 'official:%')
+        .order('last_attempted_at', { ascending: true, nullsFirst: true })
+        .order('source_system', { ascending: true }),
     ]);
-    const queryError = activeCount.error || feedActiveCount.error;
+    const queryError = activeCount.error || feedActiveCount.error || officialStateQuery.error;
     if (queryError) throw new Error(queryError.message);
 
     const sourceAgeHours = source.generatedAt ? Math.max(0, (Date.now() - Date.parse(source.generatedAt)) / 3_600_000) : null;
@@ -271,6 +276,14 @@ export async function GET(request: NextRequest) {
     const countError = newCount.error || updatedCount.error || closedCount.error;
     if (countError) throw new Error(`统计岗位轮换明细失败: ${countError.message}`);
 
+    const officialStates = officialStateQuery.data || [];
+    const now = Date.now();
+    const officialDue = officialStates.filter((row) => {
+      const retryAt = row.next_retry_at ? Date.parse(row.next_retry_at) : NaN;
+      const leaseExpiresAt = row.lease_expires_at ? Date.parse(row.lease_expires_at) : NaN;
+      return (!Number.isFinite(retryAt) || retryAt <= now) && (!Number.isFinite(leaseExpiresAt) || leaseExpiresAt <= now);
+    }).length;
+
     return NextResponse.json({
       generatedAt: new Date().toISOString(),
       lookbackHours: LOOKBACK_HOURS,
@@ -283,6 +296,11 @@ export async function GET(request: NextRequest) {
         consecutiveFailures: state.consecutive_failures,
         syncInProgress: Boolean(state.lease_expires_at && Date.parse(state.lease_expires_at) > Date.now()),
         updatedAt: state.updated_at,
+      },
+      officialDetails: {
+        totalCompanies: officialStates.length,
+        dueCompanies: officialDue,
+        states: officialStates,
       },
       source: {
         reachable: source.reachable,

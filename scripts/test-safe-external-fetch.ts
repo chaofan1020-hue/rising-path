@@ -1,5 +1,5 @@
 import assert from 'node:assert/strict';
-import { isForbiddenExternalAddress } from '../src/lib/safe-external-fetch';
+import { buildWorkdayCxsDetailUrl, isForbiddenExternalAddress } from '../src/lib/safe-external-fetch';
 
 for (const address of [
   '127.0.0.1',
@@ -17,4 +17,13 @@ for (const address of [
 
 assert.equal(isForbiddenExternalAddress('8.8.8.8'), false);
 assert.equal(isForbiddenExternalAddress('2606:4700:4700::1111'), false);
+
+assert.equal(
+  buildWorkdayCxsDetailUrl('https://vanguard.wd5.myworkdayjobs.com/vanguard_external/job/Malvern-PA/example_181766/apply'),
+  'https://vanguard.wd5.myworkdayjobs.com/wday/cxs/vanguard/vanguard_external/job/Malvern-PA/example_181766',
+);
+assert.equal(
+  buildWorkdayCxsDetailUrl('https://citi.wd5.myworkdayjobs.com/en-US/2/job/Houston-Texas/example_25926650'),
+  'https://citi.wd5.myworkdayjobs.com/wday/cxs/citi/2/job/Houston-Texas/example_25926650',
+);
 console.log('safe external fetch address checks passed');

@@ -144,6 +144,10 @@
 
 - 登录页注册成功动画或 `Lanyard` 的卡顿、闪现、空白、WebGL 上下文丢失、Three/Rapier/Drei 模块加载失败：先阅读 `docs/3d-lanyard-troubleshooting.md`，按文档的分类和验证标准排查。
 
+## 公司岗位字段接入规则
+
+后续新增或修复任何公司岗位来源前，必须先阅读 `docs/job-company-field-connector-runbook.md` 和 `docs/job-company-onboarding-runbook.md`。公司之间可以有字段差异，但必须沿用其中的官方源探测、真实样本、解析层/标准化层/同步层/展示层分层、字段证据、dry-run、只补缺失字段回填、生命周期保护和部署验收流程。凡是写入岗位数据的脚本，必须先确认其连接的 Supabase 环境；本地 `.env.local` 不能默认视为生产。生产回填必须以生产库 dry-run、写入后生产库字段证据查询，以及公网 API/页面抽样三者共同验收。禁止用模型猜测没有官方证据的截止日期、薪资或经验要求，也禁止因字段解析异常直接改变岗位上下架状态。
+
 ## API 接口清单
 
 | 路径 | 方法 | 功能 |

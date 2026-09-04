@@ -1,0 +1,27 @@
+{
+  "connector": "oracle_hcm",
+  "company": "Lazard",
+  "board": "LazardProfessionalCareers",
+  "items": [
+    {"Id":"6454","Title":"AUM Reporting Analyst","PrimaryLocation":"New York, United States","WorkplaceType":"On-site","ExternalDescriptionStr":"<p>At least 3 years of experience.</p><p>Base salary range $110,000 - $130,000 USD.</p>","ExternalPostedEndDate":"2026-09-09T23:00:00+00:00"},
+    {"Id":"6455","Title":"Analyst - Industrials","PrimaryLocation":"New York, United States","WorkplaceType":"Hybrid","ExternalDescriptionStr":"2-4 years of experience in finance."},
+    {"Id":"6456","Title":"Associate - Technology","PrimaryLocation":"Chicago, United States","WorkplaceType":"Hybrid","ExternalDescriptionStr":"Requires 4 years of experience."},
+    {"Id":"6457","Title":"Portfolio Analyst","PrimaryLocation":"Boston, United States","WorkplaceType":"On-site","ExternalDescriptionStr":"Junior role. No prior experience required."},
+    {"Id":"6458","Title":"Vice President - Advisory","PrimaryLocation":"San Francisco, United States","WorkplaceType":"Hybrid","ExternalDescriptionStr":"Requires 10+ years of relevant experience."},
+    {"Id":"6459","Title":"Finance Project Manager","PrimaryLocation":"New York, United States","WorkplaceType":"Hybrid","ExternalDescriptionStr":"Minimum 5 years of professional experience."},
+    {"Id":"6460","Title":"Accounting Policy Associate","PrimaryLocation":"New York, United States","WorkplaceType":"Hybrid","ExternalDescriptionStr":"Requires 2 years' experience."},
+    {"Id":"6461","Title":"Fund Accountant","PrimaryLocation":"New York, United States","WorkplaceType":"On-site","ExternalDescriptionStr":"At least 1 year of experience."},
+    {"Id":"6462","Title":"Data Analyst","PrimaryLocation":"Minneapolis, United States","WorkplaceType":"Hybrid","ExternalDescriptionStr":"Requires 3 years of experience."},
+    {"Id":"6463","Title":"Marketing Designer","PrimaryLocation":"London, United Kingdom","WorkplaceType":"On-site","ExternalDescriptionStr":"12 month contract."},
+    {"Id":"6464","Title":"Operations Manager","PrimaryLocation":"New York, United States","WorkplaceType":"Hybrid","ExternalDescriptionStr":"Requires 6 years of experience."},
+    {"Id":"6465","Title":"Business Analyst","PrimaryLocation":"New York, United States","WorkplaceType":"Hybrid","ExternalDescriptionStr":"Requires 2-3 years of experience."},
+    {"Id":"6466","Title":"Risk Associate","PrimaryLocation":"New York, United States","WorkplaceType":"Hybrid","ExternalDescriptionStr":"Requires 3 years' experience."},
+    {"Id":"6467","Title":"Research Analyst","PrimaryLocation":"Paris, France","WorkplaceType":"On-site","ExternalDescriptionStr":"Requires 2 years of experience."},
+    {"Id":"6468","Title":"Technology Lead","PrimaryLocation":"New York, United States","WorkplaceType":"Hybrid","ExternalDescriptionStr":"Requires 8 years of experience."},
+    {"Id":"6469","Title":"Legal Counsel","PrimaryLocation":"New York, United States","WorkplaceType":"On-site","ExternalDescriptionStr":"Requires 7 years of experience."},
+    {"Id":"6470","Title":"HR Business Partner","PrimaryLocation":"New York, United States","WorkplaceType":"Hybrid","ExternalDescriptionStr":"Requires 5 years of experience."},
+    {"Id":"6471","Title":"Product Manager","PrimaryLocation":"New York, United States","WorkplaceType":"Hybrid","ExternalDescriptionStr":"Requires 4 years of experience."},
+    {"Id":"6472","Title":"Investment Associate","PrimaryLocation":"New York, United States","WorkplaceType":"Hybrid","ExternalDescriptionStr":"Requires 3 years of experience."},
+    {"Id":"6473","Title":"Executive Assistant","PrimaryLocation":"New York, United States","WorkplaceType":"On-site","ExternalDescriptionStr":"Requires 2 years of experience."}
+  ]
+}

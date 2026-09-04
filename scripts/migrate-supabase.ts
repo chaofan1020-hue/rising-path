@@ -12,6 +12,7 @@ const MIGRATION_PATTERN = /^(\d{4})_(.+)\.sql$/u;
 type Options = {
   from: number;
   to: number | null;
+  only: string | null;
   check: boolean;
   dryRun: boolean;
   baseline: boolean;
@@ -33,12 +34,17 @@ function parseOptions(): Options {
   const from = Number(value('--from') || '0');
   const toValue = value('--to');
   const to = toValue ? Number(toValue) : null;
+  const only = value('--only') || null;
   if (!Number.isInteger(from) || from < 0 || (to !== null && (!Number.isInteger(to) || to < from))) {
     throw new Error('迁移范围无效，请使用 --from=0017 [--to=0034]');
+  }
+  if (only && !MIGRATION_PATTERN.test(only)) {
+    throw new Error('--only 必须是完整迁移文件名，例如 0082_job_standard_fields.sql');
   }
   return {
     from,
     to,
+    only,
     check: args.includes('--check'),
     dryRun: args.includes('--dry-run'),
     baseline: args.includes('--baseline'),
@@ -53,8 +59,10 @@ function migrationNumber(file: string): number {
 
 async function getMigrationFiles(options: Options): Promise<string[]> {
   const directory = path.join(process.cwd(), 'supabase', 'migrations');
-  const files = (await fs.readdir(directory))
+  const allFiles = (await fs.readdir(directory))
     .filter((file) => MIGRATION_PATTERN.test(file))
+    .sort((a, b) => a.localeCompare(b));
+  const files = (options.only ? allFiles.filter((file) => file === options.only) : allFiles)
     .filter((file) => migrationNumber(file) >= options.from)
     .filter((file) => options.to === null || migrationNumber(file) <= options.to)
     .sort((a, b) => a.localeCompare(b));

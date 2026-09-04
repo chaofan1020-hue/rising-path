@@ -112,7 +112,7 @@ export default function FeaturesCards() {
   const router = useRouter()
 
   const handleFeatureClick = async (index: number) => {
-    const targetPaths = ["/ai-match", "/optimize", "/field-mappings", "/jobs", "/dashboard", "/mock-interview"]
+    const targetPaths = ["/ai-match", "/optimize", "/auto-apply", "/jobs", "/dashboard", "/mock-interview"]
     const targetPath = targetPaths[index] || "/"
 
     try {

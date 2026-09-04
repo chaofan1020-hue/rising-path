@@ -29,6 +29,7 @@ import { REGION_DNA, type RegionKey } from '@/lib/region-dna';
 import type {
   CareerStage,
   MajorMatch,
+  ResumeProfile,
   ResumeProfileUpdateMetadata,
   UserSegmentation,
 } from '@/lib/resume-types';
@@ -44,7 +45,7 @@ interface SegmentationCardProps {
   defaultEditing?: boolean;
   skills?: string[];
   schoolLine?: string;  // 如 "墨尔本大学 · 数据分析硕士"
-  onUpdated: (seg: Segmentation, metadata?: ResumeProfileUpdateMetadata) => void;
+  onUpdated: (seg: Segmentation, metadata?: ResumeProfileUpdateMetadata, profile?: ResumeProfile) => void;
 }
 
 const STAGE_KEYS: CareerStage[] = ['junior', 'senior', 'experienced', 'returning_intern'];
@@ -103,7 +104,7 @@ export function SegmentationCard({
           processingStatus: data.processing_status,
           processingStage: data.processing_stage,
           profileConfirmedAt: data.profile_confirmed_at,
-        });
+        }, data.profile as ResumeProfile | undefined);
         setEditing(false);
       }
     } finally {
@@ -145,6 +146,7 @@ export function SegmentationCard({
           {editing ? <ChevronUp className="h-3 w-3 ml-1" /> : <ChevronDown className="h-3 w-3 ml-1" />}
         </Button>
       </div>
+      <p className="mt-1 pl-8 text-xs text-zinc-500 dark:text-zinc-400">{t('resume.segHint')}</p>
 
       {/* 画像摘要 */}
       <div className="mt-2.5 grid grid-cols-1 md:grid-cols-2 gap-x-4 gap-y-1.5 text-xs md:text-[13px] text-zinc-700 dark:text-zinc-300">

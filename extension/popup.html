@@ -2,48 +2,64 @@
 <html lang="zh-CN">
   <head>
     <meta charset="utf-8" />
-    <title>Liorvix 自动网申</title>
+    <title>Liorvix Auto Apply</title>
     <style>
-      body { width: 380px; margin: 0; font: 14px/1.5 system-ui, sans-serif; background: #fff; color: #111; }
-      header { padding: 14px 16px; border-bottom: 1px solid #eee; }
-      h1 { margin: 0; font-size: 16px; }
-      p { margin: 4px 0 0; color: #666; font-size: 12px; }
-      main { padding: 12px 16px; max-height: 480px; overflow: auto; }
-      button { border: 0; border-radius: 8px; padding: 8px 12px; cursor: pointer; font-size: 13px; }
-      .primary { background: #111; color: #fff; }
-      .ghost { background: #f4f4f5; color: #333; }
-      .row { display: flex; gap: 8px; margin: 10px 0; }
-      .field { border: 1px solid #eee; border-radius: 8px; padding: 8px 10px; margin-bottom: 8px; }
-      .field label { display: flex; gap: 8px; align-items: flex-start; }
-      .meta { color: #888; font-size: 11px; margin-top: 4px; }
-      .value { color: #333; font-size: 12px; margin-top: 4px; word-break: break-word; }
-      .badge { display: inline-block; border-radius: 999px; padding: 2px 8px; font-size: 11px; background: #f4f4f5; }
+      :root { color-scheme: light; }
+      * { box-sizing: border-box; }
+      body { width: 400px; margin: 0; font: 13px/1.5 Inter, ui-sans-serif, system-ui, sans-serif; background: #fafafa; color: #18181b; }
+      header { padding: 16px 18px 14px; background: #fff; border-bottom: 1px solid #e4e4e7; }
+      .brand { display: flex; align-items: center; gap: 10px; }
+      .mark { width: 28px; height: 28px; display: grid; place-items: center; border-radius: 7px; background: #18181b; color: #fff; font-weight: 700; font-size: 12px; }
+      h1 { margin: 0; font-size: 15px; line-height: 1.2; letter-spacing: -.01em; }
+      header p { margin: 4px 0 0 38px; color: #71717a; font-size: 11px; }
+      main { padding: 14px 18px 16px; max-height: 540px; overflow: auto; }
+      button { border: 1px solid transparent; border-radius: 6px; min-height: 34px; padding: 7px 11px; cursor: pointer; font: inherit; font-size: 12px; font-weight: 600; transition: background .15s, border-color .15s; }
+      button:disabled { cursor: default; opacity: .5; }
+      .primary { background: #18181b; color: #fff; }
+      .primary:hover:not(:disabled) { background: #27272a; }
+      .secondary { background: #fff; border-color: #d4d4d8; color: #27272a; }
+      .secondary:hover:not(:disabled) { background: #f4f4f5; }
+      .subtle { background: transparent; color: #52525b; }
+      .subtle:hover:not(:disabled) { background: #f4f4f5; }
+      .actions { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; margin: 12px 0; }
+      .actions .wide { grid-column: 1 / -1; }
+      .status { display: flex; align-items: flex-start; gap: 9px; padding: 10px 11px; border: 1px solid #e4e4e7; border-radius: 7px; background: #fff; color: #52525b; font-size: 12px; }
+      .status-dot { width: 7px; height: 7px; margin-top: 5px; flex: 0 0 auto; border-radius: 50%; background: #a1a1aa; }
+      .section-label { display: flex; justify-content: space-between; align-items: baseline; margin: 16px 0 8px; color: #3f3f46; font-size: 11px; font-weight: 700; text-transform: uppercase; letter-spacing: .08em; }
+      .field { border: 1px solid #e4e4e7; border-radius: 7px; padding: 10px; margin-bottom: 8px; background: #fff; }
+      .field label { display: flex; gap: 9px; align-items: flex-start; }
+      .field label > span { min-width: 0; flex: 1; }
+      .field strong { display: block; overflow: hidden; color: #27272a; font-size: 12px; font-weight: 600; text-overflow: ellipsis; white-space: nowrap; }
+      .meta { color: #71717a; font-size: 11px; margin-top: 3px; }
+      .field input[type=text] { width: 100%; margin-top: 8px; padding: 7px 8px; border: 1px solid #d4d4d8; border-radius: 5px; outline: none; color: #27272a; font: inherit; font-size: 12px; }
+      .field input[type=text]:focus { border-color: #71717a; box-shadow: 0 0 0 2px #e4e4e7; }
+      .badge { display: inline-block; border-radius: 4px; padding: 2px 5px; font-size: 10px; background: #f4f4f5; }
       .ai { background: #fff7ed; color: #c2410c; }
       .resume { background: #ecfdf5; color: #047857; }
-      .empty { background: #f4f4f5; color: #666; }
-      footer { padding: 10px 16px; border-top: 1px solid #eee; color: #888; font-size: 11px; }
-      .error { color: #dc2626; margin-top: 8px; font-size: 12px; white-space: pre-wrap; }
-      .muted { color: #888; }
-      a { color: #111; }
+      .empty { background: #f4f4f5; color: #52525b; }
+      footer { padding: 10px 18px 12px; border-top: 1px solid #e4e4e7; background: #fff; color: #71717a; font-size: 11px; }
+      .error { color: #b91c1c; margin-top: 8px; font-size: 12px; white-space: pre-wrap; }
+      .muted { color: #71717a; }
     </style>
   </head>
   <body>
     <header>
-      <h1>Liorvix 自动网申</h1>
-      <p>只填不提交 · 提交前请逐项确认</p>
+      <div class="brand"><span class="mark">L</span><h1>Liorvix Auto Apply</h1></div>
+      <p>Review fields before filling. You always submit.</p>
     </header>
     <main>
-      <div class="row">
-        <button id="open-liorvix" class="ghost">打开 Liorvix</button>
+      <div class="actions">
+        <button id="open-liorvix" class="secondary">打开 Liorvix</button>
         <button id="scan" class="primary">扫描表单</button>
-        <button id="fill" class="primary">填写已确认字段</button>
-        <button id="mark-submitted" class="ghost">标记已投递</button>
+        <button id="fill" class="primary wide">填写已确认字段</button>
+        <button id="mark-submitted" class="subtle wide">填写后标记为已投递</button>
       </div>
-      <div id="status" class="muted">正在读取状态...</div>
+      <div class="status"><span class="status-dot"></span><span id="status">正在读取状态...</span></div>
       <div id="error" class="error"></div>
+      <div class="section-label"><span>字段审阅</span><span id="field-count"></span></div>
       <div id="fields"></div>
     </main>
-    <footer>不会自动点击提交按钮；文件上传字段需要手动选择。</footer>
+    <footer>不会自动点击提交按钮。文件上传和最终提交需要手动完成。</footer>
     <script src="popup.js"></script>
   </body>
 </html>

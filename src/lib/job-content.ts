@@ -124,8 +124,17 @@ export function jobHtmlToPlainText(value: unknown): string {
       .replace(/<[^>]*>/g, ' ')
       .replace(/[\u00a0\u200b]/g, ' '),
   ));
-  // Strip tags that were supplied as encoded text, such as &lt;b&gt;.
-  const plainText = decoded.replace(/<[^>]*>/g, ' ');
+  // A number of ATS APIs return every HTML tag as an entity (for example
+  // `&lt;li&gt;`). Decode first, then apply the same block/list boundaries a
+  // second time so requirements remain separate lines rather than one long
+  // paragraph. This also keeps downstream field extraction tied to the
+  // individual requirement where it appeared.
+  const plainText = decoded
+    .replace(/<\s*br\s*\/?\s*>/gi, '\n')
+    .replace(/<\s*\/(?:p|div|section|article|header|footer|h[1-6]|li|tr|blockquote)\s*>/gi, '\n')
+    .replace(/<\s*(?:li|tr)\b[^>]*>/gi, '\n• ')
+    .replace(/<\s*(?:p|div|section|article|header|footer|h[1-6]|ul|ol|table|blockquote)\b[^>]*>/gi, '\n')
+    .replace(/<[^>]*>/g, ' ');
 
   return plainText
     .split(/\r?\n/)
@@ -134,6 +143,29 @@ export function jobHtmlToPlainText(value: unknown): string {
     .join('\n')
     .replace(/\n{3,}/g, '\n\n')
     .trim();
+}
+
+/**
+ * Reject collector evidence accidentally persisted in the description column.
+ * Real descriptions may contain braces, so only parsed objects with known
+ * evidence/payload keys are quarantined.
+ */
+export function isDisplayableJobDescription(value: unknown): boolean {
+  if (typeof value !== 'string') return false;
+  const normalized = value.trim();
+  if (!normalized) return false;
+  if (!normalized.startsWith('{') || !normalized.endsWith('}')) return true;
+  try {
+    const parsed = JSON.parse(normalized) as unknown;
+    if (!parsed || typeof parsed !== 'object' || Array.isArray(parsed)) return true;
+    const keys = Object.keys(parsed as Record<string, unknown>);
+    return !keys.some((key) => [
+      'source_evidence', 'structured_field_sources', 'source_type', 'raw_payload',
+      'raw_response', 'field_evidence', 'evidence', 'widget', 'externalSpa',
+    ].includes(key));
+  } catch {
+    return true;
+  }
 }
 
 export function sanitizeJobContent<T>(record: T): T {

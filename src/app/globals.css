@@ -255,6 +255,22 @@
     scrollbar-gutter: stable;
   }
 
+  /* The page keeps a permanent scrollbar gutter, so Radix's second
+     compensation must not move the layout while a popup is open. */
+  html body[data-scroll-locked] {
+    padding-right: 0 !important;
+    margin-right: 0 !important;
+    --removed-body-scroll-bar-size: 0px !important;
+  }
+
+  html body[data-scroll-locked] .right-scroll-bar-position {
+    right: 0 !important;
+  }
+
+  html body[data-scroll-locked] .width-before-scroll-bar {
+    margin-right: 0 !important;
+  }
+
   * {
     @apply border-border outline-ring/50;
   }
@@ -458,4 +474,16 @@ body {
 
 @utility glow-lg {
   box-shadow: 0 0 40px rgba(196, 106, 74, 0.4);
+}
+
+/* The sync dashboard is a live operations screen. Keep its operational
+   labels readable at a glance instead of relying on tiny utility text. */
+body[data-job-sync-dashboard='true'] .text-xs {
+  font-size: 0.875rem;
+  line-height: 1.25rem;
+}
+
+body[data-job-sync-dashboard='true'] [class~='text-[11px]'] {
+  font-size: 0.8125rem;
+  line-height: 1.125rem;
 }

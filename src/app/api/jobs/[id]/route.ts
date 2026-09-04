@@ -1,12 +1,16 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { getCompanyFaviconUrl, getCompanyLogoUrl } from '@/lib/company-logo';
 import { getSupabaseClient } from '@/storage/database/supabase-client';
-import { sanitizeJobContent } from '@/lib/job-content';
+import { isDisplayableJobDescription, sanitizeJobContent } from '@/lib/job-content';
 import { ADMIN_PERMISSIONS, requireAdminPermission } from '@/lib/admin-permissions';
 import { recordAdminAuditEvent, recordAdminAuditFailure } from '@/lib/admin-audit';
 import { ExternalFetchError, fetchSafeExternalPage } from '@/lib/safe-external-fetch';
-import { looksLikeClosedJobPage } from '@/lib/job-maintenance';
+import { looksLikeBlockedPage, looksLikeClosedJobPage } from '@/lib/job-maintenance';
 import { nextLinkFailureCount, shouldCloseAfterLinkFailure } from '@/lib/job-link-health';
+import { isVerifiedField } from '@/lib/job-field-provenance';
+import { isDisplayableJobDeadline } from '@/lib/job-deadline';
+import { extractOfficialJobDetails, isJobContentShell } from '@/lib/job-official-detail';
+import { hasMatchingPhenomDetailPayload, isRegisteredPhenomJobUrl } from '@/lib/job-connectors';
 
 // 本地 logo 缓存
 let localLogosCache: Record<string, string> = {};
@@ -94,13 +98,46 @@ export async function GET(
         .maybeSingle();
       const maxAgeHours = Math.min(Math.max(Number(process.env.JOBS_DETAIL_LINK_CHECK_MAX_AGE_HOURS) || 6, 1), 168);
       const lastCheckedAt = syncRecord?.last_link_checked_at ? Date.parse(syncRecord.last_link_checked_at) : NaN;
-      const stale = !Number.isFinite(lastCheckedAt) || Date.now() - lastCheckedAt >= maxAgeHours * 3_600_000;
+      // Invalid/legacy descriptions need a detail fetch even when the link
+      // health timestamp is fresh; otherwise the detail page stays blank until
+      // the next maintenance cycle.
+      const contentNeedsRefresh = !isDisplayableJobDescription(data.description) || isJobContentShell(data.description);
+      const stale = contentNeedsRefresh || !Number.isFinite(lastCheckedAt) || Date.now() - lastCheckedAt >= maxAgeHours * 3_600_000;
       if (stale) {
         const checkedAt = new Date().toISOString();
         try {
           const page = await fetchSafeExternalPage(data.job_url);
-          if (looksLikeClosedJobPage(page.title, page.content)) {
+          if (looksLikeClosedJobPage(page.title, page.content)
+            && !isRegisteredPhenomJobUrl(data.company, data.job_url)
+            && !hasMatchingPhenomDetailPayload(data.job_url, page.content)) {
             throw new ExternalFetchError('目标页面显示岗位已关闭', 422, 410);
+          }
+          const officialDetails = extractOfficialJobDetails(page);
+          if (looksLikeBlockedPage(page.title, page.content) && officialDetails?.source !== 'official_structured_data') {
+            throw new ExternalFetchError('目标页面需要浏览器验证，暂不判定岗位状态', 422);
+          }
+          const detailPatch: Record<string, unknown> = {};
+          if (officialDetails?.description && officialDetails.description.length >= 160 && contentNeedsRefresh) {
+            detailPatch.description = officialDetails.description;
+          }
+          if (officialDetails?.requirements && !data.requirements) detailPatch.requirements = officialDetails.requirements;
+          if (officialDetails?.responsibilities && !data.responsibilities) detailPatch.responsibilities = officialDetails.responsibilities;
+          if (officialDetails?.experience && data.experience_min_years == null && data.experience_max_years == null && !data.experience_text) {
+            detailPatch.experience_text = officialDetails.experience;
+          }
+          if (officialDetails?.location && (!data.region || data.region === '未注明')) {
+            detailPatch.region = officialDetails.location.slice(0, 100);
+            detailPatch.location_source = 'official_link_structured_field';
+          }
+          if (Object.keys(detailPatch).length > 0) {
+            detailPatch.updated_at = checkedAt;
+            const { error: detailUpdateError } = await client
+              .from('jobs')
+              .update(detailPatch)
+              .eq('id', Number(id))
+              .eq('is_active', true);
+            if (detailUpdateError) throw detailUpdateError;
+            Object.assign(data, detailPatch);
           }
           await client
             .from('job_sync_records')
@@ -163,12 +200,24 @@ export async function GET(
     const logo_url = configuredLogo || (data.company ? await getCompanyLogo(data.company, data.job_url) : null);
     const logo_fallback_url = data.company ? getCompanyFaviconUrl(data.company, data.job_url) : null;
 
+    const sanitized = sanitizeJobContent({
+      ...data,
+      logo_url,
+      logo_fallback_url,
+    }) as Record<string, unknown>;
+    if (!isDisplayableJobDescription(sanitized.description)) sanitized.description = null;
+    // Apply the same field gate as the list endpoint at the detail boundary;
+    // a direct URL must never reveal quarantined legacy values.
+    const deadlineSourceType: string | null = sanitized.field_evidence && typeof sanitized.field_evidence === 'object' && !Array.isArray(sanitized.field_evidence)
+      && typeof (sanitized.field_evidence as Record<string, unknown>).source_type === 'string'
+      ? (sanitized.field_evidence as Record<string, unknown>).source_type as string
+      : null;
+    if (!isVerifiedField(sanitized.valid_through, typeof sanitized.deadline_source === 'string' ? sanitized.deadline_source : null)
+      || !isDisplayableJobDeadline(sanitized.valid_through, typeof sanitized.deadline_source === 'string' ? sanitized.deadline_source : null, deadlineSourceType)) sanitized.valid_through = null;
+    if (!isVerifiedField(sanitized.salary_range, typeof sanitized.salary_source === 'string' ? sanitized.salary_source : null)) sanitized.salary_range = null;
+    if (!isVerifiedField(sanitized.region, typeof sanitized.location_source === 'string' ? sanitized.location_source : null)) sanitized.region = '未注明';
     return NextResponse.json({
-      job: sanitizeJobContent({
-        ...data,
-        logo_url,
-        logo_fallback_url,
-      }),
+      job: sanitized,
       linkCheck,
     });
   } catch (error) {

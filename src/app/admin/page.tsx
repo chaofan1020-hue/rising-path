@@ -893,7 +893,6 @@ function AdminContent() {
   const [jobFeedState, setJobFeedState] = useState<JobFeedStateData | null>(null);
   const [jobFeedStateLoading, setJobFeedStateLoading] = useState(false);
   const [jobFeedStateError, setJobFeedStateError] = useState('');
-  const [reconcileConfirmOpen, setReconcileConfirmOpen] = useState(false);
   const [batchResult, setBatchResult] = useState<{
     success?: boolean;
     created?: number;
@@ -1708,14 +1707,14 @@ function AdminContent() {
     setBatchImportOpen(false);
   };
 
-  const handleFeedSync = async (mode: 'incremental' | 'reconcile' = 'incremental') => {
+  const handleFeedSync = async () => {
     setFeedSyncing(true);
-    setFeedSyncMessage(mode === 'reconcile' ? '正在执行完整岗位对账…' : '正在同步招聘数据…');
+    setFeedSyncMessage('正在同步招聘数据…');
     try {
       const response = await fetch('/api/jobs/sync-feed', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ mode, maxPages: mode === 'reconcile' ? 100 : 20 }),
+        body: JSON.stringify({ mode: 'incremental', maxPages: 20 }),
       });
       const data = await response.json();
       if (!response.ok) throw new Error(data.error || '同步失败');
@@ -1724,7 +1723,7 @@ function AdminContent() {
         .map(([reason, count]) => `${reason}: ${count}`)
         .join('，');
       setFeedSyncMessage(
-        `${mode === 'reconcile' ? '对账' : '同步'}完成：接收 ${result.received} 条，写入 ${result.upserted} 条，关闭 ${result.closed} 条。${result.skipped ? `跳过 ${result.skipped} 条（${skippedReasons || '见日志'}）。` : ''}${result.has_more ? '仍有剩余数据，请再次执行。' : '已完成。'}`,
+        `同步完成：接收 ${result.received} 条，写入 ${result.upserted} 条，关闭 ${result.closed} 条。${result.skipped ? `跳过 ${result.skipped} 条（${skippedReasons || '见日志'}）。` : ''}${result.has_more ? '仍有剩余数据，下一次同步会从当前游标继续。' : '已完成。'}`,
       );
       await fetchJobsPage();
       await fetchJobFeedState();
@@ -3288,17 +3287,6 @@ function AdminContent() {
                           <span className="hidden md:inline">同步招聘数据</span>
                           <span className="md:hidden">同步</span>
                         </Button>
-                        <Button
-                          variant="outline"
-                          size="sm"
-                          className="h-8 text-xs md:text-sm"
-                          onClick={() => setReconcileConfirmOpen(true)}
-                          disabled={feedSyncing}
-                        >
-                          <RefreshCw className="h-4 w-4 md:mr-2" />
-                          <span className="hidden md:inline">完整对账</span>
-                          <span className="md:hidden">对账</span>
-                        </Button>
                       </>}
                       {canWriteJobs && <Button
                         variant="outline"
@@ -3628,7 +3616,7 @@ function AdminContent() {
                         <div className="mt-3 grid gap-2 text-xs text-muted-foreground sm:grid-cols-2 lg:grid-cols-4">
                           <p>数据源：<span className="text-foreground">{jobFeedState.state.source_system}</span></p>
                           <p>上次增量成功：<span className="text-foreground">{jobFeedState.state.last_incremental_success_at ? new Date(jobFeedState.state.last_incremental_success_at).toLocaleString('zh-CN') : '暂无'}</span></p>
-                          <p>上次完整对账：<span className="text-foreground">{jobFeedState.state.last_reconcile_success_at ? new Date(jobFeedState.state.last_reconcile_success_at).toLocaleString('zh-CN') : '暂无'}</span></p>
+                          <p>历史全量对账：<span className="text-foreground">{jobFeedState.state.last_reconcile_success_at ? new Date(jobFeedState.state.last_reconcile_success_at).toLocaleString('zh-CN') : '暂无'}</span></p>
                           <p>连续失败：<span className={jobFeedState.state.consecutive_failures > 0 ? 'font-medium text-destructive' : 'text-foreground'}>{jobFeedState.state.consecutive_failures}</span></p>
                           {jobFeedState.state.last_error && <p className="sm:col-span-2 lg:col-span-4 break-words text-destructive">最近错误：{jobFeedState.state.last_error}</p>}
                         </div>
@@ -4468,32 +4456,6 @@ function AdminContent() {
               onClick={() => deleteJobId && handleDeleteJob(deleteJobId)}
             >
               删除
-            </AlertDialogAction>
-          </AlertDialogFooter>
-        </AlertDialogContent>
-      </AlertDialog>
-
-      <AlertDialog open={reconcileConfirmOpen} onOpenChange={(open) => {
-        if (!feedSyncing) setReconcileConfirmOpen(open);
-      }}>
-        <AlertDialogContent>
-          <AlertDialogHeader>
-            <AlertDialogTitle>确认执行完整岗位对账</AlertDialogTitle>
-            <AlertDialogDescription>
-              完整对账会逐页读取招聘源，并可能将源中已经消失的岗位标记为关闭。任务可以分批续跑，确定现在开始吗？
-            </AlertDialogDescription>
-          </AlertDialogHeader>
-          <AlertDialogFooter>
-            <AlertDialogCancel disabled={feedSyncing}>取消</AlertDialogCancel>
-            <AlertDialogAction
-              disabled={feedSyncing}
-              onClick={(event) => {
-                event.preventDefault();
-                setReconcileConfirmOpen(false);
-                void handleFeedSync('reconcile');
-              }}
-            >
-              开始对账
             </AlertDialogAction>
           </AlertDialogFooter>
         </AlertDialogContent>

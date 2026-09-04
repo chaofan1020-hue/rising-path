@@ -12,7 +12,7 @@ EnvironmentFile=/opt/liorvix/.env.local
 Environment=NODE_ENV=production
 Environment=HOSTNAME=127.0.0.1
 Environment=PORT=5000
-Environment=JOBS_AUTO_WORKER=false
+Environment=JOBS_AUTO_WORKER=true
 ExecStart=/usr/bin/node /opt/liorvix/dist/server.js
 Restart=always
 RestartSec=5

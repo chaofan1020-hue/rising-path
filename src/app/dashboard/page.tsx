@@ -149,6 +149,25 @@ interface DashboardData {
   latestResumeId: number | null;
   profileReady?: boolean;
   missingSteps?: string[];
+  personalization?: {
+    roles: string[];
+    locations: string[];
+    industries: string[];
+    companies: string[];
+    education: string[];
+    skillCount: number;
+    internshipCount: number;
+    internshipMonths: number;
+    workMonths: number;
+    projectCount: number;
+    focusAreas: Array<{
+      key: string;
+      titleKey: string;
+      descriptionKey: string;
+      descriptionParams: Record<string, string | number>;
+      href: string;
+    }>;
+  } | null;
   plan: {
     context: {
       region: string;
@@ -587,6 +606,53 @@ export default function DashboardPage() {
                       <ArrowRight className="ml-1.5 h-3.5 w-3.5" />
                     </Link>
                   </Button>
+                </div>
+              </section>
+            )}
+            {data.profileReady && data.personalization && (
+              <section className="order-3 border-y border-zinc-200 py-5 dark:border-zinc-800 md:py-6">
+                <div className="mb-4 flex flex-col gap-1">
+                  <h3 className="text-lg font-semibold tracking-tight text-zinc-900 dark:text-zinc-100">
+                    {t('dashboard.personalization.title')}
+                  </h3>
+                  <p className="text-xs leading-5 text-zinc-500 dark:text-zinc-400">
+                    {t('dashboard.personalization.subtitle')}
+                  </p>
+                </div>
+                <div className="grid grid-cols-1 gap-3 border-b border-zinc-200 pb-5 sm:grid-cols-2 lg:grid-cols-4 dark:border-zinc-800">
+                  {[
+                    { key: 'roles', labelKey: 'dashboard.personalization.roles', values: data.personalization.roles },
+                    { key: 'locations', labelKey: 'dashboard.personalization.locations', values: data.personalization.locations },
+                    { key: 'companies', labelKey: 'dashboard.personalization.companies', values: data.personalization.companies },
+                    { key: 'industries', labelKey: 'dashboard.personalization.industries', values: data.personalization.industries },
+                  ].map((item) => (
+                    <div key={item.key} className="min-w-0">
+                      <p className="mb-2 text-xs font-medium text-zinc-500">{t(item.labelKey)}</p>
+                      {item.values.length > 0 ? (
+                        <div className="flex flex-wrap gap-1.5">
+                          {item.values.slice(0, 4).map((value) => <Badge key={value} variant="outline" className="max-w-full truncate text-xs">{value.startsWith('region.') ? t(value) : value}</Badge>)}
+                        </div>
+                      ) : (
+                        <span className="text-xs text-zinc-400">{t('dashboard.personalization.notProvided')}</span>
+                      )}
+                    </div>
+                  ))}
+                </div>
+                <div className="mt-5 grid grid-cols-1 gap-3 lg:grid-cols-2">
+                  {data.personalization.focusAreas.map((area) => (
+                    <Link key={area.key} href={area.href} className="group border-b border-zinc-200 pb-3 transition-colors hover:border-zinc-500 dark:border-zinc-800 dark:hover:border-zinc-500">
+                      <div className="flex items-start justify-between gap-3">
+                        <p className="text-sm font-medium text-zinc-900 dark:text-zinc-100">{t(area.titleKey)}</p>
+                        <ArrowRight className="mt-0.5 h-3.5 w-3.5 shrink-0 text-zinc-400 transition-transform group-hover:translate-x-0.5" />
+                      </div>
+                      <p className="mt-1 text-xs leading-5 text-zinc-500 dark:text-zinc-400">{t(area.descriptionKey, area.descriptionParams)}</p>
+                    </Link>
+                  ))}
+                </div>
+                <div className="mt-4 flex flex-wrap gap-x-5 gap-y-2 text-xs text-zinc-500">
+                  <span>{t('dashboard.personalization.education')}: {data.personalization.education[0] || t('dashboard.personalization.notProvided')}</span>
+                  <span>{t('dashboard.personalization.experience')}: {data.personalization.internshipCount} / {data.personalization.projectCount}</span>
+                  <span>{t('dashboard.personalization.skills')}: {data.personalization.skillCount}</span>
                 </div>
               </section>
             )}

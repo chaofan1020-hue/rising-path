@@ -1,6 +1,7 @@
 const statusEl = document.getElementById("status");
 const errorEl = document.getElementById("error");
 const fieldsEl = document.getElementById("fields");
+const fieldCountEl = document.getElementById("field-count");
 const selectedKeys = new Set();
 
 function showError(message) {
@@ -31,8 +32,9 @@ function render(state) {
     ? `已连接 · ${state.context?.company || "未指定公司"} · ${state.fields.length} 个字段`
     : "未连接 Liorvix，请先在 Liorvix 登录";
   fieldsEl.innerHTML = "";
+  fieldCountEl.textContent = state.results.length ? `${state.results.length} 个` : "";
   if (!state.results.length) {
-    fieldsEl.innerHTML = '<p class="muted">还没有预填数据，先点击“扫描表单”。</p>';
+    fieldsEl.innerHTML = '<p class="muted">先扫描当前招聘页面，系统会把可填写字段列在这里。</p>';
     return;
   }
   for (const result of state.results) {
@@ -117,9 +119,11 @@ document.getElementById("open-liorvix").addEventListener("click", () => {
 });
 
 fieldsEl.addEventListener("change", (event) => {
-  const key = event.target.dataset.key;
+  const target = event.target;
+  if (target.type !== "checkbox") return;
+  const key = target.dataset.key;
   if (!key) return;
-  if (event.target.checked) selectedKeys.add(key);
+  if (target.checked) selectedKeys.add(key);
   else selectedKeys.delete(key);
 });
 

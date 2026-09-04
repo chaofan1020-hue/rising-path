@@ -2,7 +2,7 @@ import { NextRequest, NextResponse } from 'next/server';
 import { getSupabaseAnonClient } from '@/storage/database/supabase-client';
 import { getAuthRedirectOrigin, getClientIp } from '@/lib/auth-server';
 import { isValidEmail } from '@/lib/auth-shared';
-import { consumeAuthRateLimit, normalizeEmail } from '@/lib/auth-security';
+import { authErrorMessage, consumeAuthRateLimit, normalizeEmail } from '@/lib/auth-security';
 
 export async function POST(request: NextRequest) {
   const ip = getClientIp(request);
@@ -28,7 +28,15 @@ export async function POST(request: NextRequest) {
     const { error } = await supabase.auth.resetPasswordForEmail(email, {
       redirectTo: `${redirectOrigin}/auth/callback?next=${encodeURIComponent('/login?mode=update-password')}`,
     });
-    if (error) console.error('[Auth] Password reset failed:', error.message);
+    if (error) {
+      console.error('[Auth] Password reset failed:', error.message);
+      const message = error.message.toLowerCase();
+      // A provider/SMTP outage is not an account-enumeration signal, so make
+      // it visible to the user instead of claiming that an email was sent.
+      if (message.includes('error sending') || message.includes('smtp')) {
+        return NextResponse.json({ error: authErrorMessage(error) }, { status: 503 });
+      }
+    }
 
     // Keep the response generic so the endpoint cannot be used for account enumeration.
     return NextResponse.json({ success: true });

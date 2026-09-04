@@ -61,6 +61,23 @@ type RotationData = {
   summary: { platformActiveJobs: number; platformFeedJobs: number; createdInRecentRuns: number; updatedInRecentRuns: number; recentRuns: number; failedRuns: number; closed24h: number; closedCapped: boolean; lookbackHours: number; localNew: number; localUpdated: number; localClosed: number };
   changes: { runs: RemoteRun[]; removed: Array<{ id: string; company_name: string; title: string; location: string | null; closed_at: string | null; updated_at: string }>; jobs: ChangeRow[]; pagination: { page: number; pageSize: number; total: number; totalPages: number; changeType: ChangeType } };
 };
+type FieldQualityCompany = {
+  company: string;
+  total: number;
+  verifiedDeadline: number;
+  verifiedSalary: number;
+  verifiedLocation: number;
+  pending: number;
+  rejected: number;
+  invalidDeadline: number;
+  latestVerifiedAt: string | null;
+  coverage: { deadline: number; salary: number; location: number };
+  priorityScore: number;
+  releaseGate: 'passed' | 'pending_recheck';
+  ruleConfigured: boolean;
+  companyId: string | null;
+};
+type FieldQualityData = { generatedAt: string; companySyncAvailable: boolean; companies: FieldQualityCompany[] };
 
 const changeFilters: Array<{ value: ChangeType; label: string }> = [
   { value: 'all', label: '全部变更' },
@@ -136,6 +153,8 @@ export default function JobRotationPage() {
   const [changeType, setChangeType] = useState<ChangeType>('all');
   const [page, setPage] = useState(1);
   const [syncing, setSyncing] = useState(false);
+  const [companySyncing, setCompanySyncing] = useState<string | null>(null);
+  const [quality, setQuality] = useState<FieldQualityData | null>(null);
   const [syncMessage, setSyncMessage] = useState('');
   const [syncError, setSyncError] = useState('');
 
@@ -144,9 +163,13 @@ export default function JobRotationPage() {
     setError('');
     try {
       const params = new URLSearchParams({ change_type: changeType, page: String(page), page_size: '50', hours: '24' });
-      const response = await fetch(`/api/admin/job-rotation?${params.toString()}`, { cache: 'no-store' });
+      const [response, qualityResponse] = await Promise.all([
+        fetch(`/api/admin/job-rotation?${params.toString()}`, { cache: 'no-store' }),
+        fetch('/api/admin/job-field-quality', { cache: 'no-store' }),
+      ]);
       const payload = await response.json() as RotationData & { error?: string };
       if (!response.ok) throw new Error(payload.error || '读取岗位轮换状态失败');
+      if (qualityResponse.ok) setQuality(await qualityResponse.json() as FieldQualityData);
       setData(payload);
       setLastRefresh(new Date().toISOString());
     } catch (cause) {
@@ -175,6 +198,30 @@ export default function JobRotationPage() {
       setSyncError(cause instanceof Error ? cause.message : '岗位同步失败');
     } finally {
       setSyncing(false);
+    }
+  };
+
+  const handleCompanySync = async (company: string, companyId: string | null) => {
+    if (!companyId) {
+      setSyncError(`${company} 尚未在主服务器公司目录中找到稳定标识，无法安全定向同步。`);
+      return;
+    }
+    setCompanySyncing(company);
+    setSyncError('');
+    setSyncMessage('');
+    try {
+      const response = await fetch('/api/jobs/sync-feed', {
+        method: 'POST', headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ mode: 'incremental', maxPages: 20, companyId }),
+      });
+      const payload = await response.json() as { error?: string; result?: { received?: number; upserted?: number; closed?: number } };
+      if (!response.ok) throw new Error(payload.error || '定向同步失败');
+      setSyncMessage(`${company} 同步完成：收到 ${payload.result?.received || 0} 条，更新 ${payload.result?.upserted || 0} 条，下架 ${payload.result?.closed || 0} 条。`);
+      await fetchData();
+    } catch (cause) {
+      setSyncError(cause instanceof Error ? cause.message : '定向同步失败');
+    } finally {
+      setCompanySyncing(null);
     }
   };
 
@@ -210,6 +257,16 @@ export default function JobRotationPage() {
               {loading ? <tr><td colSpan={7} className="py-12 text-center text-muted-foreground"><Loader2 className="mx-auto mb-2 h-5 w-5 animate-spin" />正在加载轮换明细…</td></tr> : data.changes.jobs.length === 0 ? <tr><td colSpan={7} className="py-12 text-center text-muted-foreground">当前时间窗口内没有匹配的岗位变更</td></tr> : data.changes.jobs.map((row) => <tr key={row.id} className="align-top hover:bg-muted/30"><td className="px-3 py-3"><ChangeBadge type={row.change_type} /><p className="mt-1 text-xs text-muted-foreground">ID {row.id}</p>{row.missing_feed_checks > 0 && <p className="mt-1 text-xs text-amber-600">缺席对账 {row.missing_feed_checks} 次</p>}</td><td className="max-w-[320px] px-3 py-3"><p className="font-medium">{row.title}</p><p className="mt-1 text-xs text-muted-foreground">{row.company}{row.job_type ? ` · ${row.job_type}` : ''}</p></td><td className="px-3 py-3"><p>{row.region || '未注明'}</p><p className="mt-1 text-xs text-muted-foreground">{row.direction || '方向未注明'}</p></td><td className="px-3 py-3 whitespace-nowrap">{formatDeadline(row.valid_through)}</td><td className="px-3 py-3 whitespace-nowrap"><p>{formatTime(row.updated_at || row.created_at)}</p><p className="mt-1 text-xs text-muted-foreground">创建于 {formatTime(row.created_at)}</p><p className="mt-1 text-xs text-muted-foreground">来源核验 {relativeTime(row.last_verified_at)}</p></td><td className="px-3 py-3 whitespace-nowrap"><LinkHealth row={row} />{(row.last_link_checked_at || row.availability_checked_at) && <p className="mt-1 text-xs text-muted-foreground">{relativeTime(row.last_link_checked_at || row.availability_checked_at)}</p>}{row.last_link_error && <p className="mt-1 max-w-[220px] truncate text-xs text-muted-foreground" title={row.last_link_error}>{row.last_link_error}</p>}</td><td className="px-3 py-3 text-right"><div className="flex justify-end gap-1"><Button size="icon" variant="ghost" title="查看原岗位链接" aria-label="查看原岗位链接" disabled={!row.job_url} asChild={Boolean(row.job_url)}>{row.job_url ? <a href={row.job_url} target="_blank" rel="noopener noreferrer"><ExternalLink className="h-4 w-4" /></a> : <Link2 className="h-4 w-4 text-muted-foreground" />}</Button><Button size="sm" variant="outline" asChild><a href={`/admin?tab=jobs`}><BriefcaseBusiness className="mr-1 h-3.5 w-3.5" />管理</a></Button></div></td></tr>)}
             </tbody></table></div>
             <div className="mt-4 flex flex-col items-center justify-between gap-3 text-xs text-muted-foreground sm:flex-row"><span>共 {formatNumber(data.changes.pagination.total)} 条，当前第 {data.changes.pagination.page} / {Math.max(totalPages, 1)} 页</span><div className="flex items-center gap-2"><Button type="button" size="sm" variant="outline" onClick={() => setPage((current) => Math.max(1, current - 1))} disabled={page <= 1 || loading}>上一页</Button><Button type="button" size="sm" variant="outline" onClick={() => setPage((current) => Math.min(totalPages, current + 1))} disabled={page >= totalPages || loading || totalPages === 0}>下一页</Button></div></div>
+          </CardContent>
+        </Card>
+
+        <Card>
+          <CardHeader className="flex flex-col gap-3 pb-3 md:flex-row md:items-center md:justify-between"><div><CardTitle className="text-base">公司字段质量</CardTitle><p className="mt-1 text-xs text-muted-foreground">只统计已进入本站的开放岗位。字段缺少官网证据时保持不展示，不会触发下架。</p></div><Badge variant="outline">{quality ? `已审计 ${formatNumber(quality.companies.length)} 家` : '读取中'}</Badge></CardHeader>
+          <CardContent className="pt-0">
+            <div className="overflow-x-auto rounded-lg border"><table className="w-full min-w-[980px] text-sm"><thead className="bg-muted/50"><tr className="border-b"><th className="px-3 py-3 text-left font-medium">公司</th><th className="px-3 py-3 text-right font-medium">岗位</th><th className="px-3 py-3 text-center font-medium">截止日期</th><th className="px-3 py-3 text-center font-medium">薪资</th><th className="px-3 py-3 text-center font-medium">地点</th><th className="px-3 py-3 text-center font-medium">待复核</th><th className="px-3 py-3 text-left font-medium">发布闸门</th><th className="px-3 py-3 text-right font-medium">操作</th></tr></thead><tbody className="divide-y">
+              {!quality ? <tr><td colSpan={8} className="py-8 text-center text-muted-foreground"><Loader2 className="mx-auto h-4 w-4 animate-spin" /></td></tr> : quality.companies.slice(0, 20).map((company) => <tr key={company.company} className="hover:bg-muted/30"><td className="px-3 py-3"><p className="font-medium">{company.company}</p><p className="mt-1 text-xs text-muted-foreground">{company.ruleConfigured ? '已配置公司规则' : '通用官网规则'}</p></td><td className="px-3 py-3 text-right">{formatNumber(company.total)}</td><td className="px-3 py-3 text-center">{company.coverage.deadline}%</td><td className="px-3 py-3 text-center">{company.coverage.salary}%</td><td className="px-3 py-3 text-center">{company.coverage.location}%</td><td className="px-3 py-3 text-center">{formatNumber(company.pending + company.rejected)}</td><td className="px-3 py-3">{company.releaseGate === 'passed' ? <Badge variant="secondary">可发布</Badge> : <Badge variant="outline">待复核</Badge>}{company.invalidDeadline > 0 && <p className="mt-1 text-xs text-destructive">异常日期 {company.invalidDeadline}</p>}</td><td className="px-3 py-3 text-right"><Button size="sm" variant="outline" disabled={!canSync || !quality.companySyncAvailable || !company.companyId || companySyncing !== null} title={quality.companySyncAvailable ? company.companyId ? '仅同步该公司开放岗位与关闭事件' : '主服务器未返回该公司的稳定标识' : '等待上游启用按公司安全过滤'} onClick={() => void handleCompanySync(company.company, company.companyId)}>{companySyncing === company.company ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <RefreshCw className="h-3.5 w-3.5" />}<span className="ml-1">同步</span></Button></td></tr>)}
+            </tbody></table></div>
+            {quality && !quality.companySyncAvailable && <p className="mt-3 text-xs text-muted-foreground">定向同步将会在主服务器发布公司过滤能力后自动可用；当前禁用是为了避免按钮误触发全库扫描。</p>}
           </CardContent>
         </Card>
 

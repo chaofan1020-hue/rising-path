@@ -2,10 +2,12 @@ import { NextRequest, NextResponse } from 'next/server';
 import { getSupabaseClient } from '@/storage/database/supabase-client';
 import { detectSponsorship } from '@/lib/utils';
 import { ADMIN_PERMISSIONS, requireAdminPermission } from '@/lib/admin-permissions';
-import { sanitizeJobContent } from '@/lib/job-content';
+import { isDisplayableJobDescription, sanitizeJobContent } from '@/lib/job-content';
 import { TARGET_REGION_KEYWORDS, targetRegionPostgrestClauses } from '@/lib/job-region-scope';
 import { recordAdminAuditEvent, recordAdminAuditFailure } from '@/lib/admin-audit';
 import { getCompanyFaviconUrl, getCompanyLogoUrl } from '@/lib/company-logo';
+import { isVerifiedField } from '@/lib/job-field-provenance';
+import { isDisplayableJobDeadline } from '@/lib/job-deadline';
 
 export const dynamic = 'force-dynamic';
 export const revalidate = 0;
@@ -141,6 +143,30 @@ function compactListDescription(value: unknown): string {
     : normalized;
 }
 
+function isEntryLevelJobCompatible(job: Record<string, unknown>): boolean {
+  const min = typeof job.experience_min_years === 'number'
+    ? job.experience_min_years
+    : Number(job.experience_min_years);
+  const max = typeof job.experience_max_years === 'number'
+    ? job.experience_max_years
+    : Number(job.experience_max_years);
+  if (Number.isFinite(min) && min > 1) return false;
+  if (Number.isFinite(max) && max > 1 && Number.isFinite(min) && min > 1) return false;
+
+  // Keep a defensive text check for legacy rows whose numeric experience was
+  // never parsed. It only matches explicit years-of-experience requirements,
+  // not incidental mentions such as "three years of product history".
+  const text = [job.experience_text, job.title, job.description, job.requirements]
+    .map((value) => typeof value === 'string' ? value : '')
+    .join(' ')
+    .replace(/\s+/g, ' ');
+  // Titles are often the only structured signal on legacy rows. A clearly
+  // senior/management title is incompatible with an internship or campus
+  // result even when its experience field was never parsed.
+  if (/\b(?:senior|sr\.?|lead|principal|staff|manager|director|vice\s+president|vp|head\s+of|chief)\b/i.test(String(job.title || ''))) return false;
+  return !/(?:at\s+least|minimum(?:\s+of)?|requires?|must\s+have|\bof)\s*(?:\d+(?:\.\d+)?\s*\+?|\d+(?:\.\d+)?\s*(?:-|to|–|—)\s*\d+(?:\.\d+)?)\s*(?:years?|yrs?|年)\s*(?:of\s+)?(?:professional\s+)?experience\b/i.test(text);
+}
+
 export async function GET(request: NextRequest) {
   try {
     const client = getSupabaseClient();
@@ -168,8 +194,8 @@ export async function GET(request: NextRequest) {
     // Supabase's generated select parser requires a literal column string;
     // the route intentionally chooses one of two fixed projections here.
     let query = summaryOnly
-      ? client.from('jobs').select('id,title,company,region,direction,audience,job_type,description,salary_range,job_url,sponsorship,valid_through,is_active,is_closed,created_at,updated_at', { count: 'planned' })
-      : client.from('jobs').select('id,title,company,region,direction,audience,job_type,description,requirements,salary_range,job_url,sponsorship,valid_through,is_active,is_closed,created_at,updated_at', { count: 'planned' });
+      ? client.from('jobs').select('id,title,company,region,direction,audience,job_type,employment_category,experience_min_years,experience_max_years,experience_text,description,salary_range,employment_type,workplace_type,job_url,sponsorship,valid_through,deadline_time_zone,deadline_source,salary_source,location_source,field_evidence,is_active,is_closed,created_at,updated_at', { count: 'planned' })
+      : client.from('jobs').select('id,title,company,region,direction,audience,job_type,employment_category,experience_min_years,experience_max_years,experience_text,description,requirements,salary_range,employment_type,workplace_type,job_url,sponsorship,valid_through,deadline_time_zone,deadline_source,salary_source,location_source,field_evidence,is_active,is_closed,created_at,updated_at', { count: 'planned' });
 
     if (diverseFeed) {
       // updated_at reflects the active feed refresh and naturally mixes the
@@ -179,7 +205,11 @@ export async function GET(request: NextRequest) {
         .order('created_at', { ascending: false })
         .order('id', { ascending: false });
     } else {
-      query = query.order('created_at', { ascending: false });
+      // Jobs imported in one feed batch share a timestamp. A stable secondary
+      // key prevents pagination from duplicating or skipping those records.
+      query = query
+        .order('created_at', { ascending: false })
+        .order('id', { ascending: false });
     }
 
     // 默认只显示可投递岗位；管理员或筛选器可以显式请求全部/已关闭岗位。
@@ -245,7 +275,15 @@ export async function GET(request: NextRequest) {
     // 因此前端按页请求，默认 100 条。
     // Fetch one extra row so pagination remains correct even though the total
     // count uses the planner estimate instead of a full-table exact count.
-    query = query.range(offset, offset + pageLimit);
+    // Fetch a little extra for entry-level filters. Legacy rows may carry an
+    // incorrect category, so filtering after retrieval must not leave a page
+    // empty when a handful of rows are rejected.
+    const entryLevelFilter = jobType === '实习' || jobType === '校招';
+    const queryOffset = entryLevelFilter ? 0 : offset;
+    const rangeEnd = entryLevelFilter
+      ? offset + (pageLimit * 3)
+      : offset + pageLimit;
+    query = query.range(queryOffset, rangeEnd);
 
     const { data, error, count } = await query;
 
@@ -265,8 +303,15 @@ export async function GET(request: NextRequest) {
       company: string;
       [key: string]: unknown;
     }>;
-    const hasMore = jobRows.length > pageLimit;
-    const filteredJobs = jobRows.slice(0, pageLimit);
+    const filteredCandidates = entryLevelFilter
+      ? jobRows.filter(isEntryLevelJobCompatible)
+      : jobRows;
+    const hasMore = entryLevelFilter
+      ? filteredCandidates.length > offset + pageLimit || jobRows.length > rangeEnd
+      : jobRows.length > pageLimit;
+    const filteredJobs = entryLevelFilter
+      ? filteredCandidates.slice(offset, offset + pageLimit)
+      : filteredCandidates.slice(0, pageLimit);
 
     // 为每个岗位添加分类信息和 logo
     const companies = [...new Set(filteredJobs.map((job) => String((job as { company?: unknown }).company || '')).filter(Boolean))];
@@ -282,10 +327,25 @@ export async function GET(request: NextRequest) {
     }
     const jobsWithLogo = filteredJobs.map((job) => {
       const sanitizedJob = sanitizeJobContent(job);
+      if (!isDisplayableJobDescription(sanitizedJob.description)) sanitizedJob.description = null;
+      // Historical collection rows did not record provenance. Keep them
+      // searchable for continuity, but do not present their salary, deadline
+      // or location as candidate-facing facts until a verified source arrives.
+      const visibleSalary = isVerifiedField(sanitizedJob.salary_range, typeof sanitizedJob.salary_source === 'string' ? sanitizedJob.salary_source : null);
+      const deadlineSourceType: string | null = sanitizedJob.field_evidence && typeof sanitizedJob.field_evidence === 'object' && !Array.isArray(sanitizedJob.field_evidence)
+        && typeof (sanitizedJob.field_evidence as Record<string, unknown>).source_type === 'string'
+        ? (sanitizedJob.field_evidence as Record<string, unknown>).source_type as string
+        : null;
+      const visibleDeadline = isVerifiedField(sanitizedJob.valid_through, typeof sanitizedJob.deadline_source === 'string' ? sanitizedJob.deadline_source : null)
+        && isDisplayableJobDeadline(sanitizedJob.valid_through, typeof sanitizedJob.deadline_source === 'string' ? sanitizedJob.deadline_source : null, deadlineSourceType);
+      const visibleLocation = isVerifiedField(sanitizedJob.region, typeof sanitizedJob.location_source === 'string' ? sanitizedJob.location_source : null);
       return {
         ...sanitizedJob,
+        salary_range: visibleSalary ? sanitizedJob.salary_range : null,
+        valid_through: visibleDeadline ? sanitizedJob.valid_through : null,
+        region: visibleLocation ? sanitizedJob.region : '未注明',
         ...(summaryOnly ? { description: compactListDescription(sanitizedJob.description) } : {}),
-        region_category: getRegionCategory(job.region),
+        region_category: visibleLocation ? getRegionCategory(job.region) : '未注明',
         direction_category: getDirectionCategory(job.direction),
         logo_url: localLogosCache[job.company]
           || getCompanyLogoUrl(job.company, typeof job.job_url === 'string' ? job.job_url : null),
