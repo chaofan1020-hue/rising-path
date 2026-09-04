@@ -1021,3 +1021,17 @@ Microsoft 岗位详情页为 `apply.careers.microsoft.com/careers/job/<id>`，Me
 ### 后续观察
 
 UBS 和 Jane Street 按顺序为下一批，但均需要先解决独立阻塞：UBS 官方页面超过当前安全响应大小限制；Jane Street 样本出现重定向到非 HTTPS 目标的协议问题。两家均未写入、未改状态，继续保持 `discovery_required`，待处理完上述阻塞后再回到队列。
+
+## 2026-09-04：Deloitte 地点证据修复与 Morgan Stanley Taleo 阻塞（生产复核）
+
+### Deloitte 地点修复
+
+- 已将 `src/lib/job-official-detail.ts` 的解析修复部署到美国生产服务器 `/opt/liorvix`，旧文件已保留带时间戳备份；数据库迁移检查无待执行项，服务重启后本机 `/api/health` 返回 `{"status":"ok"}`。
+- 生产 dry-run 显式使用 `/opt/liorvix/.env.local`，目标 Supabase project ref 为 `weqvdtdjdzmqflhwobec`。当时在招岗位 `1,207` 条，地点证据为 `unavailable_on_official_source`/`pending_recheck` 的候选 `1,153` 条；详情成功 `1,146` 条，全部抽取到 `apply.deloitte.com` 页面标题下方的官方地点，7 条返回 HTTP 404。
+- 已完成 20 条 canary 和后续 100 条小批量写入，均为只更新 `region`、`location_source`、地点 `field_evidence` 和 `updated_at`；两批均为 `20/20`、`100/100` 成功。岗位未新增、未删除，`is_active` / `is_closed` 未被修改。实际可回填数高于旧记录中的“约 862”，后续以本次生产 dry-run 的 `1,146` 条官方地点证据为准。
+
+### Morgan Stanley Taleo 未完成
+
+- 生产来源分布已拆开核对：Eightfold `1,092` 条，Taleo `43` 条（host：`morganstanley.eightfold.ai` 与 `morganstanley.tal.net`），不能共用 Eightfold 连接器或游标。
+- Taleo 真实样本 `20/20` 返回 HTTP 200，但页面内容均为 Oleeo/Cloudflare `Quick Check Needed` 人机验证壳；官方字段覆盖为地点 `0`、岗位类型 `0`、经验 `0`、薪资 `0`、截止日期 `0`。未执行 canary、未写入岗位字段、未改变岗位生命周期。
+- 当前阻塞不是解析失败，而是官方详情需要人机验证。禁止通过验证码绕过、伪造或第三方破解服务继续抓取。恢复条件：Morgan Stanley/Taleo 提供官方公开 API 或导出接口、对生产出口做正式 allowlist，或人工验证后获得可审计且获授权的正式接口。满足条件前，43 条保持原有字段证据状态并继续单独列在 Taleo 队列，不得标记为 Eightfold 已完成。
