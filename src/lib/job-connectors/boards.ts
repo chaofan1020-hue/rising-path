@@ -25,6 +25,7 @@ export const PHASE2_CONNECTOR_BOARDS: ConnectorBoardConfig[] = [
     ['Elastic', 'elastic'],
     ['Duolingo', 'duolingo'],
     ['Roblox', 'roblox'],
+    ['Jane Street', 'janestreet'],
   ].map(([company, board]) => ({ connector: 'greenhouse' as const, company, board })),
   ...[
     { connector: 'ashby' as const, company: 'Runway', board: 'runway', boardAliases: ['runway-ml'] },
