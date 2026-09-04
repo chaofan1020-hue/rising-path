@@ -1036,3 +1036,46 @@ UBS 和 Jane Street 按顺序为下一批，但均需要先解决独立阻塞：
 - 生产来源分布已拆开核对：Eightfold `1,092` 条，Taleo `43` 条（host：`morganstanley.eightfold.ai` 与 `morganstanley.tal.net`），不能共用 Eightfold 连接器或游标。
 - Taleo 真实样本 `20/20` 返回 HTTP 200，但页面内容均为 Oleeo/Cloudflare `Quick Check Needed` 人机验证壳；官方字段覆盖为地点 `0`、岗位类型 `0`、经验 `0`、薪资 `0`、截止日期 `0`。未执行 canary、未写入岗位字段、未改变岗位生命周期。
 - 当前阻塞不是解析失败，而是官方详情需要人机验证。禁止通过验证码绕过、伪造或第三方破解服务继续抓取。恢复条件：Morgan Stanley/Taleo 提供官方公开 API 或导出接口、对生产出口做正式 allowlist，或人工验证后获得可审计且获授权的正式接口。满足条件前，43 条保持原有字段证据状态并继续单独列在 Taleo 队列，不得标记为 Eightfold 已完成。
+
+
+## 2026-09-05：Deutsche Bank、Bain & Company、Two Sigma、Evercore 官方来源接入收口
+
+### Deutsche Bank（官方 beesite JSON API，220 条）
+
+- 官方源：`api-deutschebank.beesite.de`。列表 `search/?data={JSON}` 按 CountItem 分页，详情 `jobhtml/{PositionID}.json` 返回 `{html, apply_uri}`；官方广告正文头部有结构化 `Location:` / `Full/Part-Time:` / `Listed:` 字段。
+- 数据库岗位 URL `#/professional/job/{PositionID}` 与 API `PositionID` 完全对应（如 `75420`）。
+- 在 `src/lib/job-official-detail.ts` 新增 `deutscheBankDetailsFromApi(payload)`，`scripts/backfill-official-job-details.ts` 增加 DB 专用 fetch 分支；`APPROVED_GENERIC_HOSTS` 增加 `Deutsche Bank: ['careers.db.com']`。
+- 生产验收：220 条在招、`is_closed=0`；地点 214/220（209 verified）、岗位类型 208（205 verified）、薪资 129（verified）、经验 47 条。官网 `Listed` 是发布日期不是截止日期，截止日期保持为空。
+- 顺带修正 11 条被历史解析器错标为 `Part-Time` 的岗位（官方详情明确 `Full-time`），改回 `社招`，证据 `previous_status: rejected_legacy`；剩余 3 条（10744/10982/10995）官方头部 MISSING 不动。
+
+### Bain & Company（官方详情页，79 条）
+
+- 来源 `careers.bain.com/jobs/FolderDetail/...`，正文含 `Employment Type Permanent Full-Time`、`Location(s): ...`、`Description & Requirements`。
+- 新增 `bainDetailsFromText(page)`，host 白名单 `careers.bain.com`。
+- 生产验收：79 条在招、`is_closed=0`；地点 79/79（78 verified）、岗位类型 78 verified（原 22）、薪资 41 verified（原 7）。
+
+### Two Sigma（官方详情页，45 条）
+
+- 来源 `careers.twosigma.com/careers/JobDetail/...`，正文含 `Location NY New York United States`、`Experience Level Experienced`、`Position Summary`。
+- 新增 `twoSigmaDetailsFromText(page)`；host 白名单 `careers.twosigma.com`。
+- 生产验收：45 条在招、`is_closed=0`；地点 45/45 verified、岗位类型 17 verified（原 1）、经验 37 verified（原 1）、薪资 0（官网无薪资，正确为空）。
+
+### Evercore（Taleo 裸详情页，49 条）
+
+- 数据库 URL：`https://evercore.tal.net/vx/mobile-0/appcentre-ext/brand-4/candidate/so/pm/1/pl/3/opp/{SessionId}-{slug}/en-GB?instant=apply`。
+- 关键陷阱：`?instant=apply` 会 302 到 `xf-{hash}/.../apply` 注册/登录表单页（无岗位详情）；去掉 `?instant=apply` 与 slug、仅保留 `/opp/{id}` 的裸 URL 才返回公开详情页（含 `Location`、`Region`、`Job description` 正文）。
+- `backfill-official-job-details.ts` 增加 Evercore 专用 fetch 分支：从原始 URL 提取 `opp/{id}` 构造裸 URL（保留 `pl/{n}` 与 `/en-GB`），证据 URL 用裸页 URL。
+- 生产 dry-run：20/20 fetched，地点 20、经验 7、薪资 16；canary 20 条写入 0 失败；全量 49 条候选 fetched 49、would_update 29（canary 后剩余）、updated 29、failed 0。
+- 生产验收：49 条在招、`is_closed=0`；地点 49/49（全部 verified，`Location Chicago`、`New York`、`Houston`、`London`、`Menlo Park - Technology, San Francisco` 等）、薪资 40 verified、经验 17 条（正文明确要求，如 “1-2 years of relevant experience”）。工作方式/岗位类型/截止日期官网未提供，保持未知/空。公网 `/api/jobs/32394` 抽样返回 `region: New York`、`salary_range: "$140,000 - $185,000"`、`field_evidence.source_type: official_ats`，岗位仍在招。
+
+### McKinsey & Company（官方源受限，记录阻塞）
+
+- 数据库 149 条岗位 URL `mckinsey.avature.net/careers/ApplicationMethods?folderId={id}` 全部 302 到登录页；`www.mckinsey.com/careers/search-jobs` 反爬（一次可访问后持续超时）。
+- 详情、`Location(s)`、`Description & Requirements` 均在登录后的申请页内，公开访问拿不到结构化字段。
+- 按 Morgan Stanley Taleo 先例处理：不写入、不改生命周期，在文档中记录“官方源需登录/反爬受限”。
+
+### UBS、Citadel（阻塞，仅记录）
+
+- UBS（351 条，BrassRing）：官方页面 AJAX 403 且 1.3MB 响应超过当前安全大小限制，无写入，保持 `discovery_required`。
+- Citadel（33 条）：官方页面 403 反爬，无写入。
+- Rothschild & Co：已由 official-details-worker 自动追平（日志 `candidate_jobs: 0`），无需手动回填。

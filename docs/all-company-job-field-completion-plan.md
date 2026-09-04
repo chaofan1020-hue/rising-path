@@ -1,7 +1,7 @@
 # 全公司岗位字段完善计划
 
 更新时间：2026-09-05  
-状态：Wells Fargo、Accenture 已完成生产字段回填与严格回归；MongoDB、Okta、Elastic、Duolingo、Roblox、Jane Street、KKR 七家 Greenhouse 公司已于 2026-09-05 完成生产回填与验收；BlackRock 已于同日完成官方详情接入与生产回填；按来源族逐批执行，不做全站批量回填
+状态：Wells Fargo、Accenture 已完成生产字段回填与严格回归；MongoDB、Okta、Elastic、Duolingo、Roblox、Jane Street、KKR 七家 Greenhouse 公司已于 2026-09-05 完成生产回填与验收；BlackRock、Millennium Management、Deutsche Bank、Bain & Company、Two Sigma、Evercore 已按官方 JSON/详情页来源完成生产回填与验收；McKinsey、UBS、Citadel 官方源受限记为阻塞；按来源族逐批执行，不做全站批量回填
 
 ## 1. 目标与边界
 
@@ -36,7 +36,7 @@ Greenhouse、Ashby 与 Lever 的以下 31 家已完成生产抽样、全量只�
 | Greenhouse | Cloudflare、Stripe、Datadog、Coinbase、Asana、Brex、Databricks、Figma、GitLab、Point72、Reddit、Robinhood、Twilio、Discord、TPG、Bridgewater Associates、General Atlantic、MongoDB、Okta、Elastic、Duolingo、Roblox、Jane Street、KKR | `src/lib/job-connectors/greenhouse.ts` + 详情页补充 |
 | Ashby | OpenAI、Cursor、Notion、Perplexity、Ramp、Vanta、Runway、Linear | `src/lib/job-connectors/ashby.ts` + 详情页补充 |
 | Lever | Palantir | `src/lib/job-connectors/lever.ts` + 详情页补充 |
-| 通用官方详情 | BlackRock、Millennium Management | `job-official-detail.ts` JSON-LD 正文提取 + `backfill-official-job-details.ts` |
+| 通用官方详情 | BlackRock、Millennium Management、Deutsche Bank、Bain & Company、Two Sigma、Evercore | `job-official-detail.ts` JSON-LD/官方正文/官方 JSON API 提取 + `backfill-official-job-details.ts` |
 
 Cloudflare 已完成经验字段的生产回填验证，可作为同族连接器的验收样板，但不等同于其他 Greenhouse 公司无需验证。
 

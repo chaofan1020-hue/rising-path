@@ -1,6 +1,6 @@
 import { config as loadDotenv } from 'dotenv';
 import { isDisplayableJobDescription } from '@/lib/job-content';
-import { extractOfficialJobDetails, isJobContentShell } from '@/lib/job-official-detail';
+import { deutscheBankDetailsFromApi, extractOfficialJobDetails, isJobContentShell } from '@/lib/job-official-detail';
 import { extractOfficialJobRequirements, looksLikeBlockedPage, looksLikeClosedJobPage } from '@/lib/job-maintenance';
 import { fetchSafeExternalPage } from '@/lib/safe-external-fetch';
 import {
@@ -66,6 +66,10 @@ const APPROVED_GENERIC_HOSTS: Record<string, string[]> = {
   'Goldman Sachs': ['higher.gs.com'],
   BlackRock: ['careers.blackrock.com'],
   'Millennium Management': ['mlp.eightfold.ai', 'career.mlp.com'],
+  'Deutsche Bank': ['careers.db.com'],
+  'Bain & Company': ['careers.bain.com'],
+  'Two Sigma': ['careers.twosigma.com'],
+  Evercore: ['evercore.tal.net'],
 };
 
 function genericOfficialWriteEnabled(company: string): boolean {
@@ -353,7 +357,7 @@ async function activeCompanyJobs(
     const { data, error } = await query;
     if (error) throw new Error(`Failed to read ${company} jobs: ${error.message}`);
     const page = (data || []) as Job[];
-    candidates.push(...page.filter((job) => jobIds.length > 0 && jobIds.includes(job.id) ? true : hasCandidate(job)));
+    candidates.push(...page.filter((job) => jobIds.length > 0 && jobIds.includes(job.id) ? true : (company === 'Deutsche Bank' ? (hasCandidate(job) || job.employment_category === 'Part-Time' || job.job_type === 'Part-Time') : hasCandidate(job))));
   if (jobIds.length > 0 || page.length < PAGE_SIZE || (candidateCap != null && candidates.length >= candidateCap)) break;
     const lastId = Number(page[page.length - 1]?.id);
     if (!Number.isInteger(lastId) || lastId <= (cursor || 0)) break;
@@ -494,6 +498,155 @@ async function main(): Promise<void> {
           incrementSkip('unapproved_workday_host');
           skippedJobIds.push(job.id);
         } else {
+          if (company === 'Deutsche Bank') {
+            await waitForRequestSlot();
+            const positionId = job.job_url.match(/\/professional\/job\/(\d+)/)?.[1];
+            if (!positionId) {
+              incrementSkip('no_position_id');
+              skippedJobIds.push(job.id);
+            } else {
+              const apiResponse = await fetch(`https://api-deutschebank.beesite.de/jobhtml/${encodeURIComponent(positionId)}.json`, { cache: 'no-store' });
+              if (!apiResponse.ok) {
+                result.failed += 1;
+                failedJobIds.push(job.id);
+                const reason = `Deutsche Bank API HTTP ${apiResponse.status}`;
+                result.skip_reasons[reason] = (result.skip_reasons[reason] || 0) + 1;
+              } else {
+                const payload: unknown = await apiResponse.json();
+                const details = deutscheBankDetailsFromApi(payload);
+                if (!details?.description || details.description.length < 160) {
+                  incrementSkip('no_public_description');
+                  skippedJobIds.push(job.id);
+                } else {
+                  result.fetched += 1;
+                  const evidenceUrl = job.job_url;
+                  let preparedJob = preparePatch(job, evidenceUrl, details, reviewMissingFields);
+                  if (details.employmentType && (job.employment_category === 'Part-Time' || job.job_type === 'Part-Time')) {
+                    // Deutsche Bank's Full/Part-Time header is the authoritative
+                    // employment schedule. A stored "Part-Time" label that
+                    // contradicts an official "Full-time" schedule is legacy
+                    // data from an earlier description-only parser; fix it from
+                    // the title instead of preserving the wrong label.
+                    const corrected = normalizeEmploymentCategory([details.employmentType, job.title]);
+                    if (corrected !== '未知') {
+                      const previousEvidence = (job.field_evidence && typeof job.field_evidence === 'object')
+                        ? job.field_evidence as Record<string, unknown>
+                        : {};
+                      const previousFields = previousEvidence.fields && typeof previousEvidence.fields === 'object' && !Array.isArray(previousEvidence.fields)
+                        ? previousEvidence.fields as Record<string, unknown>
+                        : {};
+                      const nextFields = { ...previousFields };
+                      nextFields.employment_category = {
+                        status: 'verified',
+                        source: 'official_payload',
+                        evidence_url: evidenceUrl,
+                        evidence_kind: 'official_payload',
+                        verified_at: new Date().toISOString(),
+                        previous_status: 'rejected_legacy',
+                      };
+                      const now = new Date().toISOString();
+                      if (preparedJob) {
+                        preparedJob.patch.employment_category = corrected;
+                        preparedJob.patch.job_type = corrected;
+                        if (!preparedJob.fields.includes('employment_category')) preparedJob.fields.push('employment_category');
+                        preparedJob.patch.field_evidence = { ...previousEvidence, fields: nextFields };
+                      } else {
+                        preparedJob = {
+                          job,
+                          pageUrl: evidenceUrl,
+                          patch: {
+                            employment_category: corrected,
+                            job_type: corrected,
+                            field_evidence: { ...previousEvidence, fields: nextFields },
+                            updated_at: now,
+                          },
+                          fields: ['employment_category'],
+                          unavailableFields: [],
+                        };
+                      }
+                    }
+                  }
+                  if (!preparedJob) {
+                    incrementSkip('no_new_fields');
+                    skippedJobIds.push(job.id);
+                  } else {
+                    prepared.push(preparedJob);
+                    result.would_update += 1;
+                    for (const field of FIELDS) {
+                      if (preparedJob.fields.includes(field)) result.candidate_fields[field] += 1;
+                    }
+                    result.unavailable_fields += preparedJob.unavailableFields.length;
+                    if (write) {
+                      const { error } = await client
+                        .from('jobs')
+                        .update(preparedJob.patch)
+                        .eq('id', job.id)
+                        .eq('source_system', 'collector_feed')
+                        .eq('company', company)
+                        .eq('is_active', true);
+                      if (error) throw new Error(`Failed to update job ${job.id}: ${error.message}`);
+                      result.updated += 1;
+                    }
+                    processedJobIds.push(job.id);
+                  }
+                }
+              }
+            }
+          } else if (company === 'Evercore') {
+            // Evercore's Taleo links carry ?instant=apply, which redirects to a
+            // registration/apply form instead of the job detail page. The bare
+            // opp/{id}/en-GB URL (same pl/{n} path segment) returns the public
+            // detail page with the official Location / Region / Job description.
+            await waitForRequestSlot();
+            const oppId = url.pathname.match(/\/opp\/(\d+)(?:[-/])/)?.[1];
+            if (!oppId) {
+              incrementSkip('no_opp_id');
+              skippedJobIds.push(job.id);
+            } else {
+              const barePath = url.pathname.replace(/\/opp\/\d+[^/]*/i, `/opp/${oppId}`);
+              const bareUrl = `${url.origin}${barePath}`;
+              const page = await fetchSafeExternalPage(bareUrl);
+              if (looksLikeClosedJobPage(page.title, page.content)) {
+                incrementSkip('closed_page');
+                skippedJobIds.push(job.id);
+              } else {
+                const details = extractOfficialJobDetails(page);
+                if (looksLikeBlockedPage(page.title, page.content)) {
+                  incrementSkip('blocked');
+                  skippedJobIds.push(job.id);
+                } else if (!details?.description || details.description.length < 160) {
+                  incrementSkip('no_public_description');
+                  skippedJobIds.push(job.id);
+                } else {
+                  result.fetched += 1;
+                  const preparedJob = preparePatch(job, bareUrl, details, reviewMissingFields);
+                  if (!preparedJob) {
+                    incrementSkip('no_new_fields');
+                    skippedJobIds.push(job.id);
+                  } else {
+                    prepared.push(preparedJob);
+                    result.would_update += 1;
+                    for (const field of FIELDS) {
+                      if (preparedJob.fields.includes(field)) result.candidate_fields[field] += 1;
+                    }
+                    result.unavailable_fields += preparedJob.unavailableFields.length;
+                    if (write) {
+                      const { error } = await client
+                        .from('jobs')
+                        .update(preparedJob.patch)
+                        .eq('id', job.id)
+                        .eq('source_system', 'collector_feed')
+                        .eq('company', company)
+                        .eq('is_active', true);
+                      if (error) throw new Error(`Failed to update job ${job.id}: ${error.message}`);
+                      result.updated += 1;
+                    }
+                    processedJobIds.push(job.id);
+                  }
+                }
+              }
+            }
+          } else {
           await waitForRequestSlot();
           const page = await fetchSafeExternalPage(job.job_url);
           if (looksLikeClosedJobPage(page.title, page.content)
@@ -537,6 +690,7 @@ async function main(): Promise<void> {
               }
             }
           }
+        }
         }
       } catch (error) {
         result.failed += 1;

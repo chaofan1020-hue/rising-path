@@ -169,6 +169,79 @@ function goldmanDetailsFromText(page: ExternalPageContent, description: string |
   return { location, salaryRange, experience };
 }
 
+function evercoreDetailsFromText(page: ExternalPageContent): OfficialJobDetails | null {
+  let hostname = '';
+  try { hostname = new URL(page.url).hostname.toLowerCase(); } catch { return null; }
+  if (hostname !== 'evercore.tal.net') return null;
+  const visible = jobHtmlToPlainText(page.content).replace(/\s+/g, ' ').trim();
+  if (visible.length < 160) return null;
+
+  const location = visible.match(/\bLocation\s+([A-Z][A-Za-z .,'-]{1,80}?)(?=\s+(?:Region|Group|Job description|Job Description|Description|Apply|Share))/)?.at(1) || null;
+  const descriptionStart = visible.search(/Job description/);
+  const description = descriptionStart >= 0 ? visible.slice(descriptionStart) : visible;
+  return {
+    description: description.length >= 160 ? description : null,
+    responsibilities: null,
+    requirements: null,
+    experience: null,
+    location: location ? location.replace(/\s+/g, ' ').trim() : null,
+    validThrough: null,
+    salaryRange: null,
+    employmentType: null,
+    workplaceType: null,
+    source: 'official_page_text',
+  };
+}
+
+function bainDetailsFromText(page: ExternalPageContent): OfficialJobDetails | null {
+  let hostname = '';
+  try { hostname = new URL(page.url).hostname.toLowerCase(); } catch { return null; }
+  if (hostname !== 'careers.bain.com') return null;
+  const visible = jobHtmlToPlainText(page.content).replace(/\s+/g, ' ').trim();
+  if (visible.length < 160) return null;
+
+  const location = visible.match(/(?:Location\(s\)|Locations)\s*:?\s*([A-Z][A-Za-z ,.|-]+?)(?=\s+(?:Description & Requirements|What Makes Us|Job Description|About the Role|Description|Job ID))/)?.at(1) || null;
+  const employmentType = visible.match(/Employment Type\s+([A-Za-z-]+(?:\s+[A-Za-z-]+)?)/)?.[1] || null;
+  const descriptionStart = visible.search(/(?:Description & Requirements|Job Description|About the Role)/);
+  const description = descriptionStart >= 0 ? visible.slice(descriptionStart) : visible;
+  return {
+    description: description.length >= 160 ? description : null,
+    responsibilities: null,
+    requirements: null,
+    experience: null,
+    location: location ? location.replace(/\s+/g, ' ').trim() : null,
+    validThrough: null,
+    salaryRange: null,
+    employmentType,
+    workplaceType: null,
+    source: 'official_page_text',
+  };
+}
+
+function twoSigmaDetailsFromText(page: ExternalPageContent): OfficialJobDetails | null {
+  let hostname = '';
+  try { hostname = new URL(page.url).hostname.toLowerCase(); } catch { return null; }
+  if (hostname !== 'careers.twosigma.com') return null;
+  const visible = jobHtmlToPlainText(page.content).replace(/\s+/g, ' ').trim();
+  if (visible.length < 160) return null;
+
+  const location = visible.match(/Location\s+([A-Z][A-Za-z ,.'-]{1,80}?)(?=\s+(?:Business|Function|Experience Level|Position Summary|Apply|Share))/)?.at(1) || null;
+  const descriptionStart = visible.search(/Position Summary/);
+  const description = descriptionStart >= 0 ? visible.slice(descriptionStart) : visible;
+  return {
+    description: description.length >= 160 ? description : null,
+    responsibilities: null,
+    requirements: null,
+    experience: null,
+    location: location ? location.replace(/\s+/g, ' ').trim() : null,
+    validThrough: null,
+    salaryRange: null,
+    employmentType: null,
+    workplaceType: null,
+    source: 'official_page_text',
+  };
+}
+
 function blackrockDetailsFromText(page: ExternalPageContent, description: string | null): Partial<OfficialJobDetails> {
   let hostname = '';
   try { hostname = new URL(page.url).hostname.toLowerCase(); } catch { return {}; }
@@ -185,6 +258,43 @@ function blackrockDetailsFromText(page: ExternalPageContent, description: string
   );
   return { experience };
 }
+
+/**
+ * Parse the Deutsche Bank official beesite API detail payload
+ * ({ html: string, apply_uri?: string }) returned by
+ * https://api-deutschebank.beesite.de/jobhtml/{PositionID}.json.
+ *
+ * The payload is the official job ad HTML: a structured header table
+ * (Location / Full-Part-Time / Listed) plus the full ad body. Only official
+ * fields are extracted: location and Full/Part-Time come from the structured
+ * header; the ad body becomes the description. "Listed" is a publish date,
+ * not an application deadline, so it is never emitted as validThrough.
+ */
+export function deutscheBankDetailsFromApi(payload: unknown): OfficialJobDetails | null {
+  if (!payload || typeof payload !== "object") return null;
+  const record = payload as Record<string, unknown>;
+  const html = typeof record.html === "string" ? record.html : null;
+  if (!html) return null;
+  const plain = jobHtmlToPlainText(html).replace(/\s+/g, " ").trim();
+  if (plain.length < 160) return null;
+
+  const location = plain.match(/\bLocation:\s*([A-Z][A-Za-z .'\u2019-]{1,90}?)(?=\s+(?:Position Overview|Job Title|POSITION OVERVIEW|Employer|Details of|Additional Job Description)|\s*$)/)?.[1]?.trim() || null;
+  const employmentType = plain.match(/Full\/Part-Time:\s*([A-Za-z-]+)/)?.[1] || null;
+
+  return {
+    description: plain,
+    responsibilities: null,
+    requirements: null,
+    experience: null,
+    location,
+    validThrough: null,
+    salaryRange: null,
+    employmentType,
+    workplaceType: null,
+    source: "official_structured_data",
+  };
+}
+
 
 function fromPosting(posting: Record<string, unknown>): OfficialJobDetails {
   const description = firstString(posting.description, posting.descriptionText, posting.jobDescription);
@@ -207,6 +317,16 @@ function fromPosting(posting: Record<string, unknown>): OfficialJobDetails {
 
 /** Extract a public JobPosting payload without exposing ATS configuration JSON. */
 export function extractOfficialJobDetails(page: ExternalPageContent): OfficialJobDetails | null {
+  // Bain and Two Sigma render their full job ad server-side; the thin
+  // JobPosting JSON-LD on those pages carries no description, so their
+  // dedicated text parsers run first and own the extraction.
+  const bain = bainDetailsFromText(page);
+  if (bain) return bain;
+  const twoSigma = twoSigmaDetailsFromText(page);
+  if (twoSigma) return twoSigma;
+  const evercore = evercoreDetailsFromText(page);
+  if (evercore) return evercore;
+
   const records = structuredRecords(page.metadata?.structured_data).filter(isJobPosting);
   if (records.length > 0) {
     const details = fromPosting(records[0]);
