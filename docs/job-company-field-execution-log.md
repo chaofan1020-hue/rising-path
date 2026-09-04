@@ -1029,6 +1029,7 @@ UBS 和 Jane Street 按顺序为下一批，但均需要先解决独立阻塞：
 - 已将 `src/lib/job-official-detail.ts` 的解析修复部署到美国生产服务器 `/opt/liorvix`，旧文件已保留带时间戳备份；数据库迁移检查无待执行项，服务重启后本机 `/api/health` 返回 `{"status":"ok"}`。
 - 生产 dry-run 显式使用 `/opt/liorvix/.env.local`，目标 Supabase project ref 为 `weqvdtdjdzmqflhwobec`。当时在招岗位 `1,207` 条，地点证据为 `unavailable_on_official_source`/`pending_recheck` 的候选 `1,153` 条；详情成功 `1,146` 条，全部抽取到 `apply.deloitte.com` 页面标题下方的官方地点，7 条返回 HTTP 404。
 - 已完成 20 条 canary 和后续 100 条小批量写入，均为只更新 `region`、`location_source`、地点 `field_evidence` 和 `updated_at`；两批均为 `20/20`、`100/100` 成功。岗位未新增、未删除，`is_active` / `is_closed` 未被修改。实际可回填数高于旧记录中的“约 862”，后续以本次生产 dry-run 的 `1,146` 条官方地点证据为准。
+- 随后完成剩余候选的全量只补缺失字段写入：成功解析 `954` 条，实际更新 `953` 条，失败 `8` 条。其中 `7` 条为官方详情 HTTP `404`，`1` 条因岗位已不再匹配仍在招候选而跳过；失败清单已保留供后续复核。全量写入仍只更新地点字段及其证据和 `updated_at`，没有新增岗位、删除岗位或修改 `is_active` / `is_closed`，也未触碰主 Feed。
 
 ### Morgan Stanley Taleo 未完成
 
