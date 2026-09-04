@@ -20,6 +20,11 @@ export const PHASE2_CONNECTOR_BOARDS: ConnectorBoardConfig[] = [
     ['TPG', 'tpgcareers'],
     ['Bridgewater Associates', 'bridgewater89'],
     ['General Atlantic', 'generalatlantic'],
+    ['MongoDB', 'mongodb'],
+    ['Okta', 'okta'],
+    ['Elastic', 'elastic'],
+    ['Duolingo', 'duolingo'],
+    ['Roblox', 'roblox'],
   ].map(([company, board]) => ({ connector: 'greenhouse' as const, company, board })),
   ...[
     { connector: 'ashby' as const, company: 'Runway', board: 'runway', boardAliases: ['runway-ml'] },
