@@ -36,7 +36,7 @@ Greenhouse、Ashby 与 Lever 的以下 31 家已完成生产抽样、全量只�
 | Greenhouse | Cloudflare、Stripe、Datadog、Coinbase、Asana、Brex、Databricks、Figma、GitLab、Point72、Reddit、Robinhood、Twilio、Discord、TPG、Bridgewater Associates、General Atlantic、MongoDB、Okta、Elastic、Duolingo、Roblox、Jane Street、KKR | `src/lib/job-connectors/greenhouse.ts` + 详情页补充 |
 | Ashby | OpenAI、Cursor、Notion、Perplexity、Ramp、Vanta、Runway、Linear | `src/lib/job-connectors/ashby.ts` + 详情页补充 |
 | Lever | Palantir | `src/lib/job-connectors/lever.ts` + 详情页补充 |
-| 通用官方详情 | BlackRock | `job-official-detail.ts` JSON-LD 正文提取 + `backfill-official-job-details.ts` |
+| 通用官方详情 | BlackRock、Millennium Management | `job-official-detail.ts` JSON-LD 正文提取 + `backfill-official-job-details.ts` |
 
 Cloudflare 已完成经验字段的生产回填验证，可作为同族连接器的验收样板，但不等同于其他 Greenhouse 公司无需验证。
 
