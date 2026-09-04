@@ -64,6 +64,7 @@ const APPROVED_GENERIC_HOSTS: Record<string, string[]> = {
   Deloitte: ['apply.deloitte.com'],
   'Morgan Stanley': ['morganstanley.eightfold.ai'],
   'Goldman Sachs': ['higher.gs.com'],
+  BlackRock: ['careers.blackrock.com'],
 };
 
 function genericOfficialWriteEnabled(company: string): boolean {

@@ -169,6 +169,23 @@ function goldmanDetailsFromText(page: ExternalPageContent, description: string |
   return { location, salaryRange, experience };
 }
 
+function blackrockDetailsFromText(page: ExternalPageContent, description: string | null): Partial<OfficialJobDetails> {
+  let hostname = '';
+  try { hostname = new URL(page.url).hostname.toLowerCase(); } catch { return {}; }
+  if (hostname !== 'careers.blackrock.com') return {};
+
+  // BlackRock's JSON-LD carries the full description but no structured
+  // experience/employment fields; the official page text has a clear
+  // "Required experience" section. Extract only that official section.
+  const source = description || '';
+  const experience = section(
+    source,
+    /required experience\s*:?/i,
+    /responsibilities|about (?:the role|the job|blackrock)|equal opportunity|application process/i,
+  );
+  return { experience };
+}
+
 function fromPosting(posting: Record<string, unknown>): OfficialJobDetails {
   const description = firstString(posting.description, posting.descriptionText, posting.jobDescription);
   const responsibilities = firstString(posting.responsibilities, posting.jobResponsibilities);
@@ -196,12 +213,13 @@ export function extractOfficialJobDetails(page: ExternalPageContent): OfficialJo
     const visible = jobHtmlToPlainText(page.content);
     const deloitte = deloitteDetailsFromText(page, details.description, visible);
     const goldman = goldmanDetailsFromText(page, details.description, visible);
+    const blackrock = blackrockDetailsFromText(page, details.description);
     return {
       ...details,
       location: details.location || deloitte.location || goldman.location || null,
       workplaceType: details.workplaceType || deloitte.workplaceType || goldman.workplaceType || null,
       salaryRange: details.salaryRange || goldman.salaryRange || null,
-      experience: details.experience || goldman.experience || null,
+      experience: details.experience || goldman.experience || blackrock.experience || null,
     };
   }
   const visible = jobHtmlToPlainText(page.content);
