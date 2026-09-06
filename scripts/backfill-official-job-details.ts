@@ -348,6 +348,7 @@ async function activeCompanyJobs(
   jobIds: number[] = [],
   candidateCap: number | null = null,
   urlContains: string | null = null,
+  scanAll = false,
 ): Promise<Job[]> {
   const client = getSupabaseClient();
   const candidates: Job[] = [];
@@ -367,7 +368,7 @@ async function activeCompanyJobs(
     const { data, error } = await query;
     if (error) throw new Error(`Failed to read ${company} jobs: ${error.message}`);
     const page = (data || []) as Job[];
-    candidates.push(...page.filter((job) => jobIds.length > 0 && jobIds.includes(job.id) ? true : (company === 'Deutsche Bank' ? (hasCandidate(job) || job.employment_category === 'Part-Time' || job.job_type === 'Part-Time') : hasCandidate(job))));
+    candidates.push(...page.filter((job) => jobIds.length > 0 && jobIds.includes(job.id) ? true : scanAll ? true : (company === 'Deutsche Bank' ? (hasCandidate(job) || job.employment_category === 'Part-Time' || job.job_type === 'Part-Time') : hasCandidate(job))));
   if (jobIds.length > 0 || page.length < PAGE_SIZE || (candidateCap != null && candidates.length >= candidateCap)) break;
     const lastId = Number(page[page.length - 1]?.id);
     if (!Number.isInteger(lastId) || lastId <= (cursor || 0)) break;
@@ -415,6 +416,7 @@ async function main(): Promise<void> {
   const urlContains = argument('url-contains');
   const reviewMissingFields = hasFlag('review-missing-fields');
   const closeRemoved = hasFlag('close-removed');
+  const scanAll = hasFlag('scan-all');
   const runId = runIdArgument();
   if (!company) throw new Error('Specify --company=<company>');
   if (all && limit != null) throw new Error('--all and --limit cannot be combined');
@@ -430,7 +432,7 @@ async function main(): Promise<void> {
   }
 
   const client = getSupabaseClient();
-  const jobs = await activeCompanyJobs(company, afterId, jobIds, all || limit == null ? null : limit, urlContains);
+  const jobs = await activeCompanyJobs(company, afterId, jobIds, all || limit == null ? null : limit, urlContains, scanAll);
   const selected = all || limit == null ? jobs : jobs.slice(0, limit);
   const result = {
     environment: { env_file: envFile, supabase_project_ref: projectRef() },

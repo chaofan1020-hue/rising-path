@@ -1258,3 +1258,39 @@ BoA 走 Workday（`ghr.wd1.myworkdayjobs.com`），40 条 `location rejected_leg
 | McKinsey & Company | 149 | 137 | 0 | ⚠️ 官方源受限（反爬/登录），阻塞 |
 | Citadel | 33 | 31 | 0 | ⚠️ 官方源受限（反爬/登录），阻塞 |
 | Rothschild & Co | 40 | 21 | 19 | ⚠️ 岗位正文前端 JS 动态加载，阻塞 |
+
+#### Workday 官方详情 API 全量上下架同步（2026-09-07）
+
+- 新增正式脚本 `scripts/close-removed-by-official-list.ts`：用 Workday `wday/cxs/<tenant>/<site>/job/<slug>` 官方详情 API 对库内每个 active 岗位做生命周期判定（200=在招保留；404/410=官网已撤下架；403/429/超时=保留不误删）。
+- 从 `job_url` 自动推导 tenant/site（`buildWorkdayCxsDetailUrl`），覆盖全部 18 个 Workday tenant/site 组合、约 8,436 条在招岗位。
+- 实测限流：详情 API 并发 6 + 150ms 触发高频 429；并发 4 + 350ms 稳定无 429（Citi/NVIDIA/WF 全量 0 unknown）。
+- 先修正了"列表搜索比对"方案的误判：Workday 列表 `searchText=<requisition_id>` 对带 `-1/-2` 后缀 ID 不可靠（详情 API 200 的岗位列表搜不到），改为详情 API 后无此问题。
+
+##### 执行结果（全部生产库，`is_active=true` 逐条验证）
+
+| 公司 | 检查 | 官网在招 | 官网已撤下架 | 无法判定（保留） |
+| --- | ---: | ---: | ---: | ---: |
+| Bank of America | 474 | 396 | 78 | 13（网络） |
+| Accenture | 1,559 | 1,339 | 0 | 220（详情 API 403） |
+| Citigroup | 2,192 | 2,192 | 0 | 0 |
+| NVIDIA | 925 | 925 | 0 | 0 |
+| Wells Fargo | 1,126 | 1,125 | 0 | 1（网络） |
+| Fidelity Investments | 447 | 447 | 0 | 0 |
+| Vanguard | 421 | 420 | 0 | 1（网络） |
+| Intel | 237 | 237 | 0 | 0 |
+| State Street | 220 | 220 | 0 | 0 |
+| Ares Management | 175 | 175 | 0 | 0 |
+| Barclays | 158 | 158 | 0 | 0 |
+| Blackstone | 143 | 143 | 0 | 0 |
+| PIMCO | 137 | 137 | 0 | 0 |
+| Brookfield | 98 | 98 | 0 | 0 |
+| Adobe | 76 | 76 | 0 | 0 |
+| The Carlyle Group | 63 | 63 | 0 | 0 |
+| Apollo Global Management | 32 | 32 | 0 | 0 |
+| Bain Capital | 22 | 22 | 0 | 0 |
+| Rothschild & Co | 19 | 19 | 0 | 0 |
+| Houlihan Lokey | 11 | 11 | 0 | 0 |
+
+- Bank of America：active 从 487 → 409，78 条官网已撤岗位 `is_active=false, is_closed=true`，同步 `job_sync_records` 标记 `closed`。
+- Accenture 220 条详情 API 403：抽查公开 HTML 页面均 200 在招（`Associate-Social-Producer_R00348602-1` 等），判定为"岗位在招但详情 API 访问受限"，**保留不误删**，符合 runbook"403 不等于撤下"原则。
+- `backfill-official-job-details.ts` 新增 `--scan-all` 开关：跳过 `hasCandidate` 字段过滤，对全量 active 岗位做官网生命周期/字段检查（配合 `--close-removed` 使用）。Citigroup 30 条 dry-run 验证无误判。
