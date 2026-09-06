@@ -207,7 +207,22 @@ async function main(): Promise<void> {
         .filter(([id]) => Boolean(id)),
     );
     const matched = existing.filter((job) => listById.has(job.external_job_id || ''));
-    const targets = all || limit == null ? matched : matched.slice(0, limit);
+    // When a bounded --limit is used on a large Oracle board, prioritize jobs
+    // whose fields are quarantined (rejected_legacy / pending_recheck) or
+    // missing evidence so the first N details actually unblock the backlog
+    // instead of re-verifying already-verified rows.
+    const ordered = limit != null && !all
+      ? [...matched].sort((a, b) => {
+          const rank = (job: ExistingJob) => {
+            const status = evidence(job, 'location')?.status ?? evidence(job, 'salary')?.status ?? evidence(job, 'deadline')?.status;
+            if (status == null) return 0;
+            if (status !== 'verified') return -1;
+            return 1;
+          };
+          return rank(a) - rank(b);
+        })
+      : matched;
+    const targets = all || limit == null ? ordered : ordered.slice(0, limit);
     const targetIds = new Set(targets.map((job) => job.external_job_id).filter((id): id is string => Boolean(id)));
     official = targetIds.size > 0
       ? await fetchConnectorBoard(profile, { detailJobIds: targetIds })
