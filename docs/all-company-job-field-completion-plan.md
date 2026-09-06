@@ -1,6 +1,6 @@
 # 全公司岗位字段完善计划
 
-更新时间：2026-09-06  
+状态：Oracle HCM 三家公司全部完成（Lazard 40/40、Jefferies 159/159、JPMorgan Chase 6,355/6,356 location verified）；根因修复（field_evidence.status 为准）后 28 家 ATS 公司批量回填至 location verified 95-100%；Accenture、BlackRock、Millennium Management、Deutsche Bank、Bain & Company、Two Sigma、Evercore 等官方详情公司已完成；Amazon 官方详情解析器上线、全量回填进行中；UBS、McKinsey、Citadel 官方源受限记为阻塞；按来源族逐批执行，不做全站批量回填
 状态：Accenture 官网 JSON-LD 双源字段回填收口（1,011 条 accenture.com 岗位 location/deadline 831 verified、employment 918 verified、experience 817；180 条官网已 302 下架不猜测）；Wells Fargo、MongoDB、Okta、Elastic、Duolingo、Roblox、Jane Street、KKR、BlackRock、Millennium Management、Deutsche Bank、Bain & Company、Two Sigma、Evercore 已完成生产回填与验收；McKinsey、UBS、Citadel 官方源受限记为阻塞；按来源族逐批执行，不做全站批量回填
 
 ## 1. 目标与边界

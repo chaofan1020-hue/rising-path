@@ -1107,3 +1107,61 @@ Accenture 在招 2,589 条中，约 1,011 条岗位 URL 指向官网 `www.accent
 ### 台账
 
 - `job_company_sources` 中 Accenture 由 `source_family_identified` 提升为 `configured_connector`，`connector_name=accenture_careers`，`official_hosts=[www.accenture.com, accenture.wd103.myworkdayjobs.com]`，已记录双源完成情况（2026-09-06）。
+
+## 2026-09-06：Oracle HCM 全量回填与 ATS 修复后批量回填
+
+执行时间：2026-09-06（UTC 08:00-12:00，持续进行）
+
+### 根因修复：field_evidence.status 为准
+
+- `scripts/backfill-connector-fields.ts` 的 `evidenceIsVerified()` 原先把 `location_source='official_payload'` 当作 verified，导致 `field_evidence.status='rejected_legacy'` 的岗位永不被回填。已改为以 `field_evidence.status` 为准（无 evidence 才 fallback 到列来源）。生产已部署验证。
+
+### JPMorgan Chase（Oracle HCM，6,356 条在招）
+
+- 全量 `--all --write`：官方列表 7,328 条、匹配 6,354 条；回填 4,410 条（location 4,193、employment_category 2,827、experience 3,004、salary 7、deadline 339）。
+- 结果：6,356 条中 location verified 6,355（rejected 仅剩 1）。0 详情失败，未改 `is_active` / `is_closed`。
+- 公网 API 抽样 69248/34049/34056：region 有官方证据、岗位仍 `is_active=true`、`is_closed=false`。
+
+### ATS 公司（Greenhouse/Ashby/Lever）修复后批量回填
+
+同一根因修复后，此前已 canary 的公司重跑 `--all --write`，全部 rejected_legacy 被回填：
+
+| 公司 | 在招 | location verified | 公司 | 在招 | location verified |
+| --- | ---: | ---: | --- | ---: | ---: |
+| OpenAI | 699 | 699 | Databricks | 552 | 550 |
+| Stripe | 415 | 415 | Palantir | 281 | 281 |
+| Cloudflare | 274 | 273 | Brex | 270 | 270 |
+| Datadog | 267 | 267 | Coinbase | 158 | 158 |
+| GitLab | 154 | 154 | Reddit | 143 | 143 |
+| Figma | 124 | 124 | Point72 | 165 | 165 |
+| Robinhood | 121 | 121 | Runway | 43 | 43 |
+| Linear | 23 | 23 | Cursor | 108 | 108 |
+| Notion | 83 | 83 | Perplexity | 100 | 100 |
+| Ramp | 141 | 141 | Vanta | 99 | 99 |
+| Twilio | 97 | 97 | Discord | 48 | 48 |
+| TPG | 17 | 17 | Bridgewater Associates | 14 | 14 |
+| General Atlantic | 8 | 8 |  |  |  |
+
+### 官方详情公司（backfill-official-job-details）批量回填
+
+- Millennium Management：65 条更新（location 34、experience 48、deadline 65、employment 24）。剩余 37 rejected 为 `no_new_fields`（官方详情页无该字段），保持空。
+- BlackRock：6 条更新，200/201 verified。
+- Deutsche Bank：6 条更新，213/220 verified。
+- 公网 API 抽样 67227（Figma）/69190（Databricks）/69174（Coinbase）：region 有官方来源、仍 `is_active=true`。
+
+### Amazon（新增官方详情解析器）
+
+- 新增 `amazonDetailsFromText()`（`src/lib/job-official-detail.ts`）：从 amazon.jobs 纯文本的 `Job details` 区块提取官方 location（如 `IND, KA, Bengaluru`、`USA, OH, Etna`），已加 fixture 与测试。
+- 抽样 100 条：68% 官方页面 200、32% 404（旧岗位官网已撤下）。
+- 首批 canary：id 851 写入 requirements/location/employment_category（location `USA, WA, Seattle`）。
+- 全量 `--all --write` 后台运行中，预计覆盖所有 200 页面岗位的 location/requirements/employment 字段；404 岗位仅计入 failed、不改生命周期。
+- 当前进度：verified 607 → 持续上升（见生产库 audit）。
+
+### 阻塞与不做（按 runbook）
+
+- Amazon 404 岗位（官网已撤下但 collector_feed 仍在招）：不因字段任务下架，保持 `rejected_legacy`。
+- Accenture 182 rejected：官网 302 下架，不猜测。
+- UBS（300）、McKinsey & Company（137）、Citadel（31）：官方源反爬/登录受限，保持记录阻塞。
+- Morgan Stanley（29 rejected + 78 other）：Eightfold 部分可解析、Taleo 需人机验证，不绕过。
+- Rothschild & Co（21 rejected）：岗位正文由前端 JS 动态加载，公开 HTML 不含正文，需额外探测。
+- Bank of America（40 rejected）：Workday host（ghr.wd1.myworkdayjobs.com）需专用 Workday 适配器，排队后续。
