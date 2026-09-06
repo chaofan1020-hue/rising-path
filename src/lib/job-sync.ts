@@ -50,6 +50,7 @@ export interface JobSyncRecord {
   source_system?: string | null;
   external_job_id?: string | null;
   valid_through?: string | null;
+  posted_at?: string | null;
   missing_from_feed_at?: string | null;
   missing_feed_checks?: number;
   availability_status?: JobAvailabilityStatus | null;
@@ -132,6 +133,7 @@ interface ExistingJob {
   experience_text?: string | null;
   workplace_type?: string | null;
   valid_through?: string | null;
+  posted_at?: string | null;
   deadline_source?: string | null;
   salary_source?: string | null;
   location_source?: string | null;
@@ -407,7 +409,7 @@ function toJobPayload(job: JobSyncRecord, existing?: ExistingJob): Omit<JobSyncR
   // A missing deadline is an explicit "not verified" result from the feed.
   // Never preserve a stale date or its source across syncs; this prevents old
   // inferred dates from resurfacing after a clean-up migration.
-  for (const field of ['salary_range', 'employment_type', 'employment_category', 'experience_min_years', 'experience_max_years', 'experience_text', 'workplace_type', 'salary_source', 'location_source'] as const) {
+  for (const field of ['salary_range', 'employment_type', 'employment_category', 'experience_min_years', 'experience_max_years', 'experience_text', 'workplace_type', 'salary_source', 'location_source', 'posted_at'] as const) {
     if (payload[field] == null && existing?.[field] != null) {
       (payload as Record<string, unknown>)[field] = existing[field];
     }
@@ -537,7 +539,7 @@ export async function syncJobRecords(
   // that record before inserting so the unique source/id index remains useful.
   for (const batch of chunks(externalIds, EXISTING_EXTERNAL_ID_LOOKUP_BATCH_SIZE)) {
     const { data, error } = await retryDatabaseOperation(
-      () => client.from('jobs').select('id, job_url, company, source_system, external_job_id, description, overview, responsibilities, requirements, nice_to_have, salary_range, employment_type, employment_category, experience_min_years, experience_max_years, experience_text, workplace_type, valid_through, deadline_source, salary_source, location_source, field_evidence, is_active, is_closed').in('external_job_id', batch),
+      () => client.from('jobs').select('id, job_url, company, source_system, external_job_id, description, overview, responsibilities, requirements, nice_to_have, salary_range, employment_type, employment_category, experience_min_years, experience_max_years, experience_text, workplace_type, valid_through, posted_at, deadline_source, salary_source, location_source, field_evidence, is_active, is_closed').in('external_job_id', batch),
       '查询岗位外部 ID',
     );
     if (error) throw new Error(`查询岗位外部 ID 失败: ${error.message}`);
@@ -564,7 +566,7 @@ export async function syncJobRecords(
   // oversized URL that surfaces as a generic fetch failure.
   for (const batch of chunks(urls, EXISTING_JOB_LOOKUP_BATCH_SIZE)) {
     const { data, error } = await retryDatabaseOperation(
-      () => client.from('jobs').select('id, job_url, company, source_system, external_job_id, description, overview, responsibilities, requirements, nice_to_have, salary_range, employment_type, employment_category, experience_min_years, experience_max_years, experience_text, workplace_type, valid_through, deadline_source, salary_source, location_source, field_evidence, is_active, is_closed').in('job_url', batch),
+      () => client.from('jobs').select('id, job_url, company, source_system, external_job_id, description, overview, responsibilities, requirements, nice_to_have, salary_range, employment_type, employment_category, experience_min_years, experience_max_years, experience_text, workplace_type, valid_through, posted_at, deadline_source, salary_source, location_source, field_evidence, is_active, is_closed').in('job_url', batch),
       '查询岗位',
     );
     if (error) throw new Error(`查询岗位失败: ${error.message}`);

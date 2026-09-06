@@ -8,6 +8,7 @@ export interface OfficialJobDetails {
   experience: string | null;
   location: string | null;
   validThrough: string | null;
+  postedAt: string | null;
   salaryRange: string | null;
   employmentType: string | null;
   workplaceType: string | null;
@@ -233,6 +234,7 @@ function amazonDetailsFromText(page: ExternalPageContent): OfficialJobDetails | 
     experience: null,
     location: location || null,
     validThrough: null,
+    postedAt: null,
     salaryRange: null,
     employmentType: null,
     workplaceType: null,
@@ -256,6 +258,7 @@ function jefferiesDetailsFromText(page: ExternalPageContent): OfficialJobDetails
     experience: null,
     location: location ? location.replace(/\s+/g, ' ').trim() : null,
     validThrough: null,
+    postedAt: null,
     salaryRange: null,
     employmentType: null,
     workplaceType: null,
@@ -280,6 +283,7 @@ function evercoreDetailsFromText(page: ExternalPageContent): OfficialJobDetails 
     experience: null,
     location: location ? location.replace(/\s+/g, ' ').trim() : null,
     validThrough: null,
+    postedAt: null,
     salaryRange: null,
     employmentType: null,
     workplaceType: null,
@@ -305,6 +309,7 @@ function bainDetailsFromText(page: ExternalPageContent): OfficialJobDetails | nu
     experience: null,
     location: location ? location.replace(/\s+/g, ' ').trim() : null,
     validThrough: null,
+    postedAt: null,
     salaryRange: null,
     employmentType,
     workplaceType: null,
@@ -329,6 +334,7 @@ function twoSigmaDetailsFromText(page: ExternalPageContent): OfficialJobDetails 
     experience: null,
     location: location ? location.replace(/\s+/g, ' ').trim() : null,
     validThrough: null,
+    postedAt: null,
     salaryRange: null,
     employmentType: null,
     workplaceType: null,
@@ -382,6 +388,7 @@ export function deutscheBankDetailsFromApi(payload: unknown): OfficialJobDetails
     experience: null,
     location,
     validThrough: null,
+    postedAt: null,
     salaryRange: null,
     employmentType,
     workplaceType: null,
@@ -402,6 +409,7 @@ function fromPosting(posting: Record<string, unknown>): OfficialJobDetails {
     experience: experienceRequirementsText(posting.experienceRequirements) || firstString(posting.experience, posting.experienceYears),
     location: extractAddress(posting.jobLocation || posting.jobLocationType),
     validThrough: firstString(posting.validThrough, posting.applicationDeadline, posting.closingDate),
+    postedAt: firstString(posting.datePosted, posting.datePostedISO, posting.originalPostingDate),
     salaryRange: extractSalary(posting.baseSalary || posting.salary),
     employmentType: firstString(posting.employmentType),
     workplaceType: firstString(posting.jobLocationType, posting.workplaceType),
@@ -452,6 +460,7 @@ export function extractOfficialJobDetails(page: ExternalPageContent): OfficialJo
     experience: goldmanDetails.experience || null,
     location: googleDetails.location || goldmanDetails.location || null,
     validThrough: null,
+    postedAt: null,
     salaryRange: goldmanDetails.salaryRange || null,
     employmentType: null,
     workplaceType: null,

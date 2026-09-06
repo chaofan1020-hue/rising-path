@@ -134,6 +134,30 @@ function text(value: unknown): string {
   return typeof value === 'string' ? value.trim() : value == null ? '' : String(value).trim();
 }
 
+/**
+ * Parse ATS-style relative posting labels into an absolute ISO timestamp.
+ * Accepts "Posted Today", "Posted 3 Days Ago", "Posted 30+ Days Ago",
+ * "Posted Yesterday" and ISO/date strings. Returns null when the value is
+ * not a recognizable posting date.
+ */
+export function parseFeedPostedAt(value: unknown, now = Date.now()): string | null {
+  const raw = text(value).replace(/\s+/g, ' ').trim();
+  if (!raw) return null;
+  if (/^\d{4}-\d{2}-\d{2}/.test(raw)) {
+    const parsed = new Date(raw);
+    return Number.isNaN(parsed.getTime()) ? null : parsed.toISOString();
+  }
+  const normalized = raw.toLowerCase().replace(/posted\s*/i, '');
+  if (/(^|\s)today(\s|$)/.test(normalized)) return new Date(now).toISOString();
+  if (/(^|\s)yesterday(\s|$)/.test(normalized)) return new Date(now - 24 * 60 * 60 * 1000).toISOString();
+  const daysMatch = normalized.match(/(\d+)\s*\+?\s*days?\s+ago/);
+  if (daysMatch) {
+    const days = Math.min(Math.max(Number(daysMatch[1]), 1), 3650);
+    return new Date(now - days * 24 * 60 * 60 * 1000).toISOString();
+  }
+  return null;
+}
+
 export function normalizeFeedLocation(value: unknown, depth = 0): string {
   if (depth > 2 || value == null) return '';
   if (typeof value === 'string' || typeof value === 'number') return String(value).trim();
@@ -463,6 +487,7 @@ export function normalizeFeedItem(item: JobsFeedItem): JobSyncRecord | null {
     source_system: JOBS_FEED_SOURCE,
     external_job_id: text(item.external_job_id) || text(item.id) || null,
     valid_through: deadline?.value || null,
+    posted_at: parseFeedPostedAt(item.date_posted),
     missing_from_feed_at: null,
     missing_feed_checks: 0,
     availability_status: health.availabilityStatus,

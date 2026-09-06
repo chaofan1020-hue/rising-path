@@ -38,6 +38,7 @@ type Job = {
   salary_range: string | null;
   salary_source: string | null;
   valid_through: string | null;
+  posted_at: string | null;
   deadline_source: string | null;
   field_evidence: Record<string, unknown> | null;
 };
@@ -286,6 +287,11 @@ function preparePatch(
     fields.push('deadline');
     fieldSources.deadline = standardSource;
   }
+  const postedAt = text(details.postedAt) || null;
+  if (postedAt && !text(job.posted_at)) {
+    patch.posted_at = postedAt;
+    fields.push('posted_at');
+  }
 
   const now = new Date().toISOString();
   const previousFields = job.field_evidence?.fields && typeof job.field_evidence.fields === 'object' && !Array.isArray(job.field_evidence.fields)
@@ -349,7 +355,7 @@ async function activeCompanyJobs(
   for (;;) {
     let query = client
       .from('jobs')
-      .select('id,external_job_id,title,company,job_url,description,requirements,responsibilities,region,location_source,workplace_type,employment_category,job_type,experience_min_years,experience_max_years,experience_text,salary_range,salary_source,valid_through,deadline_source,field_evidence')
+      .select('id,external_job_id,title,company,job_url,description,requirements,responsibilities,region,location_source,workplace_type,employment_category,job_type,experience_min_years,experience_max_years,experience_text,salary_range,salary_source,valid_through,deadline_source,posted_at,field_evidence')
       .eq('source_system', 'collector_feed')
       .eq('company', company)
       .eq('is_active', true)
