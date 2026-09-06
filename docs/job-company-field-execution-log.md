@@ -1165,3 +1165,32 @@ Accenture 在招 2,589 条中，约 1,011 条岗位 URL 指向官网 `www.accent
 - Morgan Stanley（29 rejected + 78 other）：Eightfold 部分可解析、Taleo 需人机验证，不绕过。
 - Rothschild & Co（21 rejected）：岗位正文由前端 JS 动态加载，公开 HTML 不含正文，需额外探测。
 - Bank of America（40 rejected）：Workday host（ghr.wd1.myworkdayjobs.com）需专用 Workday 适配器，排队后续。
+
+## 2026-09-07：官网撤下岗位自动下架 + 官网发布时间字段（posted_at）
+
+### 新增 --close-removed：官网明确撤下的岗位直接下架
+
+用户要求“官网明确撤下的岗位都撤掉，不要保留”。在 `scripts/backfill-official-job-details.ts` 新增 `--close-removed` 开关：
+
+- **明确撤下即下架**：HTTP 404/410、官方详情页明确显示“已关闭/已下架/已过期/不存在”、Deutsche Bank API 404/410 → `is_active=false, is_closed=true`，同步更新 `job_sync_records` 状态为 closed。
+- **不误删**：反爬（403/验证码）、登录墙、超时、SPA 壳（Morgan Stanley/UBS/Citadel）保持原状，仍只记阻塞。
+- **dry-run 安全**：不带 `--write` 只统计 `removed` 数量；带 `--write` 才实际下架。
+- **机制验证**：Amazon 抽样 40 条命中 38 条 404（`removed_official_404`）；10 条小样 `--close-removed --write` 成功下架 7 条，生产库确认 `is_active=false, is_closed=true`。
+
+### Amazon 全量下架（进行中）
+
+- 生产在招 21,764 条，抽样约 95% 官网已 404（旧岗位官网撤下但 collector_feed 仍在招）。
+- 后台 `--all --close-removed --write` 运行中（并发 8、限速 400ms），预计数小时完成；下架只改 `is_active/is_closed`，不动字段、不删记录。
+- 进度：active 21,764 → 18,324（截至 2026-09-07），持续下降。
+
+### 新增官网发布时间字段 posted_at
+
+- `jobs` 表新增 `posted_at timestamptz`（迁移 `0109_job_posted_at.sql`，已部署生产并验证）。
+- feed 的 `date_posted`（如 `Posted Today`、`Posted 14 Days Ago`）通过新增 `parseFeedPostedAt()` 归一为绝对时间后写入 `jobs.posted_at`；本地单测 6/6 通过，生产抽样 `Posted 14 Days Ago → 2026-08-23T18:30:26Z` 验证通过。
+- 官方详情 JSON-LD 的 `datePosted` 通过 `OfficialJobDetails.postedAt` 解析，官方详情回填时只补空值不覆盖。
+- feed 缺省时不覆盖已有 `posted_at`（加入 `toJobPayload` 保留列表）。
+
+### 待办（网络恢复后补 push）
+
+- 本地提交 `f88b961`（--close-removed）与 `17bc951`（posted_at）已完成，生产已部署；push 因本地代理（Clash 7897 未监听）暂失败，待网络恢复补推。
+- Amazon 下架完成后，继续：BoA 40 条 rejected 恢复、BCG/OW Phenom 重跑、后处理大屏。
