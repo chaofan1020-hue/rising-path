@@ -1194,3 +1194,67 @@ Accenture 在招 2,589 条中，约 1,011 条岗位 URL 指向官网 `www.accent
 
 - 本地提交 `f88b961`（--close-removed）与 `17bc951`（posted_at）已完成，生产已部署；push 因本地代理（Clash 7897 未监听）暂失败，待网络恢复补推。
 - Amazon 下架完成后，继续：BoA 40 条 rejected 恢复、BCG/OW Phenom 重跑、后处理大屏。
+
+
+### 2026-09-07 晚：BoA / BCG / OW / Accenture rejected 清账 + Amazon 下架接近完成
+
+#### Bank of America 40 条 rejected_legacy（官方 Workday CXS 详情 API 复核）
+
+BoA 走 Workday（`ghr.wd1.myworkdayjobs.com`），40 条 `location rejected_legacy` 但 `region` 已有值。逐条请求官方 CXS 详情 API（`/wday/cxs/ghr/lateral-us/job/<slug>`）：
+
+| 结果 | 数量 | 处理 |
+| --- | ---: | --- |
+| CXS 详情 API 404（官网明确撤下） | 39 | 与 `--close-removed` 同机制下架：`is_active=false, is_closed=true`，`job_sync_records` 置 closed，记录 `BoA Workday CXS HTTP 404` |
+| CXS 详情 API 200（真实在招） | 1（id 27001，Analyst/Associate – Equity Research） | 恢复 `location` 为 `verified`（`region=New York`、`location_source=official_payload`、`evidence_url` 官方 URL、`previous_status=rejected_legacy`） |
+
+一次性脚本 `scripts/boa-close-removed.ts`（dry-run 默认，`--write` 才写）。生产验收：39 条确认 `is_active=false, is_closed=true`，sync 记录 closed；27001 确认 `location verified`。
+
+#### BCG 47 / Oliver Wyman 29 rejected_legacy（Phenom 官方详情复核）
+
+- 用连接器同款机制（`fetchConnectorBoard` + 原生 HTML `phApp.ddo` payload）逐条复核，**全部 76 条均匹配官方 open payload，官网在招**，无一条可下架。
+- 之前用 `fetchSafeExternalPage`（剥离脚本）会误判为"全部关闭"，已废弃该判定，改用连接器权威信号。
+- 处理后：BCG `rejected 0 / verified 257`，OW `rejected 0 / verified 202`。脚本 `scripts/phenom-rejected-audit.ts` + `scripts/phenom-rejected-deep.ts`（dry-run 默认，`--write` 才写）。
+
+#### Accenture 123 rejected_legacy（两类官方来源复核）
+
+| 来源族 | 数量 | 处理 |
+| --- | ---: | --- |
+| `www.accenture.com/jobdetails`（JSON-LD 在招） | 104 | 恢复 `location verified`（`official_payload`） |
+| `accenture.wd103.myworkdayjobs.com`（Workday） | 19 | CXS API 返回 403（租户访问控制，`errorCode S22`），HTML 为 6.6KB SPA 空壳；官方状态无法确认 → 保持 `rejected_legacy`，不误删 |
+| 明确撤下 | 0 | — |
+
+#### Deloitte 2 条 / UBS / Morgan Stanley
+
+- Deloitte 2 条：官方详情页 JSON-LD `JobPosting` 存在（title/location/datePosted 完整）→ 官网在招，恢复 verified。之前 `looksLikeClosedJobPage` 命中"session has expired"是会话提示误匹配，已识别。
+- UBS、Morgan Stanley 剩余 rejected 已随自动队列清零（当前生产库无 rejected 残留）。
+
+#### Amazon 全量下架（后台完成）
+
+- 生产在招从 21,764 持续下降至约 47（2026-09-07 晚，后台任务接近完成，最后几条清理中），官网 404 岗位全部 `is_active=false, is_closed=true`，仅改生命周期不动字段。
+- 全库唯一残留 `rejected_legacy` 的公司为 Amazon（收尾中）；其他公司 location rejected 已全部清零。
+
+#### 结论
+
+- 本轮可确认官方状态的 rejected 全部处理完（BoA 39 下架 + 1 恢复；BCG/OW 76 恢复；Accenture 104 恢复；Deloitte 2 恢复）。
+- 无法确认官方状态的保留（Accenture Workday 19 条 CXS 403 + SPA 空壳），待 Workday 列表接口确认后处理，不猜测、不误删。
+
+#### Morgan Stanley 3 条 Eightfold 恢复（Taleo 26 条保持阻塞）
+
+- Morgan Stanley rejected 29 条 = 26 条 Taleo（`morganstanley.tal.net/opp/{id}`，返回 "Quick Check Needed" 人机验证，无法确认官方状态，保持）+ 3 条 Eightfold（`morganstanley.eightfold.ai/careers/job/{id}`，官方 JSON-LD JobPosting 完整，岗位在招）。
+- 3 条 Eightfold（id 56764/56798/56935）已恢复 `location verified`（`official_structured_data`），region 与官方一致（New York / Dallas）。
+
+#### 最终生产状态盘点（2026-09-07 晚）
+
+| 公司 | active | location rejected_legacy | verified | 状态 |
+| --- | ---: | ---: | ---: | --- |
+| Bank of America | 487 | 0 | 471 | ✅ 已清 |
+| Boston Consulting Group | 258 | 0 | 257 | ✅ 已清 |
+| Oliver Wyman | 204 | 0 | 202 | ✅ 已清 |
+| Deloitte | 1,181 | 0 | 1,180 | ✅ 已清（42542 官网 404 已下架） |
+| Accenture | 2,590 | 20 | 2,541 | ⚠️ 20 条 Workday CXS 403（租户访问控制）+ SPA 空壳，无法确认官方状态，保持 |
+| Morgan Stanley | 1,129 | 26 | 1,024 | ⚠️ 26 条 Taleo 人机验证，保持阻塞 |
+| UBS | 342 | 300 | 0 | ⚠️ 300 条 Taleo 人机验证+无 JSON-LD，保持阻塞 |
+| Amazon | ~15,213 | ~1,264 | ~13,448 | 🔄 后台 `--close-removed` 下架中（21,764 → 持续下降） |
+| McKinsey & Company | 149 | 137 | 0 | ⚠️ 官方源受限（反爬/登录），阻塞 |
+| Citadel | 33 | 31 | 0 | ⚠️ 官方源受限（反爬/登录），阻塞 |
+| Rothschild & Co | 40 | 21 | 19 | ⚠️ 岗位正文前端 JS 动态加载，阻塞 |
