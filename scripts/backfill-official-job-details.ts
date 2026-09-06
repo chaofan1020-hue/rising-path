@@ -2,7 +2,7 @@ import { config as loadDotenv } from 'dotenv';
 import { isDisplayableJobDescription } from '@/lib/job-content';
 import { deutscheBankDetailsFromApi, extractOfficialJobDetails, isJobContentShell } from '@/lib/job-official-detail';
 import { extractOfficialJobRequirements, looksLikeBlockedPage, looksLikeClosedJobPage } from '@/lib/job-maintenance';
-import { fetchSafeExternalPage } from '@/lib/safe-external-fetch';
+import { ExternalFetchError, fetchSafeExternalPage } from '@/lib/safe-external-fetch';
 import {
   extractDeadline,
   extractSalary,
@@ -408,6 +408,7 @@ async function main(): Promise<void> {
   const jobIds = idListArgument();
   const urlContains = argument('url-contains');
   const reviewMissingFields = hasFlag('review-missing-fields');
+  const closeRemoved = hasFlag('close-removed');
   const runId = runIdArgument();
   if (!company) throw new Error('Specify --company=<company>');
   if (all && limit != null) throw new Error('--all and --limit cannot be combined');
@@ -438,6 +439,8 @@ async function main(): Promise<void> {
     fetched: 0,
     would_update: 0,
     updated: 0,
+    removed: 0,
+    removed_job_ids: [] as number[],
     skipped: 0,
     failed: 0,
     skip_reasons: {} as Record<string, number>,
@@ -452,6 +455,33 @@ async function main(): Promise<void> {
   const incrementSkip = (reason: string) => {
     result.skipped += 1;
     result.skip_reasons[reason] = (result.skip_reasons[reason] || 0) + 1;
+  };
+  const recordRemoved = async (jobId: number, reason: string, detail: string): Promise<void> => {
+    result.removed += 1;
+    result.removed_job_ids.push(jobId);
+    result.skip_reasons[reason] = (result.skip_reasons[reason] || 0) + 1;
+    if (!closeRemoved) return;
+    const now = new Date().toISOString();
+    const { error: jobError } = await client
+      .from('jobs')
+      .update({ is_active: false, is_closed: true, updated_at: now })
+      .eq('id', jobId)
+      .eq('source_system', 'collector_feed')
+      .eq('company', company)
+      .eq('is_active', true);
+    if (jobError) throw new Error(`下架岗位失败 ${jobId}: ${jobError.message}`);
+    const { error: syncError } = await client
+      .from('job_sync_records')
+      .update({
+        availability_status: 'closed',
+        link_health: 'closed',
+        last_link_error: detail.slice(0, 500),
+        last_link_checked_at: now,
+        availability_checked_at: now,
+        updated_at: now,
+      })
+      .eq('job_id', jobId);
+    if (syncError) throw new Error(`保存下架状态失败 ${jobId}: ${syncError.message}`);
   };
 
   // Keep a single global launch clock even when several workers are active.
@@ -513,10 +543,14 @@ async function main(): Promise<void> {
             } else {
               const apiResponse = await fetch(`https://api-deutschebank.beesite.de/jobhtml/${encodeURIComponent(positionId)}.json`, { cache: 'no-store' });
               if (!apiResponse.ok) {
-                result.failed += 1;
-                failedJobIds.push(job.id);
-                const reason = `Deutsche Bank API HTTP ${apiResponse.status}`;
-                result.skip_reasons[reason] = (result.skip_reasons[reason] || 0) + 1;
+                if (apiResponse.status === 404 || apiResponse.status === 410) {
+                  await recordRemoved(job.id, 'removed_official_404', `Deutsche Bank API HTTP ${apiResponse.status}`);
+                } else {
+                  result.failed += 1;
+                  failedJobIds.push(job.id);
+                  const reason = `Deutsche Bank API HTTP ${apiResponse.status}`;
+                  result.skip_reasons[reason] = (result.skip_reasons[reason] || 0) + 1;
+                }
               } else {
                 const payload: unknown = await apiResponse.json();
                 const details = deutscheBankDetailsFromApi(payload);
@@ -613,8 +647,7 @@ async function main(): Promise<void> {
               const bareUrl = `${url.origin}${barePath}`;
               const page = await fetchSafeExternalPage(bareUrl);
               if (looksLikeClosedJobPage(page.title, page.content)) {
-                incrementSkip('closed_page');
-                skippedJobIds.push(job.id);
+                await recordRemoved(job.id, 'removed_closed_page', '官方详情页明确显示岗位已关闭/已下架');
               } else {
                 const details = extractOfficialJobDetails(page);
                 if (looksLikeBlockedPage(page.title, page.content)) {
@@ -667,8 +700,7 @@ async function main(): Promise<void> {
               const bareUrl = `${url.origin}${barePath}`;
               const page = await fetchSafeExternalPage(bareUrl);
               if (looksLikeClosedJobPage(page.title, page.content)) {
-                incrementSkip('closed_page');
-                skippedJobIds.push(job.id);
+                await recordRemoved(job.id, 'removed_closed_page', '官方详情页明确显示岗位已关闭/已下架');
               } else {
                 const details = extractOfficialJobDetails(page);
                 if (looksLikeBlockedPage(page.title, page.content)) {
@@ -712,8 +744,7 @@ async function main(): Promise<void> {
           if (looksLikeClosedJobPage(page.title, page.content)
             && !isRegisteredPhenomJobUrl(job.company, job.job_url)
             && !hasMatchingPhenomDetailPayload(job.job_url, page.content)) {
-            incrementSkip('closed_page');
-            skippedJobIds.push(job.id);
+            await recordRemoved(job.id, 'removed_closed_page', '官方详情页明确显示岗位已关闭/已下架');
           } else {
             const details = extractOfficialJobDetails(page);
             if (looksLikeBlockedPage(page.title, page.content) && details?.source !== 'official_structured_data') {
@@ -753,10 +784,15 @@ async function main(): Promise<void> {
         }
         }
       } catch (error) {
-        result.failed += 1;
-        failedJobIds.push(job.id);
-        const reason = error instanceof Error ? error.message.slice(0, 160) : String(error).slice(0, 160);
-        result.skip_reasons[reason] = (result.skip_reasons[reason] || 0) + 1;
+        const upstreamStatus = error instanceof ExternalFetchError ? error.upstreamStatus : undefined;
+        if (upstreamStatus === 404 || upstreamStatus === 410) {
+          await recordRemoved(job.id, 'removed_official_404', error instanceof Error ? error.message.slice(0, 500) : String(error).slice(0, 500));
+        } else {
+          result.failed += 1;
+          failedJobIds.push(job.id);
+          const reason = error instanceof Error ? error.message.slice(0, 160) : String(error).slice(0, 160);
+          result.skip_reasons[reason] = (result.skip_reasons[reason] || 0) + 1;
+        }
       }
     }
     completed += 1;
