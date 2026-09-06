@@ -205,6 +205,40 @@ function goldmanDetailsFromText(page: ExternalPageContent, description: string |
   return { location, salaryRange, experience };
 }
 
+/**
+ * Amazon.jobs renders the official location inside a sanitized
+ * `association location-icon` block (e.g. `IND, KA, Bengaluru` or
+ * `US, WA, Redmond`). The plain-text fallback drops that structure, so
+ * extract it straight from the page HTML before the generic text parser.
+ */
+function amazonDetailsFromText(page: ExternalPageContent): OfficialJobDetails | null {
+  let hostname = '';
+  try { hostname = new URL(page.url).hostname.toLowerCase(); } catch { return null; }
+  if (hostname !== 'www.amazon.jobs' && hostname !== 'amazon.jobs') return null;
+  const visible = jobHtmlToPlainText(page.content).replace(/\s+/g, " ").trim();
+  if (visible.length < 160) return null;
+
+  // amazon.jobs renders the official location as a list item below the
+  // "Job details" heading (e.g. "IND, KA, Bengaluru" / "US, WA, Redmond").
+  const detailsMarker = visible.search(/Job details\s/);
+  const location = detailsMarker >= 0
+    ? visible.slice(detailsMarker).match(/[-–]\s*([A-Z]{2,3}, [A-Z]{2}, [^-\n]+?)(?=\s*[-–]|\s*(?:Basic|Last updated|Score|Share|Apply|Job details|\$))/i)?.[1]?.trim() || null
+    : null;
+  const descriptionStart = visible.search(/\n Description\n/);
+  const description = descriptionStart >= 0 ? visible.slice(descriptionStart) : visible;
+  return {
+    description: description && description.length >= 160 ? description : null,
+    responsibilities: null,
+    requirements: null,
+    experience: null,
+    location: location || null,
+    validThrough: null,
+    salaryRange: null,
+    employmentType: null,
+    workplaceType: null,
+    source: 'official_page_text',
+  };
+}
 function jefferiesDetailsFromText(page: ExternalPageContent): OfficialJobDetails | null {
   let hostname = '';
   try { hostname = new URL(page.url).hostname.toLowerCase(); } catch { return null; }
@@ -388,6 +422,8 @@ export function extractOfficialJobDetails(page: ExternalPageContent): OfficialJo
   if (evercore) return evercore;
   const jefferies = jefferiesDetailsFromText(page);
   if (jefferies) return jefferies;
+  const amazon = amazonDetailsFromText(page);
+  if (amazon) return amazon;
 
   const records = structuredRecords(page.metadata?.structured_data).filter(isJobPosting);
   if (records.length > 0) {

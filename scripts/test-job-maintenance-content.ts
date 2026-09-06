@@ -167,4 +167,27 @@ assert.equal(jefferiesDetails?.source, 'official_page_text');
 assert.equal(jefferiesDetails?.location, 'New York');
 assert.ok(jefferiesDetails?.description?.includes('Summer Associate Program'));
 
+// Amazon.jobs official detail page: the official location is a list item
+// below the "Job details" heading (plain-text form: "IND, KA, Bengaluru").
+const amazonDetails = extractOfficialJobDetails({
+  title: 'Biz Tech Leader',
+  content: 'Biz Tech Leader, Amazon DSP - India | Amazon.jobs'
+    + '\n Description'
+    + '\n Amazon Advertising is one of the fastest-growing business units at Amazon. We believe advertising done well enhances the customer experience.'
+    + '\n Job details'
+    + '\n -'
+    + '\n - IND, KA, Bengaluru'
+    + '\n -'
+    + '\n - Sales, Advertising, & Account Management'
+    + '\n Basic Qualifications'
+    + '\n 10+ years of experience in the development of mission-critical system software, including work on distributed systems.'
+    + '\n Preferred Qualifications'
+    + '\n Experience developing and deploying cloud-based analytics technology. Amazon is committed to a diverse and inclusive workplace.',
+  url: 'https://www.amazon.jobs/en/jobs/10499430/biz-tech-leader-amazon-dsp-india-amazon-dsp-india-advertising',
+  httpStatus: 200,
+});
+assert.equal(amazonDetails?.source, 'official_page_text');
+assert.equal(amazonDetails?.location, 'IND, KA, Bengaluru');
+assert.ok(amazonDetails?.description?.includes('Basic Qualifications'));
 console.log('job maintenance content tests passed');
+
