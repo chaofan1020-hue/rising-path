@@ -3,6 +3,7 @@ import { execFile as execFileCallback } from 'node:child_process';
 import { resolve } from 'node:path';
 import { promisify } from 'node:util';
 import type { SupabaseClient } from '@supabase/supabase-js';
+import { getCompanySourceProfile } from '@/lib/job-connectors/company-profiles';
 import { getSupabaseClient } from '@/storage/database/supabase-client';
 import { recordJobSyncRunFinish, recordJobSyncRunProgress, recordJobSyncRunStart } from '@/lib/job-sync-dashboard';
 
@@ -26,6 +27,19 @@ const ORPHAN_HEARTBEAT_MS = 60_000;
 const COMPLETION_RECHECK_MS = 24 * 60 * 60_000;
 const RETRY_MS = 5 * 60_000;
 const GENERIC_OFFICIAL_SOURCE_TYPES = new Set(['amazon_jobs', 'apple_official_api', 'google_careers', 'microsoft_careers', 'meta_careers', 'deloitte_careers', 'morgan_stanley_eightfold', 'goldman_sachs_careers']);
+// Companies whose official detail pages are handled by
+// scripts/backfill-official-job-details.ts (APPROVED_GENERIC_HOSTS keys).
+// The historical worker routes these to the official detail script even when
+// the source matrix records a connector_name that has no Phase 2 profile.
+const OFFICIAL_DETAIL_COMPANIES = new Set([
+  'Amazon', 'Apple', 'Google', 'Microsoft', 'Meta', 'Deloitte',
+  'Morgan Stanley', 'Goldman Sachs', 'BlackRock', 'Millennium Management',
+  'Deutsche Bank', 'Bain & Company', 'Two Sigma', 'Evercore', 'Jefferies', 'Accenture',
+]);
+
+function officialDetailCompany(company: string): boolean {
+  return OFFICIAL_DETAIL_COMPANIES.has(company.trim());
+}
 const GENERIC_OFFICIAL_COMPANIES_ENV = 'JOBS_GENERIC_OFFICIAL_BACKFILL_COMPANIES';
 
 function genericOfficialWriteEnabled(company: string): boolean {
@@ -90,7 +104,7 @@ async function ensureQueue(client: SupabaseClient): Promise<void> {
   const rows = (data || []).flatMap((row) => {
     const company = typeof row.company_name === 'string' ? row.company_name.trim() : '';
     const sourceType = String(row.source_type || '').toLowerCase();
-    const family = sourceType === 'workday' ? 'workday' : GENERIC_OFFICIAL_SOURCE_TYPES.has(sourceType) ? 'official_generic' : row.connector_name ? 'registered_connector' : 'discovery_required';
+    const family = sourceType === 'workday' ? 'workday' : GENERIC_OFFICIAL_SOURCE_TYPES.has(sourceType) ? 'official_generic' : getCompanySourceProfile(company) ? 'registered_connector' : officialDetailCompany(company) ? 'official_generic' : 'discovery_required';
     if (!company) return [];
     // A source family that has not been identified is not safe to probe from
     // the historical worker. Keep it visible, but do not let it consume a
@@ -104,7 +118,7 @@ async function ensureQueue(client: SupabaseClient): Promise<void> {
       source_family: family,
       status: discoveryRequired || connectorPaused ? 'paused' : 'queued',
       next_run_at: new Date().toISOString(),
-    last_error: discoveryRequired ? '来源待探测' : connectorPaused ? '官方详情复核未启用写入开关' : null,
+      last_error: discoveryRequired ? '来源待探测' : connectorPaused ? (family === 'registered_connector' ? '连接器历史复核未启用写入开关' : '官方详情复核未启用写入开关') : null,
     }];
   });
   if (!rows.length) return;
