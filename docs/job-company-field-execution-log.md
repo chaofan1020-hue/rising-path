@@ -1294,3 +1294,21 @@ BoA 走 Workday（`ghr.wd1.myworkdayjobs.com`），40 条 `location rejected_leg
 - Bank of America：active 从 487 → 409，78 条官网已撤岗位 `is_active=false, is_closed=true`，同步 `job_sync_records` 标记 `closed`。
 - Accenture 220 条详情 API 403：抽查公开 HTML 页面均 200 在招（`Associate-Social-Producer_R00348602-1` 等），判定为"岗位在招但详情 API 访问受限"，**保留不误删**，符合 runbook"403 不等于撤下"原则。
 - `backfill-official-job-details.ts` 新增 `--scan-all` 开关：跳过 `hasCandidate` 字段过滤，对全量 active 岗位做官网生命周期/字段检查（配合 `--close-removed` 使用）。Citigroup 30 条 dry-run 验证无误判。
+
+#### 历史字段复核 Worker 来源判定修复（2026-09-07）
+
+- 根因：`src/lib/job-historical-field-review-worker.ts` 按 `connector_name` 判定来源族，但 Deutsche Bank / Bain & Company / Two Sigma / Evercore 的 `connector_name` 没有对应 Phase 2 配置（它们走官方详情脚本），被错判为 `registered_connector` 后调用 `backfill-connector-fields.ts`，报「未找到阶段 2 公司配置」并反复重试失败。
+- 修复：来源族判定改为「Workday → 官方通用 source_type 白名单 → Phase 2 配置（`getCompanySourceProfile`）→ 官方详情公司白名单 → discovery_required」；`last_error` 文案按 family 区分（连接器/官方详情）。
+- 效果（生产队列 `job_historical_field_reviews` 全部 completed）：Deutsche Bank 官方 beesite API 更新 219 条、Evercore Taleo 更新 48 条、Bain & Company 更新 71 条、Two Sigma 更新 37 条、Millennium Management 更新 158 条；不再循环失败。
+- 生产 `JOBS_GENERIC_OFFICIAL_BACKFILL_COMPANIES` 白名单补入 `Deutsche Bank,Bain & Company,Two Sigma,Evercore,Millennium Management`，重启 liorvix 生效。
+
+#### Apple 官方 jobDetails API 上下架同步（2026-09-07）
+
+- 新增正式脚本 `scripts/close-removed-by-apple-api.ts`：先请求 `jobs.apple.com/api/v1/CSRFToken` 拿 token+cookie（复用一次 session），再请求 `/api/v1/jobDetails/<jobNumber>`：200=在招保留；404/410=官网撤下下架；其他（403/429/超时）=保留不误删。
+- Apple 全量 3,454 条 active dry-run：3,453 条逐条核验全部 `verified_open`，无撤岗；写入脚本已入库。
+
+#### 官方详情公司 close-removed 全量同步（2026-09-07，进行中）
+
+- 用 `backfill-official-job-details.ts --company=X --scan-all --close-removed` 对官方详情类公司做全量上下架核验（404/关闭页 → 下架，403/429/超时 → 保留）。
+- BlackRock（199 条 active）dry-run 完成：全部在招 `removed=0`，无官网已撤岗位；1 条补 `posted_at`，198 条字段已有证据跳过。生产无需下架。
+- 后续：Google / Microsoft / Meta / Deloitte / Morgan Stanley / Goldman Sachs / Amazon 逐家跟进（Amazon 20,098 条量大，需分批）。

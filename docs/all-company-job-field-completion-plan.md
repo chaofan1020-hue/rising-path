@@ -1,6 +1,7 @@
 # 全公司岗位字段完善计划
 
 状态：Oracle HCM 三家公司全部完成（Lazard 40/40、Jefferies 159/159、JPMorgan Chase 6,355/6,356 location verified）；根因修复（field_evidence.status 为准）后 28 家 ATS 公司批量回填至 location verified 95-100%；Accenture、BlackRock、Millennium Management、Deutsche Bank、Bain & Company、Two Sigma、Evercore 等官方详情公司已完成；Amazon 官方详情解析器上线、全量 close-removed 下架 6,713 条官网 404（21,764 → 15,053）；**Workday 官方详情 API 上下架同步已跑通**：20 家 Workday 公司 8,436 条 active 全量逐条验证，Bank of America 下架 78 条官网已撤岗位（487 → 409），其余公司全部在招无撤岗；UBS、McKinsey、Citadel 官方源受限记为阻塞；按来源族逐批执行，不做全站批量回填
+状态：Apple 官方 jobDetails API 上下架同步跑通（dry-run 3,453 条 active 全量逐条验证，全部 verified_open 无撤岗，仅 20 条抽样曾验证在招；写入脚本 close-removed-by-apple-api.ts 已入库）；历史字段复核 Worker 来源判定修复（以 Phase2 配置为准 + 官方详情公司白名单，不再把 Deutsche Bank / Bain & Company / Two Sigma / Evercore 错判为 connector 而循环失败）；Deutsche Bank 恢复官方 beesite API 回填（220 条，running）、Evercore Taleo 回填完成（48 条）、Bain & Company（72 条）、Two Sigma（47 条）、Millennium Management（161 条）排队推进，官方详情脚本 404/410/关闭页自动下架同步进行；UBS、McKinsey、Citadel 官方源受限记为阻塞；按来源族逐批执行，不做全站批量回填
 状态：Accenture 官网 JSON-LD 双源字段回填收口（1,011 条 accenture.com 岗位 location/deadline 831 verified、employment 918 verified、experience 817；180 条官网已 302 下架不猜测）；Wells Fargo、MongoDB、Okta、Elastic、Duolingo、Roblox、Jane Street、KKR、BlackRock、Millennium Management、Deutsche Bank、Bain & Company、Two Sigma、Evercore 已完成生产回填与验收；McKinsey、UBS、Citadel 官方源受限记为阻塞；按来源族逐批执行，不做全站批量回填
 
 ## 1. 目标与边界
