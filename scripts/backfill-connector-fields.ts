@@ -50,7 +50,14 @@ function evidence(job: ExistingJob, field: FieldName): Record<string, unknown> |
 }
 
 function evidenceIsVerified(job: ExistingJob, field: FieldName): boolean {
-  if (evidence(job, field)?.status === 'verified') return true;
+  // field_evidence.status is the authoritative state. A legacy value that was
+  // explicitly quarantined (rejected_legacy) or is under review
+  // (pending_recheck) must not be treated as verified just because the column
+  // source happens to read as trusted (e.g. official_payload). Only when no
+  // field evidence exists at all do we fall back to the column source.
+  const status = evidence(job, field)?.status;
+  if (status === 'verified') return true;
+  if (status != null) return false;
   if (field === 'location') return isTrustedJobFieldSource(job.location_source);
   if (field === 'salary') return isTrustedJobFieldSource(job.salary_source);
   if (field === 'deadline') return isTrustedJobFieldSource(job.deadline_source);

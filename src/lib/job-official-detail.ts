@@ -205,6 +205,30 @@ function goldmanDetailsFromText(page: ExternalPageContent, description: string |
   return { location, salaryRange, experience };
 }
 
+function jefferiesDetailsFromText(page: ExternalPageContent): OfficialJobDetails | null {
+  let hostname = '';
+  try { hostname = new URL(page.url).hostname.toLowerCase(); } catch { return null; }
+  if (hostname !== 'jefferies.tal.net') return null;
+  const visible = jobHtmlToPlainText(page.content).replace(/\s+/g, ' ').trim();
+  if (visible.length < 160) return null;
+
+  const location = visible.match(/\bLocation\s+([A-Z][A-Za-z .,'-]{1,80}?)(?=\s+(?:Business unit|Business units|Region|Department|Program type|Graduation|Job description|Job Description|Description|Apply|Share))/)?.at(1) || null;
+  const descriptionStart = visible.search(/Job description/i);
+  const description = descriptionStart >= 0 ? visible.slice(descriptionStart) : visible;
+  return {
+    description: description.length >= 160 ? description : null,
+    responsibilities: null,
+    requirements: null,
+    experience: null,
+    location: location ? location.replace(/\s+/g, ' ').trim() : null,
+    validThrough: null,
+    salaryRange: null,
+    employmentType: null,
+    workplaceType: null,
+    source: 'official_page_text',
+  };
+}
+
 function evercoreDetailsFromText(page: ExternalPageContent): OfficialJobDetails | null {
   let hostname = '';
   try { hostname = new URL(page.url).hostname.toLowerCase(); } catch { return null; }
@@ -362,6 +386,8 @@ export function extractOfficialJobDetails(page: ExternalPageContent): OfficialJo
   if (twoSigma) return twoSigma;
   const evercore = evercoreDetailsFromText(page);
   if (evercore) return evercore;
+  const jefferies = jefferiesDetailsFromText(page);
+  if (jefferies) return jefferies;
 
   const records = structuredRecords(page.metadata?.structured_data).filter(isJobPosting);
   if (records.length > 0) {

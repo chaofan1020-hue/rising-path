@@ -70,6 +70,7 @@ const APPROVED_GENERIC_HOSTS: Record<string, string[]> = {
   'Bain & Company': ['careers.bain.com'],
   'Two Sigma': ['careers.twosigma.com'],
   Evercore: ['evercore.tal.net'],
+  Jefferies: ['jefferies.tal.net'],
   Accenture: ['www.accenture.com'],
 };
 
@@ -602,6 +603,60 @@ async function main(): Promise<void> {
             // registration/apply form instead of the job detail page. The bare
             // opp/{id}/en-GB URL (same pl/{n} path segment) returns the public
             // detail page with the official Location / Region / Job description.
+            await waitForRequestSlot();
+            const oppId = url.pathname.match(/\/opp\/(\d+)(?:[-/])/)?.[1];
+            if (!oppId) {
+              incrementSkip('no_opp_id');
+              skippedJobIds.push(job.id);
+            } else {
+              const barePath = url.pathname.replace(/\/opp\/\d+[^/]*/i, `/opp/${oppId}`);
+              const bareUrl = `${url.origin}${barePath}`;
+              const page = await fetchSafeExternalPage(bareUrl);
+              if (looksLikeClosedJobPage(page.title, page.content)) {
+                incrementSkip('closed_page');
+                skippedJobIds.push(job.id);
+              } else {
+                const details = extractOfficialJobDetails(page);
+                if (looksLikeBlockedPage(page.title, page.content)) {
+                  incrementSkip('blocked');
+                  skippedJobIds.push(job.id);
+                } else if (!details?.description || details.description.length < 160) {
+                  incrementSkip('no_public_description');
+                  skippedJobIds.push(job.id);
+                } else {
+                  result.fetched += 1;
+                  const preparedJob = preparePatch(job, bareUrl, details, reviewMissingFields);
+                  if (!preparedJob) {
+                    incrementSkip('no_new_fields');
+                    skippedJobIds.push(job.id);
+                  } else {
+                    prepared.push(preparedJob);
+                    result.would_update += 1;
+                    for (const field of FIELDS) {
+                      if (preparedJob.fields.includes(field)) result.candidate_fields[field] += 1;
+                    }
+                    result.unavailable_fields += preparedJob.unavailableFields.length;
+                    if (write) {
+                      const { error } = await client
+                        .from('jobs')
+                        .update(preparedJob.patch)
+                        .eq('id', job.id)
+                        .eq('source_system', 'collector_feed')
+                        .eq('company', company)
+                        .eq('is_active', true);
+                      if (error) throw new Error(`Failed to update job ${job.id}: ${error.message}`);
+                      result.updated += 1;
+                    }
+                    processedJobIds.push(job.id);
+                  }
+                }
+              }
+            }
+          } else if (company === 'Jefferies') {
+            // Jefferies Taleo links carry ?instant=apply, which redirects to a
+            // registration/apply form instead of the job detail page. The bare
+            // opp/{id}/en-GB URL returns the public detail page with the
+            // official Location / Business unit / Job description labels.
             await waitForRequestSlot();
             const oppId = url.pathname.match(/\/opp\/(\d+)(?:[-/])/)?.[1];
             if (!oppId) {

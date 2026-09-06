@@ -154,4 +154,17 @@ assert.equal(accentureDetails?.salaryRange, null);
 assert.equal(accentureDetails?.experience, '2-5 years');
 assert.equal(accentureDetails?.validThrough, '2027-08-26T13:46:32.648-07:00');
 assert.equal(accentureDetails?.employmentType, 'Full-time');
+
+// Jefferies Taleo official detail page: "Location New York" label before
+// Business unit(s), Program type etc.
+const jefferiesDetails = extractOfficialJobDetails({
+  title: '2027 Investment Banking Summer Associate Program - Evercore Careers',
+  content: '2027 Investment Banking Summer Associate Program Location New York Business unit(s) Investment Banking Program type Summer Associate Graduation Requirement December 2027 - June 2028 Job description The Summer Associate Program is a 10-week summer program for MBA students. As a Summer Associate, you will be responsible for day-to-day execution of a broad array of transactions, as well as originating new business opportunities. Requirements: MBA students graduating between December 2027 and June 2028 are eligible.',
+  url: 'https://jefferies.tal.net/vx/mobile-0/appcentre-ext/brand-4/candidate/so/pm/1/pl/2/opp/1909-2027-Investment-Banking-Summer-Internship',
+  httpStatus: 200,
+});
+assert.equal(jefferiesDetails?.source, 'official_page_text');
+assert.equal(jefferiesDetails?.location, 'New York');
+assert.ok(jefferiesDetails?.description?.includes('Summer Associate Program'));
+
 console.log('job maintenance content tests passed');
