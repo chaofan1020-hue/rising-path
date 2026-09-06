@@ -122,4 +122,36 @@ const evercoreDetails = extractOfficialJobDetails({
 assert.equal(evercoreDetails?.source, 'official_page_text');
 assert.equal(evercoreDetails?.location, 'New York');
 assert.ok(evercoreDetails?.description?.includes('Primary Responsibilities'));
+
+// Accenture official jobdetails page JSON-LD: structured jobLocation,
+// OccupationalExperienceRequirements months range, and "unavailable"
+// placeholders for salary must be ignored.
+const accentureDetails = extractOfficialJobDetails({
+  title: '^NET Postgres SQL Delivery - 6452016',
+  content: '<div>Job Description Accenture Flex offers you the flexibility of local fixed-duration project-based work powered by Accenture.</div>',
+  url: 'https://www.accenture.com/us-en/careers/jobdetails?id=14660238_en',
+  httpStatus: 200,
+  metadata: {
+    structured_data: [{
+      '@context': 'https://schema.org',
+      '@type': 'JobPosting',
+      title: '^NET Postgres SQL Delivery - 6452016',
+      jobLocation: [{
+        '@type': 'Place',
+        address: { addressLocality: 'Irving', addressRegion: 'TX', addressCountry: 'USA', postalCode: 'unavailable', streetAddress: 'unavailable' },
+      }],
+      experienceRequirements: { '@type': 'OccupationalExperienceRequirements', monthsOfExperience: '24-60' },
+      baseSalary: { '@type': 'MonetaryAmount', currency: 'unavailable', value: { '@type': 'QuantitativeValue', value: 'unavailable', unitText: 'unavailable' } },
+      employmentType: 'Full-time',
+      validThrough: '2027-08-26T13:46:32.648-07:00',
+      qualifications: '<p><u>Basic Qualifications:</u></p><ul><li><p>Minimum 3+ years of experience working with data management.</p></li></ul>',
+    }],
+  },
+});
+assert.equal(accentureDetails?.source, 'official_structured_data');
+assert.equal(accentureDetails?.location, 'Irving, TX, USA');
+assert.equal(accentureDetails?.salaryRange, null);
+assert.equal(accentureDetails?.experience, '2-5 years');
+assert.equal(accentureDetails?.validThrough, '2027-08-26T13:46:32.648-07:00');
+assert.equal(accentureDetails?.employmentType, 'Full-time');
 console.log('job maintenance content tests passed');

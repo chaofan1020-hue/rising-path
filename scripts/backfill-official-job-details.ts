@@ -70,6 +70,7 @@ const APPROVED_GENERIC_HOSTS: Record<string, string[]> = {
   'Bain & Company': ['careers.bain.com'],
   'Two Sigma': ['careers.twosigma.com'],
   Evercore: ['evercore.tal.net'],
+  Accenture: ['www.accenture.com'],
 };
 
 function genericOfficialWriteEnabled(company: string): boolean {
@@ -339,6 +340,7 @@ async function activeCompanyJobs(
   afterId: number | null,
   jobIds: number[] = [],
   candidateCap: number | null = null,
+  urlContains: string | null = null,
 ): Promise<Job[]> {
   const client = getSupabaseClient();
   const candidates: Job[] = [];
@@ -354,6 +356,7 @@ async function activeCompanyJobs(
       .limit(PAGE_SIZE);
     if (cursor != null) query = query.gt('id', cursor);
     if (jobIds.length > 0) query = query.in('id', jobIds);
+    if (urlContains) query = query.ilike('job_url', '%' + urlContains + '%');
     const { data, error } = await query;
     if (error) throw new Error(`Failed to read ${company} jobs: ${error.message}`);
     const page = (data || []) as Job[];
@@ -402,10 +405,12 @@ async function main(): Promise<void> {
   const limit = numberArgument('limit', 1, 1_000);
   const afterId = numberArgument('after-id', 1, Number.MAX_SAFE_INTEGER);
   const jobIds = idListArgument();
+  const urlContains = argument('url-contains');
   const reviewMissingFields = hasFlag('review-missing-fields');
   const runId = runIdArgument();
   if (!company) throw new Error('Specify --company=<company>');
   if (all && limit != null) throw new Error('--all and --limit cannot be combined');
+  if (urlContains && jobIds.length > 0) throw new Error('--url-contains and --job-ids cannot be combined');
   const genericWriteEnabled = genericOfficialWriteEnabled(company)
     && Object.prototype.hasOwnProperty.call(APPROVED_GENERIC_HOSTS, company);
   const writeEnabled = process.env.JOB_BACKFILL_WRITE_ENABLED === 'true' || genericWriteEnabled;
@@ -417,7 +422,7 @@ async function main(): Promise<void> {
   }
 
   const client = getSupabaseClient();
-  const jobs = await activeCompanyJobs(company, afterId, jobIds, all || limit == null ? null : limit);
+  const jobs = await activeCompanyJobs(company, afterId, jobIds, all || limit == null ? null : limit, urlContains);
   const selected = all || limit == null ? jobs : jobs.slice(0, limit);
   const result = {
     environment: { env_file: envFile, supabase_project_ref: projectRef() },

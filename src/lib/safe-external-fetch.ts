@@ -303,13 +303,22 @@ export function extractPageMetadata(value: string): Record<string, unknown> {
   const structuredData: unknown[] = [];
   for (const match of value.matchAll(jsonLdPattern)) {
     if (!/type\s*=\s*["']application\/ld\+json["']/i.test(match[1])) continue;
-    const raw = decodeHtmlAttribute(match[2].trim());
+    const body = match[2].trim();
+    if (!body) continue;
+    let parsed: unknown | null = null;
     try {
-      const parsed = JSON.parse(raw) as unknown;
-      structuredData.push(parsed);
+      parsed = JSON.parse(body) as unknown;
     } catch {
-      // Some portals embed invalid JSON-LD. Visible text remains available.
+      // Some portals embed HTML entities (e.g. &quot; inside a nested HTML
+      // attribute) that make naive JSON.parse fail on the raw body; decode
+      // entities and retry before giving up on the structured data.
+      try {
+        parsed = JSON.parse(decodeHtmlAttribute(body)) as unknown;
+      } catch {
+        // Visible text remains available for these portals.
+      }
     }
+    if (parsed !== null) structuredData.push(parsed);
   }
   if (structuredData.length > 0) metadata.structured_data = structuredData;
   return metadata;

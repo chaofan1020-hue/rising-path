@@ -33,11 +33,42 @@ function text(value: unknown): string {
   return '';
 }
 
+const UNAVAILABLE_PLACEHOLDERS = /^(?:unavailable|not provided|na|n\/a|tbd|to be determined|not available)$/i;
+
+function isUsablePart(value: unknown): boolean {
+  const normalized = text(value);
+  return Boolean(normalized) && !UNAVAILABLE_PLACEHOLDERS.test(normalized);
+}
+
 function firstString(...values: unknown[]): string | null {
   for (const value of values) {
     const normalized = text(value);
     if (normalized) return normalized;
   }
+  return null;
+}
+
+/** Normalize a schema.org experienceRequirements object to a readable string. */
+function experienceRequirementsText(value: unknown): string | null {
+  if (!value || typeof value !== 'object' || Array.isArray(value)) return null;
+  const record = value as Record<string, unknown>;
+  const months = firstString(record.monthsOfExperience, record.monthsOfExperienceMin);
+  if (months && !UNAVAILABLE_PLACEHOLDERS.test(months)) {
+    const range = months.match(/^(\d+)\s*-\s*(\d+)$/);
+    if (range) {
+      const minYears = (Number(range[1]) / 12).toFixed(Number(range[1]) % 12 === 0 ? 0 : 1).replace(/\.0$/, '');
+      const maxYears = (Number(range[2]) / 12).toFixed(Number(range[2]) % 12 === 0 ? 0 : 1).replace(/\.0$/, '');
+      return `${minYears}-${maxYears} years`;
+    }
+    const monthsNumber = Number.parseInt(months, 10);
+    if (Number.isInteger(monthsNumber) && monthsNumber > 0) {
+      const years = (monthsNumber / 12).toFixed(monthsNumber % 12 === 0 ? 0 : 1).replace(/\.0$/, '');
+      return `${years} years`;
+    }
+    return months;
+  }
+  const years = firstString(record.yearsOfExperience, record.yearsOfExperienceMin);
+  if (years && !UNAVAILABLE_PLACEHOLDERS.test(years)) return `${years} years`;
   return null;
 }
 
@@ -79,8 +110,7 @@ function extractAddress(value: unknown): string | null {
     const address = (item as Record<string, unknown>).address;
     const record = address && typeof address === 'object' ? address as Record<string, unknown> : item as Record<string, unknown>;
     const parts = [record.addressLocality, record.addressRegion, record.addressCountry, record.streetAddress]
-      .map(text)
-      .filter(Boolean);
+      .filter(isUsablePart);
     if (parts.length) output.push([...new Set(parts)].join(', '));
   }
   return output.length ? [...new Set(output)].join('; ') : null;
@@ -88,17 +118,23 @@ function extractAddress(value: unknown): string | null {
 
 function extractSalary(value: unknown): string | null {
   if (!value) return null;
-  if (typeof value === 'string') return text(value) || null;
+  if (typeof value === 'string') return isUsablePart(value) ? text(value) : null;
   if (typeof value !== 'object') return null;
   const record = value as Record<string, unknown>;
-  const currency = firstString(record.currency, record.currencyCode);
+  const currencyRaw = firstString(record.currency, record.currencyCode);
+  const currency = currencyRaw && !UNAVAILABLE_PLACEHOLDERS.test(currencyRaw) ? currencyRaw : null;
   const nested = record.value && typeof record.value === 'object' ? record.value as Record<string, unknown> : record;
   const min = firstString(nested.minValue, nested.minimum, nested.from);
   const max = firstString(nested.maxValue, nested.maximum, nested.to);
   const single = firstString(nested.value, nested.amount);
+  if (min && UNAVAILABLE_PLACEHOLDERS.test(min)) return null;
+  if (max && UNAVAILABLE_PLACEHOLDERS.test(max)) return null;
+  if (single && UNAVAILABLE_PLACEHOLDERS.test(single)) return null;
   const amount = min && max ? `${min}-${max}` : min || max || single;
   if (!amount) return null;
-  return `${currency ? `${currency} ` : ''}${amount}${firstString(record.unitText, record.unit) ? ` ${firstString(record.unitText, record.unit)}` : ''}`.trim();
+  const unitRaw = firstString(record.unitText, record.unit);
+  const unit = unitRaw && !UNAVAILABLE_PLACEHOLDERS.test(unitRaw) ? unitRaw : null;
+  return `${currency ? `${currency} ` : ''}${amount}${unit ? ` ${unit}` : ''}`.trim();
 }
 
 function section(textValue: string, startPattern: RegExp, endPattern: RegExp): string | null {
@@ -305,7 +341,7 @@ function fromPosting(posting: Record<string, unknown>): OfficialJobDetails {
     description: description || null,
     responsibilities: responsibilities || null,
     requirements: requirements || section(combined, /(?:basic|minimum|preferred) qualifications|requirements|what you(?:'|’)ll bring|skills(?: and experience)?/i, /responsibilities|what you(?:'|’)ll do|benefits|compensation|about (?:the role|the job)|application process/i),
-    experience: firstString(posting.experienceRequirements, posting.experience, posting.experienceYears),
+    experience: experienceRequirementsText(posting.experienceRequirements) || firstString(posting.experience, posting.experienceYears),
     location: extractAddress(posting.jobLocation || posting.jobLocationType),
     validThrough: firstString(posting.validThrough, posting.applicationDeadline, posting.closingDate),
     salaryRange: extractSalary(posting.baseSalary || posting.salary),

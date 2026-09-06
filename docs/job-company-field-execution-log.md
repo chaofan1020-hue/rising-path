@@ -1079,3 +1079,31 @@ UBS 和 Jane Street 按顺序为下一批，但均需要先解决独立阻塞：
 - UBS（351 条，BrassRing）：官方页面 AJAX 403 且 1.3MB 响应超过当前安全大小限制，无写入，保持 `discovery_required`。
 - Citadel（33 条）：官方页面 403 反爬，无写入。
 - Rothschild & Co：已由 official-details-worker 自动追平（日志 `candidate_jobs: 0`），无需手动回填。
+
+
+## 2026-09-06：Accenture 官网 JSON-LD 双源字段回填收口
+
+Accenture 在招 2,589 条中，约 1,011 条岗位 URL 指向官网 `www.accenture.com/us-en/careers/jobdetails?id=...`（非 Workday host）。这些岗位 `field_evidence.fields.location.status` 大量为 `rejected_legacy` / `pending_recheck`，是后台来源矩阵"待复核/被拒绝"的主要来源。
+
+### 根因修复
+
+- `src/lib/safe-external-fetch.ts`：JSON-LD 解析改为先对原文 `JSON.parse`，失败才 `decodeHtmlAttribute` 重试。Accenture 详情页 JSON-LD 内嵌 `data-cmp-data-layer` HTML 属性（含 `&quot;`），原实现先做实体解码再解析会把合法 JSON 的引号破坏导致解析失败，整个结构化数据被 catch 吞掉，详情回退到 `official_page_text`（location=null）。修复后 `source=official_structured_data` 正常。
+- `src/lib/job-official-detail.ts`：新增 `UNAVAILABLE_PLACEHOLDERS`（过滤 `unavailable/na/n/a/not provided` 等占位值）、`isUsablePart`、`experienceRequirementsText`（把 `monthsOfExperience: "24-60"` 归一为 `2-5 years`）；`extractAddress`/`extractSalary` 过滤占位符。
+- `scripts/backfill-official-job-details.ts`：`APPROVED_GENERIC_HOSTS` 增加 `Accenture: ['www.accenture.com']`；新增 `--url-contains=<substring>` 选项，按 URL 子串过滤候选（Deloitte 双源等场景同样适用）。
+
+### 生产验证与回填
+
+- 单条 57811（`jobdetails?id=14660238_en`）：`location=Irving, TX, USA`、`exp=2-5 years`、`validThrough=2027-08-26`、`employmentType=Full-time`、`source=official_structured_data`。
+- canary：`--limit=20 --url-contains=jobdetails` 写入 18/20，0 失败；写入后生产库字段证据 `location/experience/deadline/employment_category` 全部 `verified`，`evidence_kind=official_detail_page`，证据 URL 为官网详情页。
+- 公网 `/api/jobs/47600` 抽样返回 `region=Chicago, IL, USA; ...`、`job_type=社招`、完整官方描述，岗位仍在招。
+- 全量两批：第一批 1,000 条（907 更新、0 失败），第二批 `--after-id=68654` 11 条（11 更新），共覆盖全部 1,011 条 accenture.com 官网岗位。
+- 全量验收（2,589 条）：accenture.com 1,011 条中 location verified 831、location 带官方来源 993、deadline verified 831、employment verified 918、experience 817；Workday 源 1,578 条保持既有覆盖。全公司来源矩阵 75 家公司 / 79 host 组无异常。
+
+### 官网已下架岗位（180 条，不猜测）
+
+- 1,011 条 accenture.com 岗位中仍有 180 条 `jobdetails` URL 稳定 302 到 `jobsearch` 搜索页（抽样 7 条多次探测均如此，与 title 参数无关），官网详情已下架/失效，但 `collector_feed` 仍标记在招。
+- 按规则：不猜测地点/截止日期、不修改 `is_active` / `is_closed`、不改生命周期，保持 `rejected_legacy` 待上游移除或更新 URL 后再复核。
+
+### 台账
+
+- `job_company_sources` 中 Accenture 由 `source_family_identified` 提升为 `configured_connector`，`connector_name=accenture_careers`，`official_hosts=[www.accenture.com, accenture.wd103.myworkdayjobs.com]`，已记录双源完成情况（2026-09-06）。

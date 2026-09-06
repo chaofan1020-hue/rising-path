@@ -1,7 +1,7 @@
 # 全公司岗位字段完善计划
 
-更新时间：2026-09-05  
-状态：Wells Fargo、Accenture 已完成生产字段回填与严格回归；MongoDB、Okta、Elastic、Duolingo、Roblox、Jane Street、KKR 七家 Greenhouse 公司已于 2026-09-05 完成生产回填与验收；BlackRock、Millennium Management、Deutsche Bank、Bain & Company、Two Sigma、Evercore 已按官方 JSON/详情页来源完成生产回填与验收；McKinsey、UBS、Citadel 官方源受限记为阻塞；按来源族逐批执行，不做全站批量回填
+更新时间：2026-09-06  
+状态：Accenture 官网 JSON-LD 双源字段回填收口（1,011 条 accenture.com 岗位 location/deadline 831 verified、employment 918 verified、experience 817；180 条官网已 302 下架不猜测）；Wells Fargo、MongoDB、Okta、Elastic、Duolingo、Roblox、Jane Street、KKR、BlackRock、Millennium Management、Deutsche Bank、Bain & Company、Two Sigma、Evercore 已完成生产回填与验收；McKinsey、UBS、Citadel 官方源受限记为阻塞；按来源族逐批执行，不做全站批量回填
 
 ## 1. 目标与边界
 
@@ -48,7 +48,7 @@ Cloudflare 已完成经验字段的生产回填验证，可作为同族连接器
 | --- | --- | --- | --- |
 | Phenom | Boston Consulting Group 250、Oliver Wyman 190 | 已识别来源族，需适配器验证 | 先做 BCG 先锋，再处理 Oliver Wyman |
 | Oracle HCM | Lazard 41、Jefferies 135、JPMorgan Chase 9,737 | 已识别来源族 | 先以 Lazard 验证列表/详情/ID，再扩展 |
-| Workday | Citigroup 及其余待验收公司 | 已识别来源族；Wells Fargo、Accenture 已完成字段回填并进入常规观察 | 按公司独立游标继续处理；新公司先做真实样本和 dry-run |
+| Workday | Citigroup 及其余待验收公司 | 已识别来源族；Wells Fargo 已完成；Accenture 双源（Workday + 官网 JSON-LD）已收口进入常规观察 | 按公司独立游标继续处理；新公司先做真实样本和 dry-run |
 | Apple 官方 API | Apple 3,449 | 已确认独立官方 API | 单独实现并验收详情补全 |
 | 自建/未分类 | Amazon 18,177、Google 2,416、Microsoft 1,369、Deloitte 1,151、Morgan Stanley 1,110、Goldman Sachs 797、Meta 773，以及其余 17 家 | `discovery_required`，共 28,288 条 | 仅做官方源探测和台账；未确认前不回填 |
 
