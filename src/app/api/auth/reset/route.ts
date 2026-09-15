@@ -2,7 +2,8 @@ import { NextRequest, NextResponse } from 'next/server';
 import { getSupabaseAnonClient } from '@/storage/database/supabase-client';
 import { getAuthRedirectOrigin, getClientIp } from '@/lib/auth-server';
 import { isValidEmail } from '@/lib/auth-shared';
-import { authErrorMessage, consumeAuthRateLimit, normalizeEmail } from '@/lib/auth-security';
+import { authErrorMessage, consumeAuthRateLimit, normalizeEmail, captchaErrorIfInvalid } from '@/lib/auth-security';
+import { readCaptchaToken } from '@/lib/altcha';
 
 export async function POST(request: NextRequest) {
   const ip = getClientIp(request);
@@ -11,6 +12,10 @@ export async function POST(request: NextRequest) {
     const email = normalizeEmail(body.email);
     if (!isValidEmail(email)) {
       return NextResponse.json({ error: '请输入有效的邮箱地址' }, { status: 400 });
+    }
+    const captchaError = await captchaErrorIfInvalid(readCaptchaToken(body));
+    if (captchaError) {
+      return NextResponse.json({ error: captchaError }, { status: 400 });
     }
 
     const ipLimit = await consumeAuthRateLimit(`reset:ip:${ip}`, 5, 3600, 3600);

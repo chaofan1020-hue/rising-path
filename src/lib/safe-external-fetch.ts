@@ -8,6 +8,7 @@ const MAX_RESPONSE_BYTES = 1_000_000;
 // Keep the default limit for every other host and allow only this exact public
 // host a bounded 2 MB response so the detail evidence is not truncated.
 const GOOGLE_MAX_RESPONSE_BYTES = 2_000_000;
+const UBS_MAX_RESPONSE_BYTES = 2_000_000;
 const MAX_REDIRECTS = 3;
 
 export class ExternalFetchError extends Error {
@@ -324,6 +325,44 @@ export function extractPageMetadata(value: string): Record<string, unknown> {
   return metadata;
 }
 
+function extractJsonArrayAfterMarker(source: string, marker: string): unknown[] | null {
+  const markerIndex = source.indexOf(marker);
+  if (markerIndex < 0) return null;
+  const openIndex = source.indexOf('[', markerIndex + marker.length);
+  if (openIndex < 0) return null;
+  let depth = 0;
+  let quoted = false;
+  let escaped = false;
+  for (let index = openIndex; index < source.length; index += 1) {
+    const char = source[index];
+    if (quoted) {
+      if (escaped) escaped = false;
+      else if (char === '\\') escaped = true;
+      else if (char === '"') quoted = false;
+      continue;
+    }
+    if (char === '"') quoted = true;
+    else if (char === '[') depth += 1;
+    else if (char === ']') {
+      depth -= 1;
+      if (depth === 0) {
+        try { return JSON.parse(source.slice(openIndex, index + 1)) as unknown[]; } catch { return null; }
+      }
+    }
+  }
+  return null;
+}
+
+function extractBrassRingQuestions(value: string): Array<Record<string, unknown>> | null {
+  // BrassRing embeds the public job payload in a JSON-valued HTML attribute.
+  // Decode entities first, then isolate only JobDetailQuestions so the large
+  // branding/configuration shell is never exposed to downstream parsers.
+  const decoded = decodeHtmlAttribute(value);
+  const questions = extractJsonArrayAfterMarker(decoded, '"JobDetailQuestions":');
+  if (!Array.isArray(questions)) return null;
+  return questions.filter((item): item is Record<string, unknown> => Boolean(item && typeof item === 'object' && !Array.isArray(item)));
+}
+
 function cookieHeader(value: string | null): string | null {
   if (!value) return null;
   const cookies: string[] = [];
@@ -413,7 +452,12 @@ export async function fetchSafeExternalPage(rawUrl: string): Promise<ExternalPag
     const googlePath = resolved.url.pathname.toLowerCase();
     const isGoogleCareers = /(?:^|\.)google\.com$/i.test(resolved.url.hostname)
       && (googlePath.includes('/about/careers/') || googlePath.includes('/jobs/results/'));
-    const maxResponseBytes = isGoogleCareers ? GOOGLE_MAX_RESPONSE_BYTES : MAX_RESPONSE_BYTES;
+    const isUbsBrassRing = resolved.url.hostname.toLowerCase() === 'jobs.ubs.com'
+      && /\/TGnewUI\/Search\/home\/HomeWithPreLoad/i.test(resolved.url.pathname)
+      && /PageType=JobDetails/i.test(resolved.url.search);
+    const maxResponseBytes = isGoogleCareers
+      ? GOOGLE_MAX_RESPONSE_BYTES
+      : isUbsBrassRing ? UBS_MAX_RESPONSE_BYTES : MAX_RESPONSE_BYTES;
     const response = await requestPinnedHttps(resolved.url, resolved.addresses[0], {}, false, maxResponseBytes);
     const location = response.headers.get('location');
     if ([301, 302, 303, 307, 308].includes(response.statusCode)) {
@@ -493,6 +537,10 @@ export async function fetchSafeExternalPage(rawUrl: string): Promise<ExternalPag
       }
     }
     const metadata = extractPageMetadata(rawContent);
+    if (isUbsBrassRing) {
+      const brassRingQuestions = extractBrassRingQuestions(rawContent);
+      if (brassRingQuestions) metadata.brassring_questions = brassRingQuestions;
+    }
     if (!hasJobPostingStructuredData(metadata.structured_data) && resolved.url.hostname.toLowerCase() === 'jobs.apple.com') {
       try {
         const appleStructuredData = await fetchAppleStructuredData(resolved.url, resolved.addresses[0]);

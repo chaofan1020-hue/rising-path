@@ -97,6 +97,120 @@ export interface TrackedTextGenerationResult {
   totalMs: number;
 }
 
+export interface TrackedTextBatchItem {
+  messages: TextMessage[];
+  options: TextGenerationOptions;
+  context: TrackedTextGenerationContext;
+}
+
+export type TrackedTextBatchItemResult =
+  | { ok: true; result: TrackedTextGenerationResult }
+  | { ok: false; error: unknown };
+
+/**
+ * Run several bounded text generations under one feature reservation. This is
+ * used by batch workflows that need parallelism without charging one request
+ * per internal model call. Each child call still gets its own usage event and
+ * provider request id for observability.
+ */
+export async function consumeTrackedTextBatch(
+  client: TextProviderClient,
+  items: TrackedTextBatchItem[],
+  concurrency: number,
+): Promise<TrackedTextBatchItemResult[]> {
+  if (items.length === 0) return [];
+  const firstContext = items[0].context;
+  const reservationId = createAiUsageRequestId();
+  const reservation = await reserveCredits({
+    userId: firstContext.userId,
+    metric: metricForFeature(firstContext.feature),
+    idempotencyKey: reservationId,
+    metadata: {
+      feature: firstContext.feature,
+      phase: firstContext.phase || null,
+      batch_size: items.length,
+    },
+  });
+  const results: TrackedTextBatchItemResult[] = new Array(items.length);
+  const workerCount = Math.max(1, Math.min(Math.floor(concurrency) || 1, items.length));
+  let cursor = 0;
+
+  const runOne = async (index: number): Promise<void> => {
+    const item = items[index];
+    const requestId = createAiUsageRequestId();
+    const startedAt = Date.now();
+    let latestUsage: TextUsage | null = null;
+    let content = '';
+    let firstContentAt: number | null = null;
+    try {
+      const stream = client.stream(item.messages, { ...item.options, requestId });
+      for await (const chunk of stream) {
+        if (chunk.content) {
+          const text = chunk.content.toString();
+          if (firstContentAt === null && text.trim()) firstContentAt = Date.now();
+          content += text;
+        }
+        if (chunk.usage) latestUsage = chunk.usage;
+      }
+      const totalMs = Date.now() - startedAt;
+      await recordAiUsageEvent({
+        ...item.context,
+        requestId,
+        provider: latestUsage?.provider || 'alibaba',
+        model: latestUsage?.model || null,
+        usageSource: latestUsage?.usageSource || 'unknown',
+        inputTokens: latestUsage?.inputTokens,
+        outputTokens: latestUsage?.outputTokens,
+        totalTokens: latestUsage?.totalTokens,
+        metadata: { ...item.context.metadata, batch_reservation_id: reservationId },
+        durationMs: totalMs,
+        totalMs,
+        ttfbMs: firstContentAt === null ? null : firstContentAt - startedAt,
+      });
+      results[index] = {
+        ok: true,
+        result: {
+          content,
+          usage: latestUsage,
+          requestId,
+          ttfbMs: firstContentAt === null ? null : firstContentAt - startedAt,
+          totalMs,
+        },
+      };
+    } catch (error) {
+      await recordAiUsageError({
+        ...item.context,
+        requestId,
+        provider: latestUsage?.provider || 'alibaba',
+        model: latestUsage?.model || null,
+        usageSource: latestUsage?.usageSource || 'unknown',
+        inputTokens: latestUsage?.inputTokens,
+        outputTokens: latestUsage?.outputTokens,
+        totalTokens: latestUsage?.totalTokens,
+        metadata: { ...item.context.metadata, batch_reservation_id: reservationId },
+        durationMs: Date.now() - startedAt,
+        totalMs: Date.now() - startedAt,
+        ttfbMs: firstContentAt === null ? null : firstContentAt - startedAt,
+        error,
+      });
+      results[index] = { ok: false, error };
+    }
+  };
+
+  const worker = async (): Promise<void> => {
+    while (true) {
+      const index = cursor;
+      cursor += 1;
+      if (index >= items.length) return;
+      await runOne(index);
+    }
+  };
+  await Promise.all(Array.from({ length: workerCount }, () => worker()));
+  const hasSuccess = results.some((result) => result?.ok);
+  await settleCredits(reservation, hasSuccess ? 'committed' : 'released');
+  return results;
+}
+
 export async function invokeTrackedTextGeneration(
   client: TextProviderClient,
   messages: TextMessage[],

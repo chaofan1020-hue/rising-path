@@ -111,6 +111,7 @@ export function parseAshbyJob(rawValue: unknown, options: ConnectorParseOptions)
     compensation: salary,
     valid_through: deadline,
     application_deadline: deadline,
+    date_posted: firstText(raw, ['publishedDate', 'publishedAt', 'listedAt', 'datePosted', 'date_posted']),
     status: status(raw),
     sync_action: status(raw) === 'closed' ? 'close' : 'upsert',
     source_evidence: structuredFieldSources,

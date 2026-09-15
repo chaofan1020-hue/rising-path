@@ -3,7 +3,7 @@ import { getSupabaseClient } from '@/storage/database/supabase-client';
 import { loadStorageSkill } from '@/lib/storage-utils';
 import { ADMIN_PERMISSIONS, requireAdminPermission } from '@/lib/admin-permissions';
 import { recordAdminAuditEvent, recordAdminAuditFailure } from '@/lib/admin-audit';
-import { getCompanyFaviconUrl, getCompanyLogoUrl } from '@/lib/company-logo';
+import { resolveDisplayLogoUrls } from '@/lib/company-logo';
 
 interface CompanyLogoCatalogRow {
   id: number | null;
@@ -78,7 +78,7 @@ async function loadCompanyLogoCatalog(): Promise<CompanyLogoCatalogRow[]> {
       const configuredLogo = typeof configured?.logo_url === 'string' && configured.logo_url.trim()
         ? configured.logo_url.trim()
         : null;
-      const logoUrl = uploaded?.logo_url || configuredLogo || getCompanyLogoUrl(companyName, job?.jobUrl);
+      const logos = resolveDisplayLogoUrls(companyName, job?.jobUrl, uploaded?.logo_url || configuredLogo);
       const source: CompanyLogoCatalogRow['source'] = uploaded?.logo_url
         ? uploaded.logo_url.includes('/logos/imported/') ? 'imported' : 'uploaded'
         : configuredLogo
@@ -88,8 +88,8 @@ async function loadCompanyLogoCatalog(): Promise<CompanyLogoCatalogRow[]> {
       return {
         id: uploaded?.id || configured?.id || null,
         company_name: companyName,
-        logo_url: logoUrl,
-        fallback_logo_url: getCompanyFaviconUrl(companyName, job?.jobUrl),
+        logo_url: logos.logo_url,
+        fallback_logo_url: logos.logo_fallback_url,
         source,
         job_count: job?.jobCount || 0,
         updated_at: uploaded?.updated_at || configured?.updated_at || null,
@@ -101,7 +101,7 @@ async function loadCompanyLogoCatalog(): Promise<CompanyLogoCatalogRow[]> {
 }
 
 export async function GET(request: NextRequest) {
-  const permissionError = requireAdminPermission(request, ADMIN_PERMISSIONS.configWrite);
+  const permissionError = await requireAdminPermission(request, ADMIN_PERMISSIONS.configWrite);
   if (permissionError) return permissionError;
 
   try {
@@ -114,7 +114,7 @@ export async function GET(request: NextRequest) {
 }
 
 export async function POST(request: NextRequest) {
-  const permissionError = requireAdminPermission(request, ADMIN_PERMISSIONS.configWrite);
+  const permissionError = await requireAdminPermission(request, ADMIN_PERMISSIONS.configWrite);
   if (permissionError) return permissionError;
 
   try {
@@ -189,7 +189,7 @@ export async function POST(request: NextRequest) {
 }
 
 export async function DELETE(request: NextRequest) {
-  const permissionError = requireAdminPermission(request, ADMIN_PERMISSIONS.configWrite);
+  const permissionError = await requireAdminPermission(request, ADMIN_PERMISSIONS.configWrite);
   if (permissionError) return permissionError;
 
   try {

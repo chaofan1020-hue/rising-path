@@ -1,5 +1,11 @@
 import { z } from 'zod';
 
+export const MATCH_RECOMMENDATION_TYPES = ['apply_now', 'improve_then_apply', 'low_priority'] as const;
+export const MATCH_ELIGIBILITY_STATUSES = ['eligible', 'uncertain', 'blocked'] as const;
+export const MATCH_FIELD_STATUSES = ['verified', 'derived', 'pending_recheck', 'missing'] as const;
+
+const fieldStatusSchema = z.enum(MATCH_FIELD_STATUSES);
+
 const scoreBreakdownSchema = z.object({
   ats: z.number().int().min(0).max(100),
   keywords: z.number().int().min(0).max(100),
@@ -9,7 +15,7 @@ const scoreBreakdownSchema = z.object({
   profile_fit: z.number().int().min(0).max(100),
 });
 
-const matchSchema = z.object({
+const baseMatchSchema = z.object({
   job_id: z.number().int().positive(),
   match_score: z.number().int().min(0).max(100),
   score_breakdown: scoreBreakdownSchema,
@@ -19,9 +25,27 @@ const matchSchema = z.object({
   suggestions: z.string().trim().min(1).max(2000),
 });
 
-const matchResponseSchema = z.array(matchSchema).min(1);
+const modelMatchResponseSchema = z.array(baseMatchSchema).min(1);
+const matchResultSchema = baseMatchSchema.extend({
+  recommendation_type: z.enum(MATCH_RECOMMENDATION_TYPES),
+  confidence: z.number().int().min(0).max(100),
+  eligibility: z.object({
+    status: z.enum(MATCH_ELIGIBILITY_STATUSES),
+    reasons: z.array(z.string().trim().min(1).max(500)).max(8),
+  }),
+  field_quality: z.object({
+    location: fieldStatusSchema,
+    salary: fieldStatusSchema,
+    experience: fieldStatusSchema,
+    sponsorship: fieldStatusSchema,
+    deadline: fieldStatusSchema,
+  }),
+});
 
-export type Match = z.infer<typeof matchSchema>;
+export const MATCH_RESULT_SCHEMA = matchResultSchema;
+
+export type Match = z.infer<typeof matchResultSchema>;
+export type ModelMatch = z.infer<typeof baseMatchSchema>;
 
 export const AI_MATCH_RESPONSE_SCHEMA: Record<string, unknown> = {
   type: 'object',
@@ -69,21 +93,21 @@ export const AI_MATCH_RESPONSE_SCHEMA: Record<string, unknown> = {
   required: ['matches'],
 };
 
-export function parseModelMatches(raw: string): Match[] {
+export function parseModelMatches(raw: string): ModelMatch[] {
   const normalized = raw
     .trim()
     .replace(/^```(?:json)?\s*/i, '')
     .replace(/\s*```$/, '')
     .trim();
   const parsed: unknown = JSON.parse(normalized);
-  if (Array.isArray(parsed)) return matchResponseSchema.parse(parsed);
+  if (Array.isArray(parsed)) return modelMatchResponseSchema.parse(parsed);
   if (typeof parsed === 'object' && parsed !== null && 'matches' in parsed) {
-    return matchResponseSchema.parse(parsed.matches);
+    return modelMatchResponseSchema.parse(parsed.matches);
   }
-  return matchResponseSchema.parse(parsed);
+  return modelMatchResponseSchema.parse(parsed);
 }
 
-export function validateMatchSet(matches: Match[], jobIds: Iterable<number>): void {
+export function validateMatchSet(matches: ModelMatch[], jobIds: Iterable<number>): void {
   const expectedJobIds = new Set(jobIds);
   const returnedJobIds = new Set<number>();
 

@@ -4,29 +4,37 @@ import { ADMIN_PERMISSIONS, requireAdminPermission } from '@/lib/admin-permissio
 
 process.env.ADMIN_SESSION_SECRET = 'admin-permission-test-secret';
 
-function requestForRole(role: 'content_admin' | 'support_admin') {
-  process.env.ADMIN_SESSION_ROLE = role;
+async function requestForRole(role: 'content_admin' | 'support_admin') {
   return new Request('http://localhost/api/admin/test', {
-    headers: { authorization: `Bearer ${createAdminSessionToken()}` },
+    headers: { authorization: `Bearer ${await createAdminSessionToken(Math.floor(Date.now() / 1000), role)}` },
   });
 }
 
-const contentRequest = requestForRole('content_admin');
-assert.equal(requireAdminPermission(contentRequest, ADMIN_PERMISSIONS.dnaPublish), null);
-assert.equal(requireAdminPermission(contentRequest, ADMIN_PERMISSIONS.jobsWrite), null);
-assert.equal(requireAdminPermission(contentRequest, ADMIN_PERMISSIONS.auditRead)?.status, 403);
-assert.equal(requireAdminPermission(contentRequest, ADMIN_PERMISSIONS.configWrite)?.status, 403);
-assert.equal(requireAdminPermission(contentRequest, ADMIN_PERMISSIONS.usersRead)?.status, 403);
-assert.equal(requireAdminPermission(contentRequest, ADMIN_PERMISSIONS.usageExport)?.status, 403);
+async function main() {
+  const contentRequest = await requestForRole('content_admin');
+  assert.equal(await requireAdminPermission(contentRequest, ADMIN_PERMISSIONS.dnaPublish), null);
+  assert.equal(await requireAdminPermission(contentRequest, ADMIN_PERMISSIONS.jobsWrite), null);
+  assert.equal((await requireAdminPermission(contentRequest, ADMIN_PERMISSIONS.auditRead))?.status, 403);
+  assert.equal((await requireAdminPermission(contentRequest, ADMIN_PERMISSIONS.configWrite))?.status, 403);
+  assert.equal((await requireAdminPermission(contentRequest, ADMIN_PERMISSIONS.usersRead))?.status, 403);
+  assert.equal((await requireAdminPermission(contentRequest, ADMIN_PERMISSIONS.usersWrite))?.status, 403);
+  assert.equal((await requireAdminPermission(contentRequest, ADMIN_PERMISSIONS.usageExport))?.status, 403);
 
-const supportRequest = requestForRole('support_admin');
-assert.equal(requireAdminPermission(supportRequest, ADMIN_PERMISSIONS.feedbackReview), null);
-assert.equal(requireAdminPermission(supportRequest, ADMIN_PERMISSIONS.dnaPublish)?.status, 403);
-assert.equal(requireAdminPermission(supportRequest, ADMIN_PERMISSIONS.usersRead), null);
-assert.equal(requireAdminPermission(supportRequest, ADMIN_PERMISSIONS.jobsWrite)?.status, 403);
-assert.equal(requireAdminPermission(supportRequest, ADMIN_PERMISSIONS.usageExport)?.status, 403);
+  const supportRequest = await requestForRole('support_admin');
+  assert.equal(await requireAdminPermission(supportRequest, ADMIN_PERMISSIONS.feedbackReview), null);
+  assert.equal((await requireAdminPermission(supportRequest, ADMIN_PERMISSIONS.dnaPublish))?.status, 403);
+  assert.equal(await requireAdminPermission(supportRequest, ADMIN_PERMISSIONS.usersRead), null);
+  assert.equal(await requireAdminPermission(supportRequest, ADMIN_PERMISSIONS.usersWrite), null);
+  assert.equal((await requireAdminPermission(supportRequest, ADMIN_PERMISSIONS.jobsWrite))?.status, 403);
+  assert.equal((await requireAdminPermission(supportRequest, ADMIN_PERMISSIONS.usageExport))?.status, 403);
 
-const unauthenticated = new Request('http://localhost/api/admin/test');
-assert.equal(requireAdminPermission(unauthenticated, ADMIN_PERMISSIONS.dashboardRead)?.status, 401);
+  const unauthenticated = new Request('http://localhost/api/admin/test');
+  assert.equal((await requireAdminPermission(unauthenticated, ADMIN_PERMISSIONS.dashboardRead))?.status, 401);
 
-console.log('Admin permission matrix checks passed');
+  console.log('Admin permission matrix checks passed');
+}
+
+void main().catch((error) => {
+  console.error(error);
+  process.exitCode = 1;
+});

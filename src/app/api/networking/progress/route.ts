@@ -3,6 +3,7 @@ import { getAuthContext, unauthorizedResponse } from '@/lib/auth-server';
 import type { NetworkingProgress } from '@/lib/networking-recommender';
 import { NETWORKING_STAGES } from '@/lib/networking-recommender';
 import { resolveActiveRegion } from '@/lib/user-region';
+import { getUserResume } from '@/lib/resume-selection';
 
 function defaultProgress(): NetworkingProgress {
   return {
@@ -18,13 +19,8 @@ export async function GET(request: NextRequest) {
     const auth = await getAuthContext(request);
     if (!auth) return unauthorizedResponse();
     const client = auth.client;
-    const { data: resume } = await client
-      .from('resumes')
-      .select('id, profile, segmentation, segmentation_overrides')
-      .eq('user_id', auth.user.id)
-      .order('created_at', { ascending: false })
-      .limit(1)
-      .maybeSingle();
+    const resume = await getUserResume(client, auth.user.id, request.nextUrl.searchParams.get('resumeId'));
+    if (request.nextUrl.searchParams.get('resumeId') && !resume) return NextResponse.json({ error: '简历不存在或无权使用' }, { status: 404 });
     const { data: userProfile } = await client
       .from('profiles')
       .select('preferred_region')
@@ -51,6 +47,7 @@ export async function POST(request: NextRequest) {
     const body = await request.json() as {
       stage?: unknown;
       completedMilestones?: unknown;
+      resumeId?: unknown;
     };
     const stage = Number(body.stage);
     if (!Number.isInteger(stage) || stage < 1 || stage > NETWORKING_STAGES.length) {
@@ -60,13 +57,7 @@ export async function POST(request: NextRequest) {
       ? body.completedMilestones.filter((item): item is string => typeof item === 'string').slice(0, 50)
       : [];
 
-    const { data: resume } = await client
-      .from('resumes')
-      .select('id, profile, segmentation, segmentation_overrides')
-      .eq('user_id', auth.user.id)
-      .order('created_at', { ascending: false })
-      .limit(1)
-      .maybeSingle();
+    const resume = await getUserResume(client, auth.user.id, body.resumeId);
     if (!resume) {
       return NextResponse.json({ error: '未找到简历' }, { status: 404 });
     }

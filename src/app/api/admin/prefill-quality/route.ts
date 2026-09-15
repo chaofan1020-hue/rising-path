@@ -18,7 +18,7 @@ function getRangeBounds(range: QualityRange): { from: string; to: string } {
 }
 
 export async function GET(request: NextRequest) {
-  const permissionError = requireAdminPermission(request, ADMIN_PERMISSIONS.dashboardRead);
+  const permissionError = await requireAdminPermission(request, ADMIN_PERMISSIONS.dashboardRead);
   if (permissionError) return permissionError;
 
   const range = request.nextUrl.searchParams.get('range') || '30d';

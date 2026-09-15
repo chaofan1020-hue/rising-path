@@ -24,7 +24,7 @@ function validDate(value: unknown): string | null | undefined {
 }
 
 export async function GET(request: NextRequest) {
-  const permissionError = requireAdminPermission(request, ADMIN_PERMISSIONS.configWrite);
+  const permissionError = await requireAdminPermission(request, ADMIN_PERMISSIONS.configWrite);
   if (permissionError) return permissionError;
 
   const params = request.nextUrl.searchParams;
@@ -49,7 +49,7 @@ export async function GET(request: NextRequest) {
 }
 
 export async function POST(request: NextRequest) {
-  const permissionError = requireAdminPermission(request, ADMIN_PERMISSIONS.configWrite);
+  const permissionError = await requireAdminPermission(request, ADMIN_PERMISSIONS.configWrite);
   if (permissionError) return permissionError;
 
   try {
@@ -113,7 +113,7 @@ export async function POST(request: NextRequest) {
 }
 
 export async function PATCH(request: NextRequest) {
-  const permissionError = requireAdminPermission(request, ADMIN_PERMISSIONS.configWrite);
+  const permissionError = await requireAdminPermission(request, ADMIN_PERMISSIONS.configWrite);
   if (permissionError) return permissionError;
 
   try {

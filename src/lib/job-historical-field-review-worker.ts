@@ -26,7 +26,7 @@ const DEFAULT_LEASE_SECONDS = 900;
 const ORPHAN_HEARTBEAT_MS = 60_000;
 const COMPLETION_RECHECK_MS = 24 * 60 * 60_000;
 const RETRY_MS = 5 * 60_000;
-const GENERIC_OFFICIAL_SOURCE_TYPES = new Set(['amazon_jobs', 'apple_official_api', 'google_careers', 'microsoft_careers', 'meta_careers', 'deloitte_careers', 'morgan_stanley_eightfold', 'goldman_sachs_careers']);
+const GENERIC_OFFICIAL_SOURCE_TYPES = new Set(['amazon_jobs', 'apple_official_api', 'google_careers', 'microsoft_careers', 'meta_careers', 'deloitte_careers', 'morgan_stanley_eightfold', 'goldman_sachs_careers', 'ubs_brassring', 'evercore_taleo']);
 // Companies whose official detail pages are handled by
 // scripts/backfill-official-job-details.ts (APPROVED_GENERIC_HOSTS keys).
 // The historical worker routes these to the official detail script even when
@@ -34,7 +34,7 @@ const GENERIC_OFFICIAL_SOURCE_TYPES = new Set(['amazon_jobs', 'apple_official_ap
 const OFFICIAL_DETAIL_COMPANIES = new Set([
   'Amazon', 'Apple', 'Google', 'Microsoft', 'Meta', 'Deloitte',
   'Morgan Stanley', 'Goldman Sachs', 'BlackRock', 'Millennium Management',
-  'Deutsche Bank', 'Bain & Company', 'Two Sigma', 'Evercore', 'Jefferies', 'Accenture',
+  'Deutsche Bank', 'Bain & Company', 'Two Sigma', 'Evercore', 'Jefferies', 'Accenture', 'UBS',
 ]);
 
 function officialDetailCompany(company: string): boolean {

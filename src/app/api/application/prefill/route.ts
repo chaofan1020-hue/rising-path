@@ -12,6 +12,7 @@ import {
 } from '@/lib/application-profile';
 import { applicationPrefillRequestSchema } from '@/lib/application-contracts';
 import { consumeAuthRateLimit } from '@/lib/auth-security';
+import { getUserResume } from '@/lib/resume-selection';
 
 function decayedConfidence(fieldSource?: { source?: string; confidence?: number; updatedAt?: string }): number {
   const base = typeof fieldSource?.confidence === 'number' ? fieldSource.confidence : 0.9;
@@ -169,14 +170,7 @@ export async function POST(request: NextRequest) {
       .eq('user_id', auth.user.id)
       .maybeSingle();
 
-    const resumeQuery = client
-      .from('resumes')
-      .select('id, user_info, profile')
-      .eq('user_id', auth.user.id);
-    const selectedResumeId = body.resumeId || profileRow?.resume_id || null;
-    const { data: resume } = selectedResumeId
-      ? await resumeQuery.eq('id', selectedResumeId).maybeSingle()
-      : await resumeQuery.order('created_at', { ascending: false }).limit(1).maybeSingle();
+    const resume = await getUserResume(client, auth.user.id, body.resumeId);
     if (body.resumeId && !resume) {
       return NextResponse.json({ error: '简历不存在或无权使用' }, { status: 404 });
     }

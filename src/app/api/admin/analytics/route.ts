@@ -23,7 +23,7 @@ function getRangeBounds(range: AnalyticsRange): { from: string; to: string } {
 }
 
 export async function GET(request: NextRequest) {
-  const permissionError = requireAdminPermission(request, ADMIN_PERMISSIONS.dashboardRead);
+  const permissionError = await requireAdminPermission(request, ADMIN_PERMISSIONS.dashboardRead);
   if (permissionError) return permissionError;
 
   const rangeParam = request.nextUrl.searchParams.get('range') || '7d';

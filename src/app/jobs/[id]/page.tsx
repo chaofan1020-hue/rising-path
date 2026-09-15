@@ -47,6 +47,11 @@ import PageBackButton from '@/components/page-back-button';
 import { AutoApplyAssistant } from '@/components/auto-apply-assistant';
 import { useLanguage } from '@/lib/language-context';
 import { getJobDeadlineRemaining } from '@/lib/job-deadline';
+import { CompanyLogo } from '@/components/company-logo';
+import { pickEligibleResumeId } from '@/lib/resume-availability';
+import { useResumeAvailability } from '@/hooks/use-resume-availability';
+import { ResumeAvailabilityHint } from '@/components/resume-availability-hint';
+import { readActiveResumeId, writeActiveResumeId } from '@/lib/active-resume';
 
 interface Job {
   id: number;
@@ -65,6 +70,7 @@ interface Job {
   logo_url?: string;
   logo_fallback_url?: string;
   sponsorship?: 'yes' | 'no' | 'unknown';
+  posted_at?: string | null;
   created_at: string;
   valid_through?: string | null;
   deadline_time_zone?: string | null;
@@ -165,47 +171,6 @@ const scoreBreakdownLabels: Array<{ key: string; label: string }> = [
   { key: 'profile_fit', label: 'jobDetail.scoreProfileFit' },
 ];
 
-// Company Logo Component
-function CompanyLogo({ company, logoUrl, fallbackLogoUrl, size = 'md' }: { company: string; logoUrl?: string; fallbackLogoUrl?: string; size?: 'sm' | 'md' | 'lg' }) {
-  const [failedSource, setFailedSource] = useState<'primary' | 'fallback' | null>(null);
-
-  useEffect(() => {
-    setFailedSource(null);
-  }, [logoUrl, fallbackLogoUrl]);
-  
-  const sizeClasses = {
-    sm: 'w-8 h-8',
-    md: 'w-12 h-12',
-    lg: 'w-16 h-16',
-  };
-
-  const logoSource = failedSource === 'primary'
-    ? fallbackLogoUrl
-    : failedSource === 'fallback'
-      ? null
-      : logoUrl;
-  
-  if (logoSource) {
-    return (
-      <div className={`${sizeClasses[size]} rounded-xl border border-zinc-200 dark:border-zinc-700 overflow-hidden bg-white flex-shrink-0`}>
-        <img
-          src={logoSource}
-          alt={`${company} logo`}
-          className="w-full h-full object-contain p-1.5"
-          onError={() => setFailedSource(logoSource === logoUrl && fallbackLogoUrl ? 'primary' : 'fallback')}
-        />
-      </div>
-    );
-  }
-
-  const initial = company?.charAt(0)?.toUpperCase() || '?';
-  return (
-    <div className={`${sizeClasses[size]} rounded-xl bg-zinc-900 dark:bg-white flex items-center justify-center flex-shrink-0 shadow-lg shadow-zinc-900/15 dark:shadow-black/30`}>
-      <span className={`${size === 'lg' ? 'text-2xl' : 'text-lg'} font-bold text-white dark:text-zinc-900`}>{initial}</span>
-    </div>
-  );
-}
-
 // Badge variants（极简黑白灰：所有信息徽章统一中性灰底）
 function InfoBadge({ icon: Icon, children, variant = 'default' }: { icon: LucideIcon; children: React.ReactNode; variant?: 'default' | 'success' | 'warning' | 'info' }) {
   const variants = {
@@ -227,14 +192,15 @@ function InfoBadge({ icon: Icon, children, variant = 'default' }: { icon: Lucide
 function JobDetailContent() {
   const params = useParams();
   const searchParams = useSearchParams();
-  const { t } = useLanguage();
+  const { t, locale } = useLanguage();
   const [job, setJob] = useState<Job | null>(null);
   const [relatedJobs, setRelatedJobs] = useState<RelatedJob[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [applying, setApplying] = useState(false);
   const [applied, setApplied] = useState(false);
-  const [resumes, setResumes] = useState<ResumeOption[]>([]);
+  const { loading: resumesLoading, error: resumesError, availability, reload: reloadResumes } = useResumeAvailability<ResumeOption>();
+  const resumes = availability.eligible;
   const [selectedResumeId, setSelectedResumeId] = useState('');
   const [match, setMatch] = useState<JobMatchSnapshot | null>(null);
   const [matchLoading, setMatchLoading] = useState(false);
@@ -281,32 +247,16 @@ function JobDetailContent() {
     if (params.id) {
       fetchJob();
       checkIfApplied();
-      fetchConfirmedResumes();
       checkIfFavorite();
     }
   }, [params.id]);
 
-  const fetchConfirmedResumes = async () => {
-    try {
-      const response = await apiFetch('/api/resume');
-      if (!response.ok) return;
-      const data = await response.json();
-      const availableResumes = (data.resumes || []).filter((resume: ResumeOption) => (
-        resume.processing_status === 'ready' && resume.segmentation_confirmed === true
-      ));
-      setResumes(availableResumes);
-      const requestedResume = Number(requestedResumeId);
-      if (Number.isInteger(requestedResume) && availableResumes.some((resume: ResumeOption) => resume.id === requestedResume)) {
-        setSelectedResumeId(String(requestedResume));
-        return;
-      }
-      if (availableResumes.length === 1) {
-        setSelectedResumeId(String(availableResumes[0].id));
-      }
-    } catch (error) {
-      console.error('Failed to fetch confirmed resumes:', error);
-    }
-  };
+  useEffect(() => {
+    if (resumesLoading) return;
+    const next = pickEligibleResumeId(resumes, requestedResumeId || readActiveResumeId());
+    setSelectedResumeId(next ? String(next) : '');
+    if (next) writeActiveResumeId(next);
+  }, [requestedResumeId, resumes, resumesLoading]);
 
   const checkIfFavorite = async () => {
     try {
@@ -431,6 +381,7 @@ function JobDetailContent() {
         body: JSON.stringify({
           resumeId: selectedResumeId,
           jobId: Number(params.id),
+          locale,
         }),
       });
       const data = await response.json();
@@ -484,9 +435,14 @@ function JobDetailContent() {
     );
   }
 
-  // 计算新鲜度
-  const postedDays = Math.floor((Date.now() - new Date(job.created_at).getTime()) / (1000 * 60 * 60 * 24));
-  const isNew = postedDays <= 7;
+  const postedAtMs = job.posted_at ? Date.parse(job.posted_at) : NaN;
+  const postedDays = deadlineNow && Number.isFinite(postedAtMs)
+    ? Math.max(0, Math.floor((deadlineNow - postedAtMs) / (1000 * 60 * 60 * 24)))
+    : null;
+  const postedAtLabel = Number.isFinite(postedAtMs)
+    ? new Intl.DateTimeFormat(locale === 'en' ? 'en-US' : locale, { year: 'numeric', month: '2-digit', day: '2-digit' }).format(new Date(postedAtMs))
+    : null;
+  const isNew = postedDays != null && postedDays <= 7;
   const isHot = (relatedJobs.length > 3);
 
   return (
@@ -647,24 +603,19 @@ function JobDetailContent() {
           </CardHeader>
           <CardContent>
             {resumes.length === 0 ? (
-              <div className="flex flex-col items-start gap-3 rounded-xl border border-dashed border-zinc-200 bg-zinc-50/70 p-4 dark:border-zinc-800 dark:bg-zinc-900/50">
-                <p className="text-sm text-zinc-500 dark:text-zinc-400">
-                  {t('jobDetail.noConfirmedResume')}
-                </p>
-                <Button asChild variant="outline" size="sm" className="border-zinc-200 dark:border-zinc-700">
-                  <Link href="/resume">
-                    <FileText className="mr-2 h-4 w-4" />
-                    {t('jobDetail.manageResume')}
-                  </Link>
-                </Button>
-              </div>
+              <ResumeAvailabilityHint
+                status={availability.status}
+                loading={resumesLoading}
+                error={resumesError ? t('resume.listLoadFailed') : ''}
+                onRetry={() => void reloadResumes(true)}
+              />
             ) : (
               <div className="flex flex-col gap-3 sm:flex-row sm:items-end">
                 <div className="min-w-0 flex-1">
                   <label htmlFor="job-score-resume" className="mb-1.5 block text-xs font-medium text-zinc-600 dark:text-zinc-300">
                     {t('jobDetail.selectConfirmedResume')}
                   </label>
-                  <Select value={selectedResumeId} onValueChange={setSelectedResumeId}>
+                <Select value={selectedResumeId} onValueChange={(value) => { setSelectedResumeId(value); writeActiveResumeId(Number(value)); }}>
                     <SelectTrigger id="job-score-resume" className="h-10 w-full rounded-xl border-zinc-200 dark:border-zinc-700">
                       <SelectValue placeholder={t('jobDetail.selectResumePlaceholder')} />
                     </SelectTrigger>
@@ -779,7 +730,7 @@ function JobDetailContent() {
               <div className="flex items-start gap-3">
                 <CompanyLogo
                   company={job.company_info.company_name}
-                  logoUrl={job.company_info.logo_url || job.logo_url}
+                  logoUrl={job.logo_url}
                   fallbackLogoUrl={job.logo_fallback_url}
                   size="md"
                 />
@@ -1017,6 +968,28 @@ function JobDetailContent() {
           </Card>
         )}
 
+        {!job.description && job.company.toLocaleLowerCase() === 'citadel' && job.job_url && (
+          <Card className="mb-4 rounded-2xl border-amber-200 bg-amber-50/60 dark:border-amber-900/60 dark:bg-amber-950/20 shadow-none">
+            <CardContent className="flex flex-col gap-3 p-4 sm:flex-row sm:items-center sm:justify-between">
+              <div className="flex items-start gap-3">
+                <AlertTriangle className="mt-0.5 h-4 w-4 shrink-0 text-amber-700 dark:text-amber-400" />
+                <p className="text-sm text-amber-900 dark:text-amber-200">
+                  {t('jobDetail.officialSourceUnavailable')}
+                </p>
+              </div>
+              <a
+                href={job.job_url}
+                target="_blank"
+                rel="noopener noreferrer"
+                className="inline-flex shrink-0 items-center justify-center gap-2 rounded-lg border border-amber-300 bg-white px-3 py-2 text-sm font-medium text-amber-950 transition-colors hover:bg-amber-100 dark:border-amber-800 dark:bg-amber-950/40 dark:text-amber-100 dark:hover:bg-amber-900/50"
+              >
+                <ExternalLink className="h-4 w-4" />
+                {t('jobDetail.viewOfficialDetails')}
+              </a>
+            </CardContent>
+          </Card>
+        )}
+
         {/* 同公司其他岗位 - 优先跳转到公司招聘页面 */}
         {(relatedJobs.length > 0 || job.company_info?.careers_page) && (
           <Card className="mb-4 rounded-2xl border-zinc-200 dark:border-zinc-800 shadow-none">
@@ -1084,10 +1057,18 @@ function JobDetailContent() {
           <CardContent className="pt-4">
             <div className="flex items-center justify-between text-xs text-zinc-400 dark:text-zinc-500">
               <div className="flex items-center gap-1">
-                <Clock className="h-3 w-3" />
-                <span>{t('jobDetail.posted')} {new Date(job.created_at).toLocaleDateString()}</span>
-                <span className="mx-2">·</span>
-                <span>{postedDays === 0 ? t('jobDetail.today') : t('jobDetail.daysAgo', { days: postedDays })}</span>
+                {postedAtLabel ? (
+                  <>
+                    <Clock className="h-3 w-3" />
+                    <span>{t('jobDetail.posted')} {postedAtLabel}</span>
+                    {postedDays != null && (
+                      <>
+                        <span className="mx-2">·</span>
+                        <span>{postedDays === 0 ? t('jobDetail.today') : t('jobDetail.daysAgo', { days: postedDays })}</span>
+                      </>
+                    )}
+                  </>
+                ) : null}
               </div>
               <Button variant="ghost" size="sm" className="h-7 text-xs text-zinc-500 hover:text-zinc-900 hover:bg-zinc-100 dark:hover:bg-zinc-800 dark:hover:text-zinc-100" asChild>
                 <a href={`/jobs?company=${encodeURIComponent(job.company)}`}>

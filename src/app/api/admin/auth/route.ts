@@ -1,23 +1,27 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { getAuthContext } from '@/lib/auth-server';
 import {
-  createAdminSessionToken,
-  getAdminSessionCookie,
   getAdminSessionRole,
   hasValidAdminSession,
   isAdminRole,
+  isSharedAdminPasswordAllowed,
+  issueAdminSession,
+  resolveAdminSession,
 } from '@/lib/admin-auth';
 import { getSupabaseClient } from '@/storage/database/supabase-client';
 import { recordAdminAuditEvent, recordAdminAuditFailure } from '@/lib/admin-audit';
-import { getAdminPermissions } from '@/lib/admin-permissions';
+import { getEffectiveAdminPermissions } from '@/lib/admin-permissions';
 
 export async function GET(request: NextRequest) {
-  const authenticated = hasValidAdminSession(request);
-  const role = authenticated ? getAdminSessionRole(request) : null;
+  const authenticated = await hasValidAdminSession(request);
+  const session = authenticated ? await resolveAdminSession(request) : null;
+  const role = authenticated ? await getAdminSessionRole(request) : null;
   return NextResponse.json({
     authenticated,
     role,
-    permissions: role ? getAdminPermissions(role) : [],
+    adminUserId: session?.adminUserId || null,
+    permissions: role ? await getEffectiveAdminPermissions(role) : [],
+    passwordLoginAllowed: await isSharedAdminPasswordAllowed(),
   });
 }
 
@@ -42,7 +46,7 @@ export async function POST(request: NextRequest) {
     const now = new Date().toISOString();
     await getSupabaseClient().from('admin_users').update({ last_login_at: now, updated_at: now }).eq('id', data.id);
     const response = NextResponse.json({ data: { role: data.role_key }, error: null });
-    response.cookies.set(getAdminSessionCookie(createAdminSessionToken(Math.floor(Date.now() / 1000), data.role_key)));
+    response.cookies.set(await issueAdminSession({ adminUserId: data.id, role: data.role_key, request }));
     await recordAdminAuditEvent({
       request,
       action: 'admin_auth.login',

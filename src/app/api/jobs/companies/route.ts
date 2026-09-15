@@ -1,6 +1,6 @@
 import { NextResponse } from 'next/server';
 import { getSupabaseClient } from '@/storage/database/supabase-client';
-import { getCompanyFaviconUrl, getCompanyLogoUrl } from '@/lib/company-logo';
+import { resolveDisplayLogoUrls } from '@/lib/company-logo';
 
 interface CompanyOption {
   company_name: string;
@@ -31,10 +31,15 @@ async function loadCompanies(): Promise<CompanyOption[]> {
     .map((row) => {
       const company = typeof row.company_name === 'string' ? row.company_name.trim() : '';
       const jobUrl = typeof row.job_url === 'string' ? row.job_url : null;
+      const logos = resolveDisplayLogoUrls(
+        company,
+        jobUrl,
+        typeof row.logo_url === 'string' && row.logo_url ? row.logo_url : null,
+      );
       return {
         company_name: company,
-        logo_url: typeof row.logo_url === 'string' && row.logo_url ? row.logo_url : getCompanyLogoUrl(company, jobUrl),
-        fallback_logo_url: getCompanyFaviconUrl(company, jobUrl),
+        logo_url: logos.logo_url,
+        fallback_logo_url: logos.logo_fallback_url,
         job_count: Number(row.job_count) || 0,
       };
     })

@@ -18,7 +18,7 @@ function csvValue(value: unknown): string {
 }
 
 export async function GET(request: NextRequest) {
-  const permissionError = requireAdminPermission(request, ADMIN_PERMISSIONS.usageExport);
+  const permissionError = await requireAdminPermission(request, ADMIN_PERMISSIONS.usageExport);
   if (permissionError) return permissionError;
 
   const params = request.nextUrl.searchParams;

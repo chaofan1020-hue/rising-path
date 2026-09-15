@@ -1,180 +1,182 @@
-import {
-  getSupabaseClient,
-  getSupabaseServiceRoleKey,
-} from '@/storage/database/supabase-client';
 import crypto from 'node:crypto';
+import { getSupabaseClient } from '@/storage/database/supabase-client';
 import {
   getAdminBootstrapPassword,
   isAdminPasswordInput,
   verifyAdminPasswordHash,
 } from '@/lib/admin-password';
+import {
+  ADMIN_SESSION_COOKIE,
+  ADMIN_SESSION_TTL_SECONDS,
+  createAdminSessionToken,
+  getAdminSessionCookie as buildAdminSessionCookie,
+  getClearedAdminSessionCookie,
+  isAdminRole,
+  readAdminSessionTokenFromRequest,
+  verifyAdminSessionToken,
+  type AdminRole,
+  type AdminSessionPayload,
+} from '@/lib/admin-session-token';
 
-export const ADMIN_SESSION_COOKIE = 'risingpath_admin_session';
-const ADMIN_SESSION_TTL_SECONDS = 8 * 60 * 60;
+export {
+  ADMIN_SESSION_COOKIE,
+  ADMIN_SESSION_TTL_SECONDS,
+  createAdminSessionToken,
+  getClearedAdminSessionCookie,
+  isAdminRole,
+  type AdminRole,
+};
 
-interface AdminSessionPayload {
-  issuedAt: number;
-  expiresAt: number;
-  role?: AdminRole;
+export function getAdminSessionCookie(token: string) {
+  return buildAdminSessionCookie(token);
 }
 
-export type AdminRole = 'super_admin' | 'content_admin' | 'support_admin' | 'legacy_super_admin';
-
-export function isAdminRole(value: unknown): value is Exclude<AdminRole, 'legacy_super_admin'> {
-  return value === 'super_admin' || value === 'content_admin' || value === 'support_admin';
+function hashIp(request?: Request): string | null {
+  const forwarded = request?.headers.get('x-forwarded-for')?.split(',')[0]?.trim();
+  const ip = forwarded || request?.headers.get('x-real-ip')?.trim() || '';
+  if (!ip) return null;
+  return crypto.createHash('sha256').update(ip).digest('hex').slice(0, 32);
 }
 
-function getConfiguredAdminRole(): AdminRole {
-  const configured = process.env.ADMIN_SESSION_ROLE?.trim();
-  return configured === 'super_admin' || configured === 'content_admin' || configured === 'support_admin'
-    ? configured
+export async function parseAdminSession(request: Request): Promise<AdminSessionPayload | null> {
+  return verifyAdminSessionToken(readAdminSessionTokenFromRequest(request));
+}
+
+export async function hasValidAdminSession(request: Request): Promise<boolean> {
+  const payload = await resolveAdminSession(request);
+  return Boolean(payload);
+}
+
+export async function getAdminSessionRole(request: Request): Promise<AdminRole> {
+  const payload = await resolveAdminSession(request);
+  return payload?.role && (isAdminRole(payload.role) || payload.role === 'legacy_super_admin')
+    ? payload.role
     : 'legacy_super_admin';
 }
 
-function getSessionSecret(): string {
-  const configuredSecret = process.env.ADMIN_SESSION_SECRET?.trim();
-  if (configuredSecret) return configuredSecret;
+export async function resolveAdminSession(request: Request): Promise<AdminSessionPayload | null> {
+  const payload = await parseAdminSession(request);
+  if (!payload) return null;
 
-  const serviceRoleKey = getSupabaseServiceRoleKey();
-  if (serviceRoleKey) return serviceRoleKey;
-
-  throw new Error('ADMIN_SESSION_SECRET or SUPABASE_SERVICE_ROLE_KEY is required');
-}
-
-function signPayload(payload: string): string {
-  return crypto.createHmac('sha256', getSessionSecret()).update(payload).digest('base64url');
-}
-
-export function createAdminSessionToken(
-  now = Math.floor(Date.now() / 1000),
-  role = getConfiguredAdminRole(),
-): string {
-  const payload: AdminSessionPayload = {
-    issuedAt: now,
-    expiresAt: now + ADMIN_SESSION_TTL_SECONDS,
-    role,
-  };
-  const encodedPayload = Buffer.from(JSON.stringify(payload)).toString('base64url');
-  return `${encodedPayload}.${signPayload(encodedPayload)}`;
-}
-
-export function verifyAdminSessionToken(token: string | null): boolean {
-  if (!token) return false;
-
-  try {
-    const parts = token.split('.');
-    if (parts.length !== 2) return false;
-    const [encodedPayload, signature] = parts;
-    if (!encodedPayload || !signature) return false;
-
-    const expectedSignature = signPayload(encodedPayload);
-    const providedBytes = Buffer.from(signature);
-    const expectedBytes = Buffer.from(expectedSignature);
-    if (providedBytes.length !== expectedBytes.length || !crypto.timingSafeEqual(providedBytes, expectedBytes)) {
-      return false;
+  if (!payload.sessionId || !payload.adminUserId) {
+    if (process.env.NODE_ENV !== 'production' || process.env.ADMIN_ALLOW_LEGACY_SESSION === 'true') {
+      return payload;
     }
-
-    const parsed: unknown = JSON.parse(Buffer.from(encodedPayload, 'base64url').toString('utf8'));
-    if (!parsed || typeof parsed !== 'object') return false;
-    const payload = parsed as Partial<AdminSessionPayload>;
-    return typeof payload.expiresAt === 'number' && payload.expiresAt > Math.floor(Date.now() / 1000);
-  } catch {
-    return false;
+    if (await isSharedAdminPasswordAllowed()) return payload;
+    return null;
   }
-}
 
-function getCookieValue(request: Request, cookieName: string): string | null {
-  const cookies = request.headers.get('cookie')?.split(';') || [];
-  const cookie = cookies.find((item) => item.trim().startsWith(`${cookieName}=`));
-  if (!cookie) return null;
-
-  const value = cookie.trim().slice(cookieName.length + 1);
   try {
-    return decodeURIComponent(value);
-  } catch {
-    return value;
+    const { data, error } = await getSupabaseClient()
+      .from('admin_sessions')
+      .select('id, revoked_at, expires_at, admin_users!inner(id, status, role_key)')
+      .eq('id', payload.sessionId)
+      .eq('admin_user_id', payload.adminUserId)
+      .maybeSingle();
+    if (error || !data || data.revoked_at) return null;
+    if (new Date(data.expires_at).getTime() <= Date.now()) return null;
+    const adminUser = Array.isArray(data.admin_users) ? data.admin_users[0] : data.admin_users;
+    if (!adminUser || adminUser.status !== 'active') return null;
+    const role = isAdminRole(adminUser.role_key) ? adminUser.role_key : payload.role;
+    return { ...payload, role: role || payload.role };
+  } catch (error) {
+    console.error('[Admin Auth] session lookup failed:', error);
+    return null;
   }
 }
 
-export function hasValidAdminSession(request: Request): boolean {
-  const authorization = request.headers.get('authorization');
-  const bearerToken = authorization?.startsWith('Bearer ')
-    ? authorization.slice('Bearer '.length).trim()
-    : null;
-  return verifyAdminSessionToken(bearerToken || getCookieValue(request, ADMIN_SESSION_COOKIE));
+export async function issueAdminSession(options: {
+  adminUserId: string;
+  role: AdminRole;
+  request?: Request;
+}): Promise<ReturnType<typeof getAdminSessionCookie>> {
+  const sessionId = crypto.randomUUID();
+  const now = Math.floor(Date.now() / 1000);
+  const expiresAt = new Date((now + ADMIN_SESSION_TTL_SECONDS) * 1000).toISOString();
+  const { error } = await getSupabaseClient().from('admin_sessions').insert({
+    id: sessionId,
+    admin_user_id: options.adminUserId,
+    expires_at: expiresAt,
+    last_seen_at: new Date().toISOString(),
+    ip_hash: hashIp(options.request),
+    user_agent: options.request?.headers.get('user-agent')?.slice(0, 500) || null,
+  });
+  if (error) throw new Error(error.message);
+  const token = await createAdminSessionToken(now, options.role, {
+    sessionId,
+    adminUserId: options.adminUserId,
+  });
+  return getAdminSessionCookie(token);
 }
 
-export function getAdminSessionRole(request: Request): AdminRole {
-  const authorization = request.headers.get('authorization');
-  const token = authorization?.startsWith('Bearer ')
-    ? authorization.slice('Bearer '.length).trim()
-    : getCookieValue(request, ADMIN_SESSION_COOKIE);
-  if (!token) return 'legacy_super_admin';
+export async function revokeAdminSession(sessionId: string): Promise<void> {
+  await getSupabaseClient()
+    .from('admin_sessions')
+    .update({ revoked_at: new Date().toISOString() })
+    .eq('id', sessionId)
+    .is('revoked_at', null);
+}
+
+export async function revokeAdminSessionsForUser(adminUserId: string): Promise<void> {
+  await getSupabaseClient()
+    .from('admin_sessions')
+    .update({ revoked_at: new Date().toISOString() })
+    .eq('admin_user_id', adminUserId)
+    .is('revoked_at', null);
+}
+
+export async function countActiveAdminUsers(): Promise<number> {
+  const { count, error } = await getSupabaseClient()
+    .from('admin_users')
+    .select('id', { count: 'exact', head: true })
+    .eq('status', 'active');
+  if (error) throw new Error(error.message);
+  return count || 0;
+}
+
+export async function countActiveSuperAdmins(): Promise<number> {
+  const { count, error } = await getSupabaseClient()
+    .from('admin_users')
+    .select('id', { count: 'exact', head: true })
+    .eq('status', 'active')
+    .eq('role_key', 'super_admin');
+  if (error) throw new Error(error.message);
+  return count || 0;
+}
+
+export async function isSharedAdminPasswordAllowed(): Promise<boolean> {
+  if (process.env.ADMIN_ALLOW_SHARED_PASSWORD === 'true') return true;
   try {
-    const encodedPayload = token.split('.')[0];
-    const parsed = JSON.parse(Buffer.from(encodedPayload, 'base64url').toString('utf8')) as Partial<AdminSessionPayload>;
-    return isAdminRole(parsed.role)
-      ? parsed.role
-      : 'legacy_super_admin';
+    return (await countActiveSuperAdmins()) === 0;
   } catch {
-    return 'legacy_super_admin';
+    return process.env.NODE_ENV !== 'production';
   }
 }
 
-export function getAdminSessionCookie(token = createAdminSessionToken()) {
-  return {
-    name: ADMIN_SESSION_COOKIE,
-    value: token,
-    httpOnly: true,
-    sameSite: 'lax' as const,
-    secure: process.env.NODE_ENV === 'production',
-    path: '/',
-    maxAge: ADMIN_SESSION_TTL_SECONDS,
-  };
-}
-
-export function getClearedAdminSessionCookie() {
-  return {
-    name: ADMIN_SESSION_COOKIE,
-    value: '',
-    httpOnly: true,
-    sameSite: 'lax' as const,
-    secure: process.env.NODE_ENV === 'production',
-    path: '/',
-    maxAge: 0,
-  };
-}
-
-/**
- * 验证管理员密码
- */
 export async function verifyAdminPassword(password: string): Promise<boolean> {
   if (!isAdminPasswordInput(password)) return false;
-  
+
   const supabase = getSupabaseClient();
-  
+
   try {
-    // 查询数据库中的密码配置
     const { data, error } = await supabase
       .from('job_configs')
       .select('config_value')
       .eq('config_type', 'admin_password_hash')
       .single();
-    
+
     if (error) {
       if (error.code === 'PGRST116') {
-        // 没有持久化密码时，只允许部署者显式配置的一次性引导密码。
         return password === getAdminBootstrapPassword();
       }
       console.error('Error fetching password:', error);
       return false;
     }
-    
+
     if (data?.config_value) {
       return (await verifyAdminPasswordHash(password, data.config_value)).valid;
-    } else {
-      return password === getAdminBootstrapPassword();
     }
+    return password === getAdminBootstrapPassword();
   } catch (err) {
     console.error('Password verification error:', err);
     return false;

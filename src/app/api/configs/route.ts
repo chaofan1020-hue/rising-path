@@ -44,7 +44,7 @@ const FALLBACK_DIRECTION_CONFIGS = fallbackConfigs('direction', [
 // 获取所有配置
 export async function GET(request: NextRequest) {
   try {
-    const isAdmin = hasValidAdminSession(request);
+    const isAdmin = await hasValidAdminSession(request);
     const client = getSupabaseClient();
     const searchParams = request.nextUrl.searchParams;
     const configType = searchParams.get('type');
@@ -102,7 +102,7 @@ export async function GET(request: NextRequest) {
 // 添加配置
 export async function POST(request: NextRequest) {
   try {
-    const permissionError = requireAdminPermission(request, ADMIN_PERMISSIONS.configWrite);
+    const permissionError = await requireAdminPermission(request, ADMIN_PERMISSIONS.configWrite);
     if (permissionError) return permissionError;
 
     const client = getSupabaseClient();
@@ -166,7 +166,7 @@ export async function POST(request: NextRequest) {
 // 更新配置
 export async function PUT(request: NextRequest) {
   try {
-    const permissionError = requireAdminPermission(request, ADMIN_PERMISSIONS.configWrite);
+    const permissionError = await requireAdminPermission(request, ADMIN_PERMISSIONS.configWrite);
     if (permissionError) return permissionError;
 
     const client = getSupabaseClient();
@@ -231,7 +231,7 @@ export async function PUT(request: NextRequest) {
 // 删除配置
 export async function DELETE(request: NextRequest) {
   try {
-    const permissionError = requireAdminPermission(request, ADMIN_PERMISSIONS.configWrite);
+    const permissionError = await requireAdminPermission(request, ADMIN_PERMISSIONS.configWrite);
     if (permissionError) return permissionError;
 
     const client = getSupabaseClient();

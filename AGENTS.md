@@ -153,7 +153,8 @@
 | 路径 | 方法 | 功能 |
 |------|------|------|
 | /api/jobs | GET/POST | 获取/创建岗位 |
-| /api/auth/register | POST | 邮箱注册（密码策略、限流、可选 Turnstile） |
+| /api/auth/register | POST | 邮箱注册（密码策略、限流、自托管 ALTCHA） |
+| /api/auth/captcha | GET/POST | 签发 ALTCHA 人机验证挑战 |
 | /api/auth/login | POST | 邮箱密码登录（IP/邮箱限流） |
 | /api/auth/reset | POST | 发送密码重置邮件 |
 | /api/auth/resend | POST | 重发邮箱验证邮件 |
@@ -173,3 +174,5 @@
 | /api/company-dna | GET/PATCH | 获取企业基因摘要/人工更新基因（version+1） |
 | /api/admin/dna-feedback | GET | 反馈审查列表 |
 | /api/admin/dna-feedback/[id] | GET/PATCH | 反馈详情（含对话+当前基因）/标记处理 |
+| /api/admin/accounts | GET/POST/PATCH/DELETE | 绑定、更新、删除管理员邮箱 |
+| /api/admin/students/[id] | GET/DELETE | 学员详情 / 删除学员账号 |

@@ -17,7 +17,8 @@ export const dynamic = 'force-dynamic';
 export async function POST(request: NextRequest) {
   try {
     const body = await request.json();
-    const { audioBase64, audioMimeType, sessionId } = body;
+    const { audioBase64, audioMimeType, sessionId, fallback } = body;
+    const fallbackRequested = fallback === true;
 
     const auth = await getAuthContext(request);
     if (!auth) return unauthorizedResponse();
@@ -45,12 +46,18 @@ export async function POST(request: NextRequest) {
       voiceRoute = resolveInterviewVoiceRoute(job?.region);
     }
     voiceRoute ||= resolveInterviewVoiceRoute(null);
-    if (voiceRoute.asrProvider === 'cartesia_ink') {
+    if (voiceRoute.asrProvider === 'cartesia_ink' && !fallbackRequested) {
       return NextResponse.json({
-        error: '海外岗位的语音识别仅使用 Cartesia Ink-2。实时连接暂不可用，请重新开始本次回答。',
+        error: '海外岗位的语音识别仅使用 Cartesia Ink-2。',
         code: 'OVERSEAS_REALTIME_ASR_REQUIRED',
       }, { status: 503 });
     }
+
+    // This endpoint is the bounded recorder fallback for a realtime outage.
+    // Overseas sessions normally use Cartesia Ink, but a recorded WAV can be
+    // recognized by Alibaba when the browser proxy is temporarily unavailable.
+    // Keeping the fallback provider-independent prevents a transient Cartesia
+    // reconnect from leaving the user with an unusable 503 path.
 
     const requestId = createAiUsageRequestId();
     const startedAt = Date.now();
@@ -89,7 +96,12 @@ export async function POST(request: NextRequest) {
         billingUnits: result.usage.inputAudioSeconds,
         measurementSource: result.usage.inputAudioSeconds !== null ? 'provider' : 'request',
         interviewSessionId: parsedSessionId,
-        metadata: { provider_request_id: result.usage.requestId, audio_mime_type: audioMimeType || null },
+        metadata: {
+          provider_request_id: result.usage.requestId,
+          audio_mime_type: audioMimeType || null,
+          realtime_route: voiceRoute.id,
+          fallback: true,
+        },
         durationMs: Date.now() - startedAt,
       });
       await settleCredits(reservation, 'committed');
@@ -107,7 +119,12 @@ export async function POST(request: NextRequest) {
         usageSource: 'unknown',
         measurementSource: 'request',
         interviewSessionId: parsedSessionId,
-        metadata: { audio_base64_length: audioBase64.length, audio_mime_type: audioMimeType || null },
+        metadata: {
+          audio_base64_length: audioBase64.length,
+          audio_mime_type: audioMimeType || null,
+          realtime_route: voiceRoute.id,
+          fallback: true,
+        },
         durationMs: Date.now() - startedAt,
         error,
       });

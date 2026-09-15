@@ -16,7 +16,7 @@ function positiveInteger(value: string | null, fallback: number): number {
 }
 
 export async function GET(request: NextRequest) {
-  const permissionError = requireAdminPermission(request, ADMIN_PERMISSIONS.jobsRead);
+  const permissionError = await requireAdminPermission(request, ADMIN_PERMISSIONS.jobsRead);
   if (permissionError) return permissionError;
 
   const params = request.nextUrl.searchParams;
@@ -62,7 +62,7 @@ export async function GET(request: NextRequest) {
  * live worker cannot be interrupted by an admin action.
  */
 export async function PATCH(request: NextRequest) {
-  const permissionError = requireAdminPermission(request, ADMIN_PERMISSIONS.jobsWrite);
+  const permissionError = await requireAdminPermission(request, ADMIN_PERMISSIONS.jobsWrite);
   if (permissionError) return permissionError;
 
   try {

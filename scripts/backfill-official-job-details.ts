@@ -1,6 +1,6 @@
 import { config as loadDotenv } from 'dotenv';
 import { isDisplayableJobDescription } from '@/lib/job-content';
-import { deutscheBankDetailsFromApi, extractOfficialJobDetails, isJobContentShell } from '@/lib/job-official-detail';
+import { deutscheBankDetailsFromApi, extractOfficialJobDetails, isJobContentShell, officialEvercoreDetailUrl } from '@/lib/job-official-detail';
 import { extractOfficialJobRequirements, looksLikeBlockedPage, looksLikeClosedJobPage } from '@/lib/job-maintenance';
 import { ExternalFetchError, fetchSafeExternalPage } from '@/lib/safe-external-fetch';
 import {
@@ -13,6 +13,7 @@ import {
   text,
 } from '@/lib/job-connectors/utils';
 import { hasMatchingPhenomDetailPayload, isRegisteredPhenomJobUrl } from '@/lib/job-connectors';
+import { parseFeedPostedAt } from '@/lib/jobs-feed';
 import { getSupabaseClient } from '@/storage/database/supabase-client';
 import { recordJobSyncRunProgress } from '@/lib/job-sync-dashboard';
 
@@ -73,6 +74,7 @@ const APPROVED_GENERIC_HOSTS: Record<string, string[]> = {
   Evercore: ['evercore.tal.net'],
   Jefferies: ['jefferies.tal.net'],
   Accenture: ['www.accenture.com'],
+  UBS: ['jobs.ubs.com'],
 };
 
 function genericOfficialWriteEnabled(company: string): boolean {
@@ -146,7 +148,10 @@ function isUnavailableOnOfficialSource(job: Job, field: FieldName): boolean {
 
 function hasValue(job: Job, field: FieldName): boolean {
   switch (field) {
-    case 'location': return Boolean(text(job.region));
+    case 'location': {
+      const value = text(job.region);
+      return Boolean(value) && value !== '未注明';
+    }
     case 'workplace_type': return Boolean(text(job.workplace_type));
     case 'employment_category': return Boolean(text(job.employment_category) && text(job.employment_category) !== '未知');
     case 'experience': return job.experience_min_years != null || job.experience_max_years != null || Boolean(text(job.experience_text));
@@ -287,7 +292,7 @@ function preparePatch(
     fields.push('deadline');
     fieldSources.deadline = standardSource;
   }
-  const postedAt = text(details.postedAt) || null;
+  const postedAt = parseFeedPostedAt(details.postedAt);
   if (postedAt && !text(job.posted_at)) {
     patch.posted_at = postedAt;
     fields.push('posted_at');
@@ -646,13 +651,11 @@ async function main(): Promise<void> {
             // opp/{id}/en-GB URL (same pl/{n} path segment) returns the public
             // detail page with the official Location / Region / Job description.
             await waitForRequestSlot();
-            const oppId = url.pathname.match(/\/opp\/(\d+)(?:[-/])/)?.[1];
-            if (!oppId) {
+            const bareUrl = officialEvercoreDetailUrl(job.job_url);
+            if (!bareUrl) {
               incrementSkip('no_opp_id');
               skippedJobIds.push(job.id);
             } else {
-              const barePath = url.pathname.replace(/\/opp\/\d+[^/]*/i, `/opp/${oppId}`);
-              const bareUrl = `${url.origin}${barePath}`;
               const page = await fetchSafeExternalPage(bareUrl);
               if (looksLikeClosedJobPage(page.title, page.content)) {
                 await recordRemoved(job.id, 'removed_closed_page', '官方详情页明确显示岗位已关闭/已下架');

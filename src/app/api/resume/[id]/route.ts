@@ -309,9 +309,9 @@ export async function DELETE(
   request: NextRequest,
   { params }: { params: Promise<{ id: string }> },
 ) {
-  const isAdminRequest = hasValidAdminSession(request);
+  const isAdminRequest = await hasValidAdminSession(request);
   if (isAdminRequest) {
-    const permissionError = requireAdminPermission(request, ADMIN_PERMISSIONS.configWrite);
+    const permissionError = await requireAdminPermission(request, ADMIN_PERMISSIONS.configWrite);
     if (permissionError) return permissionError;
   }
   try {

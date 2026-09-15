@@ -8,7 +8,7 @@ export const runtime = 'nodejs';
 
 export async function POST(request: NextRequest) {
   try {
-    const permissionError = requireAdminPermission(request, ADMIN_PERMISSIONS.jobsWrite);
+    const permissionError = await requireAdminPermission(request, ADMIN_PERMISSIONS.jobsWrite);
     if (permissionError) return permissionError;
 
     const rateLimit = await consumeAuthRateLimit(`admin-fetch-url:ip:${getClientIp(request)}`, 20, 300, 900);

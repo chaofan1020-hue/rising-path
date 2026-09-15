@@ -47,7 +47,7 @@ function stateSource(target: SourceTarget): string {
   return `${STATE_PREFIX}${target.family}:${target.company.trim()}`.slice(0, 50);
 }
 
-const GENERIC_OFFICIAL_SOURCE_TYPES = new Set(['amazon_jobs', 'apple_official_api', 'google_careers', 'microsoft_careers', 'meta_careers', 'deloitte_careers', 'morgan_stanley_eightfold', 'goldman_sachs_careers']);
+const GENERIC_OFFICIAL_SOURCE_TYPES = new Set(['amazon_jobs', 'apple_official_api', 'google_careers', 'microsoft_careers', 'meta_careers', 'deloitte_careers', 'morgan_stanley_eightfold', 'goldman_sachs_careers', 'ubs_brassring', 'evercore_taleo']);
 const GENERIC_OFFICIAL_WRITE_ENV = 'JOBS_GENERIC_OFFICIAL_BACKFILL_WRITE_ENABLED';
 const GENERIC_OFFICIAL_COMPANIES_ENV = 'JOBS_GENERIC_OFFICIAL_BACKFILL_COMPANIES';
 

@@ -41,6 +41,45 @@
 
 ## 官方字段自动补全
 
+### 让所有可执行公司自动入队
+
+生产只需要配置一次，之后由美国服务器上的 `liorvix.service` 应用内 worker 自动发现公司、创建/维护游标并公平轮转：
+
+```dotenv
+JOBS_AUTO_WORKER=true
+JOBS_OFFICIAL_DETAILS_AUTO_SYNC=true
+JOB_BACKFILL_WRITE_ENABLED=true
+JOBS_CONNECTOR_BACKFILL_WRITE_ENABLED=true
+JOBS_GENERIC_OFFICIAL_BACKFILL_WRITE_ENABLED=true
+JOBS_GENERIC_OFFICIAL_BACKFILL_COMPANIES=
+JOBS_HISTORICAL_FIELD_REVIEW_ENABLED=true
+```
+
+`JOBS_GENERIC_OFFICIAL_BACKFILL_COMPANIES` 留空表示允许所有已经在来源台账中确认、且代码有官方适配器的通用来源；它不会把 `discovery_required` 公司强行加入队列。若新来源还没有通过真实样本和 canary，临时填写公司名列表，验收后再清空。来源台账一旦从 `discovery_required` 变为可执行，下一轮维护会自动恢复该公司的队列，不需要手动逐家公司排队。
+
+美国服务器执行一次配置生效操作：
+
+```bash
+cd /opt/liorvix
+sudo cp .env.local .env.local.before-auto-queue
+sudo sed -i 's/^JOBS_GENERIC_OFFICIAL_BACKFILL_COMPANIES=.*/JOBS_GENERIC_OFFICIAL_BACKFILL_COMPANIES=/' .env.local
+sudo systemctl restart liorvix.service
+sudo systemctl is-active liorvix.service
+```
+
+不要同时启用 `liorvix-jobs-incremental.timer` 或 `liorvix-jobs-maintenance.timer`。应用内 worker 和 systemd timer 二选一；重复启用会造成重复触发和租约竞争。
+
+日常只需检查，不要手动启动每家公司：
+
+```bash
+cd /opt/liorvix
+sudo bash -c 'set -a; . ./.env.local; set +a; pnpm exec tsx scripts/check-job-sync-state.ts'
+sudo bash -c 'set -a; . ./.env.local; set +a; pnpm exec tsx scripts/check-company-source-matrix.ts'
+sudo journalctl -u liorvix.service -n 100 --no-pager | grep -E 'Job Worker|official detail|historical|failed|error|Error'
+```
+
+正常情况下只要满足：主 Feed 最近成功、官方队列有最近成功时间、有效租约没有长期不变、失败队列没有持续增长。403/429/超时/验证码会按公司退避，不会下架岗位，也不会阻塞其他公司；只有 404/410 或明确关闭页才允许改变岗位生命周期。
+
 ### 官网岗位总数口径
 
 看板的“官网岗位数”只接受上游 `/dashboard/company-directory` 的官方计数证据，不使用美国站岗位数、主 Feed 接收数或本地活跃岗位数代替。`official_count_status` 的含义是：
@@ -82,6 +121,22 @@ JOBS_OFFICIAL_DETAILS_COMPANIES_PER_CYCLE=3
 ## 首次部署
 
 项目默认安装在 `/opt/liorvix`，服务用户为 `liorvix`。若实际路径或用户不同，先修改 `deploy/systemd/*.service`。
+
+生产环境必须二选一：
+
+1. **应用内 worker（当前美国生产模式）**：`liorvix.service` 设置 `JOBS_AUTO_WORKER=true`，由应用进程统一调度主 Feed、官方详情、失败队列和维护任务；此模式下不要启用 `liorvix-jobs-incremental.timer` 或 `liorvix-jobs-maintenance.timer`。
+2. **systemd timer 模式**：仅在应用内 worker 明确关闭时启用，避免同一数据库租约下的重复触发和误报警。
+
+应用内 worker 模式的部署：
+
+```bash
+sudo cp deploy/systemd/liorvix.service /etc/systemd/system/
+sudo systemctl daemon-reload
+sudo systemctl enable --now liorvix.service
+sudo systemctl is-active liorvix.service
+```
+
+如果明确选择 systemd timer 模式，才执行：
 
 ```bash
 sudo cp deploy/systemd/liorvix-jobs-* /etc/systemd/system/

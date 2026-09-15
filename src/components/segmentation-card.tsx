@@ -64,6 +64,7 @@ export function SegmentationCard({
   const { t } = useLanguage();
   const [editing, setEditing] = useState(defaultEditing);
   const [saving, setSaving] = useState(false);
+  const [error, setError] = useState<string | null>(null);
   const [draft, setDraft] = useState<{
     careerStage: CareerStage;
     schoolTier: string;
@@ -82,6 +83,7 @@ export function SegmentationCard({
 
   const save = async () => {
     setSaving(true);
+    setError(null);
     try {
       const res = await apiFetch(`/api/resume/${resumeId}`, {
         method: 'PATCH',
@@ -106,7 +108,11 @@ export function SegmentationCard({
           profileConfirmedAt: data.profile_confirmed_at,
         }, data.profile as ResumeProfile | undefined);
         setEditing(false);
+        return;
       }
+      setError(typeof data.error === 'string' ? data.error : t('resume.segSaveFailed'));
+    } catch {
+      setError(t('resume.segSaveFailed'));
     } finally {
       setSaving(false);
     }
@@ -259,6 +265,7 @@ export function SegmentationCard({
               ))}
             </div>
           </div>
+          {error && <p className="text-[11px] text-red-600 dark:text-red-400">{error}</p>}
           <div className="flex justify-end">
             <Button size="sm" className="h-7 text-xs bg-zinc-900 text-white hover:bg-zinc-800 dark:bg-white dark:text-zinc-900 dark:hover:bg-zinc-200" onClick={save} disabled={saving || draft.regions.length === 0}>
               {saving ? <Loader2 className="h-3 w-3 mr-1 animate-spin" /> : <CheckCircle2 className="h-3 w-3 mr-1" />}

@@ -10,6 +10,7 @@ import {
 } from '@/lib/application-profile';
 import { prefillFeedbackRequestSchema } from '@/lib/application-contracts';
 import { getSupabaseClient } from '@/storage/database/supabase-client';
+import { getUserResume } from '@/lib/resume-selection';
 
 export async function POST(request: NextRequest) {
   try {
@@ -17,7 +18,7 @@ export async function POST(request: NextRequest) {
     if (!auth) return unauthorizedResponse();
     const parsed = prefillFeedbackRequestSchema.safeParse(await request.json());
     if (!parsed.success) return NextResponse.json({ error: '预填反馈参数无效' }, { status: 400 });
-    const { fields, jobId, domain, version: expectedVersion } = parsed.data;
+    const { fields, jobId, domain, version: expectedVersion, resumeId } = parsed.data;
 
     if (jobId) {
       const { data: job, error: jobError } = await getSupabaseClient()
@@ -34,6 +35,12 @@ export async function POST(request: NextRequest) {
       .select('*')
       .eq('user_id', auth.user.id)
       .maybeSingle();
+
+    const selectedResume = await getUserResume(auth.client, auth.user.id, resumeId);
+    if (resumeId && !selectedResume) return NextResponse.json({ error: '简历不存在或无权使用' }, { status: 404 });
+    if (selectedResume && profileRow?.resume_id !== selectedResume.id) {
+      return NextResponse.json({ error: '当前简历档案已切换，请重新扫描表单' }, { status: 409 });
+    }
 
     let profile: ApplicationProfile = profileRow?.profile || DEFAULT_PROFILE;
     let source = (profileRow?.source || {}) as ProfileSourceMap;
@@ -66,7 +73,7 @@ export async function POST(request: NextRequest) {
 
     const { data: savedVersion, error: saveError } = await auth.client.rpc('apply_prefill_feedback', {
       p_expected_version: expectedVersion,
-      p_resume_id: profileRow?.resume_id || null,
+      p_resume_id: selectedResume?.id || profileRow?.resume_id || null,
       p_profile: profile,
       p_source: source,
       p_feedback: feedbackRows,

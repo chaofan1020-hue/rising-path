@@ -90,4 +90,23 @@ const morganLocationFallback = normalizeFeedItem({
 assert.ok(morganLocationFallback);
 assert.equal(morganLocationFallback.location_source, 'official_payload');
 
+const evercoreRssLocation = normalizeFeedItem({
+  ...baseline,
+  company_name: 'Evercore',
+  title: 'Experienced Associate - Industrials Advisory – Chicago, Illinois',
+  source_url: 'https://evercore.tal.net/vx/mobile-0/appcentre-ext/brand-4/candidate/so/pm/1/pl/3/opp/3298-Experienced-Associate-Industrials-Advisory-Chicago-Illinois/en-GB?instant=apply',
+  location: 'New York',
+  country: null,
+  source_type: 'rss',
+  source_evidence: { source_type: 'rss', structured_field_sources: {} },
+});
+assert.ok(evercoreRssLocation);
+assert.equal(evercoreRssLocation.region, 'New York');
+assert.equal(evercoreRssLocation.location_source, 'official_payload');
+const evercoreEvidence = evercoreRssLocation.field_evidence as {
+  fields?: Record<string, { status?: string; source?: string }>;
+} | undefined;
+assert.equal(evercoreEvidence?.fields?.location?.status, 'verified');
+assert.equal(evercoreEvidence?.fields?.location?.source, 'official_payload');
+
 console.log('job field policy tests passed');

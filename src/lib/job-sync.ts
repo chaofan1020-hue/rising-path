@@ -51,6 +51,7 @@ export interface JobSyncRecord {
   external_job_id?: string | null;
   valid_through?: string | null;
   posted_at?: string | null;
+  feed_has_date_posted?: boolean;
   missing_from_feed_at?: string | null;
   missing_feed_checks?: number;
   availability_status?: JobAvailabilityStatus | null;
@@ -125,6 +126,7 @@ interface ExistingJob {
   company: string | null;
   source_system: string | null;
   external_job_id: string | null;
+  region?: string | null;
   salary_range?: string | null;
   employment_type?: string | null;
   employment_category?: string | null;
@@ -361,6 +363,18 @@ export function jobContentHash(job: JobSyncRecord): string {
   return createHash('md5').update(fields.map(hashPart).join('|'), 'utf8').digest('hex');
 }
 
+function isMissingJobLocation(value: string | null | undefined): boolean {
+  const normalized = (value || '').trim();
+  return !normalized || normalized === '未注明';
+}
+
+function isOfficialPageLocationSource(source: string | null | undefined): boolean {
+  const normalized = (source || '').trim().toLowerCase();
+  return normalized === 'official_link_description'
+    || normalized === 'official_link_structured_field'
+    || normalized === 'official_detail_page';
+}
+
 function makeSyncRecord(
   jobId: number,
   job: JobSyncRecord,
@@ -383,13 +397,14 @@ function makeSyncRecord(
   };
 }
 
-function toJobPayload(job: JobSyncRecord, existing?: ExistingJob): Omit<JobSyncRecord, 'availability_status' | 'link_health' | 'last_link_error' | 'last_link_http_status' | 'availability_checked_at'> {
+function toJobPayload(job: JobSyncRecord, existing?: ExistingJob): Omit<JobSyncRecord, 'availability_status' | 'link_health' | 'last_link_error' | 'last_link_http_status' | 'availability_checked_at' | 'feed_has_date_posted'> {
   const {
     availability_status: _availabilityStatus,
     link_health: _linkHealth,
     last_link_error: _lastLinkError,
     last_link_http_status: _lastLinkHttpStatus,
     availability_checked_at: _availabilityCheckedAt,
+    feed_has_date_posted: feedHasDatePosted,
     ...payload
   } = job;
   // A collector can temporarily omit detail content or send an ATS SPA shell
@@ -409,9 +424,28 @@ function toJobPayload(job: JobSyncRecord, existing?: ExistingJob): Omit<JobSyncR
   // A missing deadline is an explicit "not verified" result from the feed.
   // Never preserve a stale date or its source across syncs; this prevents old
   // inferred dates from resurfacing after a clean-up migration.
-  for (const field of ['salary_range', 'employment_type', 'employment_category', 'experience_min_years', 'experience_max_years', 'experience_text', 'workplace_type', 'salary_source', 'location_source', 'posted_at'] as const) {
+  for (const field of ['salary_range', 'employment_type', 'employment_category', 'experience_min_years', 'experience_max_years', 'experience_text', 'workplace_type', 'salary_source', 'location_source'] as const) {
     if (payload[field] == null && existing?.[field] != null) {
       (payload as Record<string, unknown>)[field] = existing[field];
+    }
+  }
+  // Preserve a previously verified official posted date only when the feed
+  // omitted the field. A present but unparseable/rejected value (month-name
+  // dates before the parser, or a deadline mixed into date_posted) must not
+  // keep the stale timestamp.
+  if (payload.posted_at == null && existing?.posted_at != null && feedHasDatePosted !== true) {
+    payload.posted_at = existing.posted_at;
+  }
+  // RSS/list snapshots often send a placeholder region even after an official
+  // detail page already filled the city. Keep the verified location until the
+  // feed itself sends a replacement city.
+  if (existing && !isMissingJobLocation(existing.region)) {
+    const incomingMissing = isMissingJobLocation(payload.region);
+    const existingPageSource = isOfficialPageLocationSource(existing.location_source);
+    const incomingWeaker = !payload.location_source || payload.location_source === 'official_payload';
+    if (incomingMissing || (existingPageSource && incomingWeaker && payload.location_source !== existing.location_source)) {
+      payload.region = existing.region as string;
+      if (existing.location_source) payload.location_source = existing.location_source;
     }
   }
   if ((!payload.field_evidence || Object.keys(payload.field_evidence).length === 0) && existing?.field_evidence) {
@@ -539,7 +573,7 @@ export async function syncJobRecords(
   // that record before inserting so the unique source/id index remains useful.
   for (const batch of chunks(externalIds, EXISTING_EXTERNAL_ID_LOOKUP_BATCH_SIZE)) {
     const { data, error } = await retryDatabaseOperation(
-      () => client.from('jobs').select('id, job_url, company, source_system, external_job_id, description, overview, responsibilities, requirements, nice_to_have, salary_range, employment_type, employment_category, experience_min_years, experience_max_years, experience_text, workplace_type, valid_through, posted_at, deadline_source, salary_source, location_source, field_evidence, is_active, is_closed').in('external_job_id', batch),
+      () => client.from('jobs').select('id, job_url, company, source_system, external_job_id, region, description, overview, responsibilities, requirements, nice_to_have, salary_range, employment_type, employment_category, experience_min_years, experience_max_years, experience_text, workplace_type, valid_through, posted_at, deadline_source, salary_source, location_source, field_evidence, is_active, is_closed').in('external_job_id', batch),
       '查询岗位外部 ID',
     );
     if (error) throw new Error(`查询岗位外部 ID 失败: ${error.message}`);
@@ -566,7 +600,7 @@ export async function syncJobRecords(
   // oversized URL that surfaces as a generic fetch failure.
   for (const batch of chunks(urls, EXISTING_JOB_LOOKUP_BATCH_SIZE)) {
     const { data, error } = await retryDatabaseOperation(
-      () => client.from('jobs').select('id, job_url, company, source_system, external_job_id, description, overview, responsibilities, requirements, nice_to_have, salary_range, employment_type, employment_category, experience_min_years, experience_max_years, experience_text, workplace_type, valid_through, posted_at, deadline_source, salary_source, location_source, field_evidence, is_active, is_closed').in('job_url', batch),
+      () => client.from('jobs').select('id, job_url, company, source_system, external_job_id, region, description, overview, responsibilities, requirements, nice_to_have, salary_range, employment_type, employment_category, experience_min_years, experience_max_years, experience_text, workplace_type, valid_through, posted_at, deadline_source, salary_source, location_source, field_evidence, is_active, is_closed').in('job_url', batch),
       '查询岗位',
     );
     if (error) throw new Error(`查询岗位失败: ${error.message}`);

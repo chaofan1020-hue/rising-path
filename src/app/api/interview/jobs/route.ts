@@ -4,9 +4,18 @@ import { sanitizeJobContent } from '@/lib/job-content';
 import { TARGET_REGION_KEYWORDS, targetRegionPostgrestClauses } from '@/lib/job-region-scope';
 
 export const runtime = 'nodejs';
+// The endpoint has two query shapes (company catalog and company jobs), so
+// keep request routing dynamic. Public cache headers and client-side caching
+// still make the read-only responses reusable without build-time evaluation.
 export const dynamic = 'force-dynamic';
 const COMPANY_CACHE_TTL_MS = 300_000;
 const JOBS_CACHE_TTL_MS = 300_000;
+const PUBLIC_CATALOG_HEADERS = {
+  // The catalog contains public job/company names and is safe to cache at the
+  // browser and CDN. This removes the cold database wait from repeat visits.
+  'Cache-Control': 'public, max-age=60, s-maxage=300, stale-while-revalidate=600',
+  'CDN-Cache-Control': 'public, max-age=300, stale-while-revalidate=600',
+};
 let companyCache: { expiresAt: number; companies: string[] } | null = null;
 let companyCatalogInFlight: Promise<string[]> | null = null;
 interface InterviewPickerJob {
@@ -86,7 +95,7 @@ export async function GET(request: NextRequest) {
       const jobs = await loadJobsForCompany(company);
       return NextResponse.json(
         { jobs, cached: Boolean(jobsCache.get(company.trim().toLocaleLowerCase())) },
-        { headers: { 'Cache-Control': 'private, max-age=60, stale-while-revalidate=300' } },
+        { headers: PUBLIC_CATALOG_HEADERS },
       );
     }
 
@@ -98,7 +107,7 @@ export async function GET(request: NextRequest) {
         appliedRegionFilter: true,
         hasMore: false,
         cached: true,
-      }, { headers: { 'Cache-Control': 'private, max-age=300, stale-while-revalidate=600' } });
+      }, { headers: PUBLIC_CATALOG_HEADERS });
     }
 
     const sortedCompanies = await loadCompanyCatalog();
@@ -110,7 +119,7 @@ export async function GET(request: NextRequest) {
       appliedRegionFilter: true,
       hasMore: false,
       cached: false,
-    }, { headers: { 'Cache-Control': 'private, max-age=60, stale-while-revalidate=300' } });
+    }, { headers: PUBLIC_CATALOG_HEADERS });
   } catch (error) {
     console.error('Interview jobs error:', error);
     return NextResponse.json(

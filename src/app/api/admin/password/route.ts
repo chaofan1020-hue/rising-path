@@ -1,9 +1,13 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { getSupabaseClient } from '@/storage/database/supabase-client';
 import {
+  createAdminSessionToken,
   getAdminSessionCookie,
   getClearedAdminSessionCookie,
   hasValidAdminSession,
+  isSharedAdminPasswordAllowed,
+  parseAdminSession,
+  revokeAdminSession,
 } from '@/lib/admin-auth';
 import { ADMIN_PERMISSIONS, requireAdminPermission } from '@/lib/admin-permissions';
 import { getClientIp } from '@/lib/auth-server';
@@ -17,46 +21,23 @@ import {
 } from '@/lib/admin-password';
 import { recordAdminAuditEvent, recordAdminAuditFailure } from '@/lib/admin-audit';
 
-// 获取当前密码
 export async function GET(request: NextRequest) {
-  try {
-    const client = getSupabaseClient();
-    
-    const { data, error } = await client
-      .from('job_configs')
-      .select('config_value')
-      .eq('config_type', 'admin_password_hash')
-      .eq('is_active', true)
-      .single();
-
-    if (error && error.code !== 'PGRST116') {
-      throw new Error(`查询密码失败: ${error.message}`);
-    }
-
-    const hasCustomPassword = !!data?.config_value;
-    const hasBootstrapPassword = !hasCustomPassword && !!getAdminBootstrapPassword();
-    
-    return NextResponse.json({ 
-      hasCustomPassword,
-      authenticated: hasValidAdminSession(request),
-      message: hasCustomPassword
-        ? '已设置自定义密码'
-        : hasBootstrapPassword
-          ? '等待首次初始化'
-          : '管理员密码尚未初始化，请配置 ADMIN_BOOTSTRAP_PASSWORD',
-    });
-  } catch (error) {
-    console.error('Error fetching password:', error);
-    return NextResponse.json(
-      { error: '获取密码信息失败' },
-      { status: 500 }
-    );
-  }
+  return NextResponse.json({
+    authenticated: await hasValidAdminSession(request),
+    passwordLoginAllowed: await isSharedAdminPasswordAllowed(),
+  });
 }
 
 // 验证密码
 export async function POST(request: NextRequest) {
   try {
+    if (!(await isSharedAdminPasswordAllowed())) {
+      return NextResponse.json(
+        { error: '已改为个人管理员邮箱验证码登录，共享密码入口已关闭' },
+        { status: 410 },
+      );
+    }
+
     const rateLimit = await consumeAuthRateLimit(`admin-login:ip:${getClientIp(request)}`, 5, 900, 1800);
     if (!rateLimit.allowed) {
       return NextResponse.json(
@@ -112,7 +93,16 @@ export async function POST(request: NextRequest) {
       valid: isValid,
       message: isValid ? '验证成功' : '密码错误'
     });
-    if (isValid) response.cookies.set(getAdminSessionCookie());
+    if (isValid) {
+      const token = await createAdminSessionToken();
+      response.cookies.set(getAdminSessionCookie(token));
+      await recordAdminAuditEvent({
+        request,
+        action: 'admin_auth.login',
+        resourceType: 'admin_password',
+        metadata: { method: 'shared_password' },
+      });
+    }
     return response;
   } catch (error) {
     console.error('Error verifying password:', error);
@@ -126,7 +116,7 @@ export async function POST(request: NextRequest) {
 // 修改密码
 export async function PUT(request: NextRequest) {
   try {
-    const permissionError = requireAdminPermission(request, ADMIN_PERMISSIONS.configWrite);
+    const permissionError = await requireAdminPermission(request, ADMIN_PERMISSIONS.configWrite);
     if (permissionError) return permissionError;
 
     const client = getSupabaseClient();
@@ -218,7 +208,16 @@ export async function PUT(request: NextRequest) {
   }
 }
 
-export async function DELETE() {
+export async function DELETE(request: NextRequest) {
+  const payload = await parseAdminSession(request);
+  if (payload?.sessionId) {
+    try {
+      await revokeAdminSession(payload.sessionId);
+    } catch (error) {
+      console.error('[Admin Auth] session revoke failed:', error);
+    }
+  }
+  await recordAdminAuditEvent({ request, action: 'admin_auth.logout', resourceType: 'admin_session', resourceId: payload?.sessionId || null });
   const response = NextResponse.json({ success: true });
   response.cookies.set(getClearedAdminSessionCookie());
   return response;

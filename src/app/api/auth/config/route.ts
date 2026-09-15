@@ -1,5 +1,6 @@
 import { NextResponse } from 'next/server';
 import { getSupabaseCredentials } from '@/storage/database/supabase-client';
+import { isCaptchaEnabled } from '@/lib/altcha';
 
 /**
  * 暴露 Supabase 公共配置给浏览器端初始化客户端。
@@ -9,8 +10,12 @@ export async function GET() {
   try {
     const { url, anonKey } = getSupabaseCredentials();
     return NextResponse.json(
-      { url, anonKey },
-      { headers: { 'Cache-Control': 'private, max-age=300' } },
+      {
+        url,
+        anonKey,
+        captchaEnabled: isCaptchaEnabled(),
+      },
+      { headers: { 'Cache-Control': 'private, max-age=60' } },
     );
   } catch (error) {
     console.error('[Auth] Public Supabase config unavailable:', error);

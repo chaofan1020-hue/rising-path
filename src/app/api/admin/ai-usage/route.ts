@@ -17,7 +17,7 @@ function optionalDate(value: string | null): string | null {
 }
 
 export async function GET(request: NextRequest) {
-  const permissionError = requireAdminPermission(request, ADMIN_PERMISSIONS.dashboardRead);
+  const permissionError = await requireAdminPermission(request, ADMIN_PERMISSIONS.dashboardRead);
   if (permissionError) return permissionError;
 
   const searchParams = request.nextUrl.searchParams;

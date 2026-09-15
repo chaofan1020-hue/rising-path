@@ -7,7 +7,11 @@ import {
   type ResumeFileOptions,
 } from '@/lib/resume-parser';
 import { processResume } from '@/lib/resume-processing';
-import { RESUME_PROFILE_SCHEMA_VERSION } from '@/lib/resume-types';
+import { ACTIVE_RESUME_PROCESSING_STATUSES, RESUME_PROFILE_SCHEMA_VERSION } from '@/lib/resume-types';
+import {
+  nextStaleResumeProcessingAction,
+  RESUME_PROCESSING_STALE_MS,
+} from '@/lib/dashboard-readiness';
 
 const WORKER_INTERVAL_MS = 15_000;
 const WORKER_BATCH_SIZE = 3;
@@ -69,12 +73,59 @@ async function processResumeRow(
   }
 }
 
+async function requeueStaleProcessingResumes(
+  client: ReturnType<typeof getSupabaseClient>,
+): Promise<void> {
+  const staleBefore = new Date(Date.now() - RESUME_PROCESSING_STALE_MS).toISOString();
+  const { data: staleRows, error } = await client
+    .from('resumes')
+    .select('id, user_id, processing_attempts')
+    .in('processing_status', ACTIVE_RESUME_PROCESSING_STATUSES.filter((status) => status !== 'uploaded'))
+    .lt('processing_started_at', staleBefore)
+    .limit(10);
+  if (error) {
+    console.error('[ResumeWorker] stale processing scan failed:', error);
+    return;
+  }
+
+  for (const row of staleRows || []) {
+    if (typeof row.id !== 'number' || typeof row.user_id !== 'string') continue;
+    const action = nextStaleResumeProcessingAction(Number(row.processing_attempts || 0));
+    const now = new Date().toISOString();
+    const payload = action === 'fail'
+      ? {
+          processing_status: 'failed',
+          processing_stage: 'error',
+          processing_error: '简历解析超时，请点击重试或重新上传',
+          processing_finished_at: now,
+          updated_at: now,
+        }
+      : {
+          processing_status: 'uploaded',
+          processing_stage: 'queued',
+          processing_error: null,
+          processing_finished_at: null,
+          updated_at: now,
+        };
+    const { error: updateError } = await client
+      .from('resumes')
+      .update(payload)
+      .eq('id', row.id)
+      .eq('user_id', row.user_id)
+      .in('processing_status', ACTIVE_RESUME_PROCESSING_STATUSES.filter((status) => status !== 'uploaded'));
+    if (updateError) {
+      console.error(`[ResumeWorker] failed to ${action} stale resume ${row.id}:`, updateError);
+    }
+  }
+}
+
 async function processQueuedResumes(): Promise<void> {
   if (workerRunning) return;
   workerRunning = true;
 
   try {
     const client = getSupabaseClient();
+    await requeueStaleProcessingResumes(client);
     const { data: rows, error } = await client
       .from('resumes')
       .select('id, user_id, file_key, file_name, user_info')

@@ -22,7 +22,7 @@ function isValidTitle(title: string): boolean {
 
 export async function GET(request: NextRequest) {
   try {
-    const permissionError = requireAdminPermission(request, ADMIN_PERMISSIONS.jobsWrite);
+    const permissionError = await requireAdminPermission(request, ADMIN_PERMISSIONS.jobsWrite);
     if (permissionError) return permissionError;
     const supabase = getSupabaseClient();
     const { searchParams } = new URL(request.url);

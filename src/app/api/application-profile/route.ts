@@ -9,6 +9,7 @@ import {
   type ProfileSourceMap,
 } from '@/lib/application-profile';
 import { applicationProfilePatchSchema } from '@/lib/application-contracts';
+import { getUserResume } from '@/lib/resume-selection';
 
 function serializeAiJob(row: Record<string, unknown> | null) {
   if (!row) return null;
@@ -23,14 +24,13 @@ function serializeAiJob(row: Record<string, unknown> | null) {
   };
 }
 
-async function getLatestAiJob(client: SupabaseClient, userId: string) {
-  const { data, error } = await client
+async function getLatestAiJob(client: SupabaseClient, userId: string, resumeId?: number | null) {
+  let query = client
     .from('application_profile_jobs')
     .select('id, resume_id, status, last_error, created_at, updated_at, completed_at')
-    .eq('user_id', userId)
-    .order('created_at', { ascending: false })
-    .limit(1)
-    .maybeSingle();
+    .eq('user_id', userId);
+  if (resumeId) query = query.eq('resume_id', resumeId);
+  const { data, error } = await query.order('created_at', { ascending: false }).limit(1).maybeSingle();
   if (error) {
     console.error('[ApplicationProfile] failed to read AI job:', error.message);
     return null;
@@ -44,22 +44,19 @@ export async function GET(request: NextRequest) {
     if (!auth) return unauthorizedResponse();
     const client = auth.client;
 
-    const { data: resume } = await client
-      .from('resumes')
-      .select('id, user_info, profile')
-      .eq('user_id', auth.user.id)
-      .order('created_at', { ascending: false })
-      .limit(1)
-      .maybeSingle();
+    const resume = await getUserResume(client, auth.user.id, request.nextUrl.searchParams.get('resumeId'));
+    if (request.nextUrl.searchParams.get('resumeId') && !resume) return NextResponse.json({ error: '简历不存在或无权使用' }, { status: 404 });
 
     const { data: existing } = await client
       .from('application_profiles')
       .select('*')
       .eq('user_id', auth.user.id)
       .maybeSingle();
-    const aiJob = await getLatestAiJob(client, auth.user.id);
+    const aiJob = await getLatestAiJob(client, auth.user.id, resume?.id ?? null);
 
-    if (existing) {
+    const profileMatchesSelectedResume = existing
+      && (existing.resume_id === resume?.id || (!existing.resume_id && !resume?.id));
+    if (existing && profileMatchesSelectedResume) {
       return NextResponse.json({
         profile: existing.profile || DEFAULT_PROFILE,
         source: existing.source || {},
@@ -74,7 +71,21 @@ export async function GET(request: NextRequest) {
       resume?.user_info as Parameters<typeof buildProfileFromResume>[0],
       resume?.profile as Parameters<typeof buildProfileFromResume>[1]
     );
-    const { data: inserted, error } = await client
+    const { data: inserted, error } = existing
+      ? await client
+        .from('application_profiles')
+        .update({
+          resume_id: resume?.id || null,
+          profile: built.profile,
+          source: built.source,
+          field_stats: built.source,
+          version: Number(existing.version || 0) + 1,
+          updated_at: new Date().toISOString(),
+        })
+        .eq('user_id', auth.user.id)
+        .select()
+        .maybeSingle()
+      : await client
       .from('application_profiles')
       .insert({
         user_id: auth.user.id,
@@ -106,11 +117,11 @@ export async function GET(request: NextRequest) {
     if (error) throw new Error(`创建求职档案失败: ${error.message}`);
 
     return NextResponse.json({
-      profile: inserted?.profile || built.profile,
-      source: inserted?.source || built.source,
-      fieldStats: inserted?.field_stats || inserted?.source || built.source,
+      profile: built.profile,
+      source: built.source,
+      fieldStats: built.source,
       version: inserted?.version || 1,
-      resumeId: inserted?.resume_id || null,
+      resumeId: resume?.id || null,
       aiJob,
     });
   } catch (error) {
@@ -126,10 +137,14 @@ export async function PUT(request: NextRequest) {
     const client = auth.client;
     const parsed = applicationProfilePatchSchema.safeParse(await request.json());
     if (!parsed.success) return NextResponse.json({ error: '无效的档案数据' }, { status: 400 });
-    const { profile: updates, version: expectedVersion } = parsed.data as {
+    const { profile: updates, version: expectedVersion, resumeId } = parsed.data as {
       profile: Partial<ApplicationProfile>;
       version: number;
+      resumeId?: number;
     };
+
+    const targetResume = await getUserResume(client, auth.user.id, resumeId);
+    if (resumeId && !targetResume) return NextResponse.json({ error: '简历不存在或无权访问' }, { status: 404 });
 
     const { data: existing } = await client
       .from('application_profiles')
@@ -137,38 +152,38 @@ export async function PUT(request: NextRequest) {
       .eq('user_id', auth.user.id)
       .maybeSingle();
 
-    const base = existing?.profile || DEFAULT_PROFILE;
-    const baseSource = (existing?.source || {}) as ProfileSourceMap;
+    const existingMatchesResume = existing
+      && (existing.resume_id === targetResume?.id || (!existing.resume_id && !targetResume?.id));
+    const targetBuilt = targetResume
+      ? buildProfileFromResume(
+        targetResume.user_info as Parameters<typeof buildProfileFromResume>[0],
+        targetResume.profile as Parameters<typeof buildProfileFromResume>[1],
+      )
+      : null;
+    const base = existingMatchesResume ? (existing?.profile || DEFAULT_PROFILE) : (targetBuilt?.profile || DEFAULT_PROFILE);
+    const baseSource = (existingMatchesResume ? existing?.source : targetBuilt?.source || {}) as ProfileSourceMap;
     const merged = mergeApplicationProfile(base, updates, baseSource);
-    if (existing && existing.version !== expectedVersion) {
+    if (existingMatchesResume && existing.version !== expectedVersion) {
       return NextResponse.json({ error: '求职档案已更新，请刷新后重试' }, { status: 409 });
     }
     if (!existing && expectedVersion !== 0) {
       return NextResponse.json({ error: '求职档案已更新，请刷新后重试' }, { status: 409 });
     }
-    const version = (existing?.version || 0) + 1;
+    const version = (existingMatchesResume ? existing?.version || 0 : 0) + 1;
     const profileWrite = {
       user_id: auth.user.id,
-      resume_id: existing?.resume_id || null,
+      resume_id: targetResume?.id || existing?.resume_id || null,
       profile: merged.profile,
       source: merged.source,
       field_stats: merged.source,
       version,
       updated_at: new Date().toISOString(),
     };
-    const { data, error } = existing
-      ? await client
-        .from('application_profiles')
-        .update(profileWrite)
-        .eq('user_id', auth.user.id)
-        .eq('version', expectedVersion)
-        .select()
-        .maybeSingle()
-      : await client
-        .from('application_profiles')
-        .insert(profileWrite)
-        .select()
-        .maybeSingle();
+    let writeQuery = existing
+      ? client.from('application_profiles').update(profileWrite).eq('user_id', auth.user.id)
+      : client.from('application_profiles').insert(profileWrite);
+    if (existingMatchesResume) writeQuery = writeQuery.eq('version', expectedVersion);
+    const { data, error } = await writeQuery.select().maybeSingle();
 
     if (error?.code === '23505') {
       return NextResponse.json({ error: '求职档案已更新，请刷新后重试' }, { status: 409 });

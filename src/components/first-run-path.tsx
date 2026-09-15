@@ -5,6 +5,7 @@ import Link from 'next/link';
 import { Check, FileText, Mic, RefreshCw, Sparkles, UserCheck } from 'lucide-react';
 import { useLanguage } from '@/lib/language-context';
 import { getSupabaseBrowserClient } from '@/lib/supabase-browser';
+import { RESUME_UPDATED_EVENT, RESUME_UPDATED_STORAGE_KEY } from '@/lib/dashboard-cache';
 
 interface OnboardingState {
   resumes: boolean;
@@ -91,7 +92,11 @@ export function FirstRunPath() {
         setOnboarding(cachedState);
         setStatus('ready');
         void requestState()
-          .then((nextState) => writeOnboardingCache(data.session.user.id, nextState))
+          .then((nextState) => {
+            if (signal.aborted) return;
+            writeOnboardingCache(data.session.user.id, nextState);
+            setOnboarding(nextState);
+          })
           .catch(() => undefined);
         return;
       }
@@ -114,6 +119,19 @@ export function FirstRunPath() {
     void loadPath(controller.signal);
     return () => controller.abort();
   }, [loadPath, reloadKey]);
+
+  useEffect(() => {
+    const refresh = () => setReloadKey((value) => value + 1);
+    const onStorage = (event: StorageEvent) => {
+      if (event.key === RESUME_UPDATED_STORAGE_KEY) refresh();
+    };
+    window.addEventListener(RESUME_UPDATED_EVENT, refresh);
+    window.addEventListener('storage', onStorage);
+    return () => {
+      window.removeEventListener(RESUME_UPDATED_EVENT, refresh);
+      window.removeEventListener('storage', onStorage);
+    };
+  }, []);
 
   const steps = useMemo(() => [
     { key: 'resumes', done: onboarding.resumes, title: t('onboarding.step1.title'), desc: t('onboarding.step1.desc'), href: '/resume?first=1', icon: FileText },

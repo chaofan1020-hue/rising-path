@@ -40,6 +40,7 @@ import {
   SheetTitle,
 } from "@/components/ui/sheet";
 import { useAdminPermissions } from "@/components/admin-shell";
+import { JobRotationChangesPanel } from "@/components/admin/job-rotation-panel";
 import { ADMIN_PERMISSIONS } from "@/lib/admin-permission-constants";
 
 type Status =
@@ -519,7 +520,7 @@ function CompanyCard({
 
 export default function JobSyncDashboardPage() {
   const { loading: permissionsLoading, hasPermission } = useAdminPermissions();
-  const allowed = hasPermission(ADMIN_PERMISSIONS.dashboardRead);
+  const allowed = hasPermission(ADMIN_PERMISSIONS.jobsRead);
   const canWrite = hasPermission(ADMIN_PERMISSIONS.jobSyncWrite);
   const [dashboard, setDashboard] = useState<Dashboard | null>(null);
   const [detail, setDetail] = useState<Detail | null>(null);
@@ -718,10 +719,10 @@ export default function JobSyncDashboardPage() {
               岗位同步运行台
             </div>
             <h1 className="mt-1 text-2xl font-semibold tracking-tight md:text-3xl">
-              岗位同步状态
+              岗位同步
             </h1>
             <p className="mt-1 max-w-3xl text-sm text-muted-foreground">
-              只展示当前运行状态、岗位数量和需要处理的问题。
+              同步运行状态、近 24 小时岗位变更，以及需要处理的公司问题。
             </p>
           </div>
           <div className="flex items-center gap-2">
@@ -827,6 +828,7 @@ export default function JobSyncDashboardPage() {
             )}
           </section>
         )}
+        <JobRotationChangesPanel />
         {summary && (
           <section className="grid gap-3 sm:grid-cols-2 lg:grid-cols-5">
             {[
@@ -1220,19 +1222,13 @@ export default function JobSyncDashboardPage() {
                     )}
                   </>
                 )}
-                <Link href="/admin/job-rotation">
-                  <Button variant="outline" size="sm">
-                    <ArrowRight className="mr-1 h-4 w-4" />
-                    岗位轮换
-                  </Button>
-                </Link>
-                <Link href="/admin?tab=jobs">
+                <Link href="/admin/jobs">
                   <Button variant="outline" size="sm">
                     <ArrowRight className="mr-1 h-4 w-4" />
                     岗位管理
                   </Button>
                 </Link>
-                <Link href="/admin?tab=audit">
+                <Link href="/admin/audit">
                   <Button variant="outline" size="sm">
                     <FileWarning className="mr-1 h-4 w-4" />
                     审计日志

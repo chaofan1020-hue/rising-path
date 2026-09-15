@@ -14,7 +14,7 @@ function sortRank(status: DashboardStatus): number {
 }
 
 export async function GET(request: NextRequest) {
-  const permissionError = requireAdminPermission(request, ADMIN_PERMISSIONS.dashboardRead);
+  const permissionError = await requireAdminPermission(request, ADMIN_PERMISSIONS.jobsRead);
   if (permissionError) return permissionError;
   try {
     const dashboard = await loadJobSyncDashboard();

@@ -30,20 +30,24 @@ import { apiFetch } from '@/lib/api-client';
 import { Header1 } from '@/components/header1';
 import { SegmentationCard } from '@/components/segmentation-card';
 import { ResumeProfileCard } from '@/components/resume-profile-card';
-import type {
-  ResumeProfile,
-  ResumeProcessingStage,
-  ResumeProcessingStatus,
-  ResumeProfileConfidence,
-  ResumeProfileEvidence,
-  ResumeProfileUpdateMetadata,
-  UserSegmentation,
+import {
+  isActiveResumeProcessing,
+  type ResumeProfile,
+  type ResumeProcessingStage,
+  type ResumeProcessingStatus,
+  type ResumeProfileConfidence,
+  type ResumeProfileEvidence,
+  type ResumeProfileUpdateMetadata,
+  type UserSegmentation,
 } from '@/lib/resume-types';
 import { Target, Wand2, Send, CheckCircle2 } from 'lucide-react';
 import { useLanguage } from '@/lib/language-context';
 import PageBackButton from '@/components/page-back-button';
 import type { PersonalityAssessment } from '@/lib/personality-assessment';
 import { PersonalityQuizPanel } from '@/components/personality-quiz-panel';
+import { writeActiveResumeId } from '@/lib/active-resume';
+import { clearCockpitClientCaches } from '@/lib/dashboard-cache';
+import { classifyResumeAvailability } from '@/lib/resume-availability';
 
 interface ParsedFields {
   name?: string;
@@ -99,15 +103,8 @@ interface Resume {
   created_at: string;
 }
 
-const ACTIVE_PROCESSING_STATUSES: ResumeProcessingStatus[] = [
-  'uploaded',
-  'extracting_text',
-  'extracting_profile',
-  'deriving_segmentation',
-];
-
 function isProcessing(resume: Resume): boolean {
-  return !!resume.processing_status && ACTIVE_PROCESSING_STATUSES.includes(resume.processing_status);
+  return isActiveResumeProcessing(resume.processing_status);
 }
 
 // 内部组件
@@ -122,6 +119,7 @@ function ResumeContent() {
   const [personality, setPersonality] = useState<PersonalityAssessment | null>(null);
   const [personalityLoaded, setPersonalityLoaded] = useState(false);
   const [profileFocusId, setProfileFocusId] = useState<number | null>(null);
+  const [listError, setListError] = useState('');
   const { t } = useLanguage();
   const searchParams = useSearchParams();
   const uploadInputRef = useRef<HTMLInputElement>(null);
@@ -173,6 +171,8 @@ function ResumeContent() {
       
       if (response.ok && data.resume) {
         setResumes((prev) => [data.resume as Resume, ...prev]);
+        writeActiveResumeId(Number(data.resume.id));
+        clearCockpitClientCaches();
         setSelectedFile(null);
         if (uploadInputRef.current) uploadInputRef.current.value = '';
       } else if (data.error) {
@@ -200,14 +200,27 @@ function ResumeContent() {
     try {
       const response = await apiFetch('/api/resume');
       const data = await response.json();
-      setResumes(data.resumes || []);
+      if (!response.ok) {
+        throw new Error(typeof data.error === 'string' ? data.error : t('resume.listLoadFailed'));
+      }
+      setResumes((prev) => {
+        const next = Array.isArray(data.resumes) ? data.resumes as Resume[] : [];
+        const wasProcessing = prev.some(isProcessing);
+        const nowProcessing = next.some(isProcessing);
+        if (wasProcessing && !nowProcessing) {
+          queueMicrotask(() => clearCockpitClientCaches());
+        }
+        return next;
+      });
+      setListError('');
     } catch (error) {
       console.error('Failed to fetch resumes:', error);
+      setListError(error instanceof Error ? error.message : t('resume.listLoadFailed'));
     } finally {
       fetchingResumesRef.current = false;
       if (options.showLoading) setLoading(false);
     }
-  }, []);
+  }, [t]);
 
   const reparseResume = async (resume: Resume) => {
     setReparsingId(resume.id);
@@ -220,6 +233,7 @@ function ResumeContent() {
       const data = await response.json();
       if (response.ok && data.resume) {
         setResumes((prev) => prev.map((item) => item.id === resume.id ? data.resume as Resume : item));
+        clearCockpitClientCaches();
       } else {
         alert(t('resume.uploadFailed') + ': ' + (data.error || t('resume.uploadFailedRetry')));
       }
@@ -242,6 +256,7 @@ function ResumeContent() {
       
       if (response.ok && data.success) {
         setResumes(resumes.filter((r) => r.id !== id));
+        clearCockpitClientCaches();
       } else {
         alert(t('resume.deleteFailed') + ': ' + (data.error || ''));
       }
@@ -265,13 +280,15 @@ function ResumeContent() {
       });
 
       const data = await response.json();
-      if (data.resume) {
-        setResumes(resumes.map(r => 
-          r.id === resume.id ? { ...r, ...data.resume } : r
-        ));
+      if (!response.ok || !data.resume) {
+        throw new Error(typeof data.error === 'string' ? data.error : t('resume.translateFailed'));
       }
+      setResumes((current) => current.map((item) => (
+        item.id === resume.id ? { ...item, ...data.resume } : item
+      )));
     } catch (error) {
       console.error('Translation failed:', error);
+      alert(error instanceof Error ? error.message : t('resume.translateFailed'));
     } finally {
       setTranslatingId(null);
     }
@@ -302,10 +319,10 @@ function ResumeContent() {
     return () => window.clearInterval(interval);
   }, [fetchResumes, processingResumeIds]);
 
-  const hasConfirmedResume = resumes.some((resume) =>
-    resume.segmentation_confirmed === true && resume.processing_status === 'ready',
-  );
-  const needsConfirmationId = resumes.find((resume) => resume.processing_status === 'needs_confirmation')?.id;
+  const resumeAvailability = classifyResumeAvailability(resumes);
+  const hasConfirmedResume = resumeAvailability.status === 'ready';
+  const needsConfirmationId = resumeAvailability.pendingConfirm[0]?.id
+    ?? resumes.find((resume) => resume.processing_status === 'needs_confirmation')?.id;
 
   useEffect(() => {
     if (!needsConfirmationId) return;
@@ -402,20 +419,36 @@ function ResumeContent() {
             <div className="flex flex-col md:flex-row md:items-center justify-between gap-4">
               <div className="flex items-center gap-3">
                 <div className="w-9 h-9 rounded-xl bg-zinc-100 dark:bg-zinc-800 flex items-center justify-center flex-shrink-0">
-                  <CheckCircle2 className="h-5 w-5 text-zinc-700 dark:text-zinc-300" />
+                  {resumeAvailability.status === 'processing' ? (
+                    <Loader2 className="h-5 w-5 animate-spin text-zinc-700 dark:text-zinc-300" />
+                  ) : (
+                    <CheckCircle2 className="h-5 w-5 text-zinc-700 dark:text-zinc-300" />
+                  )}
                 </div>
                 <div>
                   <p className="font-medium text-sm text-zinc-800 dark:text-zinc-100">
-                    {hasConfirmedResume ? t('resume.uploaded') : t('resume.parsing')} {resumes.length} {t('resume.resumesUnit')}
+                    {resumeAvailability.status === 'ready' && `${t('resume.uploaded')} ${resumes.length} ${t('resume.resumesUnit')}`}
+                    {resumeAvailability.status === 'processing' && `${t('resume.parsing')} ${resumes.length} ${t('resume.resumesUnit')}`}
+                    {resumeAvailability.status === 'confirm' && `${t('resume.waitingConfirm')} · ${resumes.length} ${t('resume.resumesUnit')}`}
+                    {resumeAvailability.status === 'failed' && t('resume.parseFailedBanner')}
                   </p>
                   <p className="text-xs text-zinc-400 dark:text-zinc-500">
-                    {hasConfirmedResume ? t('resume.nextStep') : t('resume.upload.parsing')}
+                    {resumeAvailability.status === 'ready' && t('resume.nextStep')}
+                    {resumeAvailability.status === 'processing' && t('resume.processingHint')}
+                    {resumeAvailability.status === 'confirm' && t('resume.waitingConfirmHint')}
+                    {resumeAvailability.status === 'failed' && t('resume.parseFailedHint')}
                   </p>
                 </div>
               </div>
-              {hasConfirmedResume && <div className="flex items-center gap-2">
-                <Link href="/ai-match">
+              {hasConfirmedResume && <div className="flex flex-wrap items-center gap-2">
+                <Link href="/dashboard">
                   <Button size="sm" className="gap-1.5 bg-zinc-900 text-white hover:bg-zinc-800 dark:bg-white dark:text-zinc-900 dark:hover:bg-zinc-200">
+                    <Map className="h-3.5 w-3.5" />
+                    {t('resume.openCockpit')}
+                  </Button>
+                </Link>
+                <Link href="/ai-match">
+                  <Button variant="outline" size="sm" className="gap-1.5 border-zinc-200 dark:border-zinc-700 text-zinc-600 dark:text-zinc-300 hover:bg-zinc-100 hover:text-zinc-900 dark:hover:bg-zinc-800 dark:hover:text-zinc-100">
                     <Target className="h-3.5 w-3.5" />
                     {t('resume.aiMatch')}
                   </Button>
@@ -427,7 +460,21 @@ function ResumeContent() {
                   </Button>
                 </Link>
               </div>}
+              {resumeAvailability.status === 'confirm' && needsConfirmationId && (
+                <Button
+                  size="sm"
+                  className="gap-1.5 bg-zinc-900 text-white hover:bg-zinc-800 dark:bg-white dark:text-zinc-900 dark:hover:bg-zinc-200"
+                  onClick={() => document.getElementById(`resume-card-${needsConfirmationId}`)?.scrollIntoView({ behavior: 'smooth', block: 'start' })}
+                >
+                  {t('resume.confirmNow')}
+                </Button>
+              )}
             </div>
+            {autoOpenQuiz && !hasConfirmedResume && personalityLoaded && (
+              <p className="mt-3 rounded-lg border border-primary/25 bg-primary/5 px-3 py-2 text-xs text-foreground dark:bg-primary/15">
+                {t('resume.quizNeedConfirm')}
+              </p>
+            )}
           </div>
         ) : (
           <div className="relative mb-8 md:mb-10 max-w-2xl mx-auto rounded-2xl border border-dashed border-zinc-200 dark:border-zinc-800 px-4 py-6">
@@ -457,6 +504,14 @@ function ResumeContent() {
               {t('resume.refresh')}
             </Button>
           </div>
+          {listError && (
+            <div className="flex flex-wrap items-center gap-3 rounded-xl border border-primary/25 bg-primary/5 px-3 py-2.5 text-sm text-foreground dark:bg-primary/15">
+              <span>{listError}</span>
+              <Button type="button" variant="outline" size="sm" onClick={() => void fetchResumes({ showLoading: true })} className="h-8">
+                {t('common.retry')}
+              </Button>
+            </div>
+          )}
           {loading ? (
             <div className="text-center py-16 text-zinc-400">
               <Loader2 className="h-7 w-7 animate-spin mx-auto mb-3" />
@@ -492,25 +547,25 @@ function ResumeContent() {
                             <Calendar className="h-3 w-3 mr-1" />
                             {new Date(resume.created_at).toLocaleDateString()}
                           </Badge>
-                          {resume.user_info?.name ? (
-                            <Badge variant="outline" className="text-xs border-zinc-200 dark:border-zinc-700 text-zinc-600 dark:text-zinc-300">
-                              <User className="h-3 w-3 mr-1" />
-                              {resume.user_info.name}
-                            </Badge>
-                          ) : (
+                          {isProcessing(resume) ? (
                             <Badge variant="outline" className="text-xs border-zinc-200 dark:border-zinc-700 text-zinc-400">
                               <Loader2 className="h-3 w-3 mr-1 animate-spin" />
                               {t('resume.parsing')}
                             </Badge>
-                          )}
+                          ) : resume.user_info?.name ? (
+                            <Badge variant="outline" className="text-xs border-zinc-200 dark:border-zinc-700 text-zinc-600 dark:text-zinc-300">
+                              <User className="h-3 w-3 mr-1" />
+                              {resume.user_info.name}
+                            </Badge>
+                          ) : null}
                           {resume.processing_status === 'needs_confirmation' && (
                             <Badge variant="outline" className="text-xs border-amber-200 text-amber-700 dark:border-amber-800 dark:text-amber-300">
-                              {t('resume.nextStep')}
+                              {t('resume.waitingConfirm')}
                             </Badge>
                           )}
                           {resume.processing_status === 'failed' && (
                             <Badge variant="outline" className="text-xs border-red-200 text-red-700 dark:border-red-800 dark:text-red-300">
-                              {t('resume.uploadFailed')}
+                              {t('resume.parseFailedBanner')}
                             </Badge>
                           )}
                         </div>
@@ -533,6 +588,7 @@ function ResumeContent() {
                         showRecommendations={false}
                         onCompleted={(assessment, profile) => {
                           setPersonality(assessment);
+                          clearCockpitClientCaches();
                           setResumes((prev) => prev.map((item) => (
                             item.id === resume.id
                               ? { ...item, profile: profile || item.profile }
@@ -555,6 +611,7 @@ function ResumeContent() {
                           : undefined}
                         onUpdated={(seg, metadata: ResumeProfileUpdateMetadata = {}, profile) => {
                           if (metadata.confirmed) setProfileFocusId(resume.id);
+                          clearCockpitClientCaches();
                           setResumes((prev) => prev.map((r) => r.id === resume.id ? {
                             ...r,
                             profile: profile || r.profile,
@@ -580,6 +637,7 @@ function ResumeContent() {
                         highlighted={profileHighlighted}
                         onUpdated={(profile, segmentation, metadata: ResumeProfileUpdateMetadata = {}) => {
                           setProfileFocusId(null);
+                          clearCockpitClientCaches();
                           setResumes((prev) => prev.map((item) => item.id === resume.id ? {
                             ...item,
                             profile,
@@ -627,7 +685,7 @@ function ResumeContent() {
                           </>
                         )}
                       </Button>
-                        <Link href="/auto-apply" className="hidden sm:block">
+                        <Link href={`/auto-apply?resumeId=${resume.id}`} className="hidden sm:block">
                         <Button variant="outline" size="sm" className="text-xs h-7 px-2.5 border-zinc-200 dark:border-zinc-700 text-zinc-600 dark:text-zinc-300 hover:bg-zinc-100 hover:text-zinc-900 dark:hover:bg-zinc-800 dark:hover:text-zinc-100">
                           <Map className="h-3 w-3 mr-1" />
                           {t('resume.fieldMapping')}
@@ -729,7 +787,7 @@ function ResumeContent() {
                                 )}
 
                                 <div className="mt-3 pt-3 border-t border-zinc-100 dark:border-zinc-800">
-                                  <Link href="/auto-apply">
+                                  <Link href={`/auto-apply?resumeId=${resume.id}`}>
                                     <Button variant="outline" size="sm" className="w-full border-zinc-200 dark:border-zinc-700 text-zinc-600 dark:text-zinc-300 hover:bg-zinc-100 hover:text-zinc-900 dark:hover:bg-zinc-800 dark:hover:text-zinc-100">
                                       <Map className="h-4 w-4 mr-2" />
                                       {t('resume.configureMapping')}

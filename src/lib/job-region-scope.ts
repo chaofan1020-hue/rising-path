@@ -55,6 +55,12 @@ export function isExcludedRegion(location?: string | null, country?: string | nu
 export function targetRegionPostgrestClauses(): string[] {
   return Object.values(TARGET_REGION_KEYWORDS)
     .flat()
+    // PostgREST's `or()` grammar treats commas as clause separators. A raw
+    // comma inside an ILIKE value cannot be escaped reliably across client
+    // versions, so omit those overly-specific aliases; the surrounding city
+    // and country keywords still keep the region covered without breaking the
+    // entire query.
+    .filter((keyword) => !keyword.includes(','))
     .map((keyword) => `region.ilike.%${keyword.replace(/[\\%_,()]/g, (character) => `\\${character}`)}%`);
 }
 

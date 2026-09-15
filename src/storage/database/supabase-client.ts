@@ -13,7 +13,11 @@ function loadEnv(): void {
     return;
   }
 
-  loadDotenv({ path: '.env.local' });
+  // Operational scripts can point at a specific environment (for example the
+  // production file) without changing the application default. Keep already
+  // exported variables authoritative so a deployment environment is never
+  // silently replaced by a developer-local .env.local.
+  loadDotenv({ path: process.env.DOTENV_CONFIG_PATH || '.env.local' });
 
   envLoaded = true;
 }

@@ -11,6 +11,7 @@ export const applicationSemanticKeySchema = z.enum([
 
 export const prefillFeedbackRequestSchema = z.object({
   version: z.number().int().min(0),
+  resumeId: z.number().int().positive().optional(),
   jobId: z.number().int().positive().optional(),
   domain: z.string().trim().max(255).optional(),
   fields: z.array(z.object({
@@ -37,6 +38,7 @@ const profileEntry = z.record(z.string(), z.string().max(4_000));
 
 export const applicationProfilePatchSchema = z.object({
   version: z.number().int().min(0),
+  resumeId: z.number().int().positive().optional(),
   profile: z.object({
     personal: profileStringRecord.optional(),
     links: profileStringRecord.optional(),

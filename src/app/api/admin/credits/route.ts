@@ -51,7 +51,7 @@ function buildCreditTrend(ledger: Array<{ metric: string | null; entry_type: str
 }
 
 export async function GET(request: NextRequest) {
-  const permissionError = requireAdminPermission(request, ADMIN_PERMISSIONS.usersRead);
+  const permissionError = await requireAdminPermission(request, ADMIN_PERMISSIONS.usersRead);
   if (permissionError) return permissionError;
   const client = getSupabaseClient();
   const userId = request.nextUrl.searchParams.get('userId')?.trim() || null;
@@ -104,7 +104,7 @@ export async function GET(request: NextRequest) {
 }
 
 export async function POST(request: NextRequest) {
-  const permissionError = requireAdminPermission(request, ADMIN_PERMISSIONS.configWrite);
+  const permissionError = await requireAdminPermission(request, ADMIN_PERMISSIONS.configWrite);
   if (permissionError) return permissionError;
   try {
     const body = await request.json() as Record<string, unknown>;
@@ -151,7 +151,7 @@ export async function POST(request: NextRequest) {
 }
 
 export async function PATCH(request: NextRequest) {
-  const permissionError = requireAdminPermission(request, ADMIN_PERMISSIONS.configWrite);
+  const permissionError = await requireAdminPermission(request, ADMIN_PERMISSIONS.configWrite);
   if (permissionError) return permissionError;
   try {
     const body = await request.json() as Record<string, unknown>;

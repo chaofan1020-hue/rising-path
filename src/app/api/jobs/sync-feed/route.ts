@@ -6,7 +6,7 @@ import { recordAdminAuditEvent, recordAdminAuditFailure } from '@/lib/admin-audi
 export const maxDuration = 300;
 
 export async function POST(request: NextRequest) {
-  const permissionError = requireAdminPermission(request, ADMIN_PERMISSIONS.jobsWrite);
+  const permissionError = await requireAdminPermission(request, ADMIN_PERMISSIONS.jobsWrite);
   if (permissionError) return permissionError;
   if (isJobFeedSyncDisabled()) {
     return NextResponse.json({ error: '岗位同步在当前环境已禁用' }, { status: 503 });
@@ -61,7 +61,7 @@ export async function POST(request: NextRequest) {
 }
 
 export async function GET(request: NextRequest) {
-  const permissionError = requireAdminPermission(request, ADMIN_PERMISSIONS.jobsWrite);
+  const permissionError = await requireAdminPermission(request, ADMIN_PERMISSIONS.jobsWrite);
   if (permissionError) return permissionError;
   if (isJobFeedSyncDisabled()) {
     return NextResponse.json({

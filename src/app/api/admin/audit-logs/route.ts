@@ -17,7 +17,7 @@ function validDate(value: string | null): string | null {
 }
 
 export async function GET(request: NextRequest) {
-  const permissionError = requireAdminPermission(request, ADMIN_PERMISSIONS.auditRead);
+  const permissionError = await requireAdminPermission(request, ADMIN_PERMISSIONS.auditRead);
   if (permissionError) return permissionError;
 
   const params = request.nextUrl.searchParams;

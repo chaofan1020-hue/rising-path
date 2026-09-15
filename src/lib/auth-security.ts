@@ -1,6 +1,7 @@
 import crypto from 'node:crypto';
 import { getSupabaseClient } from '@/storage/database/supabase-client';
 import { validatePassword } from '@/lib/auth-shared';
+import { isCaptchaEnabled, verifyAltchaPayload } from '@/lib/altcha';
 
 export { validatePassword };
 
@@ -142,28 +143,19 @@ export async function consumeAuthRateLimit(
   return { allowed: false, retryAfterSeconds: 300 };
 }
 
-export async function verifyTurnstileToken(
-  token: unknown,
-  ip: string
-): Promise<boolean> {
-  const secret = process.env.TURNSTILE_SECRET_KEY?.trim();
-  if (!secret) return !isProductionEnvironment();
-  if (typeof token !== 'string' || token.length < 10) return false;
-
+export async function verifyCaptchaToken(token: unknown): Promise<boolean> {
+  if (!isCaptchaEnabled()) return true;
   try {
-    const response = await fetch('https://challenges.cloudflare.com/turnstile/v0/siteverify', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
-      body: new URLSearchParams({ secret, response: token, remoteip: ip }),
-      cache: 'no-store',
-    });
-    if (!response.ok) return false;
-    const result = (await response.json()) as { success?: boolean };
-    return result.success === true;
+    return await verifyAltchaPayload(token);
   } catch (error) {
-    console.error('[Auth] Turnstile verification failed:', error);
+    console.error('[Auth] ALTCHA verification failed:', error);
     return false;
   }
+}
+
+export async function captchaErrorIfInvalid(token: unknown): Promise<string | null> {
+  if (await verifyCaptchaToken(token)) return null;
+  return '请先完成人机验证';
 }
 
 export function authErrorMessage(error: unknown): string {

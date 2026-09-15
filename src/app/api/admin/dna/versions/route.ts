@@ -9,7 +9,7 @@ function validId(value: string | null): number | null {
 }
 
 export async function GET(request: NextRequest) {
-  const permissionError = requireAdminPermission(request, ADMIN_PERMISSIONS.dnaRead);
+  const permissionError = await requireAdminPermission(request, ADMIN_PERMISSIONS.dnaRead);
   if (permissionError) return permissionError;
   const companyDnaId = validId(request.nextUrl.searchParams.get('companyDnaId'));
   const company = request.nextUrl.searchParams.get('company')?.trim() || null;
@@ -34,7 +34,7 @@ export async function GET(request: NextRequest) {
 }
 
 export async function POST(request: NextRequest) {
-  const permissionError = requireAdminPermission(request, ADMIN_PERMISSIONS.dnaPublish);
+  const permissionError = await requireAdminPermission(request, ADMIN_PERMISSIONS.dnaPublish);
   if (permissionError) return permissionError;
   try {
     const body = await request.json() as { versionId?: unknown; reviewNotes?: unknown };

@@ -142,6 +142,43 @@ export function getCompanyLogoUrl(company: string, jobUrl?: string | null): stri
 export function getCompanyFaviconUrl(company: string, jobUrl?: string | null): string | null {
   const domain = getCompanyDomain(company, jobUrl);
   return domain
-    ? `https://favicon.im/${encodeURIComponent(domain)}`
+    ? `https://favicon.im/${encodeURIComponent(domain)}?larger=true`
     : null;
+}
+
+export function getCompanyBackupFaviconUrl(company: string, jobUrl?: string | null): string | null {
+  const domain = getCompanyDomain(company, jobUrl);
+  return domain
+    ? `https://www.google.com/s2/favicons?domain=${encodeURIComponent(domain)}&sz=128`
+    : null;
+}
+
+export function isMonochromeLogoUrl(url: string | null | undefined): boolean {
+  if (!url) return false;
+  return /iconify\.design\/simple-icons/i.test(url)
+    || /cdn\.jsdelivr\.net\/npm\/simple-icons/i.test(url)
+    || /\/logos\/imported\/[^?]+\.svg(?:$|\?)/i.test(url);
+}
+
+// Jobs UI must not use live Simple Icons as the primary src. Those SVGs are
+// monochrome, and Iconify 404/rate-limit then flips the same card to a color
+// favicon, so the list appears to switch between HD color and black-and-white.
+export function resolveDisplayLogoUrls(
+  company: string,
+  jobUrl?: string | null,
+  storedLogo?: string | null,
+): { logo_url: string | null; logo_fallback_url: string | null } {
+  const stored = storedLogo?.trim() || null;
+  const siteFavicon = getCompanyFaviconUrl(company, jobUrl);
+  const backupFavicon = getCompanyBackupFaviconUrl(company, jobUrl);
+  if (stored && !isMonochromeLogoUrl(stored)) {
+    return {
+      logo_url: stored,
+      logo_fallback_url: siteFavicon || backupFavicon,
+    };
+  }
+  return {
+    logo_url: siteFavicon,
+    logo_fallback_url: backupFavicon,
+  };
 }

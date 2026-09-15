@@ -5,7 +5,7 @@ import { getSupabaseClient } from '@/storage/database/supabase-client';
 import { ADMIN_PERMISSIONS, requireAdminPermission } from '@/lib/admin-permissions';
 
 export async function GET(request: NextRequest) {
-  const permissionError = requireAdminPermission(request, ADMIN_PERMISSIONS.feedbackRead);
+  const permissionError = await requireAdminPermission(request, ADMIN_PERMISSIONS.feedbackRead);
   if (permissionError) return permissionError;
 
   const client = getSupabaseClient();

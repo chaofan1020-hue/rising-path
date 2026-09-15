@@ -318,7 +318,11 @@ export async function runJobFeedSync(options: {
       }
     } else {
       cursor = state.cursor || undefined;
-      if (!cursor && state.last_incremental_success_at) {
+      // Company-filtered upstream feeds may not implement the global `since`
+      // contract consistently (McKinsey is one such source). Start from the
+      // isolated company cursor instead of turning an empty filtered page
+      // into a false successful sync.
+      if (!options.companyId && !cursor && state.last_incremental_success_at) {
         const overlapMinutes = Math.min(Math.max(Number(process.env.JOBS_FEED_OVERLAP_MINUTES) || 10, 1), 1440);
         since = subtractMinutes(state.last_incremental_success_at, overlapMinutes);
       }

@@ -1,7 +1,7 @@
 import { config as loadDotenv } from 'dotenv';
 import { abortStaleJobFeedReconcile, getJobFeedState } from '@/lib/job-feed-orchestrator';
 
-loadDotenv({ path: '.env.local' });
+loadDotenv({ path: process.env.DOTENV_CONFIG_PATH || '.env.local' });
 
 async function main() {
   const aborted = await abortStaleJobFeedReconcile();

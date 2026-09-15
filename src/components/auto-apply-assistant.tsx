@@ -122,7 +122,7 @@ export function AutoApplyAssistant({ context }: { context: AutoApplyContext }) {
     setCopying(true);
     setCopied(false);
     try {
-      const response = await apiFetch('/api/application-profile');
+      const response = await apiFetch(`/api/application-profile${context.resumeId ? `?resumeId=${encodeURIComponent(String(context.resumeId))}` : ''}`);
       const data = await response.json();
       if (!response.ok) throw new Error(data.error || t('autoApply.copyFailed'));
       await navigator.clipboard.writeText(profileToText(data.profile, context, t));

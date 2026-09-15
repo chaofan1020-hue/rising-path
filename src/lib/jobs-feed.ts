@@ -32,6 +32,7 @@ export interface JobsFeedItem {
   description?: string | null;
   source_url?: string | null;
   source_system?: string | null;
+  source_type?: string | null;
   location?: unknown;
   country?: unknown;
   offices?: unknown;
@@ -134,27 +135,157 @@ function text(value: unknown): string {
   return typeof value === 'string' ? value.trim() : value == null ? '' : String(value).trim();
 }
 
+const POSTED_MONTHS: Record<string, number> = {
+  jan: 1, january: 1,
+  feb: 2, february: 2,
+  mar: 3, march: 3,
+  apr: 4, april: 4,
+  may: 5,
+  jun: 6, june: 6,
+  jul: 7, july: 7,
+  aug: 8, august: 8,
+  sep: 9, sept: 9, september: 9,
+  oct: 10, october: 10,
+  nov: 11, november: 11,
+  dec: 12, december: 12,
+};
+const POSTED_MONTH_PATTERN = Object.keys(POSTED_MONTHS).join('|');
+const POSTED_FUTURE_SLACK_MS = 2 * 24 * 60 * 60 * 1000;
+const POSTED_MAX_AGE_MS = 15 * 365 * 24 * 60 * 60 * 1000;
+
+function postedDateOnlyIso(year: number, month: number, day: number): string | null {
+  const timestamp = Date.UTC(year, month - 1, day);
+  const date = new Date(timestamp);
+  if (date.getUTCFullYear() !== year || date.getUTCMonth() !== month - 1 || date.getUTCDate() !== day) return null;
+  return date.toISOString();
+}
+
+function isPlausiblePostedAt(date: Date, now: number): string | null {
+  const timestamp = date.getTime();
+  if (!Number.isFinite(timestamp)) return null;
+  const year = date.getUTCFullYear();
+  if (year < 2010 || year > 2100) return null;
+  if (timestamp > now + POSTED_FUTURE_SLACK_MS) return null;
+  if (timestamp < now - POSTED_MAX_AGE_MS) return null;
+  return date.toISOString();
+}
+
+function parseUnixPostedAt(value: number, now: number): string | null {
+  if (!Number.isFinite(value) || value <= 0) return null;
+  let millis = value;
+  if (value >= 1e16) millis = Math.floor(value / 1_000);
+  else if (value < 1e11) millis = value * 1_000;
+  return isPlausiblePostedAt(new Date(millis), now);
+}
+
+function normalizePostedDateString(raw: string): string {
+  return raw
+    .replace(/^(\d{4})-(\d{1,2})-(\d{1,2})/, (_, year: string, month: string, day: string) => `${year}-${month.padStart(2, '0')}-${day.padStart(2, '0')}`)
+    .replace(/(\d{2}:\d{2}:\d{2}(?:\.\d+)?)([+-])(\d{2})(\d{2})$/, '$1$2$3:$4')
+    .replace(/\s+/g, ' ')
+    .trim();
+}
+
 /**
- * Parse ATS-style relative posting labels into an absolute ISO timestamp.
- * Accepts "Posted Today", "Posted 3 Days Ago", "Posted 30+ Days Ago",
- * "Posted Yesterday" and ISO/date strings. Returns null when the value is
- * not a recognizable posting date.
+ * Parse an official listing/posted date into an absolute ISO timestamp.
+ * Accepts ISO dates, month-name dates ("August 17, 2026"), unix seconds or
+ * milliseconds, ATS relative labels ("Posted Today"), and unambiguous numeric
+ * dates. Future values that look like deadlines, and dates older than 15 years,
+ * are rejected so collector first-seen time is never used as a substitute.
  */
 export function parseFeedPostedAt(value: unknown, now = Date.now()): string | null {
+  if (typeof value === 'number') return parseUnixPostedAt(value, now);
   const raw = text(value).replace(/\s+/g, ' ').trim();
   if (!raw) return null;
-  if (/^\d{4}-\d{2}-\d{2}/.test(raw)) {
-    const parsed = new Date(raw);
-    return Number.isNaN(parsed.getTime()) ? null : parsed.toISOString();
+  if (/^-?\d+(\.\d+)?$/.test(raw)) {
+    const numeric = Number(raw);
+    if (Number.isFinite(numeric) && numeric >= 1e9) return parseUnixPostedAt(numeric, now);
   }
-  const normalized = raw.toLowerCase().replace(/posted\s*/i, '');
-  if (/(^|\s)today(\s|$)/.test(normalized)) return new Date(now).toISOString();
-  if (/(^|\s)yesterday(\s|$)/.test(normalized)) return new Date(now - 24 * 60 * 60 * 1000).toISOString();
-  const daysMatch = normalized.match(/(\d+)\s*\+?\s*days?\s+ago/);
+
+  const normalized = normalizePostedDateString(raw);
+  if (/^\d{4}-\d{2}-\d{2}/.test(normalized)) {
+    const parsed = new Date(normalized);
+    return Number.isNaN(parsed.getTime()) ? null : isPlausiblePostedAt(parsed, now);
+  }
+
+  const ymd = /^(\d{4})[/.](\d{1,2})[/.](\d{1,2})$/.exec(normalized);
+  if (ymd) {
+    const iso = postedDateOnlyIso(Number(ymd[1]), Number(ymd[2]), Number(ymd[3]));
+    return iso ? isPlausiblePostedAt(new Date(iso), now) : null;
+  }
+
+  const chinese = /^(\d{4})年(\d{1,2})月(\d{1,2})日?$/.exec(normalized);
+  if (chinese) {
+    const iso = postedDateOnlyIso(Number(chinese[1]), Number(chinese[2]), Number(chinese[3]));
+    return iso ? isPlausiblePostedAt(new Date(iso), now) : null;
+  }
+
+  const relative = normalized.toLowerCase().replace(/^posted\s+/i, '');
+  if (/(^|\s)today(\s|$)/.test(relative)) return isPlausiblePostedAt(new Date(now), now);
+  if (/(^|\s)yesterday(\s|$)/.test(relative)) return isPlausiblePostedAt(new Date(now - 24 * 60 * 60 * 1000), now);
+  const daysMatch = relative.match(/(\d+)\s*\+?\s*days?\s+ago/);
   if (daysMatch) {
     const days = Math.min(Math.max(Number(daysMatch[1]), 1), 3650);
-    return new Date(now - days * 24 * 60 * 60 * 1000).toISOString();
+    return isPlausiblePostedAt(new Date(now - days * 24 * 60 * 60 * 1000), now);
   }
+  const monthsMatch = relative.match(/(?:more than|over)\s+(\d+)\s+months?\s+ago/);
+  if (monthsMatch) {
+    const months = Math.min(Math.max(Number(monthsMatch[1]), 1), 120);
+    return isPlausiblePostedAt(new Date(now - months * 30 * 24 * 60 * 60 * 1000), now);
+  }
+  if (/(?:more than|over)\s+(?:a|1)\s+month\s+ago/.test(relative)) {
+    return isPlausiblePostedAt(new Date(now - 30 * 24 * 60 * 60 * 1000), now);
+  }
+  const wholeMonths = relative.match(/(\d+)\s+months?\s+ago/);
+  if (wholeMonths) {
+    const months = Math.min(Math.max(Number(wholeMonths[1]), 1), 120);
+    return isPlausiblePostedAt(new Date(now - months * 30 * 24 * 60 * 60 * 1000), now);
+  }
+  if (/^(?:mon|tue|wed|thu|fri|sat|sun),/i.test(normalized)) {
+    const parsed = new Date(normalized);
+    return Number.isNaN(parsed.getTime()) ? null : isPlausiblePostedAt(parsed, now);
+  }
+
+  const monthFirst = new RegExp(
+    `^(${POSTED_MONTH_PATTERN})\\s+(\\d{1,2})(?:st|nd|rd|th)?(?:,)?\\s+(20\\d{2})$`,
+    'i',
+  ).exec(normalized);
+  if (monthFirst) {
+    const iso = postedDateOnlyIso(
+      Number(monthFirst[3]),
+      POSTED_MONTHS[monthFirst[1].toLowerCase()],
+      Number(monthFirst[2]),
+    );
+    return iso ? isPlausiblePostedAt(new Date(iso), now) : null;
+  }
+  const dayFirst = new RegExp(
+    `^(\\d{1,2})(?:st|nd|rd|th)?\\s+(${POSTED_MONTH_PATTERN})(?:,)?\\s+(20\\d{2})$`,
+    'i',
+  ).exec(normalized);
+  if (dayFirst) {
+    const iso = postedDateOnlyIso(
+      Number(dayFirst[3]),
+      POSTED_MONTHS[dayFirst[2].toLowerCase()],
+      Number(dayFirst[1]),
+    );
+    return iso ? isPlausiblePostedAt(new Date(iso), now) : null;
+  }
+
+  const numericDate = /^(\d{1,2})[/.](\d{1,2})[/.](20\d{2})$/.exec(normalized);
+  if (numericDate) {
+    const left = Number(numericDate[1]);
+    const right = Number(numericDate[2]);
+    const year = Number(numericDate[3]);
+    if (left > 12 && right >= 1 && right <= 12) {
+      const iso = postedDateOnlyIso(year, right, left);
+      return iso ? isPlausiblePostedAt(new Date(iso), now) : null;
+    }
+    if (right > 12 && left >= 1 && left <= 12) {
+      const iso = postedDateOnlyIso(year, left, right);
+      return iso ? isPlausiblePostedAt(new Date(iso), now) : null;
+    }
+  }
+
   return null;
 }
 
@@ -422,8 +553,8 @@ export function normalizeFeedItem(item: JobsFeedItem): JobSyncRecord | null {
     || sourceForField(item, 'location')
     || sourceForField(item, 'offices')
     || sourceForField(item, 'country');
-  const feedSourceType = text(item.source_evidence?.source_type).toLowerCase();
-  const officialFeedPayload = /(?:official[_ -]?ats|oracle[_ -]?hcm|greenhouse|lever|ashby|workday|smartrecruiters|icims|taleo|successfactors)/i.test(feedSourceType);
+  const feedSourceType = text(item.source_evidence?.source_type || item.source_type).toLowerCase();
+  const officialFeedPayload = /(?:official[_ -]?ats|oracle[_ -]?hcm|greenhouse|lever|ashby|workday|smartrecruiters|icims|taleo|successfactors|mckinsey|amazon|apple)/i.test(feedSourceType);
   // Talent Gateway list payloads used by Morgan Stanley expose a canonical
   // location but omit the individual source tag. Restrict this fallback to
   // the configured official ATS host; no generic third-party list is trusted.
@@ -488,6 +619,7 @@ export function normalizeFeedItem(item: JobsFeedItem): JobSyncRecord | null {
     external_job_id: text(item.external_job_id) || text(item.id) || null,
     valid_through: deadline?.value || null,
     posted_at: parseFeedPostedAt(item.date_posted),
+    feed_has_date_posted: Boolean(text(item.date_posted)),
     missing_from_feed_at: null,
     missing_feed_checks: 0,
     availability_status: health.availabilityStatus,

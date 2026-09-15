@@ -13,7 +13,7 @@ function positiveInteger(value: string | null, fallback: number, max: number): n
 }
 
 export async function GET(request: NextRequest) {
-  const permissionError = requireAdminPermission(request, ADMIN_PERMISSIONS.dashboardRead);
+  const permissionError = await requireAdminPermission(request, ADMIN_PERMISSIONS.jobsRead);
   if (permissionError) return permissionError;
 
   try {

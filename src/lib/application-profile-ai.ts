@@ -58,6 +58,16 @@ export async function runApplicationProfileAiFill(input: {
     .single();
   if (resumeError || !resume) throw new Error('简历不存在或无权访问');
 
+  const { data: userProfile } = await client
+    .from('profiles')
+    .select('active_resume_id')
+    .eq('id', userId)
+    .maybeSingle();
+  const activeResumeId = Number(userProfile?.active_resume_id);
+  if (Number.isInteger(activeResumeId) && activeResumeId > 0 && activeResumeId !== resumeId) {
+    throw new Error('该简历任务已过期，请重新生成当前简历档案');
+  }
+
   const built = buildProfileFromResume(
     resume.user_info as Parameters<typeof buildProfileFromResume>[0],
     resume.profile as Parameters<typeof buildProfileFromResume>[1],
@@ -91,7 +101,8 @@ export async function runApplicationProfileAiFill(input: {
       .maybeSingle();
     if (existingError) throw new Error(`读取求职档案失败: ${existingError.message}`);
 
-    const merged = existing
+    const sameResume = existing && Number(existing.resume_id) === resumeId;
+    const merged = sameResume
       ? mergeAiProfilePreservingManual(
         aiProfile,
         existing.profile as ApplicationProfile,

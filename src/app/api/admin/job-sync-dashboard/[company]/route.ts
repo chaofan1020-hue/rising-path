@@ -6,7 +6,7 @@ import { adminMigrationUnavailable } from '@/lib/admin-dependency-status';
 export const dynamic = 'force-dynamic';
 
 export async function GET(request: NextRequest, { params }: { params: Promise<{ company: string }> }) {
-  const permissionError = requireAdminPermission(request, ADMIN_PERMISSIONS.dashboardRead);
+  const permissionError = await requireAdminPermission(request, ADMIN_PERMISSIONS.jobsRead);
   if (permissionError) return permissionError;
   try {
     const { company: encodedCompany } = await params;

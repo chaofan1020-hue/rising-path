@@ -7,7 +7,7 @@ import { recordAdminAuditEvent, recordAdminAuditFailure } from '@/lib/admin-audi
 import { ADMIN_PERMISSIONS, requireAdminPermission } from '@/lib/admin-permissions';
 
 export async function GET(request: NextRequest, { params }: { params: Promise<{ id: string }> }) {
-  const permissionError = requireAdminPermission(request, ADMIN_PERMISSIONS.feedbackRead);
+  const permissionError = await requireAdminPermission(request, ADMIN_PERMISSIONS.feedbackRead);
   if (permissionError) return permissionError;
 
   const { id } = await params;
@@ -43,7 +43,7 @@ export async function GET(request: NextRequest, { params }: { params: Promise<{ 
 }
 
 export async function PATCH(request: NextRequest, { params }: { params: Promise<{ id: string }> }) {
-  const permissionError = requireAdminPermission(request, ADMIN_PERMISSIONS.feedbackReview);
+  const permissionError = await requireAdminPermission(request, ADMIN_PERMISSIONS.feedbackReview);
   if (permissionError) return permissionError;
 
   const { id } = await params;

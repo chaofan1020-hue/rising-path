@@ -35,7 +35,7 @@ const UPDATES: LedgerUpdate[] = [
     companyName: 'McKinsey & Company',
     patch: {
       status: 'discovery_required',
-      notes: '官方源受限：mckinsey.avature.net ApplicationMethods 全部 302 到登录页；www.mckinsey.com/careers/search-jobs 反爬超时。详情与结构化字段在登录后的申请页内，公开访问不可得。不写入、不改生命周期（2026-09-05 记录）。恢复条件：官方公开 API / 导出接口 / 正式 allowlist。',
+      notes: '主 Feed 已接入 McKinsey 官方 gateway JSON（source_type=mckinsey）：生产首轮同步 764 条、目标地区写入 144 条，地点证据 official_payload。Avature ApplicationMethods 详情页仍 302 到登录/申请壳，无法补充详情字段；历史详情队列继续保持 discovery_required，不写入申请壳、不改岗位生命周期（2026-09-09）。',
     },
   },
   {

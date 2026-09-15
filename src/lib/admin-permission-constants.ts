@@ -9,8 +9,11 @@ export const ADMIN_PERMISSIONS = {
   jobsRead: 'admin.jobs.read',
   jobsWrite: 'admin.jobs.write',
   usersRead: 'admin.users.read',
+  usersWrite: 'admin.users.write',
   usageExport: 'admin.usage.export',
   configWrite: 'admin.config.write',
+  billingRead: 'admin.billing.read',
+  billingWrite: 'admin.billing.write',
   auditRead: 'admin.audit.read',
   rolesWrite: 'admin.roles.write',
 } as const;

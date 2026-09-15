@@ -5,7 +5,7 @@ import { isJobDeadlineExpired, resolveJobDeadline } from '@/lib/job-deadline';
 import { parseExperience } from '@/lib/job-connectors/utils';
 import { nextLinkFailureCount, shouldCloseAfterLinkFailure, type JobAvailabilityStatus, type JobLinkHealth } from '@/lib/job-link-health';
 import { getSupabaseClient } from '@/storage/database/supabase-client';
-import { extractOfficialJobDetails, isJobContentShell } from '@/lib/job-official-detail';
+import { extractOfficialJobDetails, isJobContentShell, officialEvercoreDetailUrl } from '@/lib/job-official-detail';
 import { hasMatchingPhenomDetailPayload } from '@/lib/job-connectors/fetch';
 import { isRegisteredPhenomJobUrl } from '@/lib/job-connectors/company-profiles';
 
@@ -223,7 +223,7 @@ export async function maintainJobLifecycle(options: {
     await Promise.all(batch.map(async (job) => {
       result.links_checked += 1;
       try {
-        const page = await fetchSafeExternalPage(job.job_url);
+        const page = await fetchSafeExternalPage(officialEvercoreDetailUrl(job.job_url) || job.job_url);
         const officialDetails = extractOfficialJobDetails(page);
         if (looksLikeClosedJobPage(page.title, page.content)
           && !isRegisteredPhenomJobUrl(job.company, job.job_url)

@@ -15,7 +15,7 @@ import { creditResponse, assertCreditsAvailable } from '@/lib/credits';
 
 export async function GET(request: NextRequest) {
   try {
-    const isAdmin = hasValidAdminSession(request);
+    const isAdmin = await hasValidAdminSession(request);
     if (isAdmin) {
       return NextResponse.json({ error: '管理员请使用 /api/admin/resumes 获取脱敏分页数据' }, { status: 403 });
     }
@@ -96,6 +96,12 @@ export async function POST(request: NextRequest) {
         throw new Error(`创建简历记录失败: ${insertError?.message || '未返回简历记录'}`);
       }
       resumeData = data as { id: number } & Record<string, unknown>;
+      // A newly uploaded resume is the natural candidate for the next test
+      // run. The explicit selector can still be changed later from the UI.
+      await client
+        .from('profiles')
+        .update({ active_resume_id: resumeData.id, updated_at: new Date().toISOString() })
+        .eq('id', auth.user.id);
     } catch (error) {
       try {
         await deleteResumeFile(fileKey);

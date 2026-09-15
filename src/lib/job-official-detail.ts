@@ -19,6 +19,11 @@ export function isJobContentShell(value: unknown): boolean {
   if (typeof value !== 'string') return true;
   const normalized = value.trim();
   if (!normalized) return true;
+  // McKinsey/Avature redirects public job links to an application portal. The
+  // resulting HTML is HTTP 200 and contains a long login/upload flow, but no
+  // public job description or structured fields. Treat this as a shell so it
+  // can never be written back as official job content.
+  if (/choose how you'd like to proceed|i am a new applicant|login username|upload cv from google drive/i.test(normalized)) return true;
   if (!normalized.startsWith('{') || !normalized.endsWith('}')) return false;
   try {
     const parsed = JSON.parse(normalized) as Record<string, unknown>;
@@ -266,6 +271,31 @@ function jefferiesDetailsFromText(page: ExternalPageContent): OfficialJobDetails
   };
 }
 
+export function officialEvercoreDetailUrl(jobUrl: string | null | undefined): string | null {
+  if (!jobUrl) return null;
+  try {
+    const url = new URL(jobUrl);
+    if (url.hostname.toLowerCase() !== 'evercore.tal.net') return null;
+    const oppId = url.pathname.match(/\/opp\/(\d+)(?:[-/])/)?.[1];
+    if (!oppId) return null;
+    const barePath = url.pathname.replace(/\/opp\/\d+[^/]*/i, `/opp/${oppId}`);
+    return `${url.origin}${barePath}`;
+  } catch {
+    return null;
+  }
+}
+
+function evercoreLocationFromPage(content: string, visible: string): string | null {
+  const labeled = visible.match(/\bLocation\s*:?\s*([A-Z][A-Za-z0-9 .,'&/-]{1,80}?)(?=\s+(?:Region|Group|Job description|Job Description|Description|Apply|Share|$))/i)?.[1];
+  if (labeled) return labeled.replace(/\s+/g, ' ').trim();
+  const htmlLabeled = content.match(/<(?:span|div|dd|td)[^>]*(?:class|id)=['"][^'"]*\blocation\b[^'"]*['"][^>]*>\s*([^<]{1,80})/i)?.[1];
+  if (htmlLabeled) {
+    const value = jobHtmlToPlainText(htmlLabeled).replace(/\s+/g, ' ').trim();
+    if (value && !/^location$/i.test(value)) return value;
+  }
+  return null;
+}
+
 function evercoreDetailsFromText(page: ExternalPageContent): OfficialJobDetails | null {
   let hostname = '';
   try { hostname = new URL(page.url).hostname.toLowerCase(); } catch { return null; }
@@ -273,7 +303,7 @@ function evercoreDetailsFromText(page: ExternalPageContent): OfficialJobDetails 
   const visible = jobHtmlToPlainText(page.content).replace(/\s+/g, ' ').trim();
   if (visible.length < 160) return null;
 
-  const location = visible.match(/\bLocation\s+([A-Z][A-Za-z .,'-]{1,80}?)(?=\s+(?:Region|Group|Job description|Job Description|Description|Apply|Share))/)?.at(1) || null;
+  const location = evercoreLocationFromPage(page.content, visible);
   const descriptionStart = visible.search(/Job description/);
   const description = descriptionStart >= 0 ? visible.slice(descriptionStart) : visible;
   return {
@@ -417,8 +447,50 @@ function fromPosting(posting: Record<string, unknown>): OfficialJobDetails {
   };
 }
 
+function brassRingDetailsFromQuestions(page: ExternalPageContent): OfficialJobDetails | null {
+  let hostname = '';
+  try { hostname = new URL(page.url).hostname.toLowerCase(); } catch { return null; }
+  if (hostname !== 'jobs.ubs.com') return null;
+  const rawQuestions = page.metadata?.brassring_questions;
+  if (!Array.isArray(rawQuestions)) return null;
+  const questions = rawQuestions.filter((item): item is Record<string, unknown> => Boolean(item && typeof item === 'object' && !Array.isArray(item)));
+  const byZone = new Map<string, string>();
+  for (const question of questions) {
+    const zone = typeof question.VerityZone === 'string' ? question.VerityZone.trim().toLowerCase() : '';
+    const value = text(question.AnswerValue);
+    if (zone && value) byZone.set(zone, value);
+  }
+  const description = byZone.get('jobdescription') || null;
+  const title = byZone.get('jobtitle') || null;
+  const city = byZone.get('formtext2') || null;
+  const state = byZone.get('formtext23') || null;
+  const employmentType = byZone.get('formtext22') || null;
+  const requirements = byZone.get('formtext59') || null;
+  const team = byZone.get('formtext58') || null;
+  const fullDescription = [description, team].filter(Boolean).join('\n\n') || null;
+  if (!fullDescription || fullDescription.length < 80 || !title) return null;
+  return {
+    description: fullDescription,
+    responsibilities: description,
+    requirements,
+    experience: requirements,
+    location: [city, state].filter(Boolean).join(', ') || null,
+    validThrough: null,
+    postedAt: null,
+    salaryRange: null,
+    employmentType,
+    workplaceType: null,
+    source: 'official_structured_data',
+  };
+}
+
 /** Extract a public JobPosting payload without exposing ATS configuration JSON. */
 export function extractOfficialJobDetails(page: ExternalPageContent): OfficialJobDetails | null {
+  let hostname = '';
+  try { hostname = new URL(page.url).hostname.toLowerCase(); } catch { /* keep generic parsing */ }
+  if ((hostname === 'jobs.mckinsey.com' || hostname === 'mckinsey.avature.net') && isJobContentShell(page.content)) return null;
+  const brassRing = brassRingDetailsFromQuestions(page);
+  if (brassRing) return brassRing;
   // Bain and Two Sigma render their full job ad server-side; the thin
   // JobPosting JSON-LD on those pages carries no description, so their
   // dedicated text parsers run first and own the extraction.

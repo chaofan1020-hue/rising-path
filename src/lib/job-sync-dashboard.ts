@@ -268,25 +268,29 @@ export async function recoverStaleJobSyncRuns(
 ): Promise<number> {
   const cutoff = new Date(now.getTime() - staleAfterMs).toISOString();
   const completedAt = now.toISOString();
+  const patch = {
+    status: 'failed',
+    current_stage: 'finished',
+    completed_at: completedAt,
+    last_heartbeat_at: completedAt,
+    error_message: '同步进程心跳超时，已自动收口；游标和岗位数据未修改',
+    stop_reason: 'worker_heartbeat_timeout',
+  };
   try {
-    const { data, error } = await client
-      .from('job_sync_runs')
-      .update({
-        status: 'failed',
-        current_stage: 'finished',
-        completed_at: completedAt,
-        last_heartbeat_at: completedAt,
-        error_message: '同步进程心跳超时，已自动收口；游标和岗位数据未修改',
-        stop_reason: 'worker_heartbeat_timeout',
-      })
-      .eq('status', 'running')
-      .lt('last_heartbeat_at', cutoff)
-      .select('id');
-    if (error) {
-      console.error('[Job Sync Dashboard] stale run recovery failed:', error.message);
-      return 0;
+    // A missing heartbeat is stale too. `.lt(last_heartbeat_at)` does not match
+    // SQL NULL, which left abandoned official-detail rows "running" forever.
+    const [withHeartbeat, withoutHeartbeat] = await Promise.all([
+      client.from('job_sync_runs').update(patch).eq('status', 'running').lt('last_heartbeat_at', cutoff).select('id'),
+      client.from('job_sync_runs').update(patch).eq('status', 'running').is('last_heartbeat_at', null).lt('started_at', cutoff).select('id'),
+    ]);
+    if (withHeartbeat.error) {
+      console.error('[Job Sync Dashboard] stale run recovery failed:', withHeartbeat.error.message);
     }
-    return data?.length || 0;
+    if (withoutHeartbeat.error) {
+      console.error('[Job Sync Dashboard] stale run recovery failed:', withoutHeartbeat.error.message);
+    }
+    if (withHeartbeat.error && withoutHeartbeat.error) return 0;
+    return (withHeartbeat.data?.length || 0) + (withoutHeartbeat.data?.length || 0);
   } catch (error) {
     console.error('[Job Sync Dashboard] stale run recovery failed:', error);
     return 0;

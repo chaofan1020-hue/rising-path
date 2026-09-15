@@ -99,6 +99,7 @@ export function parsePhenomJob(rawValue: unknown, options: ConnectorParseOptions
     compensation: salary,
     valid_through: deadline,
     application_deadline: deadline,
+    date_posted: firstText(raw, ['postedDate', 'datePosted', 'date_posted']),
     status: /closed|archived|expired/i.test(text(raw.status)) ? 'closed' : 'open',
     sync_action: /closed|archived|expired/i.test(text(raw.status)) ? 'close' : 'upsert',
     source_evidence: fields,

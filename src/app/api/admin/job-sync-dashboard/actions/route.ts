@@ -26,7 +26,7 @@ function boundedPages(value: unknown): number {
 }
 
 export async function POST(request: NextRequest) {
-  const permissionError = requireAdminPermission(request, ADMIN_PERMISSIONS.jobSyncWrite);
+  const permissionError = await requireAdminPermission(request, ADMIN_PERMISSIONS.jobSyncWrite);
   if (permissionError) return permissionError;
 
   let body: { action?: unknown; company?: unknown; maxPages?: unknown; ids?: unknown; sourceSystem?: unknown };

@@ -10,6 +10,7 @@ import { recoverStaleJobSyncRuns } from '@/lib/job-sync-dashboard';
 const DEFAULT_SYNC_INTERVAL_MINUTES = 10;
 const DEFAULT_OFFICIAL_DETAILS_INTERVAL_MINUTES = 2;
 const DEFAULT_START_DELAY_SECONDS = 15;
+const MAX_INCREMENTAL_CATCHUP_CYCLES = 8;
 
 let started = false;
 let running = false;
@@ -41,29 +42,46 @@ async function runCycle(): Promise<void> {
   try {
     if (feedConfigured()) {
       // Incremental updates are the freshness path. Always run them first so a
-      // long reconciliation can never starve newly changed jobs.
-      const incremental = await runJobFeedSync({
-        mode: 'incremental',
-        maxPages: getIncrementalSyncPolicy().maxPages,
-      });
-      console.info('[Job Worker] incremental sync completed', {
-        pages: incremental.pages,
-        completed: incremental.completed,
-        received: incremental.received,
-        upserted: incremental.upserted,
-        closed: incremental.closed,
-        skipped: incremental.skipped,
-        skipped_by_reason: incremental.skipped_by_reason,
-        failed: incremental.failed,
-        row_failures: incremental.row_failures,
-        fatal_failures: incremental.fatal_failures,
-        write_batches: incremental.write_batches,
-        write_batch_failures: incremental.write_batch_failures,
-        write_fallback_rows: incremental.write_fallback_rows,
-        write_duration_ms: incremental.write_duration_ms,
-        duration_ms: incremental.duration_ms,
-        stop_reason: incremental.stop_reason,
-      });
+      // long reconciliation can never starve newly changed jobs. A page/time
+      // budget stop is not a failure; continue immediately instead of waiting
+      // for the next 10-minute interval while a large Amazon/Apple dump is still
+      // sitting on the feed cursor.
+      for (let catchUpCycle = 0; catchUpCycle <= MAX_INCREMENTAL_CATCHUP_CYCLES; catchUpCycle += 1) {
+        const incremental = await runJobFeedSync({
+          mode: 'incremental',
+          maxPages: getIncrementalSyncPolicy().maxPages,
+        });
+        console.info('[Job Worker] incremental sync completed', {
+          pages: incremental.pages,
+          completed: incremental.completed,
+          received: incremental.received,
+          upserted: incremental.upserted,
+          closed: incremental.closed,
+          skipped: incremental.skipped,
+          skipped_by_reason: incremental.skipped_by_reason,
+          failed: incremental.failed,
+          row_failures: incremental.row_failures,
+          fatal_failures: incremental.fatal_failures,
+          write_batches: incremental.write_batches,
+          write_batch_failures: incremental.write_batch_failures,
+          write_fallback_rows: incremental.write_fallback_rows,
+          write_duration_ms: incremental.write_duration_ms,
+          duration_ms: incremental.duration_ms,
+          stop_reason: incremental.stop_reason,
+          catch_up_cycle: catchUpCycle,
+        });
+        const catchingUp = !incremental.completed
+          && (incremental.stop_reason === 'page_budget' || incremental.stop_reason === 'time_budget');
+        if (!catchingUp) break;
+        if (catchUpCycle === MAX_INCREMENTAL_CATCHUP_CYCLES) {
+          console.info('[Job Worker] incremental catch-up deferred to next interval', {
+            stop_reason: incremental.stop_reason,
+            has_more: incremental.has_more,
+          });
+          break;
+        }
+        console.info('[Job Worker] incremental still has more; continuing catch-up immediately');
+      }
 
       // Full reconciliation is an explicit recovery operation. The upstream
       // feed emits close events, so a recurring full scan adds load without

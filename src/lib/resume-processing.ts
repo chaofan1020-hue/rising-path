@@ -156,16 +156,9 @@ export async function processResume(input: ProcessResumeInput): Promise<{
     const region = nextSegmentation.regions[0]
       ?? resolveRegionKey(parsed.profile.intention?.locations?.[0])
       ?? null;
-    const planRefinement = await refineCareerPlan({
-      userId: input.userId,
-      profile: parsed.profile,
-      segmentation: nextSegmentation,
-      region,
-    });
     const profile = {
       ...parsed.profile,
       schemaVersion: RESUME_PROFILE_SCHEMA_VERSION,
-      ...(planRefinement ? { planRefinement } : {}),
     };
 
     await updateProcessingState(client, input.resumeId, input.userId, {
@@ -218,6 +211,47 @@ export async function processResume(input: ProcessResumeInput): Promise<{
       .eq('id', input.resumeId)
       .eq('user_id', input.userId);
     if (updateError) throw new Error(`保存简历画像失败: ${updateError.message}`);
+
+    // Career-plan copy is optional cockpit flavor. Waiting for it here used to
+    // keep the resume stuck in extracting_* so the cockpit looked frozen after
+    // upload. Confirm the profile first; refine in the background.
+    void refineCareerPlan({
+      userId: input.userId,
+      profile,
+      segmentation: nextSegmentation,
+      region,
+    }).then(async (planRefinement) => {
+      if (!planRefinement) return;
+      const { data: latestResume, error: latestResumeError } = await client
+        .from('resumes')
+        .select('profile, profile_version')
+        .eq('id', input.resumeId)
+        .eq('user_id', input.userId)
+        .maybeSingle();
+      if (latestResumeError) throw latestResumeError;
+      if (Number(latestResume?.profile_version || 0) !== version) return;
+      const currentProfile = isRecord(latestResume?.profile) ? latestResume.profile : profile;
+      const refinedProfile = { ...currentProfile, planRefinement };
+      const [{ error: resumePlanError }, { error: versionPlanError }] = await Promise.all([
+        client
+          .from('resumes')
+          .update({ profile: refinedProfile, updated_at: new Date().toISOString() })
+          .eq('id', input.resumeId)
+          .eq('user_id', input.userId)
+          .eq('profile_version', version),
+        client
+          .from('resume_profile_versions')
+          .update({ profile: refinedProfile })
+          .eq('resume_id', input.resumeId)
+          .eq('user_id', input.userId)
+          .eq('version', version),
+      ]);
+      if (resumePlanError || versionPlanError) {
+        throw new Error(resumePlanError?.message || versionPlanError?.message || '更新驾驶舱规划失败');
+      }
+    }).catch((error: unknown) => {
+      console.error('[Resume] background career plan refinement failed:', error);
+    });
 
     return { parsed, version };
   } catch (error) {

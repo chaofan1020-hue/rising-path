@@ -23,6 +23,10 @@ import {
 } from "lucide-react";
 import { startAmbience, stopAmbience } from "@/lib/interview-audio";
 import PageBackButton from "@/components/page-back-button";
+import { readActiveResumeId, writeActiveResumeId } from "@/lib/active-resume";
+import { pickEligibleResumeId } from "@/lib/resume-availability";
+import { useResumeAvailability } from "@/hooks/use-resume-availability";
+import { ResumeAvailabilityHint } from "@/components/resume-availability-hint";
 
 // 通用下拉选择器（与 jobs 页一致的 Popover 交互，避免原生 select 交互问题）
 function OptionSelect({
@@ -183,6 +187,11 @@ interface JobItem {
   id: number;
   title: string;
   company: string;
+  region?: string;
+}
+
+interface FavoriteJobItem extends JobItem {
+  created_at?: string;
 }
 
 const sleep = (ms: number) => new Promise<void>((resolve) => setTimeout(resolve, ms));
@@ -331,6 +340,37 @@ function gradeDot(grade: string): string {
 
 let companyCatalogPromise: Promise<string[]> | null = null;
 const pickerJobsCache = new Map<string, JobItem[]>();
+const COMPANY_CATALOG_STORAGE_KEY = "liorvix:mock-interview:company-catalog:v1";
+const COMPANY_CATALOG_STORAGE_TTL_MS = 10 * 60 * 1000;
+
+function readCachedCompanyCatalog(): string[] | null {
+  if (typeof window === "undefined") return null;
+  try {
+    const raw = window.localStorage.getItem(COMPANY_CATALOG_STORAGE_KEY);
+    if (!raw) return null;
+    const parsed = JSON.parse(raw) as { companies?: unknown; expiresAt?: unknown };
+    if (!Array.isArray(parsed.companies) || typeof parsed.expiresAt !== "number" || parsed.expiresAt <= Date.now()) {
+      window.localStorage.removeItem(COMPANY_CATALOG_STORAGE_KEY);
+      return null;
+    }
+    const companies = parsed.companies.filter((company): company is string => typeof company === "string" && company.trim().length > 0);
+    return companies.length > 0 ? companies : null;
+  } catch {
+    return null;
+  }
+}
+
+function writeCachedCompanyCatalog(companies: string[]) {
+  if (typeof window === "undefined" || companies.length === 0) return;
+  try {
+    window.localStorage.setItem(COMPANY_CATALOG_STORAGE_KEY, JSON.stringify({
+      companies,
+      expiresAt: Date.now() + COMPANY_CATALOG_STORAGE_TTL_MS,
+    }));
+  } catch {
+    // Storage may be disabled or full; the in-memory/API cache still works.
+  }
+}
 
 function isSubstantiveTranscript(value: string): boolean {
   const text = value.replace(/\s+/g, "").trim();
@@ -440,12 +480,16 @@ function MockInterviewContent() {
 
   // 设置项
   const [companies, setCompanies] = useState<string[]>([]);
+  const [companiesLoading, setCompaniesLoading] = useState(true);
   const [selectedCompany, setSelectedCompany] = useState("");
   const [jobs, setJobs] = useState<JobItem[]>([]);
   const [jobsLoading, setJobsLoading] = useState(false);
   const jobsByCompanyRef = useRef(new Map<string, JobItem[]>());
+  const [favoriteJobs, setFavoriteJobs] = useState<FavoriteJobItem[]>([]);
+  const [favoritesLoading, setFavoritesLoading] = useState(false);
   const [selectedJobId, setSelectedJobId] = useState<number | null>(null);
-  const [resumes, setResumes] = useState<ResumeItem[]>([]);
+  const { loading: resumesLoading, error: resumesError, availability, reload: reloadResumes } = useResumeAvailability<ResumeItem>();
+  const resumes = availability.eligible;
   const [selectedResumeId, setSelectedResumeId] = useState<number | null>(null);
 
   // 企业面试基因预览（设置页）
@@ -506,6 +550,13 @@ function MockInterviewContent() {
   // 视频/语音状态
   const [cameraOn, setCameraOn] = useState(false);
   const [micError, setMicError] = useState(false);
+  // A microphone is an enhancement, not a prerequisite. When it is missing
+  // or blocked, the interview remains usable through typed answers.
+  const [audioInputUnavailable, setAudioInputUnavailable] = useState(false);
+  const [textModeConfirmed, setTextModeConfirmed] = useState(false);
+  const [audioFallbackPromptOpen, setAudioFallbackPromptOpen] = useState(false);
+  const [retryingMicrophone, setRetryingMicrophone] = useState(false);
+  const [typedAnswer, setTypedAnswer] = useState("");
   // 免提模式：麦克风常开 + VAD 语音活动检测
   const [listening, setListening] = useState(false);
   const [setupOpen, setSetupOpen] = useState(true);
@@ -527,6 +578,7 @@ function MockInterviewContent() {
   const [recognizing, setRecognizing] = useState(false);
   const [submittingAnswer, setSubmittingAnswer] = useState(false);
   const [noSpeech, setNoSpeech] = useState(false);
+  const [asrNotice, setAsrNotice] = useState<string | null>(null);
   const [liveTranscript, setLiveTranscript] = useState("");
   const [pendingTranscript, setPendingTranscript] = useState("");
   const [answerRetryRequired, setAnswerRetryRequired] = useState(false);
@@ -597,6 +649,7 @@ function MockInterviewContent() {
   const realtimeAsrCommandRef = useRef<(payload: Record<string, unknown>) => void>(() => {});
   const manualAsrFinalizeTimerRef = useRef<number | null>(null);
   const manualAsrFinalizingRef = useRef(false);
+  const asrNoticeTimerRef = useRef<number | null>(null);
   const ttsNextTimeRef = useRef(0);
   const activeTTSStopRef = useRef<(() => void) | null>(null);
   const ttsSourcesRef = useRef<Set<AudioBufferSourceNode>>(new Set());
@@ -649,6 +702,15 @@ function MockInterviewContent() {
     && !recognizingRef.current
     && !answerSubmittingRef.current
     && !handoffRef.current;
+
+  const showAsrNotice = (message: string) => {
+    if (asrNoticeTimerRef.current) window.clearTimeout(asrNoticeTimerRef.current);
+    setAsrNotice(message);
+    asrNoticeTimerRef.current = window.setTimeout(() => {
+      asrNoticeTimerRef.current = null;
+      setAsrNotice(null);
+    }, 6_000);
+  };
 
   const debugInterviewEvent = useCallback((event: string, payload: Record<string, unknown> = {}) => {
     if (typeof window === "undefined") return;
@@ -784,34 +846,64 @@ function MockInterviewContent() {
     summaryAbortRef.current?.abort();
   }, []);
 
+  // 收藏岗位属于当前用户，和公开公司目录并行加载，避免打开设置弹窗时再等待一次请求。
+  useEffect(() => {
+    let cancelled = false;
+    setFavoritesLoading(true);
+    apiFetch("/api/interview/favorites")
+      .then((response) => (response.ok ? response.json() : null))
+      .then((data) => {
+        if (cancelled) return;
+        const next = Array.isArray(data?.favorites) ? data.favorites : [];
+        setFavoriteJobs(next);
+        if (next.length > 0) {
+          setCompanies((current) => Array.from(new Set([
+            ...current,
+            ...next.map((job: FavoriteJobItem) => job.company).filter(Boolean),
+          ])));
+        }
+      })
+      .catch(() => {
+        if (!cancelled) setFavoriteJobs([]);
+      })
+      .finally(() => {
+        if (!cancelled) setFavoritesLoading(false);
+      });
+    return () => { cancelled = true; };
+  }, []);
+
   // 加载公司列表
   useEffect(() => {
-    const controller = new AbortController();
-    companyCatalogPromise ||= fetch("/api/interview/jobs", { signal: controller.signal })
+    const cachedCompanies = readCachedCompanyCatalog();
+    if (cachedCompanies) {
+      setCompanies(cachedCompanies);
+      setCompaniesLoading(false);
+    }
+    let cancelled = false;
+    companyCatalogPromise ||= fetch("/api/interview/jobs")
       .then((r) => (r.ok ? r.json() : null))
       .then((d) => d?.companies || []);
     companyCatalogPromise
-      .then((catalog) => { if (!controller.signal.aborted) setCompanies(catalog); })
+      .then((catalog) => {
+        if (cancelled) return;
+        setCompanies((current) => Array.from(new Set([...catalog, ...current])));
+        setCompaniesLoading(false);
+        writeCachedCompanyCatalog(catalog);
+      })
       .catch((error) => {
-        if (error instanceof DOMException && error.name === "AbortError") return;
         companyCatalogPromise = null;
+        if (!cancelled) setCompaniesLoading(false);
     });
-    return () => controller.abort();
+    return () => { cancelled = true; };
   }, []);
 
-  // 加载简历列表
   useEffect(() => {
-    apiFetch("/api/resume")
-      .then((r) => (r.ok ? r.json() : null))
-      .then((d) => {
-        if (d) {
-          setResumes((d.resumes || []).filter((resume: ResumeItem) =>
-            resume.processing_status === "ready" && resume.segmentation_confirmed === true,
-          ));
-        }
-      })
-      .catch((e) => console.error("[mock-interview] fetch resumes error:", e));
-  }, []);
+    if (resumesLoading) return;
+    const stored = readActiveResumeId();
+    const next = pickEligibleResumeId(resumes, stored);
+    setSelectedResumeId(next);
+    if (next) writeActiveResumeId(next);
+  }, [resumes, resumesLoading]);
 
   // 公司变化时加载岗位
   useEffect(() => {
@@ -823,7 +915,9 @@ function MockInterviewContent() {
     }
     const cachedJobs = jobsByCompanyRef.current.get(selectedCompany) || pickerJobsCache.get(selectedCompany);
     if (cachedJobs) {
-      setJobs(cachedJobs);
+      const starred = favoriteJobs.filter((job) => job.company === selectedCompany);
+      const merged = [...starred, ...cachedJobs].filter((job, index, all) => all.findIndex((item) => item.id === job.id) === index);
+      setJobs(merged);
       setSelectedJobId(null);
       setJobsLoading(false);
       return;
@@ -839,7 +933,8 @@ function MockInterviewContent() {
           const nextJobs = d.jobs || [];
           jobsByCompanyRef.current.set(companyAtRequest, nextJobs);
           pickerJobsCache.set(companyAtRequest, nextJobs);
-          setJobs(nextJobs);
+          const starred = favoriteJobs.filter((job) => job.company === companyAtRequest);
+          setJobs([...starred, ...nextJobs].filter((job, index, all) => all.findIndex((item) => item.id === job.id) === index));
         }
       })
       .catch((error) => {
@@ -850,7 +945,7 @@ function MockInterviewContent() {
       });
     setSelectedJobId(null);
     return () => controller.abort();
-  }, [selectedCompany]);
+  }, [selectedCompany, favoriteJobs]);
 
   const scrollToBottom = () => {
     messagesEndRef.current?.scrollIntoView({ behavior: "smooth" });
@@ -1604,9 +1699,16 @@ function MockInterviewContent() {
               };
             }
             if (data.type === "error" || data.error) {
-              streamError = new Error(typeof data.error === "string" ? data.error : "interview stream failed");
+              streamError = Object.assign(
+                new Error(typeof data.error === "string" ? data.error : "interview stream failed"),
+                {
+                  code: typeof data.code === "string" ? data.code : undefined,
+                  retryable: data.retryable !== false,
+                },
+              );
               debugInterviewEvent("chat.stream_error", {
                 requestId: streamMessageId,
+                code: typeof data.code === "string" ? data.code : null,
                 message: streamError.message.slice(0, 180),
               });
               continue;
@@ -1680,7 +1782,9 @@ function MockInterviewContent() {
         streamingRef.current = false;
         setStreaming(false);
         removeEmptyPlaceholder();
-        throw error;
+        const typed = error as Error & { code?: string };
+        if (!typed.code) typed.code = "NETWORK_STREAM_ERROR";
+        throw typed;
       }
       if (!interviewAliveRef.current) {
         streamingRef.current = false;
@@ -1703,7 +1807,7 @@ function MockInterviewContent() {
   );
 
   // 开始面试
-  const handleStart = async () => {
+  const handleStart = async (forceTextMode = false) => {
     const targetCompany = selectedCompany.trim();
     if (!targetCompany || !selectedJobId) {
       alert(t("mockInterview.companyRequired"));
@@ -1713,31 +1817,47 @@ function MockInterviewContent() {
       alert(t("mockInterview.resumeRequired"));
       return;
     }
-    // 进入面试间前先申请麦克风权限，被拒绝则留在设置页
+    // Try to acquire audio before entering the room. A missing/blocked
+    // microphone must not prevent the interview from starting: the room
+    // provides a typed-answer fallback in that case.
+    const hasAudioInput = !forceTextMode;
     try {
-      stopMicrophone();
-      const preflightStream = await navigator.mediaDevices.getUserMedia({
-        audio: microphoneConstraints(),
-        video: false,
-      });
-      const track = preflightStream.getAudioTracks()[0];
-      if (!track) {
-        preflightStream.getTracks().forEach((item) => item.stop());
-        throw new Error("microphone audio track unavailable");
+      if (forceTextMode) {
+        stopMicrophone();
+      } else {
+        stopMicrophone();
+        setMicError(false);
+        setMicErrorKind(null);
+        const preflightStream = await navigator.mediaDevices.getUserMedia({
+          audio: microphoneConstraints(),
+          video: false,
+        });
+        const track = preflightStream.getAudioTracks()[0];
+        if (!track) {
+          preflightStream.getTracks().forEach((item) => item.stop());
+          throw new Error("microphone audio track unavailable");
+        }
+        // Keep this exact verified stream alive for the whole interview. Asking
+        // for audio again while the camera is starting can silently switch the
+        // browser to another input device (including a loopback device).
+        micStreamRef.current = preflightStream;
+        micDeviceIdRef.current = track.getSettings().deviceId || null;
+        debugInterviewEvent("mic.acquired", {
+          source: "preflight_dedicated",
+          ...microphoneDebugInfo(track),
+        });
       }
-      // Keep this exact verified stream alive for the whole interview. Asking
-      // for audio again while the camera is starting can silently switch the
-      // browser to another input device (including a loopback device).
-      micStreamRef.current = preflightStream;
-      micDeviceIdRef.current = track.getSettings().deviceId || null;
-      debugInterviewEvent("mic.acquired", {
-        source: "preflight_dedicated",
-        ...microphoneDebugInfo(track),
-      });
     } catch (err) {
       handleMicError(err);
+      stopMicrophone();
+      setSetupOpen(false);
+      setAudioFallbackPromptOpen(true);
       return;
     }
+    setAudioInputUnavailable(!hasAudioInput);
+    setTextModeConfirmed(forceTextMode);
+    setAudioFallbackPromptOpen(false);
+    setTypedAnswer("");
     interviewAliveRef.current = true;
     setMessages([]);
     setSummary("");
@@ -1780,7 +1900,7 @@ function MockInterviewContent() {
       });
       await waitForAudioDrain();
       finalizeInterviewerSubtitle(opening.messageId, opening.fullContent);
-      if (interviewAliveRef.current && sessionIdRef.current) setListening(true);
+      if (interviewAliveRef.current && sessionIdRef.current && hasAudioInput) setListening(true);
     } catch (error) {
       if (interviewAliveRef.current) {
         const message = error instanceof Error ? error.message : "unknown start error";
@@ -2143,6 +2263,39 @@ function MockInterviewContent() {
     else if (name === "NotReadableError" || name === "AbortError") setMicErrorKind("busy");
     else setMicErrorKind("unknown");
     setMicError(true);
+    setAudioInputUnavailable(true);
+    setAudioFallbackPromptOpen(true);
+  };
+
+  const retryMicrophone = async () => {
+    if (retryingMicrophone) return;
+    setRetryingMicrophone(true);
+    try {
+      stopMicrophone();
+      const stream = await navigator.mediaDevices.getUserMedia({
+        audio: microphoneConstraints(),
+        video: false,
+      });
+      const track = stream.getAudioTracks()[0];
+      if (!track) throw new Error("microphone audio track unavailable");
+      micStreamRef.current = stream;
+      micDeviceIdRef.current = track.getSettings().deviceId || null;
+      setMicError(false);
+      setMicErrorKind(null);
+      setAudioInputUnavailable(false);
+      setTextModeConfirmed(false);
+      setAudioFallbackPromptOpen(false);
+      if (interviewAliveRef.current && sessionIdRef.current) {
+        setListening(true);
+      } else {
+        setSetupOpen(true);
+      }
+    } catch (error) {
+      handleMicError(error);
+      setAudioFallbackPromptOpen(true);
+    } finally {
+      setRetryingMicrophone(false);
+    }
   };
 
   // 录音转文字并提交回答
@@ -2158,7 +2311,13 @@ function MockInterviewContent() {
       const res = await apiFetch("/api/interview/asr", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ audioBase64: base64, audioMimeType: blob.type, language: interviewLanguageRef.current, sessionId: sessionIdRef.current }),
+        body: JSON.stringify({
+          audioBase64: base64,
+          audioMimeType: blob.type,
+          language: interviewLanguageRef.current,
+          sessionId: sessionIdRef.current,
+          fallback: true,
+        }),
       });
       if (!res.ok) throw new Error("ASR failed");
       const data = await res.json();
@@ -2175,7 +2334,7 @@ function MockInterviewContent() {
       }
     } catch {
       debugInterviewEvent("asr.http_error");
-      alert(t("mockInterview.sendFailed"));
+      showAsrNotice(t("mockInterview.asrFailed"));
     } finally {
       recognizingRef.current = false;
       setRecognizing(false);
@@ -2417,6 +2576,7 @@ function MockInterviewContent() {
               draftText?: string;
               provider?: string;
               language?: string;
+              code?: string;
               error?: string;
             };
             try {
@@ -2549,6 +2709,13 @@ function MockInterviewContent() {
               if (!neuralVadReadyRef.current) candidateSpeechStartedAtRef.current = null;
               return;
             }
+            if (data.type === "reconnecting") {
+              debugInterviewEvent("asr.provider_reconnecting", {
+                provider: data.provider || null,
+              });
+              showAsrNotice(t("mockInterview.realtimeAsrReconnecting"));
+              return;
+            }
             if (data.type === "upstream_closed" || data.type === "error") {
               if (!ready) {
                 fail(new Error(data.error || "实时 ASR 失败"));
@@ -2556,8 +2723,19 @@ function MockInterviewContent() {
                 // The browser socket can stay open while the provider socket
                 // has died. Switch immediately to HTTP ASR instead of leaving
                 // the microphone in a silent, stuck state for the next turn.
-                setRealtimeFallback(true);
-                debugInterviewEvent("asr.fallback_enabled", { reason: data.type, message: data.error || null });
+                // Alibaba realtime can use the existing HTTP recorder fallback.
+                // Cartesia Ink is kept on the browser proxy instead; its
+                // upstream is restarted by the server on the next PCM frame.
+                if (data.type === "upstream_closed") {
+                  setRealtimeFallback(true);
+                  debugInterviewEvent("asr.fallback_enabled", { reason: data.type, message: data.error || null });
+                  showAsrNotice(t("mockInterview.realtimeAsrUnavailable"));
+                } else {
+                  // Keep the realtime channel alive for a provider-level
+                  // error. The proxy will reopen Ink when the next speech
+                  // frame arrives, avoiding a needless mode switch.
+                  showAsrNotice(t("mockInterview.realtimeAsrReconnecting"));
+                }
               }
             }
           };
@@ -2578,7 +2756,12 @@ function MockInterviewContent() {
               ready,
               sessionId: sessionIdRef.current,
             });
-            if (!cancelled && !intentionalClose && ready) setRealtimeFallback(true);
+            if (!cancelled && !intentionalClose && ready) {
+              // The proxy socket itself closing is different from the
+              // provider socket being recycled. Retry the realtime channel
+              // first; only the Alibaba route should enter HTTP fallback.
+              setRealtimeFallback(true);
+            }
             if (!ready) {
               fail(new Error("实时 ASR 连接已关闭"));
             }
@@ -2898,7 +3081,7 @@ function MockInterviewContent() {
   }, [currentInterviewer, currentRound, streamInterviewer, waitForAudioDrain, finalizeInterviewerSubtitle]);
 
   // 提交回答
-  const submitAnswer = async (text: string, inputSource: "asr" | "asr_fallback"): Promise<boolean> => {
+  const submitAnswer = async (text: string, inputSource: "asr" | "asr_fallback" | "typed"): Promise<boolean> => {
     if (!text.trim() || streamingRef.current || !sessionIdRef.current) return false;
     if (timeoutEscalateRef.current) clearTimeout(timeoutEscalateRef.current);
     timeoutFiredRef.current = false;
@@ -2936,13 +3119,28 @@ function MockInterviewContent() {
         result = await streamInterviewer(requestPayload);
       } catch (error) {
         const typed = error as Error & { code?: string; revision?: number };
-        if (typed.code !== "REVISION_CONFLICT" || typeof typed.revision !== "number") throw error;
-        // An ASR final can land immediately after the preceding SSE frame. The
-        // server is authoritative: sync its revision and replay this exact
-        // idempotent request once instead of dropping the recognised answer.
-        sessionRevisionRef.current = typed.revision;
-        setSessionRevision(typed.revision);
-        result = await streamInterviewer({ ...requestPayload, revision: typed.revision });
+        if (typed.code === "REVISION_CONFLICT" && typeof typed.revision === "number") {
+          // An ASR final can land immediately after the preceding SSE frame.
+          // Sync the server revision and replay this exact idempotent request.
+          sessionRevisionRef.current = typed.revision;
+          setSessionRevision(typed.revision);
+          result = await streamInterviewer({ ...requestPayload, revision: typed.revision });
+        } else if (
+          typed.code === "REQUEST_IN_FLIGHT"
+          || typed.code === "REQUEST_CONFLICT"
+          || typed.code === "NETWORK_STREAM_ERROR"
+          || typed.code === "PROVIDER_TIMEOUT"
+          || typed.code === "COMMIT_FAILED"
+          || typed.code === "INTERVIEW_STREAM_FAILED"
+        ) {
+          // A late ASR final can overlap the previous commit by a few hundred
+          // milliseconds. Wait once, then replay the same request instead of
+          // showing a false send failure or charging a second turn.
+          await sleep(700);
+          result = await streamInterviewer({ ...requestPayload, revision: sessionRevisionRef.current });
+        } else {
+          throw error;
+        }
       }
       const { completedInfo, roundEnded, messageId, fullContent } = result;
       debugInterviewEvent("chat.submit_response", { requestId, chars: fullContent.length, roundEnded, completed: !!completedInfo });
@@ -2994,9 +3192,20 @@ function MockInterviewContent() {
       });
       const typed = error as Error & { code?: string };
       debugInterviewEvent("chat.submit_error", { requestId, code: typed.code || null, message: typed.message.slice(0, 160) });
-      if (typed.code !== "REQUEST_IN_FLIGHT") alert(t("mockInterview.sendFailed"));
+      if (typed.code !== "REQUEST_IN_FLIGHT") alert(t("mockInterview.answerSubmitFailed"));
       return false;
     }
+  };
+
+  const submitTypedAnswer = async () => {
+    const text = typedAnswer.trim();
+    if (!text || answerSubmittingRef.current || streamingRef.current || speaking || organizing || ending) return;
+    answerSubmittingRef.current = true;
+    setSubmittingAnswer(true);
+    const submitted = await submitAnswer(text, "typed");
+    answerSubmittingRef.current = false;
+    setSubmittingAnswer(false);
+    if (submitted) setTypedAnswer("");
   };
 
   // 生成评估报告（SSE 流式）；失败或超时进入可重试状态。
@@ -3250,12 +3459,74 @@ function MockInterviewContent() {
     setFeedbackDone(false);
     setRealismScore(null);
     setFeedbackText("");
+    setMicError(false);
+    setMicErrorKind(null);
+    setAudioInputUnavailable(false);
+    setTextModeConfirmed(false);
+    setAudioFallbackPromptOpen(false);
+    setTypedAnswer("");
     setListening(false);
     stopCamera();
     stopMicrophone();
     setSetupOpen(true);
     clearPressure();
   };
+
+  const confirmTextFallback = () => {
+    setTextModeConfirmed(true);
+    setAudioFallbackPromptOpen(false);
+    // When the preflight failed in the setup screen, only start the session
+    // after the user explicitly chooses text mode.
+    if (stage === "setup") void handleStart(true);
+  };
+
+  const renderAudioFallbackPrompt = () => (
+    <Modal open={audioFallbackPromptOpen} onOpenChange={setAudioFallbackPromptOpen}>
+      <ModalContent className="border-zinc-700 bg-zinc-950 text-zinc-100 shadow-2xl sm:max-w-md">
+        <ModalHeader className="px-6 pt-6 pb-2 text-left">
+          <ModalTitle className="text-xl leading-7 text-zinc-50">
+            {t("mockInterview.audioFallbackTitle")}
+          </ModalTitle>
+          <ModalDescription className="text-sm leading-6 text-zinc-300">
+            {t("mockInterview.audioFallbackDesc")}
+          </ModalDescription>
+        </ModalHeader>
+        <ModalBody className="px-6 py-4">
+          <div className="rounded-xl border border-zinc-700 border-l-4 border-l-amber-500/80 bg-zinc-900 px-4 py-3 text-sm font-medium leading-6 text-zinc-200">
+            {micErrorKind === "denied"
+              ? t("mockInterview.micDenied")
+              : micErrorKind === "nodevice"
+                ? t("mockInterview.micNoDevice")
+                : micErrorKind === "busy"
+                  ? t("mockInterview.micBusy")
+                  : t("mockInterview.micError")}
+          </div>
+          <p className="mt-3 text-sm leading-6 text-zinc-300">
+            {t("mockInterview.audioFallbackChoice")}
+          </p>
+        </ModalBody>
+        <ModalFooter className="flex-col gap-2 px-6 pb-6 pt-2 sm:flex-row sm:justify-end">
+          <Button
+            type="button"
+            variant="outline"
+            onClick={() => void retryMicrophone()}
+            disabled={retryingMicrophone}
+            className="w-full rounded-full border-zinc-600 bg-zinc-900 text-zinc-100 hover:bg-zinc-800 hover:text-white sm:w-auto"
+          >
+            {retryingMicrophone && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
+            {t("mockInterview.audioFallbackRetry")}
+          </Button>
+          <Button
+            type="button"
+            onClick={confirmTextFallback}
+            className="w-full rounded-full bg-[#C46A4A] font-semibold text-white hover:bg-[#b45b3d] sm:w-auto"
+          >
+            {t("mockInterview.audioFallbackEnterText")}
+          </Button>
+        </ModalFooter>
+      </ModalContent>
+    </Modal>
+  );
 
   const qaCount = messages.filter((m) => m.role === "candidate").length;
 
@@ -3264,6 +3535,7 @@ function MockInterviewContent() {
     return (
         <div className="min-h-screen bg-white dark:bg-black">
           <Header1 />
+          {renderAudioFallbackPrompt()}
           <main className="pb-8 pt-24 md:pb-12 md:pt-28">
             <div className="container mx-auto px-4 max-w-3xl">
               <PageBackButton fallbackHref="/home" className="mb-3" />
@@ -3317,6 +3589,7 @@ function MockInterviewContent() {
                       options={companies.map((c) => ({ value: c, text: c }))}
                       value={selectedCompany}
                       onChange={setSelectedCompany}
+                      loading={companiesLoading || favoritesLoading}
                     />
                   </div>
                   <div>
@@ -3327,7 +3600,10 @@ function MockInterviewContent() {
                       icon={Briefcase}
                       label={t("mockInterview.selectJob")}
                       placeholder={t("mockInterview.jobPlaceholder")}
-                      options={jobs.map((j) => ({ value: String(j.id), text: j.title }))}
+                      options={jobs.map((j) => ({
+                        value: String(j.id),
+                        text: favoriteJobs.some((favorite) => favorite.id === j.id) ? `★ ${j.title}` : j.title,
+                      }))}
                       value={selectedJobId ? String(selectedJobId) : ""}
                       onChange={(v) => setSelectedJobId(v ? Number(v) : null)}
                       disabled={!selectedCompany}
@@ -3347,9 +3623,20 @@ function MockInterviewContent() {
                     placeholder={t("mockInterview.resumePlaceholder")}
                     options={resumes.map((r) => ({ value: String(r.id), text: r.file_name }))}
                     value={selectedResumeId ? String(selectedResumeId) : ""}
-                    onChange={(v) => setSelectedResumeId(v ? Number(v) : null)}
+                    onChange={(v) => { const id = v ? Number(v) : null; setSelectedResumeId(id); writeActiveResumeId(id); }}
+                    disabled={resumes.length === 0}
+                    loading={resumesLoading}
                   />
-                  <p className="text-xs text-gray-400 mt-1.5">{t("mockInterview.resumeHint")}</p>
+                  <ResumeAvailabilityHint
+                    status={availability.status}
+                    loading={resumesLoading}
+                    error={resumesError ? t("resume.listLoadFailed") : ""}
+                    onRetry={() => void reloadResumes(true)}
+                    className="mt-2"
+                  />
+                  {availability.status === "ready" && (
+                    <p className="text-xs text-gray-400 mt-1.5">{t("mockInterview.resumeHint")}</p>
+                  )}
                 </div>
 
                 {/* 企业面试基因预览卡：展示目标公司的考察重心与风格，传递"这家公司特有问法"的差异感 */}
@@ -3424,7 +3711,7 @@ function MockInterviewContent() {
                   </div>
                 )}
                 <Button
-                  onClick={handleStart}
+                  onClick={() => void handleStart()}
                   disabled={streaming}
                   className="w-full h-12 rounded-full bg-zinc-900 hover:bg-zinc-700 dark:bg-white dark:text-zinc-900 dark:hover:bg-zinc-200 text-white text-base shadow-md transition-colors"
                 >
@@ -3460,6 +3747,7 @@ function MockInterviewContent() {
       <div className="min-h-screen bg-zinc-950 flex flex-col">
           {/* TTS 播放元素（固定元素，供音波频谱分析） */}
           <audio ref={audioRef} className="hidden" />
+          {renderAudioFallbackPrompt()}
           {interviewCompleted && (
             <div className="fixed inset-0 z-50 flex flex-col items-center justify-center bg-zinc-950/95 backdrop-blur animate-in fade-in duration-500">
               <div className="h-16 w-16 rounded-full bg-zinc-500/10 border border-zinc-500/20 flex items-center justify-center mb-6">
@@ -3705,6 +3993,58 @@ function MockInterviewContent() {
                     </button>
                   )}
                 </div>
+              )}
+              {asrNotice && (
+                <p className="max-w-md px-4 text-center text-xs leading-relaxed text-amber-300">
+                  {asrNotice}
+                </p>
+              )}
+              {audioInputUnavailable && !textModeConfirmed && !audioFallbackPromptOpen && !interviewCompleted && (
+                <Button
+                  type="button"
+                  variant="outline"
+                  onClick={() => setAudioFallbackPromptOpen(true)}
+                  className="rounded-full border-zinc-700 text-zinc-300 hover:bg-zinc-800"
+                >
+                  {t("mockInterview.audioFallbackChoose")}
+                </Button>
+              )}
+              {audioInputUnavailable && textModeConfirmed && !interviewCompleted && (
+                <form
+                  className="w-full max-w-2xl rounded-2xl border border-zinc-700 bg-zinc-900/90 p-3 md:p-4"
+                  onSubmit={(event) => {
+                    event.preventDefault();
+                    void submitTypedAnswer();
+                  }}
+                >
+                  <div className="flex flex-col gap-3 md:flex-row md:items-end">
+                    <Textarea
+                      value={typedAnswer}
+                      onChange={(event) => setTypedAnswer(event.target.value)}
+                      onKeyDown={(event) => {
+                        if ((event.ctrlKey || event.metaKey) && event.key === "Enter") {
+                          event.preventDefault();
+                          void submitTypedAnswer();
+                        }
+                      }}
+                      disabled={speaking || streaming || submittingAnswer || organizing || ending}
+                      placeholder={t("mockInterview.answerPlaceholder")}
+                      aria-label={t("mockInterview.answerPlaceholder")}
+                      className="min-h-20 flex-1 resize-none border-zinc-700 bg-zinc-950 text-zinc-100 placeholder:text-zinc-500"
+                    />
+                    <Button
+                      type="submit"
+                      disabled={!typedAnswer.trim() || speaking || streaming || submittingAnswer || organizing || ending}
+                      className="h-10 shrink-0 rounded-full bg-[#C46A4A] px-5 text-white hover:bg-[#b45b3d]"
+                    >
+                      {submittingAnswer ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <ArrowRight className="mr-2 h-4 w-4" />}
+                      {t("mockInterview.textModeSubmit")}
+                    </Button>
+                  </div>
+                  <p className="mt-2 text-center text-[11px] text-zinc-500">
+                    {t("mockInterview.textModeHint")}
+                  </p>
+                </form>
               )}
               <button
                 onClick={() => {

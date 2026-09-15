@@ -12,7 +12,7 @@ function positiveInteger(value: string | null, fallback: number): number {
 }
 
 export async function GET(request: NextRequest) {
-  const permissionError = requireAdminPermission(request, ADMIN_PERMISSIONS.jobsRead);
+  const permissionError = await requireAdminPermission(request, ADMIN_PERMISSIONS.jobsRead);
   if (permissionError) return permissionError;
 
   const params = request.nextUrl.searchParams;
@@ -46,7 +46,7 @@ export async function GET(request: NextRequest) {
 
 export async function PATCH(request: NextRequest) {
   try {
-    const permissionError = requireAdminPermission(request, ADMIN_PERMISSIONS.jobsWrite);
+    const permissionError = await requireAdminPermission(request, ADMIN_PERMISSIONS.jobsWrite);
     if (permissionError) return permissionError;
 
     const supabase = getSupabaseClient();
@@ -88,7 +88,7 @@ export async function PATCH(request: NextRequest) {
 
 export async function DELETE(request: NextRequest) {
   try {
-    const permissionError = requireAdminPermission(request, ADMIN_PERMISSIONS.jobsWrite);
+    const permissionError = await requireAdminPermission(request, ADMIN_PERMISSIONS.jobsWrite);
     if (permissionError) return permissionError;
 
     const supabase = getSupabaseClient();

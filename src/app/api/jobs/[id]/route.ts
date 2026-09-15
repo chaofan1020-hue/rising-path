@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { getCompanyFaviconUrl, getCompanyLogoUrl } from '@/lib/company-logo';
+import { resolveDisplayLogoUrls } from '@/lib/company-logo';
 import { getSupabaseClient } from '@/storage/database/supabase-client';
 import { isDisplayableJobDescription, sanitizeJobContent } from '@/lib/job-content';
 import { ADMIN_PERMISSIONS, requireAdminPermission } from '@/lib/admin-permissions';
@@ -9,7 +9,8 @@ import { looksLikeBlockedPage, looksLikeClosedJobPage } from '@/lib/job-maintena
 import { nextLinkFailureCount, shouldCloseAfterLinkFailure } from '@/lib/job-link-health';
 import { isVerifiedField } from '@/lib/job-field-provenance';
 import { isDisplayableJobDeadline } from '@/lib/job-deadline';
-import { extractOfficialJobDetails, isJobContentShell } from '@/lib/job-official-detail';
+import { extractOfficialJobDetails, isJobContentShell, officialEvercoreDetailUrl } from '@/lib/job-official-detail';
+import { parseFeedPostedAt } from '@/lib/jobs-feed';
 import { hasMatchingPhenomDetailPayload, isRegisteredPhenomJobUrl } from '@/lib/job-connectors';
 
 // 本地 logo 缓存
@@ -17,14 +18,9 @@ let localLogosCache: Record<string, string> = {};
 let lastCacheTime = 0;
 const CACHE_DURATION = 5 * 60 * 1000; // 5 分钟
 
-// 获取公司 logo URL（优先本地，fallback 到 Iconify Simple Icons）
-async function getCompanyLogo(company: string, jobUrl?: string | null): Promise<string | null> {
-  // 先检查缓存
-  if (localLogosCache[company]) {
-    return localLogosCache[company];
-  }
-  
-  // 尝试从数据库获取本地 logo
+async function getStoredCompanyLogo(company: string): Promise<string | null> {
+  if (localLogosCache[company]) return localLogosCache[company];
+
   try {
     const supabase = getSupabaseClient();
     const { data } = await supabase
@@ -32,16 +28,16 @@ async function getCompanyLogo(company: string, jobUrl?: string | null): Promise<
       .select('logo_url')
       .eq('company_name', company)
       .single();
-    
+
     if (data?.logo_url) {
       localLogosCache[company] = data.logo_url;
       return data.logo_url;
     }
-  } catch (error) {
+  } catch {
     // Ignore lookup failures and use the deterministic remote fallback.
   }
-  
-  return getCompanyLogoUrl(company, jobUrl);
+
+  return null;
 }
 
 // 刷新 logo 缓存
@@ -106,7 +102,7 @@ export async function GET(
       if (stale) {
         const checkedAt = new Date().toISOString();
         try {
-          const page = await fetchSafeExternalPage(data.job_url);
+          const page = await fetchSafeExternalPage(officialEvercoreDetailUrl(data.job_url) || data.job_url);
           if (looksLikeClosedJobPage(page.title, page.content)
             && !isRegisteredPhenomJobUrl(data.company, data.job_url)
             && !hasMatchingPhenomDetailPayload(data.job_url, page.content)) {
@@ -128,6 +124,10 @@ export async function GET(
           if (officialDetails?.location && (!data.region || data.region === '未注明')) {
             detailPatch.region = officialDetails.location.slice(0, 100);
             detailPatch.location_source = 'official_link_structured_field';
+          }
+          if (!data.posted_at && officialDetails?.postedAt) {
+            const postedAt = parseFeedPostedAt(officialDetails.postedAt);
+            if (postedAt) detailPatch.posted_at = postedAt;
           }
           if (Object.keys(detailPatch).length > 0) {
             detailPatch.updated_at = checkedAt;
@@ -195,10 +195,11 @@ export async function GET(
       await refreshLogoCache();
     }
 
-    // 获取 company logo
     const configuredLogo = data.company_info?.logo_url || null;
-    const logo_url = configuredLogo || (data.company ? await getCompanyLogo(data.company, data.job_url) : null);
-    const logo_fallback_url = data.company ? getCompanyFaviconUrl(data.company, data.job_url) : null;
+    const storedLogo = configuredLogo || (data.company ? await getStoredCompanyLogo(data.company) : null);
+    const { logo_url, logo_fallback_url } = data.company
+      ? resolveDisplayLogoUrls(data.company, data.job_url, storedLogo)
+      : { logo_url: null, logo_fallback_url: null };
 
     const sanitized = sanitizeJobContent({
       ...data,
@@ -234,7 +235,7 @@ export async function PUT(
   { params }: { params: Promise<{ id: string }> }
 ) {
   try {
-    const permissionError = requireAdminPermission(request, ADMIN_PERMISSIONS.jobsWrite);
+    const permissionError = await requireAdminPermission(request, ADMIN_PERMISSIONS.jobsWrite);
     if (permissionError) return permissionError;
     const client = getSupabaseClient();
     const { id } = await params;
@@ -283,7 +284,7 @@ export async function DELETE(
   { params }: { params: Promise<{ id: string }> }
 ) {
   try {
-    const permissionError = requireAdminPermission(request, ADMIN_PERMISSIONS.jobsWrite);
+    const permissionError = await requireAdminPermission(request, ADMIN_PERMISSIONS.jobsWrite);
     if (permissionError) return permissionError;
     const client = getSupabaseClient();
     const { id } = await params;

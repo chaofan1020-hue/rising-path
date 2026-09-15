@@ -17,7 +17,16 @@ function debugEnabled(): boolean {
 }
 
 export async function POST(request: NextRequest) {
-  if (!debugEnabled()) return NextResponse.json({ error: 'debug logging disabled' }, { status: 404 });
+  // The client-side flag is compiled at build time while the server flag is
+  // read at runtime. During a rolling release an older page can legitimately
+  // keep posting after the server flag has been turned off. A no-op response
+  // prevents that configuration mismatch from becoming repeated console 404s.
+  if (!debugEnabled()) {
+    return new NextResponse(null, {
+      status: 204,
+      headers: { 'Cache-Control': 'no-store' },
+    });
+  }
   const auth = await getAuthContext(request);
   if (!auth) return unauthorizedResponse();
 

@@ -2,6 +2,14 @@ import type { NextConfig } from 'next';
 
 const nextConfig: NextConfig = {
   turbopack: {},
+  transpilePackages: ['altcha'],
+  async redirects() {
+    return [
+      { source: '/admin/job-rotation', destination: '/admin/jobs/sync', permanent: false },
+      { source: '/admin/job-sync-dashboard', destination: '/admin/jobs/sync', permanent: false },
+      { source: '/admin/dna-review', destination: '/admin/dna', permanent: false },
+    ];
+  },
   // These pages render user-specific data in client-side requests. Keeping
   // their HTML private prevents an old prerendered shell from being reused
   // after a deployment or shared through a CDN cache.
@@ -20,6 +28,8 @@ const nextConfig: NextConfig = {
       '/mock-interview',
       '/personality',
       '/account',
+      '/pricing',
+      '/admin',
     ];
 
     return privatePages.map((source) => ({

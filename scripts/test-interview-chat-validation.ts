@@ -14,6 +14,7 @@ assert.equal(valid.totalRounds, 4);
 assert.equal(valid.inputSource, 'system');
 assert.equal(valid.endInterview, false);
 assert.equal(interviewChatRequestSchema.parse({ endInterview: true }).endInterview, true);
+assert.equal(interviewChatRequestSchema.parse({ inputSource: 'typed', answer: 'typed answer' }).inputSource, 'typed');
 
 assert.equal(interviewChatRequestSchema.safeParse({ totalRounds: 5 }).success, false);
 assert.equal(interviewChatRequestSchema.safeParse({ answer: 'x'.repeat(10_001) }).success, false);

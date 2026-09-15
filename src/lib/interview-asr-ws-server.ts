@@ -344,6 +344,14 @@ function setupConnection(client: WebSocket, auth: AuthenticatedRealtimeSession):
     else if (connection.readyState === WebSocket.CONNECTING) connection.terminate();
     upstream = null;
     upstreamReady = false;
+    // An Ink socket is intentionally short lived per candidate answer. Do not
+    // carry its utterance id into the next socket: Cartesia can send a new
+    // turn.update before turn.start, and a stale id would map that update to
+    // the previous candidate epoch in the browser.
+    if (voiceRoute.asrProvider === 'cartesia_ink') {
+      utteranceState.activeId = null;
+      utteranceState.itemIds.clear();
+    }
     releaseCartesiaSlot(connection);
   };
 
@@ -464,6 +472,7 @@ function setupConnection(client: WebSocket, auth: AuthenticatedRealtimeSession):
       if (upstream !== connection) return;
       if (voiceRoute.asrProvider === 'cartesia_ink') {
         upstreamReady = true;
+        lastError = null;
         upstream.send(buildCartesiaInkConfig());
         console.info('[Interview ASR WS] upstream ready', {
           sessionId: ticketSessionId,
@@ -535,7 +544,16 @@ function setupConnection(client: WebSocket, auth: AuthenticatedRealtimeSession):
       if (upstream !== connection) return;
       console.error(`[Interview ASR WS] ${voiceRoute.asrProvider} connection failed:`, error.message);
       lastError = error.message;
-      if (!finishing) sendJSON(client, { type: 'error', error: '实时 ASR 连接失败' });
+      if (!finishing) {
+        if (voiceRoute.asrProvider === 'cartesia_ink') {
+          // The browser proxy stays alive and the next PCM frame will open a
+          // fresh Ink stream. Do not force the client into HTTP fallback: the
+          // overseas HTTP endpoint cannot use the Cartesia route directly.
+          sendJSON(client, { type: 'reconnecting', provider: 'cartesia' });
+        } else {
+          sendJSON(client, { type: 'error', error: '实时 ASR 连接失败' });
+        }
+      }
     });
     connection.on('close', () => {
       const isCurrent = upstream === connection;
@@ -545,7 +563,28 @@ function setupConnection(client: WebSocket, auth: AuthenticatedRealtimeSession):
       }
       releaseCartesiaSlot(connection);
       const suppressNotice = suppressedUpstreamCloses.has(connection);
-      if (!finishing && !suppressNotice) sendJSON(client, { type: 'upstream_closed' });
+      if (!finishing && !suppressNotice) {
+        if (voiceRoute.asrProvider === 'cartesia_ink') {
+          // A provider socket can be recycled between candidate turns or by a
+          // transient network blip. Keep the authenticated browser proxy and
+          // let sendAudio() reconnect it on the next non-silent frame.
+          sendJSON(client, { type: 'reconnecting', provider: 'cartesia' });
+        } else {
+          sendJSON(client, { type: 'upstream_closed' });
+        }
+      }
+      // A provider close can race with the last PCM frames. Re-open the Ink
+      // stream and flush those frames instead of waiting for another speech
+      // chunk, which would otherwise make a short answer disappear.
+      if (
+        voiceRoute.asrProvider === 'cartesia_ink'
+        && !finishing
+        && queuedAudioBytes > 0
+      ) {
+        setTimeout(() => {
+          if (!upstream && !finishing && queuedAudioBytes > 0) startUpstream();
+        }, 80);
+      }
     });
   };
 
@@ -672,6 +711,16 @@ function forwardCartesiaInkEvent(
   }
   const transcript = String(event.transcript || '').trim();
   const requestId = event.request_id || null;
+  const ensureUtterance = (): string => {
+    if (utteranceState.activeId) return utteranceState.activeId;
+    const utteranceId = `ink_${++utteranceState.sequence}`;
+    utteranceState.activeId = utteranceId;
+    // Ink may deliver an update before its explicit turn.start frame. The
+    // browser needs an id immediately so that this transcript belongs to the
+    // candidate's active VAD epoch instead of being discarded as unscoped.
+    sendJSON(client, { type: 'speech_started', utteranceId, requestId });
+    return utteranceId;
+  };
   switch (event.type) {
     case 'connected':
       // Browser proxy readiness was emitted before capture started. Do not
@@ -679,35 +728,50 @@ function forwardCartesiaInkEvent(
       // handshake state in the middle of an answer.
       return { ended: false, requestId, type: event.type, transcriptChars: 0 };
     case 'turn.start': {
-      const utteranceId = `ink_${++utteranceState.sequence}`;
-      utteranceState.activeId = utteranceId;
-      sendJSON(client, { type: 'speech_started', utteranceId, requestId });
+      const utteranceId = ensureUtterance();
       return { ended: false, requestId, type: event.type, transcriptChars: 0 };
     }
-    case 'turn.update':
+    case 'turn.update': {
+      const utteranceId = ensureUtterance();
       sendJSON(client, {
         type: 'partial',
         itemId: requestId || undefined,
-        utteranceId: utteranceState.activeId,
+        utteranceId,
         text: transcript,
         confirmedText: transcript,
         language: 'en',
       });
       return { ended: false, requestId, type: event.type, transcriptChars: transcript.length };
-    case 'turn.eager_end':
+    }
+    case 'turn.eager_end': {
+      const utteranceId = ensureUtterance();
       sendJSON(client, {
         type: 'partial',
         itemId: requestId || undefined,
-        utteranceId: utteranceState.activeId,
+        utteranceId,
         text: transcript,
         confirmedText: transcript,
         language: 'en',
       });
+      // Ink-2 may emit eager_end without a subsequent turn.end when the
+      // upstream socket is recycled during a quiet period. Expose the last
+      // substantive hypothesis as a stable final as well; the browser
+      // de-duplicates it if the provider later sends turn.end.
+      if (transcript.length >= 4) {
+        sendJSON(client, {
+          type: 'final',
+          itemId: requestId || `ink-final-${utteranceState.sequence}`,
+          utteranceId,
+          text: transcript,
+          language: 'en',
+        });
+      }
       return { ended: false, requestId, type: event.type, transcriptChars: transcript.length };
+    }
     case 'turn.resume':
       return { ended: false, requestId, type: event.type, transcriptChars: 0 };
     case 'turn.end': {
-      const utteranceId = utteranceState.activeId;
+      const utteranceId = ensureUtterance();
       sendJSON(client, { type: 'speech_stopped', utteranceId, requestId });
       if (transcript) {
         sendJSON(client, {

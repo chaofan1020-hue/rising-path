@@ -5,6 +5,14 @@ import Link from 'next/link';
 import { Header1 } from '@/components/header1';
 import { AuthGuard } from '@/components/auth-guard';
 import { apiFetch } from '@/lib/api-client';
+import { readActiveResumeId, writeActiveResumeId } from '@/lib/active-resume';
+import {
+  readDashboardCache,
+  RESUME_UPDATED_EVENT,
+  RESUME_UPDATED_STORAGE_KEY,
+  writeDashboardCache,
+} from '@/lib/dashboard-cache';
+import { isActiveResumeProcessing } from '@/lib/resume-types';
 import { REGION_DNA, type RegionKey } from '@/lib/region-dna';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent } from '@/components/ui/card';
@@ -148,6 +156,10 @@ interface DashboardData {
   regionOptions: RegionOption[];
   latestResumeId: number | null;
   profileReady?: boolean;
+  planReady?: boolean;
+  processing?: boolean;
+  processingStatus?: string | null;
+  processingError?: string | null;
   missingSteps?: string[];
   personalization?: {
     roles: string[];
@@ -246,35 +258,6 @@ interface DashboardInterviewDetail {
   updated_at?: string | null;
 }
 
-const DASHBOARD_CACHE_TTL_MS = 10 * 60 * 1000;
-
-function dashboardCacheKey(userId: string, locale: string) {
-  return `liorvix.dashboard.${userId}.${locale}.v1`;
-}
-
-function readDashboardCache(userId: string, locale: string): DashboardData | null {
-  try {
-    const raw = window.sessionStorage.getItem(dashboardCacheKey(userId, locale));
-    if (!raw) return null;
-    const parsed = JSON.parse(raw) as { savedAt?: number; data?: DashboardData };
-    if (!parsed.savedAt || !parsed.data || Date.now() - parsed.savedAt > DASHBOARD_CACHE_TTL_MS) return null;
-    return parsed.data;
-  } catch {
-    return null;
-  }
-}
-
-function writeDashboardCache(userId: string, locale: string, data: DashboardData) {
-  try {
-    window.sessionStorage.setItem(
-      dashboardCacheKey(userId, locale),
-      JSON.stringify({ savedAt: Date.now(), data }),
-    );
-  } catch {
-    // Cache failures must never block the live dashboard response.
-  }
-}
-
 export default function DashboardPage() {
   const { locale, localeReady, t } = useLanguage();
   const [data, setData] = useState<DashboardData | null>(null);
@@ -296,31 +279,75 @@ export default function DashboardPage() {
   const [selectedInterview, setSelectedInterview] = useState<DashboardInterviewDetail | null>(null);
   const [interviewDetailLoading, setInterviewDetailLoading] = useState(false);
   const [interviewDetailError, setInterviewDetailError] = useState<string | null>(null);
+  const [resumeOptions, setResumeOptions] = useState<Array<{ id: number; file_name: string; processing_status?: string }>>([]);
+  const [selectedResumeId, setSelectedResumeId] = useState<number | null>(null);
+  const fetchGenerationRef = useRef(0);
+  const wasProcessingRef = useRef(false);
 
   const fetchDashboard = useCallback((keepVisible = false) => {
+    const generation = fetchGenerationRef.current + 1;
+    fetchGenerationRef.current = generation;
     if (!keepVisible) setLoading(true);
     setError(null);
-    apiFetch(`/api/dashboard?lang=${locale}`)
+    const resumeQuery = selectedResumeId ? `&resumeId=${encodeURIComponent(String(selectedResumeId))}` : '';
+    apiFetch(`/api/dashboard?lang=${locale}${resumeQuery}`)
       .then(async (res) => {
         const json = await res.json();
         if (!res.ok) throw new Error(json.error || t('dashboard.loadError') || '加载失败');
         return json;
       })
       .then((json) => {
+        if (generation !== fetchGenerationRef.current) return;
         if (json.error) {
           setError(json.error);
         } else {
           const nextData = json as DashboardData;
           setData(nextData);
+          setError(null);
           if (dashboardCacheOwnerRef.current) {
-            writeDashboardCache(dashboardCacheOwnerRef.current, locale, nextData);
+            writeDashboardCache(dashboardCacheOwnerRef.current, locale, selectedResumeId, nextData);
           }
           setDashboardLoadVersion((version) => version + 1);
         }
       })
-      .catch((err) => setError(err?.message || t('dashboard.loadError') || '加载失败'))
-      .finally(() => setLoading(false));
-  }, [locale, t]);
+      .catch((err) => {
+        if (generation !== fetchGenerationRef.current) return;
+        setError(err?.message || t('dashboard.loadError') || '加载失败');
+      })
+      .finally(() => {
+        if (generation !== fetchGenerationRef.current) return;
+        setLoading(false);
+      });
+  }, [locale, selectedResumeId, t]);
+
+  const applyResumeOptions = useCallback((options: Array<{ id: number; file_name: string; processing_status?: string }>) => {
+    setResumeOptions(options);
+    setSelectedResumeId((current) => {
+      const stored = readActiveResumeId();
+      const preferred = (current && options.some((item) => item.id === current))
+        ? current
+        : (stored && options.some((item) => item.id === stored) ? stored : options[0]?.id || null);
+      if (preferred && preferred !== current) {
+        writeActiveResumeId(preferred);
+        void apiFetch('/api/resume/active', {
+          method: 'PATCH',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ resumeId: preferred }),
+        });
+      }
+      return preferred;
+    });
+  }, []);
+
+  const loadResumeOptions = useCallback(async () => {
+    try {
+      const response = await apiFetch('/api/resume');
+      const json = response.ok ? await response.json() : { resumes: [] };
+      applyResumeOptions(Array.isArray(json.resumes) ? json.resumes : []);
+    } catch {
+      // Resume list is auxiliary; the dashboard payload remains usable.
+    }
+  }, [applyResumeOptions]);
 
   useEffect(() => {
     if (!localeReady) return;
@@ -330,7 +357,7 @@ export default function DashboardPage() {
       .then(({ data: { session } }) => {
         if (cancelled) return;
         const userId = session?.user.id ?? null;
-        const cachedData = userId ? readDashboardCache(userId, locale) : null;
+        const cachedData = userId ? readDashboardCache<DashboardData>(userId, locale, selectedResumeId) : null;
         dashboardCacheOwnerRef.current = userId;
         if (cachedData) {
           setData(cachedData);
@@ -342,7 +369,68 @@ export default function DashboardPage() {
     return () => {
       cancelled = true;
     };
-  }, [fetchDashboard, localeReady]);
+  }, [fetchDashboard, localeReady, selectedResumeId]);
+
+  useEffect(() => {
+    void loadResumeOptions();
+  }, [loadResumeOptions]);
+
+  const selectedResumeProcessing = isActiveResumeProcessing(
+    resumeOptions.find((item) => item.id === selectedResumeId)?.processing_status
+      ?? resumeOptions[0]?.processing_status,
+  ) || data?.processing === true;
+
+  useEffect(() => {
+    if (!selectedResumeProcessing) {
+      if (wasProcessingRef.current) {
+        wasProcessingRef.current = false;
+        void loadResumeOptions();
+        fetchDashboard(true);
+      }
+      return;
+    }
+    wasProcessingRef.current = true;
+    const interval = window.setInterval(() => {
+      void loadResumeOptions();
+      fetchDashboard(true);
+    }, 2500);
+    return () => window.clearInterval(interval);
+  }, [fetchDashboard, loadResumeOptions, selectedResumeProcessing]);
+
+  useEffect(() => {
+    const refresh = () => {
+      void loadResumeOptions();
+      fetchDashboard(true);
+    };
+    const onVisible = () => {
+      if (document.visibilityState === 'visible') refresh();
+    };
+    const onStorage = (event: StorageEvent) => {
+      if (event.key === RESUME_UPDATED_STORAGE_KEY) refresh();
+    };
+    window.addEventListener(RESUME_UPDATED_EVENT, refresh);
+    window.addEventListener('storage', onStorage);
+    window.addEventListener('focus', refresh);
+    document.addEventListener('visibilitychange', onVisible);
+    return () => {
+      window.removeEventListener(RESUME_UPDATED_EVENT, refresh);
+      window.removeEventListener('storage', onStorage);
+      window.removeEventListener('focus', refresh);
+      document.removeEventListener('visibilitychange', onVisible);
+    };
+  }, [fetchDashboard, loadResumeOptions]);
+
+  const handleResumeChange = useCallback((value: string) => {
+    const resumeId = Number(value);
+    if (!Number.isInteger(resumeId) || resumeId <= 0) return;
+    setSelectedResumeId(resumeId);
+    writeActiveResumeId(resumeId);
+    void apiFetch('/api/resume/active', {
+      method: 'PATCH',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ resumeId }),
+    });
+  }, []);
 
   useEffect(() => {
     if (dashboardLoadVersion === 0) return;
@@ -387,7 +475,7 @@ export default function DashboardPage() {
       const res = await apiFetch('/api/networking/recommend', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ lang: locale }),
+        body: JSON.stringify({ lang: locale, resumeId: selectedResumeId }),
       });
       const json = await res.json();
       if (!res.ok || !json.recommendation) {
@@ -409,7 +497,7 @@ export default function DashboardPage() {
     } finally {
       setNetworkingLoading(false);
     }
-  }, [locale, t]);
+  }, [locale, selectedResumeId, t]);
 
   const loadInterviewDetail = useCallback(async (interviewId: number) => {
     setSelectedInterview(null);
@@ -435,7 +523,7 @@ export default function DashboardPage() {
   useEffect(() => {
     if (data?.diagnosis?.window !== 'preparation') return;
     let cancelled = false;
-    apiFetch('/api/networking/progress')
+    apiFetch(`/api/networking/progress${selectedResumeId ? `?resumeId=${encodeURIComponent(String(selectedResumeId))}` : ''}`)
       .then((res) => (res.ok ? res.json() : { progress: null }))
       .then((json) => {
         if (cancelled) return;
@@ -462,7 +550,7 @@ export default function DashboardPage() {
     return () => {
       cancelled = true;
     };
-  }, [data?.diagnosis?.window, data?.selectedRegion, locale]);
+  }, [data?.diagnosis?.window, data?.selectedRegion, locale, selectedResumeId]);
 
   const handleToggleNetworkingMilestone = useCallback(async (milestone: string) => {
     if (!networkingProgress) return;
@@ -479,7 +567,7 @@ export default function DashboardPage() {
       const res = await apiFetch('/api/networking/progress', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ stage: nextStage, completedMilestones: completed }),
+        body: JSON.stringify({ stage: nextStage, completedMilestones: completed, resumeId: selectedResumeId }),
       });
       const json = await res.json();
       if (!res.ok || !json.progress) throw new Error(json.error || '进度更新失败');
@@ -517,6 +605,31 @@ export default function DashboardPage() {
     };
   }, [data]);
 
+  const cockpitHintKey = useMemo(() => {
+    if (data?.processing || selectedResumeProcessing) return 'processing' as const;
+    if (data?.processingStatus === 'failed') return 'failed' as const;
+    const missing = data?.missingSteps || [];
+    if (!data || missing.includes('resume') || data.counts.resumes === 0) return 'resume' as const;
+    if (missing.includes('confirm')) return 'confirm' as const;
+    if (data.profileReady === false) return 'incomplete' as const;
+    return 'ready' as const;
+  }, [data, selectedResumeProcessing]);
+
+  const cockpitSteps = useMemo(() => {
+    const missing = new Set(data?.missingSteps || []);
+    const hasResume = (data?.counts.resumes || 0) > 0 && !missing.has('resume');
+    const parsed = hasResume
+      && cockpitHintKey !== 'processing'
+      && cockpitHintKey !== 'failed';
+    const confirmed = parsed && !missing.has('confirm');
+    return [
+      { key: 'resume', done: hasResume, current: cockpitHintKey === 'resume' },
+      { key: 'parse', done: parsed, current: cockpitHintKey === 'processing' || cockpitHintKey === 'failed' },
+      { key: 'confirm', done: confirmed, current: cockpitHintKey === 'confirm' },
+      { key: 'details', done: data?.profileReady === true, current: cockpitHintKey === 'incomplete' },
+    ];
+  }, [cockpitHintKey, data]);
+
   return (
     <AuthGuard showAccountBar={false}>
       <div className="min-h-screen bg-white dark:bg-zinc-950">
@@ -532,11 +645,22 @@ export default function DashboardPage() {
           <p className="max-w-2xl text-sm leading-6 text-zinc-500 dark:text-zinc-400 md:text-base">
             {t('dashboard.subtitle')}
           </p>
+          <p className="mt-2 max-w-2xl text-xs leading-5 text-zinc-400 dark:text-zinc-500 md:text-sm">
+            {t('dashboard.howto')}
+          </p>
+          {resumeOptions.length > 1 && (
+            <div className="mt-4 flex max-w-sm items-center gap-2">
+              <label htmlFor="dashboard-resume" className="shrink-0 text-xs font-medium text-zinc-500 dark:text-zinc-400">当前简历</label>
+              <select id="dashboard-resume" value={selectedResumeId ? String(selectedResumeId) : ''} onChange={(event) => handleResumeChange(event.target.value)} className="min-w-0 flex-1 rounded-md border border-zinc-200 bg-white px-3 py-2 text-sm text-zinc-800 outline-none dark:border-zinc-700 dark:bg-zinc-900 dark:text-zinc-100">
+                {resumeOptions.map((resume) => <option key={resume.id} value={resume.id}>{resume.file_name}</option>)}
+              </select>
+            </div>
+          )}
         </div>
 
         {loading && !data && <DashboardSkeleton />}
 
-        {!loading && error && !data && (
+        {error && !data && (
           <Card className="rounded-2xl border-zinc-200 dark:border-zinc-800">
             <CardContent className="p-6 text-center text-zinc-500">
               {error}
@@ -544,8 +668,13 @@ export default function DashboardPage() {
           </Card>
         )}
 
-        {!loading && !error && data && (
+        {data && (
           <div className="flex flex-col gap-8 md:gap-10">
+            {error && (
+              <div className="rounded-lg border border-amber-200 bg-amber-50 px-4 py-3 text-sm text-amber-800 dark:border-amber-900/60 dark:bg-amber-950/30 dark:text-amber-200">
+                {t('dashboard.refreshError')}
+              </div>
+            )}
             <section className="order-1">
                   <div className="grid border-y border-zinc-200 lg:grid-cols-[minmax(0,1fr)_20rem] dark:border-zinc-800">
                     <div className="py-6 pr-0 md:py-8 lg:pr-10">
@@ -588,28 +717,75 @@ export default function DashboardPage() {
                       />
                     </div>
                   </div>
-            </section>
-            {data.profileReady === false && (
-              <section className="order-2 rounded-lg border border-zinc-200 bg-zinc-50/60 dark:border-zinc-800 dark:bg-zinc-900/20">
-                <div className="flex flex-col gap-4 px-4 py-4 md:flex-row md:items-center md:justify-between md:px-5">
-                  <div className="min-w-0">
-                    <p className="text-sm font-semibold text-zinc-900 dark:text-zinc-100">
-                      {t('dashboard.onboardingRequired')}
+                  {(data.metrics.resumeImpact === 0 && data.metrics.interviewStrength === 0) && (
+                    <p className="mt-3 text-xs leading-5 text-zinc-400 dark:text-zinc-500">
+                      {t('dashboard.metricEmptyHint')}
                     </p>
-                    <p className="mt-1 text-xs text-zinc-500 dark:text-zinc-400">
-                      {(data.missingSteps || []).map((step) => t(`dashboard.onboardingStep.${step}`)).join(' / ')}
+                  )}
+            </section>
+            <section className={`order-2 rounded-lg border ${cockpitHintKey === 'failed' ? 'border-red-200 bg-red-50/70 dark:border-red-900/60 dark:bg-red-950/20' : 'border-zinc-200 bg-zinc-50/60 dark:border-zinc-800 dark:bg-zinc-900/20'}`}>
+              <div className="flex flex-col gap-4 px-4 py-4 md:px-5">
+                <div className="flex flex-col gap-3 md:flex-row md:items-start md:justify-between">
+                  <div className="min-w-0">
+                    <div className="mb-1.5 flex items-center gap-2">
+                      {cockpitHintKey === 'processing' && <Loader2 className="h-4 w-4 animate-spin text-zinc-500" />}
+                      {cockpitHintKey === 'ready' && <Check className="h-4 w-4 text-emerald-600 dark:text-emerald-400" />}
+                      <p className="text-sm font-semibold text-zinc-900 dark:text-zinc-100">
+                        {t(`dashboard.status.${cockpitHintKey}.title`)}
+                      </p>
+                    </div>
+                    <p className="text-sm leading-6 text-zinc-600 dark:text-zinc-300">
+                      {cockpitHintKey === 'failed' && data.processingError
+                        ? data.processingError
+                        : t(`dashboard.status.${cockpitHintKey}.description`)}
                     </p>
                   </div>
-                  <Button asChild size="sm" className="bg-zinc-900 text-white hover:bg-zinc-800 dark:bg-white dark:text-zinc-900 dark:hover:bg-zinc-200">
-                    <Link href="/resume">
-                      {t('dashboard.action.onboarding')}
-                      <ArrowRight className="ml-1.5 h-3.5 w-3.5" />
-                    </Link>
-                  </Button>
+                  {cockpitHintKey !== 'ready' && (
+                    <Button asChild size="sm" className="shrink-0 bg-zinc-900 text-white hover:bg-zinc-800 dark:bg-white dark:text-zinc-900 dark:hover:bg-zinc-200">
+                      <Link href="/resume">
+                        {cockpitHintKey === 'processing'
+                          ? t('dashboard.action.waitProcessing')
+                          : cockpitHintKey === 'failed'
+                            ? t('dashboard.action.retryResume')
+                            : t('dashboard.action.onboarding')}
+                        <ArrowRight className="ml-1.5 h-3.5 w-3.5" />
+                      </Link>
+                    </Button>
+                  )}
                 </div>
-              </section>
-            )}
-            {data.profileReady && data.personalization && (
+                <ol className="grid grid-cols-1 gap-2 sm:grid-cols-2 lg:grid-cols-4">
+                  {cockpitSteps.map((step, index) => (
+                    <li
+                      key={step.key}
+                      className={`rounded-md border px-3 py-2.5 ${
+                        step.current
+                          ? 'border-zinc-900 bg-white dark:border-white dark:bg-zinc-950'
+                          : 'border-zinc-200 bg-white/70 dark:border-zinc-800 dark:bg-zinc-950/40'
+                      }`}
+                    >
+                      <div className="flex items-center gap-2">
+                        <span className={`flex h-5 w-5 items-center justify-center rounded-full text-[10px] font-semibold ${
+                          step.done
+                            ? 'bg-zinc-900 text-white dark:bg-white dark:text-zinc-900'
+                            : step.current
+                              ? 'border border-zinc-900 text-zinc-900 dark:border-white dark:text-white'
+                              : 'border border-zinc-300 text-zinc-400 dark:border-zinc-700'
+                        }`}>
+                          {step.done ? <Check className="h-3 w-3" /> : index + 1}
+                        </span>
+                        <span className={`text-xs font-medium ${step.done || step.current ? 'text-zinc-900 dark:text-zinc-100' : 'text-zinc-500'}`}>
+                          {t(`dashboard.status.step.${step.key}`)}
+                        </span>
+                      </div>
+                      <p className="mt-1.5 pl-7 text-[11px] leading-4 text-zinc-500 dark:text-zinc-400">
+                        {t(`dashboard.status.step.${step.key}Hint`)}
+                      </p>
+                    </li>
+                  ))}
+                </ol>
+              </div>
+            </section>
+            {data.personalization && (
               <section className="order-3 border-y border-zinc-200 py-5 dark:border-zinc-800 md:py-6">
                 <div className="mb-4 flex flex-col gap-1">
                   <h3 className="text-lg font-semibold tracking-tight text-zinc-900 dark:text-zinc-100">
@@ -654,6 +830,12 @@ export default function DashboardPage() {
                   <span>{t('dashboard.personalization.experience')}: {data.personalization.internshipCount} / {data.personalization.projectCount}</span>
                   <span>{t('dashboard.personalization.skills')}: {data.personalization.skillCount}</span>
                 </div>
+              </section>
+            )}
+            {!data.diagnosis && (
+              <section id="diagnosis" className="order-4 rounded-lg border border-dashed border-zinc-200 px-4 py-4 dark:border-zinc-800 md:px-5">
+                <p className="text-sm font-semibold text-zinc-900 dark:text-zinc-100">{t('dashboard.diagnosisEmpty.title')}</p>
+                <p className="mt-1 text-sm leading-6 text-zinc-500 dark:text-zinc-400">{t('dashboard.diagnosisEmpty.description')}</p>
               </section>
             )}
             {data.diagnosis && (
@@ -1261,6 +1443,12 @@ export default function DashboardPage() {
               </section>
             */}
             {/* 个性化求职规划 */}
+            {!data.plan && (
+              <section id="plan" className="order-3 scroll-mt-24 rounded-lg border border-dashed border-zinc-200 px-4 py-4 dark:border-zinc-800 md:px-5">
+                <p className="text-sm font-semibold text-zinc-900 dark:text-zinc-100">{t('dashboard.planEmpty.title')}</p>
+                <p className="mt-1 text-sm leading-6 text-zinc-500 dark:text-zinc-400">{t('dashboard.planEmpty.description')}</p>
+              </section>
+            )}
             {data.plan && planGroups && (
               <section id="plan" className="order-3 scroll-mt-24">
                 <div className="flex flex-col md:flex-row md:items-center md:justify-between gap-4 mb-4">

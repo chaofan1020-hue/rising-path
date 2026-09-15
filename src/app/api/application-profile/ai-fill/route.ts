@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { getAuthContext, unauthorizedResponse } from '@/lib/auth-server';
 import { betaEntitlementResponse } from '@/lib/beta-entitlements';
+import { getUserResume } from '@/lib/resume-selection';
 
 function serializeJob(row: Record<string, unknown> | null) {
   if (!row) return null;
@@ -48,13 +49,8 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ error: '无效的简历 ID' }, { status: 400 });
     }
 
-    const { data: resume, error: resumeError } = await auth.client
-      .from('resumes')
-      .select('id')
-      .eq('id', resumeId)
-      .eq('user_id', auth.user.id)
-      .single();
-    if (resumeError || !resume) {
+    const resume = await getUserResume(auth.client, auth.user.id, resumeId);
+    if (!resume) {
       return NextResponse.json({ error: '简历不存在或无权访问' }, { status: 404 });
     }
 
@@ -62,6 +58,7 @@ export async function POST(request: NextRequest) {
       .from('application_profile_jobs')
       .select('id, resume_id, status, last_error, created_at, updated_at, completed_at')
       .eq('user_id', auth.user.id)
+      .eq('resume_id', resumeId)
       .in('status', ['pending', 'running'])
       .order('created_at', { ascending: false })
       .limit(1)
@@ -81,6 +78,7 @@ export async function POST(request: NextRequest) {
         .from('application_profile_jobs')
         .select('id, resume_id, status, last_error, created_at, updated_at, completed_at')
         .eq('user_id', auth.user.id)
+        .eq('resume_id', resumeId)
         .in('status', ['pending', 'running'])
         .order('created_at', { ascending: false })
         .limit(1)

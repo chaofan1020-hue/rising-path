@@ -55,6 +55,10 @@ import { AuthGuard } from '@/components/auth-guard';
 import { apiFetch } from '@/lib/api-client';
 import { Header1 } from '@/components/header1';
 import { useLanguage } from '@/lib/language-context';
+import { readActiveResumeId, writeActiveResumeId } from '@/lib/active-resume';
+import { pickEligibleResumeId } from '@/lib/resume-availability';
+import { useResumeAvailability } from '@/hooks/use-resume-availability';
+import { ResumeAvailabilityHint } from '@/components/resume-availability-hint';
 import {
   applyOptimizationChangeReapply,
   applyOptimizationChangeReview,
@@ -719,7 +723,8 @@ const ResumeEditor = ({
 // 内部组件
 function OptimizeContent() {
   const searchParams = useSearchParams();
-  const [resumes, setResumes] = useState<Resume[]>([]);
+  const { loading: resumesLoading, error: resumesError, availability, reload: fetchResumes } = useResumeAvailability<Resume>();
+  const resumes = availability.eligible;
   const [favoriteJobs, setFavoriteJobs] = useState<JobOption[]>([]);
   const [applicationJobs, setApplicationJobs] = useState<JobOption[]>([]);
   const [selectedResumeId, setSelectedResumeId] = useState<string>('');
@@ -976,21 +981,31 @@ function OptimizeContent() {
   };
 
   useEffect(() => {
-    fetchResumes();
     fetchOptimizations();
     fetchJobOptions();
   }, []);
 
+  useEffect(() => {
+    if (resumesLoading) return;
+    const resumeParam = searchParams.get('resumeId');
+    const stored = readActiveResumeId();
+    const next = pickEligibleResumeId(resumes, resumeParam || stored);
+    if (next) {
+      setSelectedResumeId(String(next));
+      writeActiveResumeId(next);
+    } else {
+      setSelectedResumeId('');
+    }
+  }, [resumes, resumesLoading, searchParams]);
+
   // 从URL参数读取预填充数据
   useEffect(() => {
-    const resumeIdParam = searchParams.get('resumeId');
     const companyParam = searchParams.get('company');
     const positionParam = searchParams.get('position');
     const suggestionsParam = searchParams.get('suggestions');
     const jobIdParam = searchParams.get('jobId');
     const regionParam = searchParams.get('region');
     
-    if (resumeIdParam) setSelectedResumeId(resumeIdParam);
     if (companyParam) setTargetCompany(companyParam);
     if (positionParam) setTargetPosition(positionParam);
     if (suggestionsParam) setSuggestions(suggestionsParam);
@@ -1036,19 +1051,6 @@ function OptimizeContent() {
       window.clearTimeout(timer);
     };
   }, [jobQuery]);
-
-  const fetchResumes = async () => {
-    try {
-      const response = await apiFetch('/api/resume');
-      const data = await response.json();
-      if (!response.ok) throw new Error(data.error || '获取简历失败');
-      setResumes((data.resumes || []).filter((resume: Resume) => (
-        resume.processing_status === 'ready' && resume.segmentation_confirmed === true
-      )));
-    } catch (error) {
-      console.error('Failed to fetch resumes:', error);
-    }
-  };
 
   const fetchJobOptions = async () => {
     try {
@@ -1652,7 +1654,7 @@ function OptimizeContent() {
             <div className="grid grid-cols-1 gap-3 md:grid-cols-3 md:gap-4">
               <div>
                 <label className="text-xs md:text-sm font-medium mb-1.5 md:mb-2 block">{t('optimize.selectResume')}</label>
-                <Select value={selectedResumeId} onValueChange={setSelectedResumeId}>
+                <Select value={selectedResumeId} onValueChange={(value) => { setSelectedResumeId(value); writeActiveResumeId(Number(value)); }} disabled={resumesLoading || resumes.length === 0}>
                   <SelectTrigger className="h-9 md:h-10">
                     <SelectValue placeholder={t('optimize.selectResumePlaceholder')} />
                   </SelectTrigger>
@@ -1664,6 +1666,13 @@ function OptimizeContent() {
                     ))}
                   </SelectContent>
                 </Select>
+                <ResumeAvailabilityHint
+                  status={availability.status}
+                  loading={resumesLoading}
+                  error={resumesError ? t('resume.listLoadFailed') : ''}
+                  onRetry={() => void fetchResumes(true)}
+                  className="mt-2"
+                />
               </div>
               <div className="md:col-span-2">
                 <label className="text-xs md:text-sm font-medium mb-1.5 md:mb-2 block">{t('optimize.targetCompany')}</label>

@@ -57,6 +57,7 @@ const AUTH_ERROR_TRANSLATIONS: Record<Locale, Record<string, string>> = {
     '该邮箱已注册，请直接登录': '此信箱已註冊，請直接登入',
     '密码不符合安全要求': '密碼不符合安全要求',
     '验证码无效或已过期，请重新发送': '驗證碼無效或已過期，請重新傳送',
+    '请先完成人机验证': '請先完成人機驗證',
     '验证邮件发送失败，请稍后重试；若持续失败请检查 Supabase SMTP 配置': '驗證信傳送失敗，請稍後重試；若持續失敗，請檢查 Supabase SMTP 設定',
   },
   en: {
@@ -82,6 +83,7 @@ const AUTH_ERROR_TRANSLATIONS: Record<Locale, Record<string, string>> = {
     '该邮箱已注册，请直接登录': 'This email is already registered. Sign in instead.',
     '密码不符合安全要求': 'Password does not meet the security requirements.',
     '验证码无效或已过期，请重新发送': 'The code is invalid or expired. Please send a new one.',
+    '请先完成人机验证': 'Complete the human verification first.',
     '验证邮件发送失败，请稍后重试；若持续失败请检查 Supabase SMTP 配置': 'The verification email could not be sent. Check the Supabase SMTP configuration if this continues.',
   },
 };
@@ -188,7 +190,7 @@ export default function LoginPage() {
     }
   };
 
-  const handleRegister = async (data: RegisterData) => {
+  const handleRegister = async (data: RegisterData, captchaToken?: string | null) => {
     const passwordError = validatePassword(data.password);
     if (passwordError) {
       setError(localizePasswordError(passwordError));
@@ -213,6 +215,7 @@ export default function LoginPage() {
           email: data.email,
           password: data.password,
           username: data.username,
+          captchaToken,
         }),
       });
       const result = (await response.json()) as {
@@ -233,7 +236,7 @@ export default function LoginPage() {
     }
   };
 
-  const handleResendVerification = async (email: string): Promise<boolean> => {
+  const handleResendVerification = async (email: string, captchaToken?: string | null): Promise<boolean> => {
     setLoading(true);
     setError(null);
     setMessage(null);
@@ -241,7 +244,7 @@ export default function LoginPage() {
       const response = await fetch('/api/auth/resend', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ email }),
+        body: JSON.stringify({ email, captchaToken }),
       });
       const result = (await response.json()) as { error?: string };
       if (!response.ok) {
@@ -257,7 +260,7 @@ export default function LoginPage() {
     }
   };
 
-  const handleSendOtp = async (email: string): Promise<boolean> => {
+  const handleSendOtp = async (email: string, captchaToken?: string | null): Promise<boolean> => {
     setLoading(true);
     setError(null);
     setMessage(null);
@@ -265,7 +268,7 @@ export default function LoginPage() {
       const response = await fetch('/api/auth/otp', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ email }),
+        body: JSON.stringify({ email, captchaToken }),
       });
       const result = (await response.json()) as { error?: string };
       if (!response.ok) throw new Error(localizeAuthError(result.error, feedback, feedback.codeSent, locale));
@@ -359,7 +362,7 @@ export default function LoginPage() {
     }
   };
 
-  const handleResetPassword = async (email: string) => {
+  const handleResetPassword = async (email: string, captchaToken?: string | null) => {
     setLoading(true);
     setError(null);
     setMessage(null);
@@ -367,7 +370,7 @@ export default function LoginPage() {
       const response = await fetch('/api/auth/reset', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ email }),
+        body: JSON.stringify({ email, captchaToken }),
       });
       const result = (await response.json()) as { error?: string };
       if (!response.ok) throw new Error(localizeAuthError(result.error, feedback, feedback.resetSent, locale));

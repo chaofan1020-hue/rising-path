@@ -61,7 +61,7 @@ function applyResumeFilters<T extends {
 }
 
 export async function GET(request: NextRequest) {
-  const permissionError = requireAdminPermission(request, ADMIN_PERMISSIONS.usersRead);
+  const permissionError = await requireAdminPermission(request, ADMIN_PERMISSIONS.usersRead);
   if (permissionError) return permissionError;
 
   const params = request.nextUrl.searchParams;
@@ -69,6 +69,13 @@ export async function GET(request: NextRequest) {
   const pageSize = Math.min(positiveInteger(params.get('pageSize'), 20), MAX_PAGE_SIZE);
   const status = params.get('status')?.trim() || null;
   const search = cleanSearch(params.get('search'));
+  const userId = params.get('userId')?.trim() || null;
+  if (userId && !isUuid(userId)) {
+    return NextResponse.json(
+      { data: null, error: { code: 'INVALID_USER_ID', message: '学生 ID 无效' } },
+      { status: 400 },
+    );
+  }
 
   if (status && !RESUME_STATUSES.includes(status as typeof RESUME_STATUSES[number])) {
     return NextResponse.json(
@@ -88,6 +95,7 @@ export async function GET(request: NextRequest) {
       .order('created_at', { ascending: false })
       .range((page - 1) * pageSize, page * pageSize - 1);
     query = applyResumeFilters(query, status, search);
+    if (userId) query = query.eq('user_id', userId);
 
     const listResult = await query;
     const countClient = client as unknown as CountClient;
@@ -96,12 +104,16 @@ export async function GET(request: NextRequest) {
       status,
       search,
     );
-    const statusQueries = RESUME_STATUSES.map((item) => applyResumeFilters(
-      countClient.from('resumes').select('id', { count: 'exact', head: true }),
-      item,
-      search,
-    ));
-    const [totalResult, ...statusResults] = await Promise.all([totalQuery, ...statusQueries]);
+    const totalQueryScoped = userId ? totalQuery.eq('user_id', userId) : totalQuery;
+    const statusQueries = RESUME_STATUSES.map((item) => {
+      const itemQuery = applyResumeFilters(
+        countClient.from('resumes').select('id', { count: 'exact', head: true }),
+        item,
+        search,
+      );
+      return userId ? itemQuery.eq('user_id', userId) : itemQuery;
+    });
+    const [totalResult, ...statusResults] = await Promise.all([totalQueryScoped, ...statusQueries]);
     const { data, error, count } = listResult;
     if (error) throw new Error(error.message);
     if (totalResult.error) throw new Error(totalResult.error.message);

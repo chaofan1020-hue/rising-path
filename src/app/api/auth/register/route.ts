@@ -7,8 +7,10 @@ import {
   consumeAuthRateLimit,
   isAuthRateLimitError,
   normalizeEmail,
+  captchaErrorIfInvalid,
   validatePassword,
 } from '@/lib/auth-security';
+import { readCaptchaToken } from '@/lib/altcha';
 
 export async function POST(request: NextRequest) {
   const ip = getClientIp(request);
@@ -27,6 +29,10 @@ export async function POST(request: NextRequest) {
     }
     if (username.length < 2 || username.length > 40 || /[\u0000-\u001f\u007f]/.test(username)) {
       return NextResponse.json({ error: '用户名长度需要在 2 到 40 个字符之间' }, { status: 400 });
+    }
+    const captchaError = await captchaErrorIfInvalid(readCaptchaToken(body));
+    if (captchaError) {
+      return NextResponse.json({ error: captchaError }, { status: 400 });
     }
 
     const ipLimit = await consumeAuthRateLimit(`signup:ip:${ip}`, 5, 3600, 3600);

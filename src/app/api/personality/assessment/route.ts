@@ -10,6 +10,7 @@ import {
 import { resolveActiveRegion } from '@/lib/user-region';
 import type { RegionKey } from '@/lib/region-dna';
 import type { ResumeProfile } from '@/lib/resume-types';
+import { getUserResume } from '@/lib/resume-selection';
 
 function positiveInteger(value: unknown): number | null {
   if (value === undefined || value === null || value === '') return null;
@@ -38,6 +39,7 @@ export async function GET(request: NextRequest) {
     const auth = await getAuthContext(request);
     if (!auth) return unauthorizedResponse();
 
+    const resume = await getUserResume(auth.client, auth.user.id, request.nextUrl.searchParams.get('resumeId'));
     const { data, error } = await auth.client
       .from('personality_assessments')
       .select('*')
@@ -50,8 +52,9 @@ export async function GET(request: NextRequest) {
       throw new Error(`读取求职方向测评失败: ${error.message}`);
     }
 
+    const assessment = data && (!resume || data.resume_id === resume.id) ? serializeAssessment(data as Record<string, unknown>) : null;
     return NextResponse.json({
-      assessment: data ? serializeAssessment(data as Record<string, unknown>) : null,
+      assessment,
     });
   } catch (error) {
     console.error('Error fetching personality assessment:', error);
@@ -73,6 +76,10 @@ export async function POST(request: NextRequest) {
       if (resumeId === null) {
         return NextResponse.json({ error: '简历 ID 无效' }, { status: 400 });
       }
+    }
+    if (resumeId === null) {
+      const resume = await getUserResume(auth.client, auth.user.id);
+      resumeId = resume?.id ?? null;
     }
 
     let profile: Record<string, unknown> | null = null;

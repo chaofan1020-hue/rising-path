@@ -57,7 +57,7 @@ export async function GET(request: NextRequest) {
 // PATCH：人工更新基因（来自审查页）。body: { company, dna, reviewNotes? }
 export async function PATCH(request: NextRequest) {
   try {
-    const permissionError = requireAdminPermission(request, ADMIN_PERMISSIONS.dnaPublish);
+    const permissionError = await requireAdminPermission(request, ADMIN_PERMISSIONS.dnaPublish);
     if (permissionError) return permissionError;
 
     const body: unknown = await request.json();

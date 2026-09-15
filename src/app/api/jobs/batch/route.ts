@@ -34,7 +34,7 @@ function chunks<T>(values: T[], size: number): T[][] {
 
 export async function POST(request: NextRequest) {
   try {
-    const permissionError = requireAdminPermission(request, ADMIN_PERMISSIONS.jobsWrite);
+    const permissionError = await requireAdminPermission(request, ADMIN_PERMISSIONS.jobsWrite);
     if (permissionError) return permissionError;
     const client = getSupabaseClient();
     const body: BatchJobInput = await request.json();
@@ -163,7 +163,7 @@ export async function PUT(request: NextRequest) {
 
 async function handleBatchDelete(request: NextRequest) {
   try {
-    const permissionError = requireAdminPermission(request, ADMIN_PERMISSIONS.jobsWrite);
+    const permissionError = await requireAdminPermission(request, ADMIN_PERMISSIONS.jobsWrite);
     if (permissionError) return permissionError;
     const client = getSupabaseClient();
     

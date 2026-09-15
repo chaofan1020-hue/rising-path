@@ -108,6 +108,7 @@ export function parseGreenhouseJob(rawValue: unknown, options: ConnectorParseOpt
     salary_range: salary,
     compensation: salary,
     valid_through: deadline,
+    date_posted: text(raw.first_published || raw.firstPublished || raw.published_at) || null,
     status: mapStatus(raw),
     sync_action: mapStatus(raw) === 'closed' ? 'close' : 'upsert',
     source_evidence: structuredFieldSources,

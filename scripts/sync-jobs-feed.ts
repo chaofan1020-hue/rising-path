@@ -1,7 +1,10 @@
 import { config as loadDotenv } from 'dotenv';
 import { runJobFeedSync, type JobFeedSyncMode } from '@/lib/job-feed-orchestrator';
 
-loadDotenv({ path: '.env.local' });
+// Allow operators to explicitly select the target environment. Falling back
+// to the local file preserves developer behavior, while production runs can
+// set ENV_FILE without silently syncing a different Supabase project.
+loadDotenv({ path: process.env.ENV_FILE || process.env.DOTENV_CONFIG_PATH || '.env.local' });
 
 function parseArguments() {
   const modeArg = process.argv.find((argument) => argument.startsWith('--mode='))?.split('=')[1];

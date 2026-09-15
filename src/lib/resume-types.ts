@@ -181,6 +181,17 @@ export type ResumeProcessingStatus =
   | 'ready'
   | 'failed';
 
+export const ACTIVE_RESUME_PROCESSING_STATUSES: ResumeProcessingStatus[] = [
+  'uploaded',
+  'extracting_text',
+  'extracting_profile',
+  'deriving_segmentation',
+];
+
+export function isActiveResumeProcessing(status?: string | null): boolean {
+  return !!status && ACTIVE_RESUME_PROCESSING_STATUSES.includes(status as ResumeProcessingStatus);
+}
+
 export type ResumeProcessingStage =
   | 'queued'
   | 'text_extraction'

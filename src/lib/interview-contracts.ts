@@ -3,9 +3,9 @@ import { randomUUID } from 'node:crypto';
 
 export const clientRequestIdSchema = z.string().trim().min(8).max(80).regex(/^[A-Za-z0-9._:-]+$/);
 
-// 当前模拟面试仅支持语音输入：候选人回答必须来自实时 ASR 或 HTTP ASR 回退。
+// 候选人回答可来自实时 ASR、HTTP ASR 回退或无音频设备时的文字输入。
 // `system` 仅用于开场、轮次切换和超时收尾等服务端控制动作。
-export const interviewInputSourceSchema = z.enum(['asr', 'asr_fallback', 'system']).default('system');
+export const interviewInputSourceSchema = z.enum(['asr', 'asr_fallback', 'typed', 'system']).default('system');
 
 export const interviewSummaryRequestSchema = z.object({
   sessionId: z.number().int().positive(),

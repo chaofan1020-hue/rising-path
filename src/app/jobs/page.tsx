@@ -15,13 +15,14 @@ import {
   SheetTrigger,
   SheetTitle,
 } from '@/components/ui/sheet';
-import { Search, MapPin, Briefcase, Building2, Users, SlidersHorizontal, RotateCcw, ExternalLink, ChevronLeft, ChevronRight, X, Plus, Check, Loader2, Heart, Sparkles, Calendar } from 'lucide-react';
+import { Search, MapPin, Briefcase, Building2, Users, SlidersHorizontal, RotateCcw, ExternalLink, ChevronLeft, ChevronRight, X, Plus, Check, Loader2, Heart, Sparkles, Calendar, Clock } from 'lucide-react';
 import Link from 'next/link';
 import { AuthGuard } from '@/components/auth-guard';
 import { apiFetch } from '@/lib/api-client';
 import { Header1 } from '@/components/header1';
 import { useLanguage } from '@/lib/language-context';
 import { getJobDeadlineRemaining } from '@/lib/job-deadline';
+import { CompanyLogo } from '@/components/company-logo';
 
 interface Job {
   id: number;
@@ -44,6 +45,7 @@ interface Job {
   valid_through?: string | null;
   deadline_time_zone?: string | null;
   is_active?: boolean;
+  posted_at?: string | null;
   created_at: string;
   updated_at?: string;
 }
@@ -63,6 +65,13 @@ function formatDeadline(value: string | null | undefined, timeZone?: string | nu
   return date
     ? new Intl.DateTimeFormat(undefined, { year: 'numeric', month: '2-digit', day: '2-digit', timeZone: timeZone || 'UTC' }).format(date)
     : null;
+}
+
+function formatPostedDate(value: string | null | undefined, locale: string): string | null {
+  if (!value) return null;
+  const timestamp = Date.parse(value);
+  if (!Number.isFinite(timestamp)) return null;
+  return new Intl.DateTimeFormat(locale === 'en' ? 'en-US' : locale, { year: 'numeric', month: '2-digit', day: '2-digit' }).format(new Date(timestamp));
 }
 
 function formatDeadlineRemaining(value: string | null | undefined, now: number, t: (key: string, params?: Record<string, string | number>) => string): string | null {
@@ -100,62 +109,6 @@ interface CompanyOption {
   logo_url: string | null;
   fallback_logo_url: string | null;
   job_count: number;
-}
-
-// 获取公司首字母
-function getCompanyInitial(company: string): string {
-  // 处理中文公司名
-  if (/[\u4e00-\u9fa5]/.test(company)) {
-    return company.charAt(0);
-  }
-  // 处理英文公司名，取首字母大写
-  const words = company.split(/[\s-]+/);
-  if (words.length >= 2) {
-    return (words[0].charAt(0) + words[1].charAt(0)).toUpperCase();
-  }
-  return company.charAt(0).toUpperCase();
-}
-
-// 公司Logo组件
-function CompanyLogo({ company, logoUrl, fallbackLogoUrl }: { company: string; logoUrl?: string; fallbackLogoUrl?: string }) {
-  const [failedSource, setFailedSource] = useState<'primary' | 'fallback' | null>(null);
-
-  useEffect(() => {
-    setFailedSource(null);
-  }, [logoUrl, fallbackLogoUrl]);
-
-  const logoSource = failedSource === 'primary'
-    ? fallbackLogoUrl
-    : failedSource === 'fallback'
-      ? null
-      : logoUrl;
-
-  if (logoSource) {
-    return (
-      <div className="w-12 h-12 rounded-xl overflow-hidden bg-white border border-zinc-200 dark:border-zinc-700 flex-shrink-0">
-        <img
-          src={logoSource}
-          alt={company}
-          loading="lazy"
-          decoding="async"
-          referrerPolicy="no-referrer"
-          className="w-full h-full object-contain p-1"
-          onError={() => {
-            setFailedSource(logoSource === logoUrl && fallbackLogoUrl ? 'primary' : 'fallback');
-          }}
-        />
-      </div>
-    );
-  }
-
-  // Logo unavailable or failed: use a stable company initial placeholder.
-  return (
-    <div className="w-12 h-12 rounded-xl bg-zinc-900 dark:bg-white flex items-center justify-center flex-shrink-0 shadow-lg shadow-zinc-900/15 dark:shadow-black/30">
-      <span className="text-white dark:text-zinc-900 font-bold text-lg">
-        {getCompanyInitial(company)}
-      </span>
-    </div>
-  );
 }
 
 // 大地区选项（用于筛选）
@@ -454,7 +407,7 @@ function JobsContent() {
   const jobsRequestIdRef = useRef(0);
   const previousFilterKeyRef = useRef<string | null>(null);
 
-  const { t } = useLanguage();
+  const { t, locale } = useLanguage();
 
   useEffect(() => {
     setDeadlineNow(Date.now());
@@ -900,6 +853,12 @@ function JobsContent() {
                             className="rounded-md text-xs border-zinc-200 dark:border-zinc-700 text-zinc-600 dark:text-zinc-300"
                           >
                             {job.sponsorship === 'yes' ? t('jobs.sponsor') : t('jobs.noSponsor')}
+                          </Badge>
+                        )}
+                        {formatPostedDate(job.posted_at, locale) && (
+                          <Badge variant="outline" className="border-zinc-200 dark:border-zinc-700 text-zinc-600 dark:text-zinc-300 rounded-md text-xs">
+                            <Clock className="h-3 w-3 mr-1" />
+                            {t('jobs.postedOn')} {formatPostedDate(job.posted_at, locale)}
                           </Badge>
                         )}
                         {formatDeadline(job.valid_through, job.deadline_time_zone) && (

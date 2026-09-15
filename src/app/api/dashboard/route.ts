@@ -11,6 +11,9 @@ import {
   computeSponsorshipStatsByRole,
   type PersonalityAnswer,
 } from '@/lib/personality-assessment';
+import { getUserResume } from '@/lib/resume-selection';
+import { computeDashboardReadiness } from '@/lib/dashboard-readiness';
+import type { ResumeProcessingStatus } from '@/lib/resume-types';
 
 type Timeframe = 'now' | 'week' | 'month';
 type CareerStage = 'junior' | 'senior' | 'experienced' | 'returning_intern';
@@ -46,6 +49,9 @@ interface PlanRegionData {
 interface DashboardResume {
   id?: number;
   segmentation_confirmed?: boolean | null;
+  processing_status?: ResumeProcessingStatus | null;
+  processing_stage?: string | null;
+  processing_error?: string | null;
   profile?: {
     personality?: {
       dimensions?: Record<string, number>;
@@ -446,7 +452,16 @@ export async function GET(request: NextRequest) {
     return NextResponse.json({ error: 'Unable to load dashboard overview' }, { status: 500 });
   }
   const overview = overviewData as DashboardOverview;
-  const latestResume = overview.latest_resume ?? null;
+  let selectedResume: DashboardResume | null = null;
+  try {
+    const requestedResumeId = request.nextUrl.searchParams.get('resumeId');
+    selectedResume = await getUserResume(supabase, auth.user.id, requestedResumeId || undefined) as DashboardResume | null;
+    if (requestedResumeId && !selectedResume) return NextResponse.json({ error: 'Selected resume not found' }, { status: 404 });
+  } catch (error) {
+    console.error('[Dashboard] Failed to resolve selected resume:', error);
+    return NextResponse.json({ error: 'Unable to load selected resume' }, { status: 500 });
+  }
+  const latestResume = selectedResume ?? overview.latest_resume ?? null;
   const latestResumeId = latestResume?.id ?? null;
   const resumeCount = overview.resume_count ?? 0;
   const avgMatchScore = overview.avg_match_score ?? 0;
@@ -495,11 +510,12 @@ export async function GET(request: NextRequest) {
       && !item.reasons?.includes('personality.reason.marketLow')
     ));
   if (personalityProfile && selectedRegion && (personalityProfile.regionKey !== selectedRegion || needsMarketRefresh || needsScoringRefresh)) {
-    const { data: assessment } = await supabase
+    let assessmentQuery = supabase
       .from('personality_assessments')
       .select('answers')
-      .eq('user_id', auth.user.id)
-      .maybeSingle();
+      .eq('user_id', auth.user.id);
+    if (latestResumeId) assessmentQuery = assessmentQuery.eq('resume_id', latestResumeId);
+    const { data: assessment } = await assessmentQuery.maybeSingle();
     const answers = Array.isArray(assessment?.answers)
       ? assessment.answers as PersonalityAnswer[]
       : null;
@@ -557,21 +573,20 @@ export async function GET(request: NextRequest) {
   const identityMissing = Boolean(latestResume && selectedRegions.some((region) => (
     regionRequiresIdentity(region) && !resolveVisaStatusForRegion(latestResume.profile?.intention, region)
   )));
-  const profileReady = Boolean(
-    latestResume
-    && latestResume.segmentation_confirmed === true
-    && explicitRegion
-    && targetRoles.length > 0
-    && !identityMissing,
-  );
-  const missingSteps: string[] = [];
-  if (!latestResume) missingSteps.push('resume');
-  else if (latestResume.segmentation_confirmed !== true) missingSteps.push('confirm');
-  if (!explicitRegion) missingSteps.push('region');
-  if (targetRoles.length === 0) missingSteps.push('role');
-  if (identityMissing) {
-    missingSteps.push('identity');
-  }
+  const {
+    processing,
+    failed,
+    planReady,
+    profileReady,
+    missingSteps,
+  } = computeDashboardReadiness({
+    hasResume: Boolean(latestResume),
+    processingStatus: latestResume?.processing_status,
+    segmentationConfirmed: latestResume?.segmentation_confirmed,
+    hasRegion: Boolean(explicitRegion),
+    hasRoles: targetRoles.length > 0,
+    identityMissing,
+  });
 
   const gradYear = latestResume?.profile?.education?.[0]?.endYear ?? undefined;
   const nowDate = new Date();
@@ -615,15 +630,33 @@ export async function GET(request: NextRequest) {
   }
 
   // 行动建议
-  if (!profileReady) {
+  if (!planReady) {
     phase = 'setup';
-    phaseTitleKey = 'dashboard.phase.setup.title';
-    phaseDescriptionKey = 'dashboard.phase.setup.description';
+    phaseTitleKey = processing
+      ? 'dashboard.phase.processing.title'
+      : failed
+        ? 'dashboard.phase.failed.title'
+        : 'dashboard.phase.setup.title';
+    phaseDescriptionKey = processing
+      ? 'dashboard.phase.processing.description'
+      : failed
+        ? 'dashboard.phase.failed.description'
+        : 'dashboard.phase.setup.description';
     phaseDescriptionParams = {};
   }
 
   const actions: { titleKey: string; href: string; priority: 'high' | 'medium' | 'low' }[] = [];
-  if (!profileReady) {
+  if (!planReady) {
+    actions.push({
+      titleKey: processing
+        ? 'dashboard.action.waitProcessing'
+        : failed
+          ? 'dashboard.action.retryResume'
+          : 'dashboard.action.onboarding',
+      href: '/resume',
+      priority: 'high',
+    });
+  } else if (!profileReady) {
     actions.push({ titleKey: 'dashboard.action.onboarding', href: '/resume', priority: 'high' });
   } else if (resumeCount === 0) {
     actions.push({ titleKey: 'dashboard.action.uploadResume', href: '/resume', priority: 'high' });
@@ -650,7 +683,14 @@ export async function GET(request: NextRequest) {
     titleKey: 'dashboard.nextAction',
     href: actions[0]?.href || '/resume',
   };
-  if (!profileReady) {
+  if (!planReady) {
+    nextAction.titleKey = processing
+      ? 'dashboard.nextAction.waitProcessing'
+      : failed
+        ? 'dashboard.nextAction.retryResume'
+        : 'dashboard.nextAction.onboarding';
+    nextAction.href = '/resume';
+  } else if (!profileReady) {
     nextAction.titleKey = 'dashboard.nextAction.onboarding';
     nextAction.href = '/resume';
   }
@@ -711,7 +751,7 @@ export async function GET(request: NextRequest) {
   };
 
   // 求职规划
-  const planRegions: PlanRegionData[] = profileReady && latestResume
+  const planRegions: PlanRegionData[] = planReady && latestResume
     ? selectedRegions.map((region) => {
         const feasibility = sortedRegions.find((item) => item.region === region)?.feasibility;
         return {
@@ -751,8 +791,14 @@ export async function GET(request: NextRequest) {
     interviewEvaluations: [],
     segmentationConfirmed: latestResume?.segmentation_confirmed === true,
     profileReady,
+    planReady,
+    processing,
+    processingStatus: latestResume?.processing_status ?? null,
+    processingError: latestResume?.processing_error ?? null,
     missingSteps,
-    personalization: buildDashboardPersonalization(latestResume, selectedRegions),
+    personalization: latestResume?.profile
+      ? buildDashboardPersonalization(latestResume, selectedRegions)
+      : null,
     counts: {
       resumes: resumeCount,
       matches: overview.match_count ?? 0,

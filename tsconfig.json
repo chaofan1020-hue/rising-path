@@ -39,6 +39,7 @@
   "exclude": [
     "node_modules",
     "dist",
-    ".next-r3f-check"
+    ".next-r3f-check",
+    "backup.*"
   ]
 }

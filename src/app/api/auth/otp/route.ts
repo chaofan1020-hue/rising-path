@@ -7,7 +7,9 @@ import {
   consumeAuthRateLimit,
   isAuthRateLimitError,
   normalizeEmail,
+  captchaErrorIfInvalid,
 } from '@/lib/auth-security';
+import { readCaptchaToken } from '@/lib/altcha';
 
 export async function POST(request: NextRequest) {
   const ip = getClientIp(request);
@@ -16,6 +18,10 @@ export async function POST(request: NextRequest) {
     const email = normalizeEmail(body.email);
     if (!isValidEmail(email)) {
       return NextResponse.json({ error: '请输入有效的邮箱地址' }, { status: 400 });
+    }
+    const captchaError = await captchaErrorIfInvalid(readCaptchaToken(body));
+    if (captchaError) {
+      return NextResponse.json({ error: captchaError }, { status: 400 });
     }
 
     const ipLimit = await consumeAuthRateLimit(`otp:ip:${ip}`, 5, 900, 1800);

@@ -49,7 +49,7 @@ async function updateJobDescription(job: Job, client: TextProviderClient): Promi
 
 export async function POST(request: NextRequest) {
   try {
-    const permissionError = requireAdminPermission(request, ADMIN_PERMISSIONS.jobsWrite);
+    const permissionError = await requireAdminPermission(request, ADMIN_PERMISSIONS.jobsWrite);
     if (permissionError) return permissionError;
     const supabase = getSupabaseClient();
     const llmClient = createTextProviderClient();
@@ -113,7 +113,7 @@ export async function POST(request: NextRequest) {
 
 export async function GET(request: NextRequest) {
   try {
-    const permissionError = requireAdminPermission(request, ADMIN_PERMISSIONS.jobsWrite);
+    const permissionError = await requireAdminPermission(request, ADMIN_PERMISSIONS.jobsWrite);
     if (permissionError) return permissionError;
     const supabase = getSupabaseClient();
     

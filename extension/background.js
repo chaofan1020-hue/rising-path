@@ -76,7 +76,7 @@ chrome.runtime.onMessage.addListener((message, _sender, sendResponse) => {
     }
     if (message.type === "setJobContext") {
       const previous = state.context;
-      const changed = previous?.jobId !== message.context?.jobId || previous?.jobUrl !== message.context?.jobUrl;
+      const changed = previous?.jobId !== message.context?.jobId || previous?.jobUrl !== message.context?.jobUrl || previous?.resumeId !== message.context?.resumeId;
       state.context = message.context;
       if (changed) {
         state.applicationId = null;
@@ -108,6 +108,7 @@ chrome.runtime.onMessage.addListener((message, _sender, sendResponse) => {
           body: JSON.stringify({
             jobId: state.context?.jobId,
             company: state.context?.company,
+            resumeId: state.context?.resumeId,
             fields: state.fields,
           }),
         });
@@ -163,6 +164,7 @@ chrome.runtime.onMessage.addListener((message, _sender, sendResponse) => {
             method: "POST",
             body: JSON.stringify({
               version: state.profileVersion,
+              resumeId: state.context?.resumeId,
               jobId: state.context?.jobId,
               domain: tab.url ? new URL(tab.url).hostname : "",
               fields: [...feedbackFields, ...ignoredFields],

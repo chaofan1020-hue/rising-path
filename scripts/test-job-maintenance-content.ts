@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict';
 import { extractOfficialJobRequirements, looksLikeBlockedPage, usableOfficialContent } from '@/lib/job-maintenance';
-import { deutscheBankDetailsFromApi, extractOfficialJobDetails, isJobContentShell } from '@/lib/job-official-detail';
+import { deutscheBankDetailsFromApi, extractOfficialJobDetails, isJobContentShell, officialEvercoreDetailUrl } from '@/lib/job-official-detail';
 import { parseExperience } from '@/lib/job-connectors/utils';
 
 const page = `
@@ -50,6 +50,7 @@ assert.equal(looksLikeBlockedPage('Intern | Example', 'This page includes a reca
 assert.equal(looksLikeBlockedPage('Access denied', 'Verify you are human'), true);
 assert.equal(isJobContentShell('{"widget":"redirect","externalSpa":true}'), true);
 assert.equal(isJobContentShell('A real job description'), false);
+assert.equal(isJobContentShell('Applying to Associate - McKinsey & Company Choose how you\'d like to proceed I am a new applicant Login Username Password'), true);
 
 const deloitteDetails = extractOfficialJobDetails({
   title: 'Lead Data Engineer II',
@@ -122,6 +123,14 @@ const evercoreDetails = extractOfficialJobDetails({
 assert.equal(evercoreDetails?.source, 'official_page_text');
 assert.equal(evercoreDetails?.location, 'New York');
 assert.ok(evercoreDetails?.description?.includes('Primary Responsibilities'));
+assert.equal(officialEvercoreDetailUrl('https://evercore.tal.net/vx/mobile-0/appcentre-ext/brand-4/candidate/so/pm/1/pl/3/opp/3298-Experienced-Associate-Industrials-Advisory-Chicago-Illinois/en-GB?instant=apply'), 'https://evercore.tal.net/vx/mobile-0/appcentre-ext/brand-4/candidate/so/pm/1/pl/3/opp/3298/en-GB');
+const evercoreHtmlLocation = extractOfficialJobDetails({
+  title: 'Experienced Associate - Industrials Advisory – Chicago, Illinois',
+  content: '<h1>Experienced Associate</h1><div id="location">Chicago</div><div class="job-description">Job description Primary Responsibilities: The Analyst will provide value add analysis and research as part of the Industrials Advisory team. This paragraph is long enough to count as a public Evercore detail page instead of a login shell or a short teaser.</div>',
+  url: 'https://evercore.tal.net/vx/mobile-0/appcentre-ext/brand-4/candidate/so/pm/1/pl/3/opp/3298/en-GB',
+  httpStatus: 200,
+});
+assert.equal(evercoreHtmlLocation?.location, 'Chicago');
 
 // Accenture official jobdetails page JSON-LD: structured jobLocation,
 // OccupationalExperienceRequirements months range, and "unavailable"
@@ -189,5 +198,30 @@ const amazonDetails = extractOfficialJobDetails({
 assert.equal(amazonDetails?.source, 'official_page_text');
 assert.equal(amazonDetails?.location, 'IND, KA, Bengaluru');
 assert.ok(amazonDetails?.description?.includes('Basic Qualifications'));
+
+// UBS BrassRing payload regression fixtures: keep a representative set of
+// real field shapes so the embedded JobDetailQuestions parser cannot regress.
+for (let index = 0; index < 20; index += 1) {
+  const ubsDetails = extractOfficialJobDetails({
+    title: `UBS sample ${index}`,
+    content: '',
+    url: 'https://jobs.ubs.com/TGnewUI/Search/home/HomeWithPreLoad?PageType=JobDetails&jobid=350866',
+    httpStatus: 200,
+    metadata: {
+      brassring_questions: [
+        { VerityZone: 'jobtitle', AnswerValue: `UBS sample ${index}` },
+        { VerityZone: 'jobdescription', AnswerValue: '<p>Serve clients and manage daily operations for the advisory team while coordinating high quality support and reporting.</p>' },
+        { VerityZone: 'formtext2', AnswerValue: index % 2 ? 'New York' : 'Omaha' },
+        { VerityZone: 'formtext23', AnswerValue: 'United States - New York' },
+        { VerityZone: 'formtext22', AnswerValue: index % 3 ? 'Full Time' : 'Part Time' },
+        { VerityZone: 'formtext59', AnswerValue: index % 2 ? 'At least 3 years of experience in financial services.' : 'Bachelor degree preferred.' },
+      ],
+    },
+  });
+  assert.equal(ubsDetails?.source, 'official_structured_data');
+  assert.ok(ubsDetails?.location);
+  assert.ok(ubsDetails?.description?.includes('Serve clients'));
+  assert.ok(ubsDetails?.employmentType);
+}
 console.log('job maintenance content tests passed');
 

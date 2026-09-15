@@ -1,5 +1,5 @@
 import type { SupabaseClient } from '@supabase/supabase-js';
-import { getCompanyFaviconUrl, getCompanyLogoUrl } from '@/lib/company-logo';
+import { resolveDisplayLogoUrls } from '@/lib/company-logo';
 import {
   DASHBOARD_FIELDS,
   cursorPreview,
@@ -193,10 +193,10 @@ async function loadLogos(client: SupabaseClient): Promise<Map<string, { logo_url
   const uploadedMap = new Map((uploaded || []).map((row) => [row.company_name, row.logo_url]));
   const configuredMap = new Map((configured || []).map((row) => [row.company_name, row.logo_url]));
   return new Map([...new Set([...uploadedMap.keys(), ...configuredMap.keys()])].map((company) => {
-    const logo = uploadedMap.get(company) || configuredMap.get(company) || getCompanyLogoUrl(company);
+    const logos = resolveDisplayLogoUrls(company, null, uploadedMap.get(company) || configuredMap.get(company) || null);
     return [company, {
-      logo_url: logo || null,
-      fallback_logo_url: getCompanyFaviconUrl(company),
+      logo_url: logos.logo_url,
+      fallback_logo_url: logos.logo_fallback_url,
       source: uploadedMap.get(company) ? 'uploaded' : configuredMap.get(company) ? 'configured' : 'automatic',
     }];
   }));
@@ -219,8 +219,7 @@ function aggregateFieldCounts(coverage: Record<string, FieldCoverage>) {
 function sourceLogo(source: SourceRow, logos: Map<string, { logo_url: string | null; fallback_logo_url: string | null; source: string }>) {
   const current = logos.get(source.company_name);
   return current || {
-    logo_url: getCompanyLogoUrl(source.company_name),
-    fallback_logo_url: getCompanyFaviconUrl(source.company_name),
+    ...resolveDisplayLogoUrls(source.company_name),
     source: 'automatic',
   };
 }

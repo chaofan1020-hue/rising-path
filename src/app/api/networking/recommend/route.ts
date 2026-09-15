@@ -8,6 +8,7 @@ import {
 import type { PlanLocale } from '@/lib/resume-types';
 import { resolveActiveRegion } from '@/lib/user-region';
 import { creditResponse, reserveCredits, settleCredits } from '@/lib/credits';
+import { getUserResume } from '@/lib/resume-selection';
 
 function normalizeLocale(value: unknown): PlanLocale {
   if (value === 'zh-TW' || value === 'en') return value;
@@ -19,16 +20,11 @@ export async function POST(request: NextRequest) {
     const auth = await getAuthContext(request);
     if (!auth) return unauthorizedResponse();
     const client = auth.client;
-    const body = await request.json() as { lang?: unknown };
+    const body = await request.json() as { lang?: unknown; resumeId?: unknown };
     const lang = normalizeLocale(body.lang);
 
-    const { data: resume } = await client
-      .from('resumes')
-      .select('id, profile, segmentation, segmentation_overrides')
-      .eq('user_id', auth.user.id)
-      .order('created_at', { ascending: false })
-      .limit(1)
-      .maybeSingle();
+    const resume = await getUserResume(client, auth.user.id, body.resumeId);
+    if (body.resumeId != null && !resume) return NextResponse.json({ error: '简历不存在或无权使用' }, { status: 404 });
 
     const { data: favorites } = await client
       .from('favorites')

@@ -85,6 +85,16 @@ const INTERVIEW_HISTORY_MESSAGE_MAX_CHARS = 700;
 const INTERVIEW_HISTORY_MESSAGE_COUNT = 4;
 const SINGLE_ROUND_TIME_LIMIT_MINUTES = 8;
 
+function classifyInterviewStreamError(error: unknown): { code: string; retryable: boolean } {
+  const message = error instanceof Error ? error.message : String(error || '');
+  const lower = message.toLowerCase();
+  if (/timeout|timed out|etimedout|deadline/.test(lower)) return { code: 'PROVIDER_TIMEOUT', retryable: true };
+  if (/credit|积分|entitlement|quota|余额/.test(lower)) return { code: 'CREDITS_UNAVAILABLE', retryable: false };
+  if (/conflict|revision|占位|claim|in flight|处理中/.test(lower)) return { code: 'REQUEST_CONFLICT', retryable: true };
+  if (/commit|保存面试消息|interview session conflict|transcript/.test(lower)) return { code: 'COMMIT_FAILED', retryable: true };
+  return { code: 'INTERVIEW_STREAM_FAILED', retryable: true };
+}
+
 function hasServerRoundTimedOut(roundStartedAt: unknown, role: RoundRole | null): boolean {
   const startedAt = typeof roundStartedAt === 'string' ? Date.parse(roundStartedAt) : Number.NaN;
   if (!Number.isFinite(startedAt)) return false;
@@ -431,11 +441,34 @@ export async function POST(request: NextRequest) {
       let jdText = '';
       let selectedJobId: number | null = null;
       let jobCompany = '';
-      if (jobError || !job || !job.company?.trim()) {
+      let resolvedJob = job;
+      let resolvedJobError = jobError;
+      // A user's saved vacancy may remain useful even when the public picker
+      // has moved it outside the default market filter. Keep the normal public
+      // region guard, but allow an active vacancy only when this user owns the
+      // corresponding favorite record.
+      if ((!resolvedJob || resolvedJobError) && jobId) {
+        const [{ data: favoriteJob }] = await Promise.all([
+          client
+            .from('favorites')
+            .select('job_id, jobs!inner(id, title, company, description, requirements, region, direction, is_active, is_closed)')
+            .eq('user_id', auth.user.id)
+            .eq('job_id', jobId)
+            .eq('jobs.is_active', true)
+            .eq('jobs.is_closed', false)
+            .maybeSingle(),
+        ]);
+        const candidate = favoriteJob?.jobs;
+        if (candidate) {
+          resolvedJob = Array.isArray(candidate) ? candidate[0] : candidate;
+          resolvedJobError = null;
+        }
+      }
+      if (resolvedJobError || !resolvedJob || !resolvedJob.company?.trim()) {
         return new Response(JSON.stringify({ error: '所选岗位已下线、已过期或不属于当前地区，请重新选择岗位', code: 'JOB_NOT_AVAILABLE' }), { status: 409 });
       }
-      selectedJobId = job.id;
-      jobCompany = job.company.trim();
+      selectedJobId = resolvedJob.id;
+      jobCompany = resolvedJob.company.trim();
 
       // 目标公司：本场所有面试官均来自该公司（画像库仅提供性格参考）
       // A catalog job is the source of truth. Never let a parallel client
@@ -446,17 +479,17 @@ export async function POST(request: NextRequest) {
       const dnaResult = await dnaResultPromise;
       const companyContext = resolveInterviewCompanyContext({
         company,
-        region: job.region,
-        jobTitle: job.title,
-        jobDirection: job.direction,
-        jobDescription: `${job.description || ''}\n${job.requirements || ''}`,
+        region: resolvedJob.region,
+        jobTitle: resolvedJob.title,
+        jobDirection: resolvedJob.direction,
+        jobDescription: `${resolvedJob.description || ''}\n${resolvedJob.requirements || ''}`,
         dna: dnaResult?.dna ?? null,
       });
       // The target vacancy's market owns the interview language. The browser
       // locale is only presentation chrome and cannot override this decision.
       language = companyContext.language;
-      const voiceRoute = resolveInterviewVoiceRoute(job.region);
-      jdText = `${job.company} - ${job.title}\n\n${language === 'en' ? 'Job Description' : '岗位描述'}:\n${job.description || ''}\n\n${language === 'en' ? 'Requirements' : '岗位要求'}:\n${job.requirements || ''}`;
+      const voiceRoute = resolveInterviewVoiceRoute(resolvedJob.region);
+      jdText = `${resolvedJob.company} - ${resolvedJob.title}\n\n${language === 'en' ? 'Job Description' : '岗位描述'}:\n${resolvedJob.description || ''}\n\n${language === 'en' ? 'Requirements' : '岗位要求'}:\n${resolvedJob.requirements || ''}`;
       const interviewType = String(requestedInterviewType || inferInterviewType(jdText));
 
       let resumeSegmentation: UserSegmentation | null = null;
@@ -476,10 +509,10 @@ export async function POST(request: NextRequest) {
       const contextDigest = buildInterviewContextDigest({
         language,
         company,
-        title: job.title,
-        direction: job.direction,
-        jobDescription: job.description,
-        jobRequirements: job.requirements,
+        title: resolvedJob.title,
+        direction: resolvedJob.direction,
+        jobDescription: resolvedJob.description,
+        jobRequirements: resolvedJob.requirements,
         dna: dnaResult?.dna ?? null,
         profile: confirmedResume.profile,
         segmentation: resumeSegmentation,
@@ -530,7 +563,7 @@ export async function POST(request: NextRequest) {
       const currentSessionId = session.id;
       const encoder = new TextEncoder();
       let fullContent = '';
-      const openingContent = buildFastOpening(language, firstInterviewer, job.title || '');
+      const openingContent = buildFastOpening(language, firstInterviewer, resolvedJob.title || '');
 
       const openingPreflightMs = Date.now() - requestStartedAt;
       const readableStream = new ReadableStream({
@@ -634,7 +667,16 @@ export async function POST(request: NextRequest) {
             );
             controller.close();
           } catch (error) {
-            console.error('Interview stream error:', error);
+            const failure = classifyInterviewStreamError(error);
+            console.error('[InterviewStreamError]', JSON.stringify({
+              phase: 'opening',
+              sessionId: currentSessionId,
+              requestId: null,
+              revision: 0,
+              code: failure.code,
+              retryable: failure.retryable,
+              message: error instanceof Error ? error.message.slice(0, 240) : String(error).slice(0, 240),
+            }));
             // A failed opening must not leave an empty in-progress session that
             // could authorize realtime tickets or appear in interview history.
             await client
@@ -648,7 +690,7 @@ export async function POST(request: NextRequest) {
               .eq('id', currentSessionId)
               .eq('user_id', auth.user.id)
               .eq('revision', 0);
-            sendSseEvent(controller, encoder, 'error', { error: '面试生成失败，请重试' });
+            sendSseEvent(controller, encoder, 'error', { error: '面试生成失败，请重试', code: failure.code, retryable: failure.retryable });
             controller.close();
           }
         },
@@ -728,6 +770,14 @@ export async function POST(request: NextRequest) {
       p_revision: currentRevision,
     });
     if (claimError) throw new Error(`面试请求占位失败: ${claimError.message}`);
+    console.info('[InterviewRequest]', JSON.stringify({
+      phase: 'claimed',
+      sessionId,
+      requestId: clientRequestId,
+      revision: currentRevision,
+      inputSource,
+      elapsedMs: Date.now() - requestStartedAt,
+    }));
     if (claimResult === 'busy') {
       return new Response(JSON.stringify({ error: '面试正在处理上一条请求，请稍后重试', code: 'REQUEST_IN_FLIGHT', revision: currentRevision }), { status: 409 });
     }
@@ -767,8 +817,8 @@ export async function POST(request: NextRequest) {
     const isManualEnd = endInterview === true && !isSwitchNext;
     const isCandidateAnswerTurn = !isSwitchNext && !isTimeout && !isManualEnd;
     if (isCandidateAnswerTurn) {
-      if (inputSource !== 'asr' && inputSource !== 'asr_fallback') {
-        return new Response(JSON.stringify({ error: '模拟面试仅接受语音识别结果' }), { status: 400 });
+      if (inputSource !== 'asr' && inputSource !== 'asr_fallback' && inputSource !== 'typed') {
+        return new Response(JSON.stringify({ error: '模拟面试回答来源无效' }), { status: 400 });
       }
       if (!answer || !String(answer).trim()) {
         return new Response(JSON.stringify({ error: '缺少回答内容' }), { status: 400 });
@@ -1010,6 +1060,13 @@ export async function POST(request: NextRequest) {
           } else {
             // Provider protocol remnants are compatibility-filtered and never influence state.
             let pendingTail = '';
+            console.info('[InterviewRequest]', JSON.stringify({
+              phase: 'provider_start',
+              sessionId,
+              requestId: clientRequestId,
+              revision: currentRevision,
+              round: currentRound,
+            }));
             const generation = await consumeTrackedTextStream(llmClient, llmMessages, { temperature: 0.6, thinking: 'disabled' }, {
               userId: auth.user.id,
               feature: 'interview_chat',
@@ -1038,6 +1095,15 @@ export async function POST(request: NextRequest) {
               }
             });
             generationTiming = { ttfbMs: generation.ttfbMs ?? 0, totalMs: generation.totalMs };
+            console.info('[InterviewRequest]', JSON.stringify({
+              phase: 'provider_finish',
+              sessionId,
+              requestId: clientRequestId,
+              revision: currentRevision,
+              chars: fullContent.length,
+              ttfbMs: generationTiming.ttfbMs,
+              totalMs: generationTiming.totalMs,
+            }));
 
             // Flush the final candidate-visible text.
             const tailText = cleanProtocolTail(pendingTail);
@@ -1135,6 +1201,14 @@ export async function POST(request: NextRequest) {
                 }
               : {},
           );
+          console.info('[InterviewRequest]', JSON.stringify({
+            phase: 'commit_start',
+            sessionId,
+            requestId: clientRequestId,
+            revision: currentRevision,
+            appendedTurnCount: turnRows.length,
+            inputSource,
+          }));
           const { data: nextRevision, error: commitError } = await client.rpc('commit_interview_turn', {
             p_session_id: sessionId,
             p_expected_revision: currentRevision,
@@ -1166,6 +1240,13 @@ export async function POST(request: NextRequest) {
             }
             throw new Error(`保存面试消息失败: ${commitError?.message || '未返回版本'}`);
           }
+          console.info('[InterviewRequest]', JSON.stringify({
+            phase: 'commit_finish',
+            sessionId,
+            requestId: clientRequestId,
+            revision: nextRevision,
+            totalMs: Date.now() - requestStartedAt,
+          }));
 
           if (turnAction === 'round_end') {
             const { error: roundStartError } = await client
@@ -1198,17 +1279,26 @@ export async function POST(request: NextRequest) {
               { requestId: clientRequestId, revision: nextRevision },
             );
           controller.close();
-        } catch (error) {
-          console.error('Interview stream error:', error);
-          await client
+          } catch (error) {
+            const failure = classifyInterviewStreamError(error);
+            console.error('[InterviewStreamError]', JSON.stringify({
+              phase: 'continuation',
+              sessionId,
+              requestId: clientRequestId,
+              revision: currentRevision,
+              code: failure.code,
+              retryable: failure.retryable,
+              message: error instanceof Error ? error.message.slice(0, 240) : String(error).slice(0, 240),
+            }));
+            await client
             .from('interview_sessions')
             .update({ active_request_id: null, active_request_started_at: null, updated_at: new Date().toISOString() })
             .eq('id', sessionId)
             .eq('active_request_id', clientRequestId);
             const betaError = betaEntitlementResponse(error);
             sendSseEvent(controller, encoder, 'error', betaError
-              ? { error: (await betaError.json()).error }
-              : { error: '面试生成失败，请重试' }, { requestId: clientRequestId, revision: currentRevision });
+              ? { error: (await betaError.json()).error, code: 'CREDITS_UNAVAILABLE', retryable: false }
+              : { error: '面试生成失败，请重试', code: failure.code, retryable: failure.retryable }, { requestId: clientRequestId, revision: currentRevision });
           controller.close();
         }
       },

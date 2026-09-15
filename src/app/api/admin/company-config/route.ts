@@ -5,7 +5,7 @@ import { recordAdminAuditEvent, recordAdminAuditFailure } from '@/lib/admin-audi
 
 // 获取所有公司配置
 export async function GET(request: NextRequest) {
-  const permissionError = requireAdminPermission(request, ADMIN_PERMISSIONS.configWrite);
+  const permissionError = await requireAdminPermission(request, ADMIN_PERMISSIONS.configWrite);
   if (permissionError) return permissionError;
 
   try {
@@ -31,7 +31,7 @@ export async function GET(request: NextRequest) {
 
 // 添加或更新公司配置
 export async function POST(request: NextRequest) {
-  const permissionError = requireAdminPermission(request, ADMIN_PERMISSIONS.configWrite);
+  const permissionError = await requireAdminPermission(request, ADMIN_PERMISSIONS.configWrite);
   if (permissionError) return permissionError;
 
   try {
@@ -131,7 +131,7 @@ export async function POST(request: NextRequest) {
 
 // 删除公司配置
 export async function DELETE(request: NextRequest) {
-  const permissionError = requireAdminPermission(request, ADMIN_PERMISSIONS.configWrite);
+  const permissionError = await requireAdminPermission(request, ADMIN_PERMISSIONS.configWrite);
   if (permissionError) return permissionError;
 
   try {

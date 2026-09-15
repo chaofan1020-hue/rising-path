@@ -2,6 +2,29 @@
 
 本记录对应 [`all-company-job-field-completion-plan.md`](all-company-job-field-completion-plan.md)。它记录真实运行结果，不以测试环境或历史快照代替生产验收。
 
+## 2026-09-07：Google 官方详情 20 条 canary
+
+执行位置：美国应用服务器 `/opt/liorvix`；目标 Supabase project ref：`weqvdtdjdzmqflhwobec`。上游采集器位于独立服务器，本轮未在上游服务器启动抓取或修改配置。
+
+- 生产 dry-run：Google 首批 20 条在招岗位详情请求 `20 / 20` 成功，`failed=0`，`removed=0`，候选更新 `3` 条，均为官方详情页明确的 `employment_category=社招`；其余 17 条没有新的官方字段，保持原值。
+- 生产 canary：使用 `--limit=20 --write` 更新 `3` 条，`failed=0`，未修改 `is_active`、`is_closed` 或岗位 ID。
+- 写入后 dry-run：同一批次 `would_update=0`、`removed=0`、`failed=0`，说明 canary 已幂等收口。
+- 数据库/API 验收：岗位 `11475` 的 `job_type=社招`，`field_evidence.fields.employment_category.status=verified`，证据 URL 为 Google 官方岗位详情页；岗位仍为 `is_active=true`、`is_closed=false`。公网 `/api/health` 返回 HTTP 200，公网 `/api/jobs/11475` 返回同样的字段和生命周期状态。
+- 运行入口：美国服务器 `liorvix.service` 设置 `JOBS_AUTO_WORKER=true`，主 Feed、官方详情、失败队列和维护任务均由应用内 worker 定时执行；`liorvix-jobs-incremental.timer` 和 `liorvix-jobs-maintenance.timer` 当前停用，不能与应用内 worker 并行启用。
+
+下一步：按同一流程继续 Google 后续批次或进入 Microsoft/Meta；先做 20 条 dry-run，再做独立 canary，不能直接全量 `--write`。Google 本轮未执行 `--close-removed`，因此没有改变任何岗位生命周期。
+
+## 2026-09-07：Amazon 官方详情第二批 20 条
+
+执行位置：美国应用服务器 `/opt/liorvix`；目标 Supabase project ref：`weqvdtdjdzmqflhwobec`。本批从 `after-id=839` 继续，未重置 Amazon 游标。
+
+- 生产 dry-run：选中 20 条在招岗位，官方详情全部成功，`failed=0`、`removed=0`；其中 19 条可补官方地点，1 条没有新的可补字段。
+- 生产写入：使用 `--scan-all --close-removed --after-id=839 --limit=20 --write` 更新 19 条地点字段，`failed=0`，`removed=0`，未修改岗位 ID、收藏/投递关系或岗位生命周期。
+- 写入后 dry-run：同批次 `would_update=0`、`removed=0`、`failed=0`，已幂等收口；下一批从岗位 ID `868` 之后继续。
+- 数据库/API 验收：公网 `/api/jobs/840` 返回 `region=USA, CA, Irvine`、`field_evidence.fields.location.status=verified`，证据 URL 为 Amazon 官方详情页；岗位仍为 `is_active=true`、`is_closed=false`。
+
+下一步：继续按 500-1,000 条受控批次推进 Amazon；每批先 dry-run，再写入，404/410 或明确关闭页才下架，403/429/超时保持岗位不变。
+
 ## 执行规则
 
 - 每家公司先记录来源、真实样本、dry-run 和字段候选数，完成生产库/API/页面三处验收后才标为已上线。
@@ -1312,3 +1335,29 @@ BoA 走 Workday（`ghr.wd1.myworkdayjobs.com`），40 条 `location rejected_leg
 - 用 `backfill-official-job-details.ts --company=X --scan-all --close-removed` 对官方详情类公司做全量上下架核验（404/关闭页 → 下架，403/429/超时 → 保留）。
 - BlackRock（199 条 active）dry-run 完成：全部在招 `removed=0`，无官网已撤岗位；1 条补 `posted_at`，198 条字段已有证据跳过。生产无需下架。
 - 后续：Google / Microsoft / Meta / Deloitte / Morgan Stanley / Goldman Sachs / Amazon 逐家跟进（Amazon 20,098 条量大，需分批）。
+## 2026-09-08 自动队列接管
+
+- 已在美国生产服务器 `/opt/liorvix` 核对项目 `weqvdtdjdzmqflhwobec`：应用内 worker、官方详情、连接器写入和历史复核均已开启。
+- 发现通用官方来源白名单仍只包含旧的 13 家，导致 Amazon 等已具备官方适配器的公司被暂停；已备份 `.env.local` 为 `/opt/liorvix/.env.local.before-auto-queue`，将 `JOBS_GENERIC_OFFICIAL_BACKFILL_COMPANIES` 清空并重启 `liorvix.service`。
+- 重启后服务为 `active`，systemd 岗位 timer 保持 `disabled`，避免重复调度和租约竞争。
+- 生产验收：Amazon 已进入 `running`，游标推进至 `1414`，累计处理 `300` 条、更新 `229` 条；Citadel、McKinsey & Company、UBS 继续保持 `discovery_required/paused`；JPMorgan Chase 继续因 Oracle 全量对账保护而暂停。
+- 以后新增已确认来源会由 worker 自动创建/恢复队列；一般不需要人工逐家公司执行脚本。仅在来源探测、canary、失败队列人工复核或服务故障时介入。
+
+## 2026-09-09 UBS BrassRing 来源恢复
+
+- 美国服务器只读探测确认 `jobs.ubs.com/TGnewUI/Search/home/HomeWithPreLoad?...PageType=JobDetails&jobid={id}` 返回 HTTP 200；页面虽约 1.3MB，但内嵌 `JobDetailQuestions` 包含官方标题、正文、城市、国家/州、工作类型和经验要求。此前“1.3MB 超限/AJAX 403”的阻塞记录已被新证据替代；未使用验证码、登录或第三方接口。
+- `safe-external-fetch` 仅对 UBS BrassRing 详情页放宽到 2MB，并只提取 `JobDetailQuestions`；`job-official-detail` 增加 UBS 专用标准化，保留官方原值。新增 20 条回归 fixture。
+- 生产 project ref `weqvdtdjdzmqflhwobec` dry-run：20/20 获取、解析和候选更新成功，0 失败、0 跳过；地点 20/20、工作类型 20/20、经验 11/20，薪资仅在官网明确出现时写入，截止日期无官方字段则为空。
+- 生产 20 条 canary 写入完成，更新 20 条；随后来源台账提升为 `source_type=ubs_brassring`、`status=configured_connector`、`connector_name=official_generic`，历史队列切换为 `official_generic`，游标保留在原位置，未改变 `is_active/is_closed`。
+- 生产验收：UBS active 336 条；抽样岗位均 `is_active=true,is_closed=false`，字段证据为 `official_link_structured_field`；公网 `https://liorvix.com/api/jobs/22441` 返回 HTTP 200。服务重建并重启后 `liorvix.service` 为 active，后续由自动 worker 继续处理。
+
+## 2026-09-09 Citadel 官方 sitemap 接入与上游状态修正
+
+- 上游服务器出口对 `https://www.citadel.com/career-sitemap.xml` 稳定返回 HTTP 200；sitemap 当前提供 60 条官方岗位 URL，采集器每小时均成功读取并写入 60 条开放岗位。Citadel 详情页仍返回 HTTP 403，因此不绕过访问控制、不伪造正文或其他未发布字段。
+- 上游 `SitemapConnector` 增加 `emea` URL 标记到 `EMEA` 的保守地点映射；采集质量统计不再把 sitemap 缺少详情正文单独标记为失败，仍会对缺少地点/部门的记录保留 `partial`。本次手动验收后 60 条中 58 条关键质量字段完整，2 条分别缺少官方地点或部门，状态可解释。
+- 美国应用端已部署 Citadel `sitemap` 来源台账和 `official_payload` 地点证据规则；生产 `weqvdtdjdzmqflhwobec` 当前 Citadel 公开岗位接口返回 34 条目标地区岗位，全部有可展示地点，30 条有正文，服务健康检查为 `{"status":"ok"}`。
+
+### Citadel 详情正文导入边界
+
+Citadel 的详情页允许正常浏览器访问，但对采集服务器返回 HTTP 403。为避免复制浏览器 cookie 或绕过 Cloudflare，新增 `pnpm import:citadel-browser-details` 作为一次性官方证据导入工具：输入只能来自正常浏览器看到的 Citadel 详情页，脚本会校验官方 host、详情 URL、正文长度和反爬标记，并把 `official_browser_detail`、`official_detail_page`、抓取时间写入 `field_evidence`。默认 dry-run，生产写入必须显式设置 `CITADEL_BROWSER_DETAIL_WRITE_ENABLED=true`、使用生产环境文件并追加 `--write`；已有可展示正文的岗位不会覆盖。后续 sitemap 同步保留已导入正文。
+- 仅补写了 3 条缺失地点证据（岗位 ID `63734`、`63733`、`70442`），没有改变岗位上下架状态；后续由现有上游定时任务持续同步 sitemap。

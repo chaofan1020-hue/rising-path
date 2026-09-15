@@ -5,7 +5,7 @@ import { ADMIN_PERMISSIONS, requireAdminPermission } from '@/lib/admin-permissio
 import { isDisplayableJobDescription, sanitizeJobContent } from '@/lib/job-content';
 import { TARGET_REGION_KEYWORDS, targetRegionPostgrestClauses } from '@/lib/job-region-scope';
 import { recordAdminAuditEvent, recordAdminAuditFailure } from '@/lib/admin-audit';
-import { getCompanyFaviconUrl, getCompanyLogoUrl } from '@/lib/company-logo';
+import { resolveDisplayLogoUrls } from '@/lib/company-logo';
 import { isVerifiedField } from '@/lib/job-field-provenance';
 import { isDisplayableJobDeadline } from '@/lib/job-deadline';
 
@@ -194,8 +194,8 @@ export async function GET(request: NextRequest) {
     // Supabase's generated select parser requires a literal column string;
     // the route intentionally chooses one of two fixed projections here.
     let query = summaryOnly
-      ? client.from('jobs').select('id,title,company,region,direction,audience,job_type,employment_category,experience_min_years,experience_max_years,experience_text,description,salary_range,employment_type,workplace_type,job_url,sponsorship,valid_through,deadline_time_zone,deadline_source,salary_source,location_source,field_evidence,is_active,is_closed,created_at,updated_at', { count: 'planned' })
-      : client.from('jobs').select('id,title,company,region,direction,audience,job_type,employment_category,experience_min_years,experience_max_years,experience_text,description,requirements,salary_range,employment_type,workplace_type,job_url,sponsorship,valid_through,deadline_time_zone,deadline_source,salary_source,location_source,field_evidence,is_active,is_closed,created_at,updated_at', { count: 'planned' });
+      ? client.from('jobs').select('id,title,company,region,direction,audience,job_type,employment_category,experience_min_years,experience_max_years,experience_text,description,salary_range,employment_type,workplace_type,job_url,sponsorship,valid_through,deadline_time_zone,deadline_source,salary_source,location_source,field_evidence,is_active,is_closed,posted_at,created_at,updated_at', { count: 'planned' })
+      : client.from('jobs').select('id,title,company,region,direction,audience,job_type,employment_category,experience_min_years,experience_max_years,experience_text,description,requirements,salary_range,employment_type,workplace_type,job_url,sponsorship,valid_through,deadline_time_zone,deadline_source,salary_source,location_source,field_evidence,is_active,is_closed,posted_at,created_at,updated_at', { count: 'planned' });
 
     if (diverseFeed) {
       // updated_at reflects the active feed refresh and naturally mixes the
@@ -347,9 +347,11 @@ export async function GET(request: NextRequest) {
         ...(summaryOnly ? { description: compactListDescription(sanitizedJob.description) } : {}),
         region_category: visibleLocation ? getRegionCategory(job.region) : '未注明',
         direction_category: getDirectionCategory(job.direction),
-        logo_url: localLogosCache[job.company]
-          || getCompanyLogoUrl(job.company, typeof job.job_url === 'string' ? job.job_url : null),
-        logo_fallback_url: getCompanyFaviconUrl(job.company, typeof job.job_url === 'string' ? job.job_url : null),
+        ...resolveDisplayLogoUrls(
+          job.company,
+          typeof job.job_url === 'string' ? job.job_url : null,
+          localLogosCache[job.company] || null,
+        ),
       };
     });
 
@@ -377,7 +379,7 @@ export async function GET(request: NextRequest) {
 
 export async function POST(request: NextRequest) {
   try {
-    const permissionError = requireAdminPermission(request, ADMIN_PERMISSIONS.jobsWrite);
+    const permissionError = await requireAdminPermission(request, ADMIN_PERMISSIONS.jobsWrite);
     if (permissionError) return permissionError;
     const client = getSupabaseClient();
     const body = await request.json();

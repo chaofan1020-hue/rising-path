@@ -47,7 +47,14 @@ export async function GET(request: NextRequest) {
     .select('id,display_name,avatar_url,preferred_region,updated_at')
     .eq('id', auth.user.id)
     .maybeSingle();
-  if (error) return NextResponse.json({ data: null, error: { code: 'PROFILE_QUERY_FAILED', message: '读取个人资料失败' } }, { status: 500 });
+  if (error) {
+    console.error('[Account] Profile query failed:', {
+      code: error.code,
+      message: error.message,
+      hint: error.hint,
+    });
+    return NextResponse.json({ data: null, error: { code: 'PROFILE_QUERY_FAILED', message: '读取个人资料失败' } }, { status: 500 });
+  }
 
   return NextResponse.json({ data: profileData(data, auth.user.email || null), error: null });
 }

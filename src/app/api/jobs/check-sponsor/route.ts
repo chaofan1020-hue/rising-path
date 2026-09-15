@@ -6,7 +6,7 @@ import { recordAdminAuditEvent, recordAdminAuditFailure } from '@/lib/admin-audi
 
 export async function POST(request: NextRequest) {
   try {
-    const permissionError = requireAdminPermission(request, ADMIN_PERMISSIONS.jobsWrite);
+    const permissionError = await requireAdminPermission(request, ADMIN_PERMISSIONS.jobsWrite);
     if (permissionError) return permissionError;
 
     const supabase = getSupabaseClient();
