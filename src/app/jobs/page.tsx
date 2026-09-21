@@ -195,7 +195,9 @@ const sponsorshipOptions: JobConfig[] = [
 
 // 获取地区对应的显示文本
 function getRegionDisplayText(region: string): string {
-  return formatLocationDisplay(region);
+  const cleaned = formatLocationDisplay(region);
+  const first = cleaned.split(';')[0]?.trim() || cleaned;
+  return first;
 }
 
 // Keep each page varied without changing the order of jobs within a company.
@@ -429,9 +431,9 @@ function JobBadges({ job, t }: { job: Job; t: (key: string, params?: Record<stri
   const postedAt = formatPostedDate(job.posted_at, locale);
   return (
     <div className="flex flex-wrap gap-1.5 md:gap-2">
-      <Badge variant="secondary" className="rounded-md text-xs bg-zinc-100 text-zinc-600 dark:bg-zinc-800 dark:text-zinc-300 hover:bg-zinc-100" translate="no">
-        <MapPin className="h-3 w-3 mr-1" />
-        {getRegionDisplayText(job.region)}
+      <Badge variant="secondary" className="max-w-full rounded-md text-xs bg-zinc-100 text-zinc-600 dark:bg-zinc-800 dark:text-zinc-300 hover:bg-zinc-100" translate="no">
+        <MapPin className="h-3 w-3 mr-1 shrink-0" />
+        <span className="truncate">{getRegionDisplayText(job.region)}</span>
       </Badge>
       <Badge variant="secondary" className="rounded-md text-xs bg-zinc-100 text-zinc-600 dark:bg-zinc-800 dark:text-zinc-300 hover:bg-zinc-100" translate="no">
         <Briefcase className="h-3 w-3 mr-1" />
@@ -449,11 +451,6 @@ function JobBadges({ job, t }: { job: Job; t: (key: string, params?: Record<stri
       {formatExperienceLabel(job) && (
         <Badge variant="outline" className="rounded-md text-xs border-zinc-200 dark:border-zinc-700 text-zinc-600 dark:text-zinc-300">
           {formatExperienceLabel(job)}
-        </Badge>
-      )}
-      {job.salary_range && (
-        <Badge variant="outline" className="border-zinc-200 dark:border-zinc-700 text-zinc-600 dark:text-zinc-300 rounded-md text-xs">
-          {job.salary_range}
         </Badge>
       )}
       {job.sponsorship && job.sponsorship !== 'unknown' && (
@@ -588,7 +585,7 @@ function JobListRow({
 }) {
   return (
     <div
-      className={`flex items-stretch gap-1 rounded-xl border p-3 transition-colors ${
+      className={`flex min-w-0 items-stretch gap-1 overflow-hidden rounded-xl border p-3 transition-colors ${
         selected
           ? 'border-zinc-900 bg-zinc-50 dark:border-white/60 dark:bg-white/[0.06]'
           : 'border-zinc-200 bg-white hover:border-zinc-400 dark:border-zinc-700/60 dark:bg-zinc-950 dark:hover:border-zinc-500'
@@ -597,18 +594,11 @@ function JobListRow({
       <button
         type="button"
         onClick={() => onSelect(job.id)}
-        className="flex min-w-0 flex-1 items-start gap-3 text-left"
+        className="flex min-w-0 flex-1 items-start gap-3 overflow-hidden text-left"
       >
         <CompanyLogo company={job.company} logoUrl={job.logo_url} fallbackLogoUrl={job.logo_fallback_url} />
-        <div className="min-w-0 flex-1">
-          <div className="flex items-start justify-between gap-2">
-            <h3 className="min-w-0 truncate text-sm font-semibold text-zinc-900 dark:text-zinc-50">{job.title}</h3>
-            {job.salary_range && (
-              <span className="shrink-0 text-xs font-semibold text-zinc-700 dark:text-zinc-100" translate="no">
-                {job.salary_range}
-              </span>
-            )}
-          </div>
+        <div className="min-w-0 flex-1 overflow-hidden">
+          <h3 className="truncate text-sm font-semibold text-zinc-900 dark:text-zinc-50">{job.title}</h3>
           <p className="truncate text-xs text-zinc-500 dark:text-zinc-400" translate="no">{job.company}</p>
           <p className="mt-1 truncate text-xs text-zinc-400 dark:text-zinc-500" translate="no">
             {getRegionDisplayText(job.region)} · {localizeJobEnum(job.direction, t)} · {localizeJobEnum(job.job_type, t) || localizeJobEnum(job.audience, t)}
@@ -1283,7 +1273,7 @@ function JobsContent() {
 
               {/* 桌面端（lg+）：主从布局 */}
               <div className="hidden lg:flex lg:items-start lg:gap-6">
-                <div className="w-[400px] shrink-0">
+                <div className="w-[400px] min-w-0 shrink-0 overflow-hidden">
                   <div className="space-y-2">
                     {filteredJobs.map((job) => (
                       <JobListRow
