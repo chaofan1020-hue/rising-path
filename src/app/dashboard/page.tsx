@@ -342,7 +342,7 @@ export default function DashboardPage() {
       const json = await response.json();
       if (!response.ok || !json.success) throw new Error(json.error || t('dashboard.onboardingRoleFailed'));
       setOnboardingRoleSaved(true);
-      fetchDashboard({ keepVisible: true });
+      fetchDashboard(true);
     } catch (err) {
       setOnboardingRoleError(err instanceof Error ? err.message : t('dashboard.onboardingRoleFailed'));
     } finally {
