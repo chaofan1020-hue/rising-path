@@ -25,6 +25,7 @@ import {
   ChevronUp,
 } from 'lucide-react';
 import { useLanguage } from '@/lib/language-context';
+import { localizeSegSummary, localizeSegReason } from '@/lib/job-display';
 import { REGION_DNA, type RegionKey } from '@/lib/region-dna';
 import type {
   CareerStage,
@@ -193,10 +194,10 @@ export function SegmentationCard({
       {/* 分层结论 */}
       <div className="mt-2.5 rounded-lg bg-zinc-100 dark:bg-zinc-800 px-2.5 py-1.5">
         <span className="text-[11px] text-zinc-700 dark:text-zinc-200 font-medium">
-          {t('resume.segResult')}：{segmentation.summary}
+          {t('resume.segResult')}：{localizeSegSummary(segmentation.summary, t)}
         </span>
       </div>
-      <p className="mt-1 text-[10px] text-muted-foreground">{t('resume.segReason')}：{segmentation.careerStageReason}</p>
+      <p className="mt-1 text-[10px] text-muted-foreground">{t('resume.segReason')}：{localizeSegReason(segmentation.careerStageReason, t)}</p>
 
       {/* 修正区 */}
       {editing && (

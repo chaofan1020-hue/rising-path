@@ -440,6 +440,9 @@ function MockInterviewContent() {
 
   // 设置项
   const [companies, setCompanies] = useState<string[]>([]);
+  const [myApplications, setMyApplications] = useState<Array<{ job_id: number; title: string; company: string }>>([]);
+  const [quickPickJob, setQuickPickJob] = useState<{ jobId: number; title: string; company: string } | null>(null);
+  const quickPickJobRef = useRef<{ jobId: number; company: string } | null>(null);
   const [selectedCompany, setSelectedCompany] = useState("");
   const [jobs, setJobs] = useState<JobItem[]>([]);
   const [jobsLoading, setJobsLoading] = useState(false);
@@ -508,7 +511,6 @@ function MockInterviewContent() {
   const [micError, setMicError] = useState(false);
   // 免提模式：麦克风常开 + VAD 语音活动检测
   const [listening, setListening] = useState(false);
-  const [setupOpen, setSetupOpen] = useState(true);
   const [voiceActive, setVoiceActive] = useState(false); // 检测到正在说话
   const vadRafRef = useRef<number | null>(null);
   // 麦克风错误细分：denied=权限被拒 nodevice=无设备 busy=被占用 unknown=其他
@@ -811,10 +813,31 @@ function MockInterviewContent() {
         }
       })
       .catch((e) => console.error("[mock-interview] fetch resumes error:", e));
+    // 网申记录用于"从我的岗位快速选择"
+    apiFetch("/api/applications")
+      .then((r) => (r.ok ? r.json() : null))
+      .then((d) => {
+        const apps = (d?.applications || []) as Array<{ job_id: number; jobs: { title: string; company: string } | null }>;
+        setMyApplications(apps
+          .filter((a) => a.jobs?.title && a.jobs?.company)
+          .map((a) => ({ job_id: a.job_id, title: a.jobs!.title, company: a.jobs!.company })));
+      })
+      .catch((e) => console.error("[mock-interview] fetch applications error:", e));
   }, []);
+
+  // 快速选择网申岗位：设置公司（触发岗位列表加载）并通过 ref 保护 jobId 不被重置
+  const pickApplicationJob = (app: { job_id: number; title: string; company: string }) => {
+    setQuickPickJob(app);
+    quickPickJobRef.current = { jobId: app.job_id, company: app.company };
+    setSelectedCompany(app.company);
+    setSelectedJobId(app.job_id);
+  };
 
   // 公司变化时加载岗位
   useEffect(() => {
+    // 快速选择的网申岗位：公司加载其岗位列表后恢复选中，不重置
+    const pendingPick = quickPickJobRef.current;
+    const isQuickPick = Boolean(pendingPick && pendingPick.company === selectedCompany);
     if (!selectedCompany) {
       setJobs([]);
       setSelectedJobId(null);
@@ -824,7 +847,8 @@ function MockInterviewContent() {
     const cachedJobs = jobsByCompanyRef.current.get(selectedCompany) || pickerJobsCache.get(selectedCompany);
     if (cachedJobs) {
       setJobs(cachedJobs);
-      setSelectedJobId(null);
+      setSelectedJobId(isQuickPick && pendingPick ? pendingPick.jobId : null);
+      if (isQuickPick) quickPickJobRef.current = null;
       setJobsLoading(false);
       return;
     }
@@ -848,7 +872,12 @@ function MockInterviewContent() {
       .finally(() => {
         if (!controller.signal.aborted && companyAtRequest === selectedCompany) setJobsLoading(false);
       });
-    setSelectedJobId(null);
+    if (isQuickPick && pendingPick) {
+      setSelectedJobId(pendingPick.jobId);
+      quickPickJobRef.current = null;
+    } else {
+      setSelectedJobId(null);
+    }
     return () => controller.abort();
   }, [selectedCompany]);
 
@@ -3262,47 +3291,88 @@ function MockInterviewContent() {
   // ========== 面试设置阶段 ==========
   if (stage === "setup") {
     return (
-        <div className="min-h-screen bg-white dark:bg-black">
+        <div className="min-h-screen bg-white dark:bg-white">
           <Header1 />
-          <main className="pb-8 pt-24 md:pb-12 md:pt-28">
-            <div className="container mx-auto px-4 max-w-3xl">
-              <PageBackButton fallbackHref="/home" className="mb-3" />
-              <div className="mb-8 text-center">
-                <div className="inline-flex items-center justify-center h-12 w-12 rounded-2xl bg-zinc-900 dark:bg-white mb-3">
-                  <Bot className="h-6 w-6 text-white dark:text-zinc-900" />
-                </div>
-                <h1 className="text-3xl md:text-4xl font-light text-black dark:text-white mb-2">
-                  {t("mockInterview.title")}
-                </h1>
-                <p className="text-gray-500 dark:text-gray-400">{t("mockInterview.subtitle")}</p>
-              </div>
+          <main className="light-scope pb-8 pt-24 md:pb-12 md:pt-28">
+            <div className="container mx-auto px-4 max-w-5xl">
+              <PageBackButton fallbackHref="/home" className="mb-4" />
+              <div className="grid gap-6 lg:grid-cols-[20rem_minmax(0,1fr)] items-start">
+                {/* 左侧：产品介绍 */}
+                <aside className="rounded-2xl border border-zinc-200 bg-white p-6 dark:border-zinc-800 dark:bg-zinc-950">
+                  <div className="mb-4 inline-flex items-center justify-center h-12 w-12 rounded-2xl bg-zinc-900 dark:bg-white">
+                    <Bot className="h-6 w-6 text-white dark:text-zinc-900" />
+                  </div>
+                  <h1 className="text-2xl font-bold tracking-tight text-zinc-900 dark:text-zinc-900 mb-2">
+                    {t("mockInterview.title")}
+                  </h1>
+                  <p className="text-sm leading-6 text-zinc-500 dark:text-zinc-400">{t("mockInterview.subtitle")}</p>
+                  <ul className="mt-5 space-y-3 border-t border-zinc-100 pt-5 dark:border-zinc-800">
+                    <li className="flex items-start gap-2.5 text-sm text-zinc-600 dark:text-zinc-300">
+                      <Mic className="mt-0.5 h-4 w-4 shrink-0 text-zinc-400" />
+                      {t("mockInterview.featureVoice")}
+                    </li>
+                    <li className="flex items-start gap-2.5 text-sm text-zinc-600 dark:text-zinc-300">
+                      <ClipboardList className="mt-0.5 h-4 w-4 shrink-0 text-zinc-400" />
+                      {t("mockInterview.featureRounds")}
+                    </li>
+                    <li className="flex items-start gap-2.5 text-sm text-zinc-600 dark:text-zinc-300">
+                      <Check className="mt-0.5 h-4 w-4 shrink-0 text-zinc-400" />
+                      {t("mockInterview.featureFeedback")}
+                    </li>
+                    <li className="flex items-start gap-2.5 text-sm text-zinc-600 dark:text-zinc-300">
+                      <FileText className="mt-0.5 h-4 w-4 shrink-0 text-zinc-400" />
+                      {t("mockInterview.featureSummary")}
+                    </li>
+                  </ul>
+                </aside>
 
-              {/* Modal 被关闭后的重新打开入口 */}
-              {!setupOpen && (
-                <div className="flex justify-center">
-                  <Button
-                    onClick={() => setSetupOpen(true)}
-                    variant="outline"
-                    className="rounded-full h-11 px-6"
-                  >
-                    <ClipboardList className="h-4 w-4 mr-2" />
-                    {t("mockInterview.openSettings")}
-                  </Button>
-                </div>
-              )}
-            </div>
-          </main>
+                {/* 右侧：面试设置卡片 */}
+                <div className="min-w-0 rounded-2xl border border-zinc-200 bg-white p-5 dark:border-zinc-800 dark:bg-zinc-950 md:p-6">
+                  <h2 className="text-lg font-semibold tracking-tight text-zinc-900 dark:text-zinc-900">
+                    {t("mockInterview.setupTitle")}
+                  </h2>
+                  <p className="mt-1 text-sm text-zinc-500 dark:text-zinc-400">{t("mockInterview.subtitle")}</p>
 
-          {/* 面试设置表单：桌面居中 Dialog / 移动端底部 Drawer（响应式 Modal） */}
-          <Modal open={setupOpen} onOpenChange={setSetupOpen}>
-            <ModalContent
-              popoverProps={{ className: "p-0 gap-0 sm:max-w-2xl max-h-[88vh] flex flex-col overflow-hidden" }}
-            >
-              <ModalHeader className="px-6 pt-6 pb-2 text-left">
-                <ModalTitle>{t("mockInterview.setupTitle")}</ModalTitle>
-                <ModalDescription>{t("mockInterview.subtitle")}</ModalDescription>
-              </ModalHeader>
-              <ModalBody className="px-6 py-4 flex-1 overflow-y-auto min-h-0">
+                  <div className="mt-5 space-y-5">
+
+                {/* 从我的网申快速选择 */}
+                {myApplications.length > 0 && (
+                  <div className="mb-6 rounded-xl border border-zinc-200 dark:border-zinc-700 bg-zinc-50 dark:bg-zinc-800/50 p-4">
+                    <div className="flex items-center justify-between gap-2 mb-1.5">
+                      <p className="text-sm font-semibold text-zinc-900 dark:text-zinc-100">{t("mockInterview.quickPickTitle")}</p>
+                      {quickPickJob && (
+                        <button
+                          type="button"
+                          onClick={() => { setQuickPickJob(null); setSelectedJobId(null); }}
+                          className="text-xs text-zinc-400 hover:text-zinc-700 dark:hover:text-zinc-200"
+                        >
+                          ✕
+                        </button>
+                      )}
+                    </div>
+                    <p className="text-xs text-zinc-500 dark:text-zinc-400 mb-3">{t("mockInterview.quickPickHint")}</p>
+                    <div className="flex gap-2 overflow-x-auto pb-1">
+                      {myApplications.map((app) => {
+                        const active = quickPickJob?.jobId === app.job_id;
+                        return (
+                          <button
+                            key={app.job_id}
+                            type="button"
+                            onClick={() => pickApplicationJob(app)}
+                            className={`shrink-0 max-w-56 rounded-xl border px-3 py-2 text-left transition-colors ${
+                              active
+                                ? 'border-zinc-900 bg-zinc-900 text-white dark:border-white dark:bg-white dark:text-zinc-900'
+                                : 'border-zinc-200 bg-white hover:border-zinc-400 dark:border-zinc-700 dark:bg-zinc-950 dark:hover:border-zinc-500'
+                            }`}
+                          >
+                            <span className="block truncate text-xs font-semibold">{app.title}</span>
+                            <span className={`block truncate text-[11px] ${active ? 'text-white/70 dark:text-zinc-500' : 'text-zinc-400'}`}>{app.company}</span>
+                          </button>
+                        );
+                      })}
+                    </div>
+                  </div>
+                )}
 
                 {/* 公司/岗位筛选 */}
                 <div className="grid md:grid-cols-2 gap-4 mb-6">
@@ -3316,7 +3386,7 @@ function MockInterviewContent() {
                       placeholder={t("mockInterview.companyPlaceholder")}
                       options={companies.map((c) => ({ value: c, text: c }))}
                       value={selectedCompany}
-                      onChange={setSelectedCompany}
+                      onChange={(v) => { setQuickPickJob(null); quickPickJobRef.current = null; setSelectedCompany(v); }}
                     />
                   </div>
                   <div>
@@ -3326,10 +3396,10 @@ function MockInterviewContent() {
                     <OptionSelect
                       icon={Briefcase}
                       label={t("mockInterview.selectJob")}
-                      placeholder={t("mockInterview.jobPlaceholder")}
+                      placeholder={quickPickJob ? quickPickJob.title : t("mockInterview.jobPlaceholder")}
                       options={jobs.map((j) => ({ value: String(j.id), text: j.title }))}
                       value={selectedJobId ? String(selectedJobId) : ""}
-                      onChange={(v) => setSelectedJobId(v ? Number(v) : null)}
+                      onChange={(v) => { setQuickPickJob(null); setSelectedJobId(v ? Number(v) : null); }}
                       disabled={!selectedCompany}
                       loading={jobsLoading}
                     />
@@ -3395,48 +3465,48 @@ function MockInterviewContent() {
                   </div>
                 )}
 
-              </ModalBody>
-              <ModalFooter className="px-6 pb-6 pt-2">
-                {micError && (
-                  <div className="w-full mb-3 flex flex-col items-center gap-1 px-4 text-center">
-                    <p className="text-xs text-red-400">
-                      {micErrorKind === "denied"
-                        ? t("mockInterview.micDenied")
-                        : micErrorKind === "nodevice"
-                          ? t("mockInterview.micNoDevice")
-                          : micErrorKind === "busy"
-                            ? t("mockInterview.micBusy")
-                            : t("mockInterview.micError")}
-                    </p>
-                    {micErrorKind === "denied" && (
-                      <p className="text-zinc-500 text-[11px] max-w-md leading-relaxed">
-                        {t("mockInterview.micDeniedGuide")}
+                  {micError && (
+                    <div className="flex flex-col items-center gap-1 rounded-xl border border-red-200 bg-red-50 px-4 py-3 text-center dark:border-red-800 dark:bg-red-950/30">
+                      <p className="text-xs text-red-500">
+                        {micErrorKind === "denied"
+                          ? t("mockInterview.micDenied")
+                          : micErrorKind === "nodevice"
+                            ? t("mockInterview.micNoDevice")
+                            : micErrorKind === "busy"
+                              ? t("mockInterview.micBusy")
+                              : t("mockInterview.micError")}
                       </p>
-                    )}
-                    {micError && inIframe && (
-                      <button
-                        onClick={() => window.open(window.location.href, "_blank")}
-                        className="mt-1 px-3 py-1 rounded-full bg-zinc-100 dark:bg-zinc-800 text-zinc-700 dark:text-zinc-200 text-[11px] transition-colors"
-                      >
-                        {t("mockInterview.openInNewTab")}
-                      </button>
-                    )}
-                  </div>
-                )}
-                <Button
-                  onClick={handleStart}
-                  disabled={streaming}
-                  className="w-full h-12 rounded-full bg-zinc-900 hover:bg-zinc-700 dark:bg-white dark:text-zinc-900 dark:hover:bg-zinc-200 text-white text-base shadow-md transition-colors"
-                >
-                  {streaming ? (
-                    <><Loader2 className="h-5 w-5 mr-2 animate-spin" />{t("mockInterview.starting")}</>
-                  ) : (
-                    <><Mic className="h-5 w-5 mr-2" />{t("mockInterview.start")}</>
+                      {micErrorKind === "denied" && (
+                        <p className="text-zinc-500 text-[11px] max-w-md leading-relaxed">
+                          {t("mockInterview.micDeniedGuide")}
+                        </p>
+                      )}
+                      {micError && inIframe && (
+                        <button
+                          onClick={() => window.open(window.location.href, "_blank")}
+                          className="mt-1 px-3 py-1 rounded-full bg-zinc-100 dark:bg-zinc-800 text-zinc-700 dark:text-zinc-200 text-[11px] transition-colors"
+                        >
+                          {t("mockInterview.openInNewTab")}
+                        </button>
+                      )}
+                    </div>
                   )}
-                </Button>
-              </ModalFooter>
-            </ModalContent>
-          </Modal>
+                  <Button
+                    onClick={handleStart}
+                    disabled={streaming}
+                    className="h-12 w-full rounded-full bg-zinc-900 text-base text-white shadow-md transition-colors hover:bg-zinc-700 dark:bg-white dark:text-zinc-900 dark:hover:bg-zinc-200"
+                  >
+                    {streaming ? (
+                      <><Loader2 className="h-5 w-5 mr-2 animate-spin" />{t("mockInterview.starting")}</>
+                    ) : (
+                      <><Mic className="h-5 w-5 mr-2" />{t("mockInterview.start")}</>
+                    )}
+                  </Button>
+                </div>
+              </div>
+            </div>
+            </div>
+          </main>
         </div>
   );
 }
@@ -3778,9 +3848,9 @@ function MockInterviewContent() {
   const fmtDuration = (sec: number) => `${Math.floor(sec / 60)}:${String(sec % 60).padStart(2, "0")}`;
 
   return (
-    <div className="min-h-screen bg-white dark:bg-black">
+    <div className="min-h-screen bg-white dark:bg-white">
         <Header1 />
-        <main className="pt-24 pb-8 md:pt-28 md:pb-12">
+        <main className="light-scope pt-24 pb-8 md:pt-28 md:pb-12">
           <div className="container mx-auto px-4 max-w-4xl">
             <div className="mb-8 text-center print:mb-4">
               <div className="inline-flex items-center justify-center h-12 w-12 rounded-2xl bg-gradient-to-br from-[#C46A4A] to-[#B5BEB0] mb-3">

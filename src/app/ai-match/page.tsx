@@ -116,7 +116,7 @@ function MultiSelectFilter({
   return (
     <Popover>
       <PopoverTrigger asChild>
-        <button className="inline-flex items-center gap-1.5 md:gap-2 px-3 py-2 md:px-4 md:py-2.5 rounded-full bg-white dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-700 hover:bg-zinc-100 hover:text-zinc-900 dark:hover:bg-zinc-800 dark:hover:text-zinc-100 transition-all text-xs md:text-sm text-zinc-700 dark:text-zinc-200">
+        <button className="inline-flex items-center gap-1.5 md:gap-2 px-3 py-1.5 md:px-3.5 md:py-2 rounded-full bg-white dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-700 hover:bg-zinc-100 hover:text-zinc-900 dark:hover:bg-zinc-800 dark:hover:text-zinc-100 transition-all text-xs md:text-sm text-zinc-700 dark:text-zinc-200">
           <Icon className="h-3.5 w-3.5 md:h-4 md:w-4 text-zinc-400 dark:text-zinc-500" />
           <span className="font-medium">{label}</span>
           {selected.length > 0 && (
@@ -302,37 +302,36 @@ function AIMatchContent() {
   };
 
   return (
-    <div className="min-h-screen bg-white dark:bg-zinc-950">
+    <div className="min-h-screen bg-white dark:bg-white">
       <Header1 />
-      <main className="relative container mx-auto px-4 pt-20 pb-16 sm:px-6 md:pt-24">
-        {/* Hero：左对齐 eyebrow + 大标题（Tailark 式） */}
-        <div className="relative mb-8 max-w-3xl md:mb-10">
-          <p className="text-sm font-medium text-zinc-400 dark:text-zinc-500 mb-3">{t('aiMatch.eyebrow')}</p>
-          <PageBackButton fallbackHref="/resume" className="mb-3" />
-          <h1 className="break-words text-2xl font-bold tracking-tight text-zinc-900 dark:text-zinc-50 md:text-4xl mb-4">{t('aiMatch.title')}</h1>
-          <p className="text-zinc-500 dark:text-zinc-400 max-w-2xl md:text-lg leading-relaxed">{t('aiMatch.subtitle')}</p>
+      <main className="light-scope relative container mx-auto px-4 pt-20 pb-16 sm:px-6 md:pt-24">
+        {/* Hero：单行紧凑头部 */}
+        <div className="relative mb-4 flex flex-wrap items-center gap-x-3 gap-y-2">
+          <PageBackButton fallbackHref="/resume" />
+          <h1 className="text-xl font-bold tracking-tight text-zinc-900 dark:text-zinc-50 md:text-2xl">{t('aiMatch.title')}</h1>
+          <p className="text-sm text-zinc-500 dark:text-zinc-400">{t('aiMatch.subtitle')}</p>
         </div>
 
         {/* Match Form */}
         <Card className="relative mb-6 md:mb-8 rounded-2xl border-zinc-200 dark:border-zinc-800 shadow-none bg-white dark:bg-zinc-950">
-          <CardHeader className="pb-2 md:pb-4">
-            <CardTitle className="flex items-center gap-2.5 text-base md:text-lg tracking-tight text-zinc-900 dark:text-zinc-50">
-              <span className="w-7 h-7 rounded-lg bg-zinc-900 dark:bg-white flex items-center justify-center">
-                <Target className="h-4 w-4 text-white dark:text-zinc-900" />
+          <CardHeader className="px-5 pt-4 pb-2 md:pb-3">
+            <CardTitle className="flex items-center gap-2 text-sm md:text-base tracking-tight text-zinc-900 dark:text-zinc-50">
+              <span className="w-6 h-6 rounded-lg bg-zinc-900 dark:bg-white flex items-center justify-center">
+                <Target className="h-3.5 w-3.5 text-white dark:text-zinc-900" />
               </span>
               {t('aiMatch.startMatch')}
             </CardTitle>
-            <CardDescription className="text-xs md:text-sm text-zinc-500 dark:text-zinc-400">
+            <CardDescription className="text-xs text-zinc-500 dark:text-zinc-400">
               {t('aiMatch.startMatchDesc')}
             </CardDescription>
           </CardHeader>
-          <CardContent>
+          <CardContent className="px-5 pb-4">
             <div className="flex flex-col gap-3 xl:flex-row xl:items-end">
               {/* 简历选择 */}
               <div className="w-full xl:w-auto">
-                <label className="text-xs md:text-sm font-medium mb-1.5 block text-zinc-700 dark:text-zinc-200">{t('aiMatch.selectResume')}</label>
+                <label className="text-xs font-medium mb-1.5 block text-zinc-700 dark:text-zinc-200">{t('aiMatch.selectResume')}</label>
                 <Select value={selectedResumeId} onValueChange={setSelectedResumeId} disabled={resumesLoading || eligibleResumes.length === 0}>
-                  <SelectTrigger className="h-11 w-full xl:w-56 rounded-xl border-zinc-200 dark:border-zinc-700 bg-white dark:bg-zinc-900">
+                  <SelectTrigger className="h-9 w-full xl:w-52 rounded-lg border-zinc-200 dark:border-zinc-700 bg-white dark:bg-zinc-900 text-xs">
                     <SelectValue placeholder={t('aiMatch.selectResumePlaceholder')} />
                   </SelectTrigger>
                   <SelectContent>
@@ -368,7 +367,7 @@ function AIMatchContent() {
                 <Button
                   onClick={handleMatch}
                   disabled={!selectedResumeId || matching || resumesLoading}
-                  className="h-11 flex-1 rounded-xl px-4 sm:flex-none sm:px-6 bg-zinc-900 text-white hover:bg-zinc-800 dark:bg-white dark:text-zinc-900 dark:hover:bg-zinc-200 shadow-md hover:shadow-lg transition-all"
+                  className="h-9 flex-1 rounded-lg px-4 sm:flex-none sm:px-5 bg-zinc-900 text-white hover:bg-zinc-800 dark:bg-white dark:text-zinc-900 dark:hover:bg-zinc-200 shadow-md hover:shadow-lg transition-all text-xs md:text-sm"
                 >
                   {matching ? (
                     <>

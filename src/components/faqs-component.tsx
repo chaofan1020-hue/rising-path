@@ -36,7 +36,9 @@ export default function FAQs() {
     ]
 
     return (
-        <section className="bg-white py-16 md:py-24 rounded-t-[3rem]">
+        <section className="relative bg-white py-16 md:py-24 rounded-t-[3rem]">
+            {/* 盖住顶部圆角缺口：深色模式下页面黑底会从圆角处透出，用与面板同色的条带填平 */}
+            <div aria-hidden="true" className="pointer-events-none absolute inset-x-0 top-0 h-12 bg-white" />
             <div className="mx-auto max-w-5xl px-4 md:px-6">
                 <div>
                     <h2 className="text-gray-900 text-4xl font-semibold">{t("faqs.title")}</h2>

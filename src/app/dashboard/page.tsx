@@ -8,6 +8,7 @@ import { apiFetch } from '@/lib/api-client';
 import { REGION_DNA, type RegionKey } from '@/lib/region-dna';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent } from '@/components/ui/card';
+import { Input } from '@/components/ui/input';
 import { Skeleton } from '@/components/ui/skeleton';
 import { Badge } from '@/components/ui/badge';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
@@ -296,6 +297,11 @@ export default function DashboardPage() {
   const [selectedInterview, setSelectedInterview] = useState<DashboardInterviewDetail | null>(null);
   const [interviewDetailLoading, setInterviewDetailLoading] = useState(false);
   const [interviewDetailError, setInterviewDetailError] = useState<string | null>(null);
+  const [onboardingRole, setOnboardingRole] = useState('');
+  const [onboardingRoleSaving, setOnboardingRoleSaving] = useState(false);
+  const [onboardingRoleSaved, setOnboardingRoleSaved] = useState(false);
+  const [onboardingRoleError, setOnboardingRoleError] = useState<string | null>(null);
+  const [directionChips, setDirectionChips] = useState<Array<{ id: number; config_value: string }>>([]);
 
   const fetchDashboard = useCallback((keepVisible = false) => {
     if (!keepVisible) setLoading(true);
@@ -321,6 +327,44 @@ export default function DashboardPage() {
       .catch((err) => setError(err?.message || t('dashboard.loadError') || '加载失败'))
       .finally(() => setLoading(false));
   }, [locale, t]);
+
+  const saveOnboardingRole = useCallback(async () => {
+    const role = onboardingRole.trim();
+    if (!role || !data?.latestResumeId || onboardingRoleSaving) return;
+    setOnboardingRoleSaving(true);
+    setOnboardingRoleError(null);
+    try {
+      const response = await apiFetch(`/api/resume/${data.latestResumeId}`, {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ profile: { intention: { roles: [role] } }, confirm: true }),
+      });
+      const json = await response.json();
+      if (!response.ok || !json.success) throw new Error(json.error || t('dashboard.onboardingRoleFailed'));
+      setOnboardingRoleSaved(true);
+      fetchDashboard({ keepVisible: true });
+    } catch (err) {
+      setOnboardingRoleError(err instanceof Error ? err.message : t('dashboard.onboardingRoleFailed'));
+    } finally {
+      setOnboardingRoleSaving(false);
+    }
+  }, [data?.latestResumeId, fetchDashboard, onboardingRole, onboardingRoleSaving, t]);
+
+  // 引导横幅：拉取岗位方向分类作为快捷选项
+  useEffect(() => {
+    if (!data || data.profileReady !== false || !(data.missingSteps || []).includes('role') || directionChips.length > 0) return;
+    let cancelled = false;
+    apiFetch('/api/configs')
+      .then((res) => res.json())
+      .then((json) => {
+        if (cancelled) return;
+        setDirectionChips((json.configs?.direction || []) as Array<{ id: number; config_value: string }>);
+      })
+      .catch(() => {});
+    return () => {
+      cancelled = true;
+    };
+  }, [data, directionChips.length]);
 
   useEffect(() => {
     if (!localeReady) return;
@@ -519,9 +563,9 @@ export default function DashboardPage() {
 
   return (
     <AuthGuard showAccountBar={false}>
-      <div className="min-h-screen bg-white dark:bg-zinc-950">
+      <div className="min-h-screen bg-white dark:bg-white">
         <Header1 />
-        <main className="container mx-auto max-w-6xl px-4 pb-16 pt-20 md:pt-24">
+        <main className="light-scope container mx-auto max-w-6xl px-4 pb-16 pt-20 md:pt-24">
         <div className="mb-7 md:mb-8">
           <p className="mb-2 text-xs font-medium text-zinc-400 dark:text-zinc-500">
             {t('dashboard.eyebrow')}
@@ -547,47 +591,57 @@ export default function DashboardPage() {
         {!loading && !error && data && (
           <div className="flex flex-col gap-8 md:gap-10">
             <section className="order-1">
-                  <div className="grid border-y border-zinc-200 lg:grid-cols-[minmax(0,1fr)_20rem] dark:border-zinc-800">
-                    <div className="py-6 pr-0 md:py-8 lg:pr-10">
-                      <div className="mb-3 inline-flex items-center gap-2 text-xs font-medium text-zinc-500 dark:text-zinc-400">
-                        <Target className="h-3.5 w-3.5" />
-                        {t('dashboard.phaseLabel')}
-                      </div>
-                      <h2 className="max-w-2xl text-2xl font-semibold tracking-tight text-zinc-950 dark:text-zinc-50 md:text-3xl">
-                        {t(data.phaseTitleKey, data.phaseTitleParams)}
-                      </h2>
-                      <p className="mt-3 max-w-xl text-sm leading-6 text-zinc-500 dark:text-zinc-400 md:text-base">
-                        {t(data.phaseDescriptionKey, data.phaseDescriptionParams)}
-                      </p>
-                      <Button
-                        asChild
-                        className="mt-5 rounded-md bg-zinc-900 text-white hover:bg-zinc-800 dark:bg-white dark:text-zinc-900 dark:hover:bg-zinc-200"
-                      >
-                        <Link href={data.nextAction?.href || data.actions[0]?.href || '/resume'}>
-                          {t(data.nextAction?.titleKey || 'dashboard.nextAction')}
-                          <ArrowRight className="ml-2 h-4 w-4" />
-                        </Link>
-                      </Button>
+              <div className="rounded-2xl border border-zinc-200 bg-white p-5 dark:border-zinc-800 dark:bg-zinc-950 md:p-6">
+                <div className="flex flex-col gap-4 md:flex-row md:items-center md:justify-between">
+                  <div className="min-w-0">
+                    <div className="mb-2 inline-flex items-center gap-2 text-xs font-medium text-zinc-500 dark:text-zinc-400">
+                      <Target className="h-3.5 w-3.5" />
+                      {t('dashboard.phaseLabel')}
                     </div>
-                    <div className="grid grid-cols-1 border-t border-zinc-200 bg-zinc-50/60 sm:grid-cols-3 lg:grid-cols-1 lg:border-l lg:border-t-0 dark:border-zinc-800 dark:bg-zinc-900/20">
-                      <OverviewMetric
-                        label={t('dashboard.metricResume')}
-                        value={`${data.metrics.resumeImpact}%`}
-                        hint={t('dashboard.metricResumeHint')}
-                      />
-                      <OverviewMetric
-                        label={t('dashboard.metricInterview')}
-                        value={`${data.metrics.interviewStrength}`}
-                        hint={t('dashboard.metricInterviewHint')}
-                      />
-                      <OverviewMetric
-                        label={t('dashboard.metricHealth')}
-                        value={data.weeklyGoal > 0 ? `${data.weeklyApplications}/${data.weeklyGoal}` : '—'}
-                        hint={data.weeklyGoal > 0 ? `${data.metrics.applicationHealth}% ${t('dashboard.metricHealthDone')}` : t('dashboard.metricHealthNoGoal')}
-                        last
-                      />
-                    </div>
+                    <h2 className="text-xl font-semibold tracking-tight text-zinc-950 dark:text-zinc-50 md:text-2xl">
+                      {t(data.phaseTitleKey, resolveDisplayParams(data.phaseTitleParams, t))}
+                    </h2>
+                    <p className="mt-2 max-w-xl text-sm leading-6 text-zinc-500 dark:text-zinc-400">
+                      {t(data.phaseDescriptionKey, resolveDisplayParams(data.phaseDescriptionParams, t))}
+                    </p>
                   </div>
+                  <Button
+                    asChild
+                    className="shrink-0 rounded-md bg-zinc-900 text-white hover:bg-zinc-800 dark:bg-white dark:text-zinc-900 dark:hover:bg-zinc-200"
+                  >
+                    <Link href={data.nextAction?.href || data.actions[0]?.href || '/resume'}>
+                      {t(data.nextAction?.titleKey || 'dashboard.nextAction')}
+                      <ArrowRight className="ml-2 h-4 w-4" />
+                    </Link>
+                  </Button>
+                </div>
+              </div>
+            </section>
+            <section className="order-2 grid grid-cols-1 gap-3 sm:grid-cols-3">
+              <MetricCard
+                label={t('dashboard.metricResume')}
+                value={`${data.metrics.resumeImpact}%`}
+                hint={t('dashboard.metricResumeHint')}
+                progress={data.metrics.resumeImpact}
+                href="/optimize"
+                actionLabel={t('dashboard.metricAction')}
+              />
+              <MetricCard
+                label={t('dashboard.metricInterview')}
+                value={`${data.metrics.interviewStrength}`}
+                hint={t('dashboard.metricInterviewHint')}
+                progress={Math.min(100, Math.round((data.metrics.interviewStrength / 3) * 100))}
+                href="/mock-interview"
+                actionLabel={t('dashboard.metricAction')}
+              />
+              <MetricCard
+                label={t('dashboard.metricHealth')}
+                value={data.weeklyGoal > 0 ? `${data.weeklyApplications}/${data.weeklyGoal}` : '—'}
+                hint={data.weeklyGoal > 0 ? `${data.metrics.applicationHealth}% ${t('dashboard.metricHealthDone')}` : t('dashboard.metricHealthNoGoal')}
+                progress={data.weeklyGoal > 0 ? data.metrics.applicationHealth : null}
+                href="/jobs"
+                actionLabel={t('dashboard.metricAction')}
+              />
             </section>
             {data.profileReady === false && (
               <section className="order-2 rounded-lg border border-zinc-200 bg-zinc-50/60 dark:border-zinc-800 dark:bg-zinc-900/20">
@@ -600,13 +654,56 @@ export default function DashboardPage() {
                       {(data.missingSteps || []).map((step) => t(`dashboard.onboardingStep.${step}`)).join(' / ')}
                     </p>
                   </div>
-                  <Button asChild size="sm" className="bg-zinc-900 text-white hover:bg-zinc-800 dark:bg-white dark:text-zinc-900 dark:hover:bg-zinc-200">
+                  <Button asChild size="sm" variant="outline" className="border-zinc-300 bg-transparent text-zinc-800 hover:bg-zinc-100 dark:border-zinc-600 dark:bg-transparent dark:text-zinc-100 dark:hover:bg-zinc-800">
                     <Link href="/resume">
                       {t('dashboard.action.onboarding')}
                       <ArrowRight className="ml-1.5 h-3.5 w-3.5" />
                     </Link>
                   </Button>
                 </div>
+                {(data.missingSteps || []).includes('role') && data.latestResumeId && !onboardingRoleSaved && (
+                  <div className="mx-4 mb-4 rounded-lg border border-zinc-200 bg-white p-3 dark:border-zinc-700 dark:bg-zinc-950">
+                    <div className="flex flex-col gap-2 sm:flex-row sm:items-center">
+                      <Input
+                        value={onboardingRole}
+                        onChange={(event) => setOnboardingRole(event.target.value)}
+                        placeholder={t('dashboard.onboardingRolePlaceholder')}
+                        className="h-9 flex-1 text-sm"
+                      />
+                      <Button
+                        size="sm"
+                        onClick={() => void saveOnboardingRole()}
+                        disabled={onboardingRoleSaving || !onboardingRole.trim()}
+                        className="bg-zinc-900 text-white hover:bg-zinc-800 dark:bg-white dark:text-zinc-900 dark:hover:bg-zinc-200"
+                      >
+                        {onboardingRoleSaving && <Loader2 className="mr-1.5 h-3.5 w-3.5 animate-spin" />}
+                        {t('dashboard.onboardingRoleSave')}
+                      </Button>
+                      {onboardingRoleError && (
+                        <span className="text-xs text-red-600 dark:text-red-400">{onboardingRoleError}</span>
+                      )}
+                    </div>
+                    {directionChips.length > 0 && (
+                      <div className="mt-2 flex flex-wrap gap-1.5">
+                        {directionChips.map((option) => (
+                          <button
+                            key={option.id}
+                            type="button"
+                            onClick={() => setOnboardingRole(option.config_value)}
+                            className="rounded-full border border-zinc-300 px-2.5 py-1 text-xs text-zinc-600 transition-colors hover:border-zinc-500 hover:bg-zinc-50 dark:border-zinc-600 dark:text-zinc-300 dark:hover:border-zinc-400 dark:hover:bg-zinc-800"
+                          >
+                            {option.config_value}
+                          </button>
+                        ))}
+                      </div>
+                    )}
+                  </div>
+                )}
+                {onboardingRoleSaved && (
+                  <div className="mx-4 mb-4 rounded-lg border border-emerald-200 bg-emerald-50 px-3 py-2 text-xs font-medium text-emerald-700 dark:border-emerald-800 dark:bg-emerald-950/40 dark:text-emerald-300">
+                    {t('dashboard.onboardingRoleSaved')}
+                  </div>
+                )}
               </section>
             )}
             {data.profileReady && data.personalization && (
@@ -672,15 +769,20 @@ export default function DashboardPage() {
                 </summary>
                 <section className="border-t border-zinc-200 p-4 dark:border-zinc-800 md:p-5">
                 {data.selectedRegion && (data.planRegions?.length ?? 0) <= 1 && REGION_DNA[data.selectedRegion as RegionKey] && (
-                  <div className="mb-4 rounded-lg border border-zinc-200 p-4 dark:border-zinc-800">
-                    <div className="mb-3 flex items-center justify-between gap-2">
-                      <p className="text-sm font-semibold text-zinc-900 dark:text-zinc-100">
+                  <details className="group mb-4 rounded-lg border border-zinc-200 dark:border-zinc-800">
+                    <summary className="flex cursor-pointer list-none items-center justify-between gap-2 px-4 py-3 marker:hidden">
+                      <span className="text-sm font-medium text-zinc-900 dark:text-zinc-100">
                         {t('dashboard.diagnosis.regionLogic')}
-                      </p>
-                      <Badge variant="outline" className="text-[10px]">
-                        {t(`region.${data.selectedRegion}`)}
-                      </Badge>
-                    </div>
+                      </span>
+                      <span className="flex items-center gap-2">
+                        <Badge variant="outline" className="text-[10px]">
+                          {t(`region.${data.selectedRegion}`)}
+                        </Badge>
+                        <ArrowRight className="h-4 w-4 text-zinc-400 transition-transform group-open:rotate-90" />
+                      </span>
+                    </summary>
+                    <div className="border-t border-zinc-200 p-4 dark:border-zinc-800">
+                    <p className="mb-3 text-xs leading-5 text-zinc-500 dark:text-zinc-400">{t('dashboard.diagnosis.dnaIndustryNote')}</p>
                     <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-4">
                       {[
                         { labelKey: 'dashboard.diagnosis.atsPrefs', items: REGION_DNA[data.selectedRegion as RegionKey].atsPreferences },
@@ -700,7 +802,8 @@ export default function DashboardPage() {
                         </div>
                       ))}
                     </div>
-                  </div>
+                    </div>
+                  </details>
                 )}
                 {data.planRegions && data.planRegions.length > 1 && (
                   <div className="mb-4 space-y-4">
@@ -781,7 +884,12 @@ export default function DashboardPage() {
                               )}
                             </div>
                           </div>
-                          <div className="mt-4 grid grid-cols-1 gap-3 border-t border-zinc-200 pt-4 sm:grid-cols-2 lg:grid-cols-4 dark:border-zinc-800">
+                          <details className="mt-4 border-t border-zinc-200 pt-3 dark:border-zinc-800">
+                            <summary className="cursor-pointer text-xs font-medium text-zinc-500 marker:hidden">
+                              {t('dashboard.diagnosis.regionLogic')}
+                            </summary>
+                            <p className="mb-3 text-xs leading-5 text-zinc-500 dark:text-zinc-400">{t('dashboard.diagnosis.dnaIndustryNote')}</p>
+                            <div className="mt-3 grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-4">
                             {[
                               { labelKey: 'dashboard.diagnosis.atsPrefs', items: REGION_DNA[regionPlan.region as RegionKey].atsPreferences },
                               { labelKey: 'dashboard.diagnosis.resumeStyle', items: REGION_DNA[regionPlan.region as RegionKey].resumeStyle },
@@ -799,7 +907,8 @@ export default function DashboardPage() {
                                 </ul>
                               </div>
                             ))}
-                          </div>
+                            </div>
+                          </details>
                         </div>
                       );
                     })}
@@ -1303,7 +1412,14 @@ export default function DashboardPage() {
                     </div>
                   </div>
                 </div>
-                <div className="grid grid-cols-1 divide-y divide-zinc-200 border-y border-zinc-200 md:grid-cols-3 md:divide-x md:divide-y-0 dark:divide-zinc-800 dark:border-zinc-800">
+                <details className="group rounded-lg border border-zinc-200 dark:border-zinc-800">
+                  <summary className="flex cursor-pointer list-none items-center justify-between gap-4 px-4 py-3 marker:hidden">
+                    <span className="text-sm font-medium text-zinc-900 dark:text-zinc-100">
+                      {t('dashboard.planNow')} / {t('dashboard.planWeek')} / {t('dashboard.planMonth')}
+                    </span>
+                    <ArrowRight className="h-4 w-4 text-zinc-400 transition-transform group-open:rotate-90" />
+                  </summary>
+                  <div className="grid grid-cols-1 divide-y divide-zinc-200 border-t border-zinc-200 md:grid-cols-3 md:divide-x md:divide-y-0 dark:divide-zinc-800 dark:border-zinc-800">
                   <PlanColumn
                     icon={<Zap className="h-4 w-4" />}
                     label={t('dashboard.planNow')}
@@ -1322,7 +1438,8 @@ export default function DashboardPage() {
                     items={planGroups.month}
                     translate={t}
                   />
-                </div>
+                  </div>
+                </details>
               </section>
             )}
 
@@ -1355,24 +1472,29 @@ export default function DashboardPage() {
                     {t('dashboard.actionsTitle')}
                   </h3>
                 </div>
-                <div className="border-y border-zinc-200 dark:border-zinc-800">
+                <div className="space-y-3">
                     {data.actions.map((action, idx) => (
                       <Link
                         key={`${action.titleKey}-${idx}`}
                         href={action.href}
-                        className="group flex items-center justify-between border-b border-zinc-200 p-4 transition-colors last:border-0 hover:bg-zinc-50 dark:border-zinc-800 dark:hover:bg-zinc-900/50 md:p-5"
+                        className="group flex items-center justify-between gap-3 rounded-2xl border border-zinc-200 p-4 transition-colors hover:border-zinc-500 hover:bg-zinc-50 dark:border-zinc-800 dark:hover:border-zinc-600 dark:hover:bg-zinc-900/50 md:p-5"
                       >
-                        <div className="flex items-center gap-4">
+                        <div className="flex min-w-0 items-center gap-3">
+                          <span className="flex h-8 w-8 shrink-0 items-center justify-center rounded-full bg-zinc-900 text-sm font-bold text-white dark:bg-white dark:text-zinc-900">
+                            {idx + 1}
+                          </span>
+                          <span className="min-w-0 text-sm md:text-base font-medium text-zinc-900 dark:text-zinc-900">
+                            {t(action.titleKey, action.titleParams)}
+                          </span>
+                        </div>
+                        <div className="flex shrink-0 items-center gap-3">
                           <span
                             className={`text-[10px] font-semibold px-2 py-0.5 rounded-full ${priorityBadge[action.priority].className}`}
                           >
                             {t(`dashboard.priority.${action.priority}`)}
                           </span>
-                          <span className="text-sm md:text-base font-medium text-zinc-900 dark:text-zinc-900">
-                            {t(action.titleKey, action.titleParams)}
-                          </span>
+                          <ArrowRight className="h-4 w-4 text-zinc-700 group-hover:translate-x-0.5 group-hover:text-zinc-900 dark:text-zinc-600 dark:group-hover:text-zinc-900 transition-all" />
                         </div>
-                        <ArrowRight className="h-4 w-4 text-zinc-700 group-hover:text-zinc-900 dark:text-zinc-600 dark:group-hover:text-zinc-900 transition-colors" />
                       </Link>
                     ))}
                 </div>
@@ -1459,7 +1581,7 @@ export default function DashboardPage() {
                             )}
                               {ev.reportGrade && (
                               <span className="text-xs font-medium text-zinc-500">
-                                {ev.reportGrade}
+                                {t('dashboard.evaluation.gradeLabel')} {ev.reportGrade}
                               </span>
                               )}
                               <ArrowRight className="h-4 w-4 text-zinc-400" aria-hidden="true" />
@@ -1605,7 +1727,11 @@ export default function DashboardPage() {
                                   );
                                 })}
                               </div>
-                              <Tabs defaultValue="people" className="mt-5">
+                                <details className="mt-4">
+                                  <summary className="cursor-pointer text-xs font-medium text-zinc-500 marker:hidden">
+                                    {t('dashboard.networking.playbook')}
+                                  </summary>
+                                  <Tabs defaultValue="people" className="mt-4">
                                 <TabsList className="w-full justify-start overflow-x-auto">
                                   <TabsTrigger value="people">{t('dashboard.networking.tabPeople')}</TabsTrigger>
                                   <TabsTrigger value="talk">{t('dashboard.networking.tabTalk')}</TabsTrigger>
@@ -1700,6 +1826,7 @@ export default function DashboardPage() {
                                   </div>
                                 </TabsContent>
                               </Tabs>
+                                </details>
                             </>
                           );
                         })()}
@@ -1712,34 +1839,7 @@ export default function DashboardPage() {
               </section>
             )}
 
-            {/* 成长故事线 */}
-            <details id="story" className="order-6 group rounded-lg border border-zinc-200 dark:border-zinc-800">
-              <summary className="flex cursor-pointer list-none items-center justify-between gap-4 px-4 py-3.5 marker:hidden md:px-5">
-                <div>
-                  <p className="text-sm font-medium text-zinc-900 dark:text-zinc-100">{t('dashboard.storyTitle')}</p>
-                  <p className="mt-0.5 text-xs text-zinc-500 dark:text-zinc-400">{t(data.story.resumeKey, data.story.resumeParams)}</p>
-                </div>
-                <ArrowRight className="h-4 w-4 text-zinc-400 transition-transform group-open:rotate-90" />
-              </summary>
-              <div className="grid grid-cols-1 gap-3 border-t border-zinc-200 p-4 dark:border-zinc-800 md:grid-cols-3 md:p-5">
-                <StoryCard
-                  icon={<LineChart className="h-4 w-4" />}
-                  title={t('dashboard.storyResume')}
-                  description={t(data.story.resumeKey, data.story.resumeParams)}
-                />
-                <StoryCard
-                  icon={<Zap className="h-4 w-4" />}
-                  title={t('dashboard.storyInterview')}
-                  description={t(data.story.interviewKey, data.story.interviewParams)}
-                />
-                <StoryCard
-                  icon={<Briefcase className="h-4 w-4" />}
-                  title={t('dashboard.storyMindset')}
-                  description={t(data.story.mindsetKey, data.story.mindsetParams)}
-                />
-              </div>
-            </details>
-
+            {/* 成长故事线已下线：纯叙事内容无行动价值（如需恢复见 git 历史） */}
           </div>
         )}
         </main>
@@ -1793,24 +1893,112 @@ const priorityBadge: Record<
   },
 };
 
+// 驾驶舱接口的参数值可能是字典键（如 region.hk），渲染前先翻译
+function resolveDisplayParams(
+  params: Record<string, string | number> | undefined,
+  t: (key: string) => string,
+): Record<string, string | number> | undefined {
+  if (!params) return params;
+  const resolved: Record<string, string | number> = {};
+  for (const [key, value] of Object.entries(params)) {
+    resolved[key] = typeof value === 'string' && value.startsWith('region.') ? t(value) : value;
+  }
+  return resolved;
+}
+
+function MetricCard({
+  label,
+  value,
+  hint,
+  progress,
+  href,
+  actionLabel,
+}: {
+  label: string;
+  value: string;
+  hint: string;
+  progress?: number | null;
+  href?: string;
+  actionLabel?: string;
+}) {
+  const body = (
+    <>
+      <div className="flex items-center justify-between gap-2">
+        <p className="truncate text-xs text-zinc-500 dark:text-zinc-400">{label}</p>
+        {typeof progress === 'number' && (
+          <span className="text-xs font-semibold text-zinc-400 dark:text-zinc-500">{progress}%</span>
+        )}
+      </div>
+      <p className="mt-1 text-2xl font-semibold tracking-tight text-zinc-950 dark:text-zinc-50">{value}</p>
+      {typeof progress === 'number' && (
+        <div className="mt-2 h-1.5 overflow-hidden rounded-full bg-zinc-100 dark:bg-zinc-800">
+          <div
+            className="h-full rounded-full bg-zinc-900 transition-all dark:bg-white"
+            style={{ width: `${Math.max(0, Math.min(100, progress))}%` }}
+          />
+        </div>
+      )}
+      <p className="mt-2 text-xs leading-5 text-zinc-500 dark:text-zinc-400">
+        {hint}
+        {href && actionLabel && (
+          <span className="ml-1.5 inline-flex items-center gap-0.5 font-medium text-zinc-900 dark:text-zinc-100">
+            {actionLabel}
+            <ArrowRight className="h-3 w-3" />
+          </span>
+        )}
+      </p>
+    </>
+  );
+  const frame = 'block rounded-2xl border border-zinc-200 bg-white p-4 dark:border-zinc-800 dark:bg-zinc-950';
+  if (href) {
+    return (
+      <Link href={href} className={`group transition-colors hover:border-zinc-400 dark:hover:border-zinc-600 ${frame}`}>
+        {body}
+      </Link>
+    );
+  }
+  return <div className={frame}>{body}</div>;
+}
+
 function OverviewMetric({
   label,
   value,
   hint,
   last = false,
+  href,
+  actionLabel,
 }: {
   label: string;
   value: string;
   hint: string;
   last?: boolean;
+  href?: string;
+  actionLabel?: string;
 }) {
-  return (
-    <div className={`min-w-0 px-4 py-3.5 sm:border-r sm:border-zinc-200 lg:border-r-0 lg:px-5 lg:py-4 dark:sm:border-zinc-800 ${last ? 'sm:border-r-0' : 'border-b border-zinc-200 lg:border-b dark:border-zinc-800'}`}>
+  const body = (
+    <>
       <p className="truncate text-xs text-zinc-500 dark:text-zinc-400">{label}</p>
       <p className="mt-1 text-xl font-semibold tracking-tight text-zinc-950 dark:text-zinc-50">{value}</p>
-      <p className="mt-1 line-clamp-2 text-xs leading-5 text-zinc-500 dark:text-zinc-400">{hint}</p>
-    </div>
+      <p className="mt-1 line-clamp-2 text-xs leading-5 text-zinc-500 dark:text-zinc-400">
+        {hint}
+        {href && actionLabel && (
+          <span className="ml-1.5 inline-flex items-center gap-0.5 font-medium text-zinc-900 dark:text-zinc-100">
+            {actionLabel}
+            <ArrowRight className="h-3 w-3" />
+          </span>
+        )}
+      </p>
+    </>
   );
+  const frame = `min-w-0 px-4 py-3.5 sm:border-r sm:border-zinc-200 lg:border-r-0 lg:px-5 lg:py-4 dark:sm:border-zinc-800 ${last ? 'sm:border-r-0' : 'border-b border-zinc-200 lg:border-b dark:border-zinc-800'}`;
+  if (href) {
+    return (
+      <Link href={href} className={`group block min-w-0 transition-colors hover:bg-zinc-100/60 dark:hover:bg-zinc-800/40 ${frame}`}>
+        {body}
+      </Link>
+    );
+  }
+  return <div className={frame}>{body}</div>;
 }
 
 function PlanColumn({

@@ -115,6 +115,14 @@ function Header1() {
         { title: t("nav.mockInterview"), href: "/mock-interview", icon: MessageSquare },
     ];
 
+    // 未登录访客可见的导航：核心工具入口，点击后经 AuthGuard 引导注册
+    const publicNavItems = [
+        { title: t("nav.jobSearch"), href: "/jobs", icon: Search },
+        { title: t("nav.aiMatch"), href: "/ai-match", icon: Sparkles },
+        { title: t("nav.atsOptimize"), href: "/optimize", icon: Wand2 },
+        { title: t("nav.mockInterview"), href: "/mock-interview", icon: MessageSquare },
+    ];
+
     const isActive = (href: string) => {
         const basePath = href.split('?')[0];
         return pathname === basePath || pathname.startsWith(`${basePath}/`);
@@ -122,7 +130,7 @@ function Header1() {
     const applicationsActive = applicationItems.some((item) => isActive(item.href));
 
     return (
-        <header className="w-full z-40 fixed top-0 left-0 border-b border-zinc-200/80 bg-background/95 backdrop-blur supports-[backdrop-filter]:bg-background/80 dark:border-zinc-800/80">
+        <header className="w-full z-40 fixed top-0 left-0 border-b border-zinc-200/80 bg-background dark:border-zinc-800/80">
             <div className="container relative mx-auto min-h-16 flex gap-3 flex-row items-center px-4">
                 <div className="flex min-w-0 items-center gap-2 2xl:gap-6">
                     <Link href={isLoggedIn ? "/home" : "/"} className="flex shrink-0 items-center gap-2 font-semibold text-lg text-black dark:text-white">
@@ -132,9 +140,9 @@ function Header1() {
                         </svg>
                         Liorvix
                     </Link>
-                    {isLoggedIn && <Button aria-label={isOpen ? t("nav.closeMenu") : t("nav.openMenu")} variant="ghost" className="2xl:hidden h-9 w-9 shrink-0 p-0" onClick={() => setOpen(!isOpen)}>
+                    <Button aria-label={isOpen ? t("nav.closeMenu") : t("nav.openMenu")} variant="ghost" className="2xl:hidden h-9 w-9 shrink-0 p-0" onClick={() => setOpen(!isOpen)}>
                         {isOpen ? <X className="w-5 h-5" /> : <Menu className="w-5 h-5" />}
-                    </Button>}
+                    </Button>
                     {isLoggedIn && <nav aria-label="Primary" className="hidden 2xl:flex min-w-0 items-center gap-0.5">
                         {navigationItems.map((item) => {
                             const Icon = item.icon;
@@ -207,6 +215,23 @@ function Header1() {
                             </DropdownMenuContent>
                         </DropdownMenu>
                     </nav>}
+                    {!isLoggedIn && (
+                        <nav aria-label="Primary" className="hidden 2xl:flex min-w-0 items-center gap-0.5">
+                            {publicNavItems.map((item) => {
+                                const Icon = item.icon;
+                                return (
+                                    <Link
+                                        key={item.href}
+                                        href={item.href}
+                                        className="inline-flex h-9 shrink-0 items-center gap-2 whitespace-nowrap rounded-lg px-2.5 text-sm font-medium text-zinc-600 transition-colors hover:bg-zinc-100 hover:text-zinc-900 dark:text-zinc-300 dark:hover:bg-zinc-800 dark:hover:text-white"
+                                    >
+                                        <Icon className="h-3.5 w-3.5" aria-hidden="true" />
+                                        <span>{item.title}</span>
+                                    </Link>
+                                );
+                            })}
+                        </nav>
+                    )}
                 </div>
                 <div className="ml-auto flex items-center gap-2">
                     <LanguageSwitcher />
@@ -225,9 +250,10 @@ function Header1() {
                         </Button>
                     )}
                 </div>
-                    {isLoggedIn && isOpen && (
+                    {isOpen && (
                         <div className="absolute left-0 right-0 top-16 border-t border-zinc-200 bg-background px-4 py-4 shadow-xl dark:border-zinc-800 2xl:hidden">
                             <div className="container mx-auto space-y-1">
+                            {isLoggedIn ? (<>
                             {navigationItems.map((item) => (
                                 <Link key={item.href} href={item.href} onClick={() => setOpen(false)} aria-current={isActive(item.href) ? "page" : undefined} className={cn("flex items-center gap-3 rounded-lg px-3 py-3 text-sm font-medium", isActive(item.href) ? "bg-zinc-900 text-white dark:bg-white dark:text-zinc-900" : "text-zinc-700 dark:text-zinc-200")}>
                                     <item.icon className="h-4 w-4" aria-hidden="true" />
@@ -269,6 +295,13 @@ function Header1() {
                                     {t("nav.logout")}
                                 </Button>
                             )}
+                            </>) : (publicNavItems.map((item) => (
+                                <Link key={item.href} href={item.href} onClick={() => setOpen(false)} className="flex items-center gap-3 rounded-lg px-3 py-3 text-sm font-medium text-zinc-700 dark:text-zinc-200">
+                                    <item.icon className="h-4 w-4" aria-hidden="true" />
+                                    <span>{item.title}</span>
+                                    <MoveRight className="ml-auto h-4 w-4 opacity-50" aria-hidden="true" />
+                                </Link>
+                            )))}
                             </div>
                         </div>
                     )}

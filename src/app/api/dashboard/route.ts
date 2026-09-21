@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from 'next/server';
 import { type RegionKey, REGION_DNA, shouldBeApplying } from '@/lib/region-dna';
 import { getAuthContext, unauthorizedResponse } from '@/lib/auth-server';
 import { buildCareerRoutePlan, type CareerRouteDiagnosis } from '@/lib/career-route-planner';
+import { getJobDeadlineRemaining } from '@/lib/job-deadline';
 import type { ResumeProfile, UserSegmentation } from '@/lib/resume-types';
 import { resolveActiveRegion } from '@/lib/user-region';
 import { regionRequiresIdentity, resolveVisaStatusForRegion } from '@/lib/visa-timeline';
@@ -696,6 +697,30 @@ export async function GET(request: NextRequest) {
         descriptionParams: { hours: hoursSinceInterview },
       });
     }
+  }
+
+  // 岗位截止提醒：用户已投递且 14 天内截止的在招岗位
+  const { data: deadlineRows } = await supabase
+    .from('applications')
+    .select('job_id, jobs!inner(title, valid_through, is_active)')
+    .eq('user_id', auth.user.id)
+    .eq('jobs.is_active', true)
+    .not('jobs.valid_through', 'is', null)
+    .limit(30);
+  const seenDeadlineJobIds = new Set<number>();
+  for (const row of deadlineRows || []) {
+    const deadlineJob = row.jobs as { title: string; valid_through: string } | null;
+    if (!deadlineJob?.valid_through || seenDeadlineJobIds.has(row.job_id)) continue;
+    const remaining = getJobDeadlineRemaining(String(deadlineJob.valid_through), now);
+    if (!remaining || remaining.expired || remaining.days > 14) continue;
+    seenDeadlineJobIds.add(row.job_id);
+    reminders.push({
+      type: `job_deadline_${row.job_id}`,
+      titleKey: 'dashboard.reminder.deadline.title',
+      descriptionKey: 'dashboard.reminder.deadline.description',
+      descriptionParams: { job: deadlineJob.title, days: remaining.days },
+    });
+    if (reminders.length >= 8) break;
   }
 
   // 成长故事线

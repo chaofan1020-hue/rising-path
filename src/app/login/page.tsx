@@ -126,6 +126,7 @@ export default function LoginPage() {
       };
     }
 
+    if (requestedMode === 'signup') setMode('signup');
     if (verificationRequested) setMode('verify');
 
     getSupabaseBrowserClient().then(async (supabase) => {

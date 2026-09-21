@@ -47,7 +47,7 @@ async function main() {
   }
   const feedUrl = process.env.JOBS_FEED_URL || 'https://hfscareer.com/collector-api/integrations/v1/jobs';
   const apiKey = process.env.JOBS_FEED_API_KEY || process.env.INTEGRATION_API_KEY;
-  let feedMatches: Row[] = [];
+  const feedMatches: Row[] = [];
   let feedPages = 0;
   if (apiKey && process.env.INSPECT_DB_ONLY !== '1') {
     let cursor: string | null = null;

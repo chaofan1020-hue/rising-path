@@ -1088,7 +1088,7 @@ function OptimizeContent() {
         id: String(item.id),
         serverId: item.id,
         resumeId: String(item.resume_id),
-        resumeName: `简历 #${item.resume_id}`,
+        resumeName: t('optimize.historyResume', { id: item.resume_id }),
         targetCompany: item.target_company,
         targetPosition: item.target_position,
         targetRegion: item.target_region || '',
@@ -1511,9 +1511,9 @@ function OptimizeContent() {
   };
 
   return (
-    <div className="min-h-screen bg-white dark:bg-zinc-950">
+    <div className="min-h-screen bg-white dark:bg-white">
       <Header1 />
-      <main className="relative container mx-auto px-4 pt-20 pb-16 sm:px-6 md:pt-24">
+      <main className="light-scope relative container mx-auto px-4 pt-20 pb-16 sm:px-6 md:pt-24">
         {/* Hero：左对齐 eyebrow + 大标题（Tailark 式） */}
         <div className="relative mb-8 max-w-3xl md:mb-10">
           <p className="text-sm font-medium text-zinc-400 dark:text-zinc-500 mb-3">{t('optimize.eyebrow')}</p>
@@ -1601,14 +1601,14 @@ function OptimizeContent() {
             <div className="border-y border-zinc-200 py-4 dark:border-zinc-800">
               <div className="mb-3 flex items-center justify-between gap-3">
                 <div>
-                  <p className="text-sm font-medium text-zinc-900 dark:text-zinc-100">选择目标岗位</p>
-                  <p className="mt-1 text-xs text-zinc-500 dark:text-zinc-400">优先从收藏或已添加岗位选择，也可搜索全部岗位。</p>
+                  <p className="text-sm font-medium text-zinc-900 dark:text-zinc-100">{t('optimize.targetJobTitle')}</p>
+                  <p className="mt-1 text-xs text-zinc-500 dark:text-zinc-400">{t('optimize.targetJobHint')}</p>
                 </div>
                 {targetJobId && <button type="button" onClick={() => { setTargetJobId(null); setTargetCompany(''); setTargetPosition(''); setTargetRegion(''); }} className="text-xs text-zinc-500 transition-colors hover:text-zinc-900 dark:hover:text-white">清除选择</button>}
               </div>
               {favoriteJobs.length > 0 && (
                 <div className="mb-3">
-                  <p className="mb-2 text-xs font-medium text-zinc-500">我的收藏</p>
+                  <p className="mb-2 text-xs font-medium text-zinc-500">{t('optimize.myFavorites')}</p>
                   <div className="flex flex-wrap gap-2">
                     {favoriteJobs.slice(0, 6).map((job) => (
                       <button key={job.id} type="button" onClick={() => selectTargetJob(job)} className={`max-w-full rounded-md border px-3 py-2 text-left text-xs transition-colors ${targetJobId === job.id ? 'border-zinc-900 bg-zinc-900 text-white dark:border-white dark:bg-white dark:text-zinc-900' : 'border-zinc-200 text-zinc-700 hover:border-zinc-400 hover:bg-zinc-50 dark:border-zinc-700 dark:text-zinc-200 dark:hover:bg-zinc-800'}`}>
@@ -1621,7 +1621,7 @@ function OptimizeContent() {
               )}
               {applicationJobs.length > 0 && (
                 <div className="mb-3">
-                  <p className="mb-2 text-xs font-medium text-zinc-500">已添加岗位</p>
+                  <p className="mb-2 text-xs font-medium text-zinc-500">{t('optimize.addedJobs')}</p>
                   <div className="flex flex-wrap gap-2">
                     {applicationJobs.slice(0, 6).map((job) => (
                       <button key={job.id} type="button" onClick={() => selectTargetJob(job)} className={`max-w-full rounded-md border px-3 py-2 text-left text-xs transition-colors ${targetJobId === job.id ? 'border-zinc-900 bg-zinc-900 text-white dark:border-white dark:bg-white dark:text-zinc-900' : 'border-zinc-200 text-zinc-700 hover:border-zinc-400 hover:bg-zinc-50 dark:border-zinc-700 dark:text-zinc-200 dark:hover:bg-zinc-800'}`}>

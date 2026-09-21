@@ -22,6 +22,7 @@ import { apiFetch } from '@/lib/api-client';
 import { Header1 } from '@/components/header1';
 import { useLanguage } from '@/lib/language-context';
 import { getJobDeadlineRemaining } from '@/lib/job-deadline';
+import { formatLocationDisplay, localizeJobEnum } from '@/lib/job-display';
 
 interface Job {
   id: number;
@@ -38,6 +39,7 @@ interface Job {
   logo_fallback_url?: string;
   sponsorship?: 'yes' | 'no' | 'unknown';
   employment_category?: string | null;
+  job_type?: string | null;
   experience_min_years?: number | null;
   experience_max_years?: number | null;
   experience_text?: string | null;
@@ -185,7 +187,7 @@ const sponsorshipOptions: JobConfig[] = [
 
 // 获取地区对应的显示文本
 function getRegionDisplayText(region: string): string {
-  return region;
+  return formatLocationDisplay(region);
 }
 
 // Keep each page varied without changing the order of jobs within a company.
@@ -413,6 +415,307 @@ function BrandOptions({
   );
 }
 
+// 岗位徽章组：列表卡片与详情面板共用
+function JobBadges({ job, t }: { job: Job; t: (key: string, params?: Record<string, string | number>) => string }) {
+  return (
+    <div className="flex flex-wrap gap-1.5 md:gap-2">
+      <Badge variant="secondary" className="rounded-md text-xs bg-zinc-100 text-zinc-600 dark:bg-zinc-800 dark:text-zinc-300 hover:bg-zinc-100" translate="no">
+        <MapPin className="h-3 w-3 mr-1" />
+        {getRegionDisplayText(job.region)}
+      </Badge>
+      <Badge variant="secondary" className="rounded-md text-xs bg-zinc-100 text-zinc-600 dark:bg-zinc-800 dark:text-zinc-300 hover:bg-zinc-100" translate="no">
+        <Briefcase className="h-3 w-3 mr-1" />
+        {localizeJobEnum(job.direction, t)}
+      </Badge>
+      <Badge variant="secondary" className="rounded-md text-xs bg-zinc-100 text-zinc-600 dark:bg-zinc-800 dark:text-zinc-300 hover:bg-zinc-100" translate="no">
+        <Users className="h-3 w-3 mr-1" />
+        {localizeJobEnum(job.audience, t)}
+      </Badge>
+      {job.employment_category && job.employment_category !== '未知' && (
+        <Badge variant="outline" className="rounded-md text-xs border-zinc-200 dark:border-zinc-700 text-zinc-600 dark:text-zinc-300">
+          {localizeJobEnum(job.employment_category, t)}
+        </Badge>
+      )}
+      {formatExperienceLabel(job) && (
+        <Badge variant="outline" className="rounded-md text-xs border-zinc-200 dark:border-zinc-700 text-zinc-600 dark:text-zinc-300">
+          {formatExperienceLabel(job)}
+        </Badge>
+      )}
+      {job.salary_range && (
+        <Badge variant="outline" className="border-zinc-200 dark:border-zinc-700 text-zinc-600 dark:text-zinc-300 rounded-md text-xs">
+          {job.salary_range}
+        </Badge>
+      )}
+      {job.sponsorship && job.sponsorship !== 'unknown' && (
+        <Badge variant="outline" className="rounded-md text-xs border-zinc-200 dark:border-zinc-700 text-zinc-600 dark:text-zinc-300">
+          {job.sponsorship === 'yes' ? t('jobs.sponsor') : t('jobs.noSponsor')}
+        </Badge>
+      )}
+      {formatDeadline(job.valid_through, job.deadline_time_zone) && (
+        <Badge variant="outline" className="border-zinc-200 dark:border-zinc-700 text-zinc-600 dark:text-zinc-300 rounded-md text-xs">
+          <Calendar className="h-3 w-3 mr-1" />
+          {t('jobs.deadline')} {formatDeadline(job.valid_through, job.deadline_time_zone)}
+        </Badge>
+      )}
+      {job.is_active === false ? (
+        <Badge variant="secondary" className="bg-zinc-100 text-zinc-400 dark:bg-zinc-800 dark:text-zinc-500 rounded-md text-xs hover:bg-zinc-100">
+          {t('jobs.inactive')}
+        </Badge>
+      ) : (
+        <Badge variant="default" className="bg-zinc-900 dark:bg-white dark:text-zinc-900 rounded-md text-xs hover:bg-zinc-900">
+          {t('jobs.active')}
+        </Badge>
+      )}
+    </div>
+  );
+}
+
+function FavoriteButton({
+  isFavorite,
+  loading,
+  onFavorite,
+  t,
+}: {
+  isFavorite: boolean;
+  loading: boolean;
+  onFavorite: () => void;
+  t: (key: string) => string;
+}) {
+  return (
+    <Button
+      type="button"
+      size="icon-sm"
+      variant="ghost"
+      title={isFavorite ? t('jobs.favorited') : t('jobs.favorite')}
+      aria-label={isFavorite ? t('jobs.favorited') : t('jobs.favorite')}
+      onClick={onFavorite}
+      disabled={loading}
+      className={isFavorite
+        ? 'text-rose-600 hover:bg-rose-50 hover:text-rose-700 dark:text-rose-400 dark:hover:bg-rose-950/30'
+        : 'text-zinc-400 hover:bg-zinc-100 hover:text-zinc-900 dark:hover:bg-zinc-800 dark:hover:text-zinc-100'}
+    >
+      {loading
+        ? <Loader2 className="animate-spin" />
+        : <Heart className={isFavorite ? 'fill-current' : ''} />}
+    </Button>
+  );
+}
+
+function JobsPagination({
+  page,
+  totalJobs,
+  totalJobsIsEstimate,
+  hasMoreJobs,
+  loading,
+  onPageChange,
+  t,
+  className,
+}: {
+  page: number;
+  totalJobs: number;
+  totalJobsIsEstimate: boolean;
+  hasMoreJobs: boolean;
+  loading: boolean;
+  onPageChange: (next: number) => void;
+  t: (key: string) => string;
+  className?: string;
+}) {
+  if (totalJobs <= 0) return null;
+  return (
+    <div className={`flex flex-col items-center gap-3 text-xs md:text-sm text-zinc-400 dark:text-zinc-500 ${className ?? ''}`}>
+      <span>{t('jobs.foundJobs')} {totalJobsIsEstimate ? t('jobs.estimatedPrefix') : ''}{totalJobs} {t('jobs.jobsUnit')} · {t('jobs.page')} {page + 1}</span>
+      <div className="flex items-center gap-2">
+        <Button
+          type="button"
+          variant="outline"
+          size="sm"
+          onClick={() => onPageChange(Math.max(0, page - 1))}
+          disabled={page === 0 || loading}
+          aria-label={t('jobs.previous')}
+        >
+          <ChevronLeft className="h-4 w-4 mr-1" />{t('jobs.previous')}
+        </Button>
+        <Button
+          type="button"
+          variant="outline"
+          size="sm"
+          onClick={() => onPageChange(page + 1)}
+          disabled={loading || !hasMoreJobs}
+          aria-label={t('jobs.next')}
+        >
+          {t('jobs.next')}<ChevronRight className="h-4 w-4 ml-1" />
+        </Button>
+      </div>
+    </div>
+  );
+}
+
+// lg+ 左列：紧凑岗位行（点击选中，右侧展示详情）
+function JobListRow({
+  job,
+  selected,
+  isFavorite,
+  favoriteLoading,
+  deadlineNow,
+  onSelect,
+  onFavorite,
+  t,
+}: {
+  job: Job;
+  selected: boolean;
+  isFavorite: boolean;
+  favoriteLoading: boolean;
+  deadlineNow: number;
+  onSelect: (jobId: number) => void;
+  onFavorite: (jobId: number) => void;
+  t: (key: string, params?: Record<string, string | number>) => string;
+}) {
+  return (
+    <div
+      className={`flex items-stretch gap-1 rounded-xl border p-3 transition-colors ${
+        selected
+          ? 'border-zinc-900 bg-zinc-50 dark:border-white/60 dark:bg-white/[0.06]'
+          : 'border-zinc-200 bg-white hover:border-zinc-400 dark:border-zinc-700/60 dark:bg-zinc-950 dark:hover:border-zinc-500'
+      }`}
+    >
+      <button
+        type="button"
+        onClick={() => onSelect(job.id)}
+        className="flex min-w-0 flex-1 items-start gap-3 text-left"
+      >
+        <CompanyLogo company={job.company} logoUrl={job.logo_url} fallbackLogoUrl={job.logo_fallback_url} />
+        <div className="min-w-0 flex-1">
+          <div className="flex items-start justify-between gap-2">
+            <h3 className="min-w-0 truncate text-sm font-semibold text-zinc-900 dark:text-zinc-50">{job.title}</h3>
+            {job.salary_range && (
+              <span className="shrink-0 text-xs font-semibold text-zinc-700 dark:text-zinc-100" translate="no">
+                {job.salary_range}
+              </span>
+            )}
+          </div>
+          <p className="truncate text-xs text-zinc-500 dark:text-zinc-400" translate="no">{job.company}</p>
+          <p className="mt-1 truncate text-xs text-zinc-400 dark:text-zinc-500" translate="no">
+            {getRegionDisplayText(job.region)} · {localizeJobEnum(job.direction, t)} · {localizeJobEnum(job.job_type, t) || localizeJobEnum(job.audience, t)}
+          </p>
+          {formatDeadlineRemaining(job.valid_through, deadlineNow, t) && (
+            <p className="mt-1 text-xs font-semibold text-red-600 dark:text-red-400">
+              {formatDeadlineRemaining(job.valid_through, deadlineNow, t)}
+            </p>
+          )}
+        </div>
+      </button>
+      <FavoriteButton
+        isFavorite={isFavorite}
+        loading={favoriteLoading}
+        onFavorite={() => onFavorite(job.id)}
+        t={t}
+      />
+    </div>
+  );
+}
+
+// lg+ 右列：选中岗位的完整详情与操作
+function JobDetailPanel({
+  job,
+  isFavorite,
+  favoriteLoading,
+  adding,
+  added,
+  deadlineNow,
+  onFavorite,
+  onAdd,
+  t,
+}: {
+  job: Job;
+  isFavorite: boolean;
+  favoriteLoading: boolean;
+  adding: boolean;
+  added: boolean;
+  deadlineNow: number;
+  onFavorite: (jobId: number) => void;
+  onAdd: (jobId: number) => void;
+  t: (key: string, params?: Record<string, string | number>) => string;
+}) {
+  return (
+    <div className="rounded-2xl border border-zinc-200 bg-white p-5 dark:border-zinc-800 dark:bg-zinc-950">
+      <div className="flex items-start gap-4">
+        <div className="w-14 h-14 shrink-0">
+          <CompanyLogo company={job.company} logoUrl={job.logo_url} fallbackLogoUrl={job.logo_fallback_url} />
+        </div>
+        <div className="min-w-0 flex-1">
+          <h2 className="break-words text-lg font-semibold tracking-tight text-zinc-900 dark:text-zinc-50">{job.title}</h2>
+          <p className="text-sm text-zinc-500 dark:text-zinc-400" translate="no">{job.company}</p>
+        </div>
+        <FavoriteButton
+          isFavorite={isFavorite}
+          loading={favoriteLoading}
+          onFavorite={() => onFavorite(job.id)}
+          t={t}
+        />
+      </div>
+
+      <div className="mt-4">
+        <JobBadges job={job} t={t} />
+      </div>
+
+      {formatDeadlineRemaining(job.valid_through, deadlineNow, t) && (
+        <p className="mt-3 text-sm font-semibold text-red-600 dark:text-red-400">
+          {formatDeadlineRemaining(job.valid_through, deadlineNow, t)}
+        </p>
+      )}
+
+      {job.description && (
+        <div className="mt-5">
+          <p className="whitespace-pre-wrap text-sm leading-relaxed text-zinc-600 dark:text-zinc-300">{job.description}</p>
+        </div>
+      )}
+      {job.requirements && (
+        <div className="mt-5">
+          <p className="whitespace-pre-wrap text-sm leading-relaxed text-zinc-600 dark:text-zinc-300">{job.requirements}</p>
+        </div>
+      )}
+
+      <div className="mt-6 flex flex-wrap items-center gap-2 border-t border-zinc-100 pt-4 dark:border-zinc-800">
+        {job.is_active !== false && (
+          <Button
+            size="sm"
+            className="h-9 bg-zinc-900 text-white hover:bg-zinc-800 dark:bg-white dark:text-zinc-900 dark:hover:bg-zinc-200"
+            onClick={() => onAdd(job.id)}
+            disabled={adding || added}
+          >
+            {adding ? (
+              <Loader2 className="h-3.5 w-3.5 animate-spin" />
+            ) : added ? (
+              <>
+                <Check className="h-3.5 w-3.5 mr-1" />
+                {t('jobs.added')}
+              </>
+            ) : (
+              <>
+                <Plus className="h-3.5 w-3.5 mr-1" />
+                {t('jobs.add')}
+              </>
+            )}
+          </Button>
+        )}
+        <Button size="sm" variant="outline" asChild className="h-9 rounded-lg text-xs border-zinc-200 dark:border-zinc-700 text-zinc-600 dark:text-zinc-300 hover:bg-zinc-100 hover:text-zinc-900 dark:hover:bg-zinc-800 dark:hover:text-zinc-100">
+          <Link href={`/jobs/${job.id}`}>
+            {t('jobs.viewDetail')}
+          </Link>
+        </Button>
+        {job.job_url && (
+          <Button size="sm" variant="outline" asChild className="h-9 rounded-lg text-xs border-zinc-200 dark:border-zinc-700 text-zinc-600 dark:text-zinc-300 hover:bg-zinc-100 hover:text-zinc-900 dark:hover:bg-zinc-800 dark:hover:text-zinc-100">
+            <a href={`/api/jobs/${job.id}/open`} target="_blank" rel="noopener noreferrer">
+              <ExternalLink className="h-3.5 w-3.5 mr-1 flex-shrink-0" />
+              {t('jobs.originalLink')}
+            </a>
+          </Button>
+        )}
+      </div>
+    </div>
+  );
+}
+
 // 内部组件
 function JobsContent() {
   const [jobs, setJobs] = useState<Job[]>([]);
@@ -444,6 +747,8 @@ function JobsContent() {
   const [favoriteJobIds, setFavoriteJobIds] = useState<Set<number>>(new Set());
   const [favoriteLoadingJobId, setFavoriteLoadingJobId] = useState<number | null>(null);
   const [deadlineNow, setDeadlineNow] = useState(0);
+  const [selectedJobId, setSelectedJobId] = useState<number | null>(null);
+  const detailScrollRef = useRef<HTMLDivElement>(null);
   
   // 动态配置
   const [configs, setConfigs] = useState<{
@@ -532,7 +837,6 @@ function JobsContent() {
       if (selectedSponsorship) params.append('sponsorship', selectedSponsorship);
       if (debouncedSearchTerm.trim()) params.set('search', debouncedSearchTerm.trim());
       params.set('diverse', '1');
-      params.set('summary', '1');
       params.set('limit', String(pageSize));
       params.set('offset', String(page * pageSize));
 
@@ -732,17 +1036,34 @@ function JobsContent() {
   };
 
   const filteredJobs = diversifyJobs(jobs, page);
+  const selectedJob = filteredJobs.find((job) => job.id === selectedJobId) ?? filteredJobs[0] ?? null;
+
+  // 列表刷新后：原选中岗位仍在则保持选中，否则自动选中第一个
+  useEffect(() => {
+    setSelectedJobId((current) => {
+      if (current != null && jobs.some((job) => job.id === current)) return current;
+      return jobs.length > 0 ? jobs[0].id : null;
+    });
+  }, [jobs]);
+
+  // 切换选中岗位时，详情面板滚回顶部
+  useEffect(() => {
+    detailScrollRef.current?.scrollTo({ top: 0 });
+  }, [selectedJobId]);
 
   return (
-    <div className="min-h-screen bg-white dark:bg-zinc-950">
+    <div className="min-h-screen bg-white dark:bg-white">
       <Header1 />
-      <main className="relative container mx-auto px-4 pt-20 pb-16 sm:px-6 md:pt-24">
-        {/* Hero：左对齐 eyebrow + 大标题（Tailark 式） */}
-        <div className="relative mb-8 max-w-3xl md:mb-10">
-          <p className="text-sm font-medium text-zinc-400 dark:text-zinc-500 mb-3">{t('page.jobs.eyebrow')}</p>
-          <h1 className="break-words text-2xl font-bold tracking-tight text-zinc-900 dark:text-zinc-50 md:text-4xl mb-4">{t('page.jobs.title')}</h1>
-          <p className="text-zinc-500 dark:text-zinc-400 max-w-2xl md:text-lg leading-relaxed">{t('page.jobs.subtitle')}</p>
-          <Link href="/ai-match" className="mt-4 inline-flex items-center gap-2 text-sm font-medium text-zinc-700 hover:text-zinc-950 dark:text-zinc-300 dark:hover:text-white">
+      <main className="light-scope relative container mx-auto px-4 pt-20 pb-12 sm:px-6 md:pb-16">
+        {/* 深色模式顶部琥珀氛围光 */}
+        <div aria-hidden="true" className="pointer-events-none absolute inset-x-0 top-0 hidden h-80 bg-[radial-gradient(60%_60%_at_50%_0%,rgba(255,255,255,0.05),transparent_70%)] dark:block" />
+        {/* Hero：单行紧凑头部 */}
+        <div className="relative mb-4 flex flex-wrap items-center justify-between gap-x-4 gap-y-2">
+          <div className="flex flex-wrap items-baseline gap-x-3 gap-y-1">
+            <h1 className="text-xl font-bold tracking-tight text-zinc-900 dark:text-zinc-50 md:text-2xl">{t('page.jobs.title')}</h1>
+            <p className="text-sm text-zinc-500 dark:text-zinc-400">{t('page.jobs.subtitle')}</p>
+          </div>
+          <Link href="/ai-match" className="inline-flex items-center gap-1.5 text-sm font-medium text-zinc-600 hover:text-zinc-950 dark:text-zinc-300 dark:hover:text-white">
             <Sparkles className="h-4 w-4 text-amber-500" />
             {t('jobs.aiMatchHint')}
             <ChevronRight className="h-4 w-4" />
@@ -750,17 +1071,17 @@ function JobsContent() {
         </div>
 
         {/* Filters */}
-        <Card className="relative mb-4 md:mb-6 rounded-2xl border-zinc-200 dark:border-zinc-800 shadow-none bg-white dark:bg-zinc-950">
-          <CardContent className="pt-4 pb-4 md:pt-5 md:pb-5">
-            <div className="flex flex-col gap-3 md:gap-4">
+        <Card className="relative mb-4 rounded-2xl border-zinc-200 dark:border-zinc-800 shadow-none bg-white dark:bg-zinc-950">
+          <CardContent className="py-3">
+            <div className="flex flex-wrap items-center gap-2 md:gap-3">
               {/* 搜索框 */}
-              <div className="relative w-full md:max-w-md">
-                <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-zinc-400 dark:text-zinc-500" />
+              <div className="relative w-full sm:w-64">
+                <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-3.5 w-3.5 text-zinc-400 dark:text-zinc-500" />
                 <Input
                   placeholder={t('jobs.searchPlaceholder')}
                   value={searchTerm}
                   onChange={(e) => setSearchTerm(e.target.value)}
-                  className="pl-10 h-10 md:h-11 border-zinc-200 dark:border-zinc-700 bg-white dark:bg-zinc-900 text-sm focus-visible:ring-zinc-300 dark:focus-visible:ring-zinc-600"
+                  className="pl-8 h-8 border-zinc-200 dark:border-zinc-700 bg-white dark:bg-zinc-900 text-xs focus-visible:ring-zinc-300 dark:focus-visible:ring-zinc-600"
                 />
               </div>
               
@@ -768,7 +1089,7 @@ function JobsContent() {
               <div className="flex flex-wrap items-center gap-2 md:gap-3">
                 <Sheet open={filterOpen} onOpenChange={setFilterOpen}>
                   <SheetTrigger asChild>
-                    <Button type="button" variant="outline" className="h-10 rounded-xl border-zinc-200 px-3 text-sm dark:border-zinc-700">
+                    <Button type="button" variant="outline" className="h-8 rounded-lg border-zinc-200 px-3 text-xs dark:border-zinc-700">
                       <SlidersHorizontal className="mr-2 h-4 w-4" />
                       {t('jobs.filter')}
                       {activeFilterCount > 0 && (
@@ -836,7 +1157,7 @@ function JobsContent() {
         </Card>
 
         {/* Results */}
-        <div className="relative space-y-3 md:space-y-4">
+        <div className="relative">
           {loading ? (
             <div className="text-center py-12 text-zinc-400">
               <Loader2 className="h-8 w-8 animate-spin mx-auto mb-2" />
@@ -848,179 +1169,158 @@ function JobsContent() {
               <p className="text-sm">{t('jobs.noJobs')}</p>
             </div>
           ) : (
-            filteredJobs.map((job) => (
-              <Card key={job.id} className="rounded-2xl border-zinc-200 dark:border-zinc-800 shadow-none hover:shadow-xl hover:shadow-zinc-900/[0.06] dark:hover:shadow-black/30 transition-shadow duration-300 bg-white dark:bg-zinc-950">
-                <CardContent className="pt-3 md:pt-4 pb-3">
-                  <div className="flex gap-3 md:gap-4">
-                    {/* 左侧内容区 */}
-                    <div className="flex-1 min-w-0 flex flex-col gap-2 md:gap-3">
-                      {/* 岗位信息 - 横向布局 */}
-                      <div className="flex items-start gap-3 md:gap-4">
-                        <CompanyLogo company={job.company} logoUrl={job.logo_url} fallbackLogoUrl={job.logo_fallback_url} />
-                        <div className="flex-1 min-w-0">
-                          <h3 className="font-semibold tracking-tight text-base md:text-lg text-zinc-900 dark:text-zinc-50 line-clamp-1">
-                            {job.title}
-                          </h3>
-                          <p className="text-sm text-zinc-500 dark:text-zinc-400 truncate">{job.company}</p>
+            <>
+              {/* 移动端 / 平板（<lg）：全宽卡片流 */}
+              <div className="space-y-3 md:space-y-4 lg:hidden">
+                {filteredJobs.map((job) => (
+                  <Card key={job.id} className="rounded-2xl border-zinc-200 dark:border-zinc-800 shadow-none hover:shadow-xl hover:shadow-zinc-900/[0.06] dark:hover:shadow-black/30 transition-shadow duration-300 bg-white dark:bg-zinc-950">
+                    <CardContent className="pt-3 md:pt-4 pb-3">
+                      <div className="flex gap-3 md:gap-4">
+                        {/* 左侧内容区 */}
+                        <div className="flex-1 min-w-0 flex flex-col gap-2 md:gap-3">
+                          {/* 岗位信息 - 横向布局 */}
+                          <div className="flex items-start gap-3 md:gap-4">
+                            <CompanyLogo company={job.company} logoUrl={job.logo_url} fallbackLogoUrl={job.logo_fallback_url} />
+                            <div className="flex-1 min-w-0">
+                              <h3 className="font-semibold tracking-tight text-base md:text-lg text-zinc-900 dark:text-zinc-50 line-clamp-1">
+                                {job.title}
+                              </h3>
+                              <p className="text-sm text-zinc-500 dark:text-zinc-400 truncate">{job.company}</p>
+                            </div>
+                          </div>
+
+                          {/* 标签区 */}
+                          <JobBadges job={job} t={t} />
+
+                          {/* 描述 */}
+                          {job.description && (
+                            <p className="text-xs md:text-sm text-zinc-400 dark:text-zinc-500 line-clamp-2">
+                              {job.description}
+                            </p>
+                          )}
+                          {formatDeadlineRemaining(job.valid_through, deadlineNow, t) && (
+                            <p className="text-sm font-semibold text-red-600 dark:text-red-400">
+                              {formatDeadlineRemaining(job.valid_through, deadlineNow, t)}
+                            </p>
+                          )}
+                        </div>
+
+                        {/* 右侧按钮区 - 垂直排列 */}
+                        <div className="flex flex-col gap-2 flex-shrink-0">
+                          <FavoriteButton
+                            isFavorite={favoriteJobIds.has(job.id)}
+                            loading={favoriteLoadingJobId === job.id}
+                            onFavorite={() => handleFavorite(job.id)}
+                            t={t}
+                          />
+                          {job.is_active !== false && (
+                            <Button
+                              size="sm"
+                              className="rounded-lg text-xs md:text-sm h-9 w-24 md:w-28 bg-zinc-900 text-white hover:bg-zinc-800 dark:bg-white dark:text-zinc-900 dark:hover:bg-zinc-200"
+                              onClick={() => handleAdd(job.id)}
+                              disabled={applyingJobId === job.id || appliedJobIds.has(job.id)}
+                            >
+                              {applyingJobId === job.id ? (
+                                <Loader2 className="h-3.5 w-3.5 animate-spin" />
+                              ) : appliedJobIds.has(job.id) ? (
+                                <>
+                                  <Check className="h-3.5 w-3.5 mr-1" />
+                                  {t('jobs.added')}
+                                </>
+                              ) : (
+                                <>
+                                  <Plus className="h-3.5 w-3.5 mr-1" />
+                                  {t('jobs.add')}
+                                </>
+                              )}
+                            </Button>
+                          )}
+                          <Button size="sm" variant="outline" asChild className="rounded-lg text-xs md:text-sm h-9 whitespace-nowrap border-zinc-200 dark:border-zinc-700 text-zinc-600 dark:text-zinc-300 hover:bg-zinc-100 hover:text-zinc-900 dark:hover:bg-zinc-800 dark:hover:text-zinc-100">
+                            <Link href={`/jobs/${job.id}`}>
+                              {t('jobs.viewDetail')}
+                            </Link>
+                          </Button>
+                          {job.job_url && (
+                            <Button size="sm" variant="outline" asChild className="rounded-lg text-xs md:text-sm h-9 whitespace-nowrap border-zinc-200 dark:border-zinc-700 text-zinc-600 dark:text-zinc-300 hover:bg-zinc-100 hover:text-zinc-900 dark:hover:bg-zinc-800 dark:hover:text-zinc-100">
+                              <a href={`/api/jobs/${job.id}/open`} target="_blank" rel="noopener noreferrer">
+                                <ExternalLink className="h-3.5 w-3.5 mr-1 flex-shrink-0" />
+                                {t('jobs.originalLink')}
+                              </a>
+                            </Button>
+                          )}
                         </div>
                       </div>
+                    </CardContent>
+                  </Card>
+                ))}
+                <JobsPagination
+                  page={page}
+                  totalJobs={totalJobs}
+                  totalJobsIsEstimate={totalJobsIsEstimate}
+                  hasMoreJobs={hasMoreJobs}
+                  loading={loading}
+                  onPageChange={setPage}
+                  t={t}
+                  className="mt-2"
+                />
+              </div>
 
-                      {/* 标签区 */}
-                      <div className="flex flex-wrap gap-1.5 md:gap-2">
-                        <Badge variant="secondary" className="rounded-md text-xs bg-zinc-100 text-zinc-600 dark:bg-zinc-800 dark:text-zinc-300 hover:bg-zinc-100" translate="no">
-                          <MapPin className="h-3 w-3 mr-1" />
-                          {getRegionDisplayText(job.region)}
-                        </Badge>
-                        <Badge variant="secondary" className="rounded-md text-xs bg-zinc-100 text-zinc-600 dark:bg-zinc-800 dark:text-zinc-300 hover:bg-zinc-100" translate="no">
-                          <Briefcase className="h-3 w-3 mr-1" />
-                          {job.direction}
-                        </Badge>
-                        <Badge variant="secondary" className="rounded-md text-xs bg-zinc-100 text-zinc-600 dark:bg-zinc-800 dark:text-zinc-300 hover:bg-zinc-100" translate="no">
-                          <Users className="h-3 w-3 mr-1" />
-                          {job.audience}
-                        </Badge>
-                        {job.employment_category && job.employment_category !== '未知' && (
-                          <Badge variant="outline" className="rounded-md text-xs border-zinc-200 dark:border-zinc-700 text-zinc-600 dark:text-zinc-300">
-                            {job.employment_category}
-                          </Badge>
-                        )}
-                        {formatExperienceLabel(job) && (
-                          <Badge variant="outline" className="rounded-md text-xs border-zinc-200 dark:border-zinc-700 text-zinc-600 dark:text-zinc-300">
-                            {formatExperienceLabel(job)}
-                          </Badge>
-                        )}
-                        {job.salary_range && (
-                          <Badge variant="outline" className="border-zinc-200 dark:border-zinc-700 text-zinc-600 dark:text-zinc-300 rounded-md text-xs">
-                            {job.salary_range}
-                          </Badge>
-                        )}
-                        {job.sponsorship && job.sponsorship !== 'unknown' && (
-                          <Badge
-                            variant="outline"
-                            className="rounded-md text-xs border-zinc-200 dark:border-zinc-700 text-zinc-600 dark:text-zinc-300"
-                          >
-                            {job.sponsorship === 'yes' ? t('jobs.sponsor') : t('jobs.noSponsor')}
-                          </Badge>
-                        )}
-                        {formatDeadline(job.valid_through, job.deadline_time_zone) && (
-                          <Badge variant="outline" className="border-zinc-200 dark:border-zinc-700 text-zinc-600 dark:text-zinc-300 rounded-md text-xs">
-                            <Calendar className="h-3 w-3 mr-1" />
-                            {t('jobs.deadline')} {formatDeadline(job.valid_through, job.deadline_time_zone)}
-                          </Badge>
-                        )}
-                        {job.is_active === false ? (
-                          <Badge variant="secondary" className="bg-zinc-100 text-zinc-400 dark:bg-zinc-800 dark:text-zinc-500 rounded-md text-xs hover:bg-zinc-100">
-                            {t('jobs.inactive')}
-                          </Badge>
-                        ) : (
-                          <Badge variant="default" className="bg-zinc-900 dark:bg-white dark:text-zinc-900 rounded-md text-xs hover:bg-zinc-900">
-                            {t('jobs.active')}
-                          </Badge>
-                        )}
-                      </div>
-
-                      {/* 描述 */}
-                      {job.description && (
-                        <p className="text-xs md:text-sm text-zinc-400 dark:text-zinc-500 line-clamp-2">
-                          {job.description}
-                        </p>
-                      )}
-                      {formatDeadlineRemaining(job.valid_through, deadlineNow, t) && (
-                        <p className="text-sm font-semibold text-red-600 dark:text-red-400">
-                          {formatDeadlineRemaining(job.valid_through, deadlineNow, t)}
-                        </p>
-                      )}
-                    </div>
-
-                    {/* 右侧按钮区 - 垂直排列 */}
-                    <div className="flex flex-col gap-2 flex-shrink-0">
-                      <Button
-                        type="button"
-                        size="icon-sm"
-                        variant="ghost"
-                        title={favoriteJobIds.has(job.id) ? t('jobs.favorited') : t('jobs.favorite')}
-                        aria-label={favoriteJobIds.has(job.id) ? t('jobs.favorited') : t('jobs.favorite')}
-                        onClick={() => handleFavorite(job.id)}
-                        disabled={favoriteLoadingJobId === job.id}
-                        className={favoriteJobIds.has(job.id)
-                          ? 'text-rose-600 hover:bg-rose-50 hover:text-rose-700 dark:text-rose-400 dark:hover:bg-rose-950/30'
-                          : 'text-zinc-400 hover:bg-zinc-100 hover:text-zinc-900 dark:hover:bg-zinc-800 dark:hover:text-zinc-100'}
-                      >
-                        {favoriteLoadingJobId === job.id
-                          ? <Loader2 className="animate-spin" />
-                          : <Heart className={favoriteJobIds.has(job.id) ? 'fill-current' : ''} />}
-                      </Button>
-                      {job.is_active !== false && (
-                        <Button
-                          size="sm"
-                          className="rounded-lg text-xs md:text-sm h-9 w-24 md:w-28 bg-zinc-900 text-white hover:bg-zinc-800 dark:bg-white dark:text-zinc-900 dark:hover:bg-zinc-200"
-                          onClick={() => handleAdd(job.id)}
-                          disabled={applyingJobId === job.id || appliedJobIds.has(job.id)}
-                        >
-                          {applyingJobId === job.id ? (
-                            <Loader2 className="h-3.5 w-3.5 animate-spin" />
-                          ) : appliedJobIds.has(job.id) ? (
-                            <>
-                              <Check className="h-3.5 w-3.5 mr-1" />
-                              {t('jobs.added')}
-                            </>
-                          ) : (
-                            <>
-                              <Plus className="h-3.5 w-3.5 mr-1" />
-                              {t('jobs.add')}
-                            </>
-                          )}
-                        </Button>
-                      )}
-                      <Button size="sm" variant="outline" asChild className="rounded-lg text-xs md:text-sm h-9 whitespace-nowrap border-zinc-200 dark:border-zinc-700 text-zinc-600 dark:text-zinc-300 hover:bg-zinc-100 hover:text-zinc-900 dark:hover:bg-zinc-800 dark:hover:text-zinc-100">
-                        <Link href={`/jobs/${job.id}`}>
-                          {t('jobs.viewDetail')}
-                        </Link>
-                      </Button>
-                      {job.job_url && (
-                        <Button size="sm" variant="outline" asChild className="rounded-lg text-xs md:text-sm h-9 whitespace-nowrap border-zinc-200 dark:border-zinc-700 text-zinc-600 dark:text-zinc-300 hover:bg-zinc-100 hover:text-zinc-900 dark:hover:bg-zinc-800 dark:hover:text-zinc-100">
-                          <a href={`/api/jobs/${job.id}/open`} target="_blank" rel="noopener noreferrer">
-                            <ExternalLink className="h-3.5 w-3.5 mr-1 flex-shrink-0" />
-                            {t('jobs.originalLink')}
-                          </a>
-                        </Button>
-                      )}
-                    </div>
+              {/* 桌面端（lg+）：主从布局 */}
+              <div className="hidden lg:flex lg:items-start lg:gap-6">
+                <div className="w-[400px] shrink-0">
+                  <div className="space-y-2">
+                    {filteredJobs.map((job) => (
+                      <JobListRow
+                        key={job.id}
+                        job={job}
+                        selected={selectedJob?.id === job.id}
+                        isFavorite={favoriteJobIds.has(job.id)}
+                        favoriteLoading={favoriteLoadingJobId === job.id}
+                        deadlineNow={deadlineNow}
+                        onSelect={setSelectedJobId}
+                        onFavorite={handleFavorite}
+                        t={t}
+                      />
+                    ))}
                   </div>
-                </CardContent>
-              </Card>
-            ))
+                  <JobsPagination
+                    page={page}
+                    totalJobs={totalJobs}
+                    totalJobsIsEstimate={totalJobsIsEstimate}
+                    hasMoreJobs={hasMoreJobs}
+                    loading={loading}
+                    onPageChange={setPage}
+                    t={t}
+                    className="mt-4"
+                  />
+                </div>
+                <div
+                  ref={detailScrollRef}
+                  className="hidden min-w-0 flex-1 lg:mt-0 lg:block lg:sticky lg:top-24 lg:max-h-[calc(100vh-7rem)] lg:overflow-y-auto"
+                >
+                  {selectedJob ? (
+                    <JobDetailPanel
+                      job={selectedJob}
+                      isFavorite={favoriteJobIds.has(selectedJob.id)}
+                      favoriteLoading={favoriteLoadingJobId === selectedJob.id}
+                      adding={applyingJobId === selectedJob.id}
+                      added={appliedJobIds.has(selectedJob.id)}
+                      deadlineNow={deadlineNow}
+                      onFavorite={handleFavorite}
+                      onAdd={handleAdd}
+                      t={t}
+                    />
+                  ) : (
+                    <div className="rounded-2xl border border-dashed border-zinc-200 dark:border-zinc-800 py-14 text-center text-zinc-400">
+                      <Briefcase className="h-10 w-10 mx-auto mb-3 opacity-40" />
+                      <p className="text-sm">{t('jobs.noJobs')}</p>
+                    </div>
+                  )}
+                </div>
+              </div>
+            </>
           )}
         </div>
-
-        {/* Results count */}
-        {!loading && totalJobs > 0 && (
-          <div className="relative mt-4 md:mt-6 flex flex-col items-center gap-3 text-xs md:text-sm text-zinc-400 dark:text-zinc-500">
-            <span>{t('jobs.foundJobs')} {totalJobsIsEstimate ? '约 ' : ''}{totalJobs} {t('jobs.jobsUnit')} · {t('jobs.page')} {page + 1}</span>
-            <div className="flex items-center gap-2">
-              <Button
-                type="button"
-                variant="outline"
-                size="sm"
-                onClick={() => setPage((current) => Math.max(0, current - 1))}
-                disabled={page === 0 || loading}
-                aria-label={t('jobs.previous')}
-              >
-                <ChevronLeft className="h-4 w-4 mr-1" />{t('jobs.previous')}
-              </Button>
-              <Button
-                type="button"
-                variant="outline"
-                size="sm"
-                onClick={() => setPage((current) => current + 1)}
-                disabled={loading || !hasMoreJobs}
-                aria-label={t('jobs.next')}
-              >
-                {t('jobs.next')}<ChevronRight className="h-4 w-4 ml-1" />
-              </Button>
-            </div>
-          </div>
-        )}
       </main>
     </div>
   );
