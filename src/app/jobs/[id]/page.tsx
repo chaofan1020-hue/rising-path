@@ -446,7 +446,7 @@ function JobDetailContent() {
   const isHot = (relatedJobs.length > 3);
 
   return (
-    <div className="min-h-screen bg-white dark:bg-zinc-950">
+    <div className="light-scope min-h-screen bg-white dark:bg-zinc-950">
       <div className="container mx-auto px-4 py-4 md:py-8 max-w-4xl">
         {/* 返回按钮 */}
         <PageBackButton fallbackHref="/jobs" label={t('jobDetail.backToJobs')} className="mb-4" />

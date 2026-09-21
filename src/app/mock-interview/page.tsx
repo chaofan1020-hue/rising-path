@@ -3536,7 +3536,7 @@ function MockInterviewContent() {
         <div className="min-h-screen bg-white dark:bg-black">
           <Header1 />
           {renderAudioFallbackPrompt()}
-          <main className="pb-8 pt-24 md:pb-12 md:pt-28">
+          <main className="light-scope pb-8 pt-24 md:pb-12 md:pt-28">
             <div className="container mx-auto px-4 max-w-3xl">
               <PageBackButton fallbackHref="/home" className="mb-3" />
               <div className="mb-8 text-center">
@@ -4120,7 +4120,7 @@ function MockInterviewContent() {
   return (
     <div className="min-h-screen bg-white dark:bg-black">
         <Header1 />
-        <main className="pt-24 pb-8 md:pt-28 md:pb-12">
+        <main className="light-scope pt-24 pb-8 md:pt-28 md:pb-12">
           <div className="container mx-auto px-4 max-w-4xl">
             <div className="mb-8 text-center print:mb-4">
               <div className="inline-flex items-center justify-center h-12 w-12 rounded-2xl bg-gradient-to-br from-[#C46A4A] to-[#B5BEB0] mb-3">

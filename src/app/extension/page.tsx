@@ -29,7 +29,7 @@ export default function ExtensionPage() {
   return (
     <div className="min-h-screen bg-white dark:bg-zinc-950">
       <Header1 />
-      <main className="mx-auto max-w-4xl px-4 pb-16 pt-24 md:px-6 md:pt-28">
+      <main className="light-scope mx-auto max-w-4xl px-4 pb-16 pt-24 md:px-6 md:pt-28">
         <div className="mb-8 flex flex-col gap-5 border-b border-zinc-200 pb-8 dark:border-zinc-800 sm:flex-row sm:items-end sm:justify-between">
           <div className="flex items-start gap-3">
             <span className="flex h-10 w-10 shrink-0 items-center justify-center rounded-lg bg-zinc-900 text-white dark:bg-white dark:text-zinc-900">

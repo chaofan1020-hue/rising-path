@@ -5,17 +5,10 @@ import Link from 'next/link';
 import { Header1 } from '@/components/header1';
 import { AuthGuard } from '@/components/auth-guard';
 import { apiFetch } from '@/lib/api-client';
-import { readActiveResumeId, writeActiveResumeId } from '@/lib/active-resume';
-import {
-  readDashboardCache,
-  RESUME_UPDATED_EVENT,
-  RESUME_UPDATED_STORAGE_KEY,
-  writeDashboardCache,
-} from '@/lib/dashboard-cache';
-import { isActiveResumeProcessing } from '@/lib/resume-types';
 import { REGION_DNA, type RegionKey } from '@/lib/region-dna';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent } from '@/components/ui/card';
+import { Input } from '@/components/ui/input';
 import { Skeleton } from '@/components/ui/skeleton';
 import { Badge } from '@/components/ui/badge';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
@@ -156,10 +149,6 @@ interface DashboardData {
   regionOptions: RegionOption[];
   latestResumeId: number | null;
   profileReady?: boolean;
-  planReady?: boolean;
-  processing?: boolean;
-  processingStatus?: string | null;
-  processingError?: string | null;
   missingSteps?: string[];
   personalization?: {
     roles: string[];
@@ -258,6 +247,35 @@ interface DashboardInterviewDetail {
   updated_at?: string | null;
 }
 
+const DASHBOARD_CACHE_TTL_MS = 10 * 60 * 1000;
+
+function dashboardCacheKey(userId: string, locale: string) {
+  return `liorvix.dashboard.${userId}.${locale}.v1`;
+}
+
+function readDashboardCache(userId: string, locale: string): DashboardData | null {
+  try {
+    const raw = window.sessionStorage.getItem(dashboardCacheKey(userId, locale));
+    if (!raw) return null;
+    const parsed = JSON.parse(raw) as { savedAt?: number; data?: DashboardData };
+    if (!parsed.savedAt || !parsed.data || Date.now() - parsed.savedAt > DASHBOARD_CACHE_TTL_MS) return null;
+    return parsed.data;
+  } catch {
+    return null;
+  }
+}
+
+function writeDashboardCache(userId: string, locale: string, data: DashboardData) {
+  try {
+    window.sessionStorage.setItem(
+      dashboardCacheKey(userId, locale),
+      JSON.stringify({ savedAt: Date.now(), data }),
+    );
+  } catch {
+    // Cache failures must never block the live dashboard response.
+  }
+}
+
 export default function DashboardPage() {
   const { locale, localeReady, t } = useLanguage();
   const [data, setData] = useState<DashboardData | null>(null);
@@ -279,75 +297,74 @@ export default function DashboardPage() {
   const [selectedInterview, setSelectedInterview] = useState<DashboardInterviewDetail | null>(null);
   const [interviewDetailLoading, setInterviewDetailLoading] = useState(false);
   const [interviewDetailError, setInterviewDetailError] = useState<string | null>(null);
-  const [resumeOptions, setResumeOptions] = useState<Array<{ id: number; file_name: string; processing_status?: string }>>([]);
-  const [selectedResumeId, setSelectedResumeId] = useState<number | null>(null);
-  const fetchGenerationRef = useRef(0);
-  const wasProcessingRef = useRef(false);
+  const [onboardingRole, setOnboardingRole] = useState('');
+  const [onboardingRoleSaving, setOnboardingRoleSaving] = useState(false);
+  const [onboardingRoleSaved, setOnboardingRoleSaved] = useState(false);
+  const [onboardingRoleError, setOnboardingRoleError] = useState<string | null>(null);
+  const [directionChips, setDirectionChips] = useState<Array<{ id: number; config_value: string }>>([]);
 
   const fetchDashboard = useCallback((keepVisible = false) => {
-    const generation = fetchGenerationRef.current + 1;
-    fetchGenerationRef.current = generation;
     if (!keepVisible) setLoading(true);
     setError(null);
-    const resumeQuery = selectedResumeId ? `&resumeId=${encodeURIComponent(String(selectedResumeId))}` : '';
-    apiFetch(`/api/dashboard?lang=${locale}${resumeQuery}`)
+    apiFetch(`/api/dashboard?lang=${locale}`)
       .then(async (res) => {
         const json = await res.json();
         if (!res.ok) throw new Error(json.error || t('dashboard.loadError') || '加载失败');
         return json;
       })
       .then((json) => {
-        if (generation !== fetchGenerationRef.current) return;
         if (json.error) {
           setError(json.error);
         } else {
           const nextData = json as DashboardData;
           setData(nextData);
-          setError(null);
           if (dashboardCacheOwnerRef.current) {
-            writeDashboardCache(dashboardCacheOwnerRef.current, locale, selectedResumeId, nextData);
+            writeDashboardCache(dashboardCacheOwnerRef.current, locale, nextData);
           }
           setDashboardLoadVersion((version) => version + 1);
         }
       })
-      .catch((err) => {
-        if (generation !== fetchGenerationRef.current) return;
-        setError(err?.message || t('dashboard.loadError') || '加载失败');
-      })
-      .finally(() => {
-        if (generation !== fetchGenerationRef.current) return;
-        setLoading(false);
-      });
-  }, [locale, selectedResumeId, t]);
+      .catch((err) => setError(err?.message || t('dashboard.loadError') || '加载失败'))
+      .finally(() => setLoading(false));
+  }, [locale, t]);
 
-  const applyResumeOptions = useCallback((options: Array<{ id: number; file_name: string; processing_status?: string }>) => {
-    setResumeOptions(options);
-    setSelectedResumeId((current) => {
-      const stored = readActiveResumeId();
-      const preferred = (current && options.some((item) => item.id === current))
-        ? current
-        : (stored && options.some((item) => item.id === stored) ? stored : options[0]?.id || null);
-      if (preferred && preferred !== current) {
-        writeActiveResumeId(preferred);
-        void apiFetch('/api/resume/active', {
-          method: 'PATCH',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ resumeId: preferred }),
-        });
-      }
-      return preferred;
-    });
-  }, []);
-
-  const loadResumeOptions = useCallback(async () => {
+  const saveOnboardingRole = useCallback(async () => {
+    const role = onboardingRole.trim();
+    if (!role || !data?.latestResumeId || onboardingRoleSaving) return;
+    setOnboardingRoleSaving(true);
+    setOnboardingRoleError(null);
     try {
-      const response = await apiFetch('/api/resume');
-      const json = response.ok ? await response.json() : { resumes: [] };
-      applyResumeOptions(Array.isArray(json.resumes) ? json.resumes : []);
-    } catch {
-      // Resume list is auxiliary; the dashboard payload remains usable.
+      const response = await apiFetch(`/api/resume/${data.latestResumeId}`, {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ profile: { intention: { roles: [role] } }, confirm: true }),
+      });
+      const json = await response.json();
+      if (!response.ok || !json.success) throw new Error(json.error || t('dashboard.onboardingRoleFailed'));
+      setOnboardingRoleSaved(true);
+      fetchDashboard({ keepVisible: true });
+    } catch (err) {
+      setOnboardingRoleError(err instanceof Error ? err.message : t('dashboard.onboardingRoleFailed'));
+    } finally {
+      setOnboardingRoleSaving(false);
     }
-  }, [applyResumeOptions]);
+  }, [data, fetchDashboard, onboardingRole, onboardingRoleSaving, t]);
+
+  // 引导横幅：拉取岗位方向分类作为快捷选项
+  useEffect(() => {
+    if (!data || data.profileReady !== false || !(data.missingSteps || []).includes('role') || directionChips.length > 0) return;
+    let cancelled = false;
+    apiFetch('/api/configs')
+      .then((res) => res.json())
+      .then((json) => {
+        if (cancelled) return;
+        setDirectionChips((json.configs?.direction || []) as Array<{ id: number; config_value: string }>);
+      })
+      .catch(() => {});
+    return () => {
+      cancelled = true;
+    };
+  }, [data, directionChips.length]);
 
   useEffect(() => {
     if (!localeReady) return;
@@ -357,7 +374,7 @@ export default function DashboardPage() {
       .then(({ data: { session } }) => {
         if (cancelled) return;
         const userId = session?.user.id ?? null;
-        const cachedData = userId ? readDashboardCache<DashboardData>(userId, locale, selectedResumeId) : null;
+        const cachedData = userId ? readDashboardCache(userId, locale) : null;
         dashboardCacheOwnerRef.current = userId;
         if (cachedData) {
           setData(cachedData);
@@ -369,68 +386,7 @@ export default function DashboardPage() {
     return () => {
       cancelled = true;
     };
-  }, [fetchDashboard, localeReady, selectedResumeId]);
-
-  useEffect(() => {
-    void loadResumeOptions();
-  }, [loadResumeOptions]);
-
-  const selectedResumeProcessing = isActiveResumeProcessing(
-    resumeOptions.find((item) => item.id === selectedResumeId)?.processing_status
-      ?? resumeOptions[0]?.processing_status,
-  ) || data?.processing === true;
-
-  useEffect(() => {
-    if (!selectedResumeProcessing) {
-      if (wasProcessingRef.current) {
-        wasProcessingRef.current = false;
-        void loadResumeOptions();
-        fetchDashboard(true);
-      }
-      return;
-    }
-    wasProcessingRef.current = true;
-    const interval = window.setInterval(() => {
-      void loadResumeOptions();
-      fetchDashboard(true);
-    }, 2500);
-    return () => window.clearInterval(interval);
-  }, [fetchDashboard, loadResumeOptions, selectedResumeProcessing]);
-
-  useEffect(() => {
-    const refresh = () => {
-      void loadResumeOptions();
-      fetchDashboard(true);
-    };
-    const onVisible = () => {
-      if (document.visibilityState === 'visible') refresh();
-    };
-    const onStorage = (event: StorageEvent) => {
-      if (event.key === RESUME_UPDATED_STORAGE_KEY) refresh();
-    };
-    window.addEventListener(RESUME_UPDATED_EVENT, refresh);
-    window.addEventListener('storage', onStorage);
-    window.addEventListener('focus', refresh);
-    document.addEventListener('visibilitychange', onVisible);
-    return () => {
-      window.removeEventListener(RESUME_UPDATED_EVENT, refresh);
-      window.removeEventListener('storage', onStorage);
-      window.removeEventListener('focus', refresh);
-      document.removeEventListener('visibilitychange', onVisible);
-    };
-  }, [fetchDashboard, loadResumeOptions]);
-
-  const handleResumeChange = useCallback((value: string) => {
-    const resumeId = Number(value);
-    if (!Number.isInteger(resumeId) || resumeId <= 0) return;
-    setSelectedResumeId(resumeId);
-    writeActiveResumeId(resumeId);
-    void apiFetch('/api/resume/active', {
-      method: 'PATCH',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ resumeId }),
-    });
-  }, []);
+  }, [fetchDashboard, localeReady]);
 
   useEffect(() => {
     if (dashboardLoadVersion === 0) return;
@@ -475,7 +431,7 @@ export default function DashboardPage() {
       const res = await apiFetch('/api/networking/recommend', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ lang: locale, resumeId: selectedResumeId }),
+        body: JSON.stringify({ lang: locale }),
       });
       const json = await res.json();
       if (!res.ok || !json.recommendation) {
@@ -497,7 +453,7 @@ export default function DashboardPage() {
     } finally {
       setNetworkingLoading(false);
     }
-  }, [locale, selectedResumeId, t]);
+  }, [locale, t]);
 
   const loadInterviewDetail = useCallback(async (interviewId: number) => {
     setSelectedInterview(null);
@@ -523,7 +479,7 @@ export default function DashboardPage() {
   useEffect(() => {
     if (data?.diagnosis?.window !== 'preparation') return;
     let cancelled = false;
-    apiFetch(`/api/networking/progress${selectedResumeId ? `?resumeId=${encodeURIComponent(String(selectedResumeId))}` : ''}`)
+    apiFetch('/api/networking/progress')
       .then((res) => (res.ok ? res.json() : { progress: null }))
       .then((json) => {
         if (cancelled) return;
@@ -550,7 +506,7 @@ export default function DashboardPage() {
     return () => {
       cancelled = true;
     };
-  }, [data?.diagnosis?.window, data?.selectedRegion, locale, selectedResumeId]);
+  }, [data?.diagnosis?.window, data?.selectedRegion, locale]);
 
   const handleToggleNetworkingMilestone = useCallback(async (milestone: string) => {
     if (!networkingProgress) return;
@@ -567,7 +523,7 @@ export default function DashboardPage() {
       const res = await apiFetch('/api/networking/progress', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ stage: nextStage, completedMilestones: completed, resumeId: selectedResumeId }),
+        body: JSON.stringify({ stage: nextStage, completedMilestones: completed }),
       });
       const json = await res.json();
       if (!res.ok || !json.progress) throw new Error(json.error || '进度更新失败');
@@ -605,36 +561,11 @@ export default function DashboardPage() {
     };
   }, [data]);
 
-  const cockpitHintKey = useMemo(() => {
-    if (data?.processing || selectedResumeProcessing) return 'processing' as const;
-    if (data?.processingStatus === 'failed') return 'failed' as const;
-    const missing = data?.missingSteps || [];
-    if (!data || missing.includes('resume') || data.counts.resumes === 0) return 'resume' as const;
-    if (missing.includes('confirm')) return 'confirm' as const;
-    if (data.profileReady === false) return 'incomplete' as const;
-    return 'ready' as const;
-  }, [data, selectedResumeProcessing]);
-
-  const cockpitSteps = useMemo(() => {
-    const missing = new Set(data?.missingSteps || []);
-    const hasResume = (data?.counts.resumes || 0) > 0 && !missing.has('resume');
-    const parsed = hasResume
-      && cockpitHintKey !== 'processing'
-      && cockpitHintKey !== 'failed';
-    const confirmed = parsed && !missing.has('confirm');
-    return [
-      { key: 'resume', done: hasResume, current: cockpitHintKey === 'resume' },
-      { key: 'parse', done: parsed, current: cockpitHintKey === 'processing' || cockpitHintKey === 'failed' },
-      { key: 'confirm', done: confirmed, current: cockpitHintKey === 'confirm' },
-      { key: 'details', done: data?.profileReady === true, current: cockpitHintKey === 'incomplete' },
-    ];
-  }, [cockpitHintKey, data]);
-
   return (
     <AuthGuard showAccountBar={false}>
-      <div className="min-h-screen bg-white dark:bg-zinc-950">
+      <div className="min-h-screen bg-white dark:bg-white">
         <Header1 />
-        <main className="container mx-auto max-w-6xl px-4 pb-16 pt-20 md:pt-24">
+        <main className="light-scope container mx-auto max-w-6xl px-4 pb-16 pt-20 md:pt-24">
         <div className="mb-7 md:mb-8">
           <p className="mb-2 text-xs font-medium text-zinc-400 dark:text-zinc-500">
             {t('dashboard.eyebrow')}
@@ -645,22 +576,11 @@ export default function DashboardPage() {
           <p className="max-w-2xl text-sm leading-6 text-zinc-500 dark:text-zinc-400 md:text-base">
             {t('dashboard.subtitle')}
           </p>
-          <p className="mt-2 max-w-2xl text-xs leading-5 text-zinc-400 dark:text-zinc-500 md:text-sm">
-            {t('dashboard.howto')}
-          </p>
-          {resumeOptions.length > 1 && (
-            <div className="mt-4 flex max-w-sm items-center gap-2">
-              <label htmlFor="dashboard-resume" className="shrink-0 text-xs font-medium text-zinc-500 dark:text-zinc-400">当前简历</label>
-              <select id="dashboard-resume" value={selectedResumeId ? String(selectedResumeId) : ''} onChange={(event) => handleResumeChange(event.target.value)} className="min-w-0 flex-1 rounded-md border border-zinc-200 bg-white px-3 py-2 text-sm text-zinc-800 outline-none dark:border-zinc-700 dark:bg-zinc-900 dark:text-zinc-100">
-                {resumeOptions.map((resume) => <option key={resume.id} value={resume.id}>{resume.file_name}</option>)}
-              </select>
-            </div>
-          )}
         </div>
 
         {loading && !data && <DashboardSkeleton />}
 
-        {error && !data && (
+        {!loading && error && !data && (
           <Card className="rounded-2xl border-zinc-200 dark:border-zinc-800">
             <CardContent className="p-6 text-center text-zinc-500">
               {error}
@@ -668,124 +588,125 @@ export default function DashboardPage() {
           </Card>
         )}
 
-        {data && (
+        {!loading && !error && data && (
           <div className="flex flex-col gap-8 md:gap-10">
-            {error && (
-              <div className="rounded-lg border border-amber-200 bg-amber-50 px-4 py-3 text-sm text-amber-800 dark:border-amber-900/60 dark:bg-amber-950/30 dark:text-amber-200">
-                {t('dashboard.refreshError')}
-              </div>
-            )}
             <section className="order-1">
-                  <div className="grid border-y border-zinc-200 lg:grid-cols-[minmax(0,1fr)_20rem] dark:border-zinc-800">
-                    <div className="py-6 pr-0 md:py-8 lg:pr-10">
-                      <div className="mb-3 inline-flex items-center gap-2 text-xs font-medium text-zinc-500 dark:text-zinc-400">
-                        <Target className="h-3.5 w-3.5" />
-                        {t('dashboard.phaseLabel')}
-                      </div>
-                      <h2 className="max-w-2xl text-2xl font-semibold tracking-tight text-zinc-950 dark:text-zinc-50 md:text-3xl">
-                        {t(data.phaseTitleKey, data.phaseTitleParams)}
-                      </h2>
-                      <p className="mt-3 max-w-xl text-sm leading-6 text-zinc-500 dark:text-zinc-400 md:text-base">
-                        {t(data.phaseDescriptionKey, data.phaseDescriptionParams)}
-                      </p>
-                      <Button
-                        asChild
-                        className="mt-5 rounded-md bg-zinc-900 text-white hover:bg-zinc-800 dark:bg-white dark:text-zinc-900 dark:hover:bg-zinc-200"
-                      >
-                        <Link href={data.nextAction?.href || data.actions[0]?.href || '/resume'}>
-                          {t(data.nextAction?.titleKey || 'dashboard.nextAction')}
-                          <ArrowRight className="ml-2 h-4 w-4" />
-                        </Link>
-                      </Button>
-                    </div>
-                    <div className="grid grid-cols-1 border-t border-zinc-200 bg-zinc-50/60 sm:grid-cols-3 lg:grid-cols-1 lg:border-l lg:border-t-0 dark:border-zinc-800 dark:bg-zinc-900/20">
-                      <OverviewMetric
-                        label={t('dashboard.metricResume')}
-                        value={`${data.metrics.resumeImpact}%`}
-                        hint={t('dashboard.metricResumeHint')}
-                      />
-                      <OverviewMetric
-                        label={t('dashboard.metricInterview')}
-                        value={`${data.metrics.interviewStrength}`}
-                        hint={t('dashboard.metricInterviewHint')}
-                      />
-                      <OverviewMetric
-                        label={t('dashboard.metricHealth')}
-                        value={data.weeklyGoal > 0 ? `${data.weeklyApplications}/${data.weeklyGoal}` : '—'}
-                        hint={data.weeklyGoal > 0 ? `${data.metrics.applicationHealth}% ${t('dashboard.metricHealthDone')}` : t('dashboard.metricHealthNoGoal')}
-                        last
-                      />
-                    </div>
-                  </div>
-                  {(data.metrics.resumeImpact === 0 && data.metrics.interviewStrength === 0) && (
-                    <p className="mt-3 text-xs leading-5 text-zinc-400 dark:text-zinc-500">
-                      {t('dashboard.metricEmptyHint')}
-                    </p>
-                  )}
-            </section>
-            <section className={`order-2 rounded-lg border ${cockpitHintKey === 'failed' ? 'border-red-200 bg-red-50/70 dark:border-red-900/60 dark:bg-red-950/20' : 'border-zinc-200 bg-zinc-50/60 dark:border-zinc-800 dark:bg-zinc-900/20'}`}>
-              <div className="flex flex-col gap-4 px-4 py-4 md:px-5">
-                <div className="flex flex-col gap-3 md:flex-row md:items-start md:justify-between">
+              <div className="rounded-2xl border border-zinc-200 bg-white p-5 dark:border-zinc-800 dark:bg-zinc-950 md:p-6">
+                <div className="flex flex-col gap-4 md:flex-row md:items-center md:justify-between">
                   <div className="min-w-0">
-                    <div className="mb-1.5 flex items-center gap-2">
-                      {cockpitHintKey === 'processing' && <Loader2 className="h-4 w-4 animate-spin text-zinc-500" />}
-                      {cockpitHintKey === 'ready' && <Check className="h-4 w-4 text-emerald-600 dark:text-emerald-400" />}
-                      <p className="text-sm font-semibold text-zinc-900 dark:text-zinc-100">
-                        {t(`dashboard.status.${cockpitHintKey}.title`)}
-                      </p>
+                    <div className="mb-2 inline-flex items-center gap-2 text-xs font-medium text-zinc-500 dark:text-zinc-400">
+                      <Target className="h-3.5 w-3.5" />
+                      {t('dashboard.phaseLabel')}
                     </div>
-                    <p className="text-sm leading-6 text-zinc-600 dark:text-zinc-300">
-                      {cockpitHintKey === 'failed' && data.processingError
-                        ? data.processingError
-                        : t(`dashboard.status.${cockpitHintKey}.description`)}
+                    <h2 className="text-xl font-semibold tracking-tight text-zinc-950 dark:text-zinc-50 md:text-2xl">
+                      {t(data.phaseTitleKey, resolveDisplayParams(data.phaseTitleParams, t))}
+                    </h2>
+                    <p className="mt-2 max-w-xl text-sm leading-6 text-zinc-500 dark:text-zinc-400">
+                      {t(data.phaseDescriptionKey, resolveDisplayParams(data.phaseDescriptionParams, t))}
                     </p>
                   </div>
-                  {cockpitHintKey !== 'ready' && (
-                    <Button asChild size="sm" className="shrink-0 bg-zinc-900 text-white hover:bg-zinc-800 dark:bg-white dark:text-zinc-900 dark:hover:bg-zinc-200">
-                      <Link href="/resume">
-                        {cockpitHintKey === 'processing'
-                          ? t('dashboard.action.waitProcessing')
-                          : cockpitHintKey === 'failed'
-                            ? t('dashboard.action.retryResume')
-                            : t('dashboard.action.onboarding')}
-                        <ArrowRight className="ml-1.5 h-3.5 w-3.5" />
-                      </Link>
-                    </Button>
-                  )}
+                  <Button
+                    asChild
+                    className="shrink-0 rounded-md bg-zinc-900 text-white hover:bg-zinc-800 dark:bg-white dark:text-zinc-900 dark:hover:bg-zinc-200"
+                  >
+                    <Link href={data.nextAction?.href || data.actions[0]?.href || '/resume'}>
+                      {t(data.nextAction?.titleKey || 'dashboard.nextAction')}
+                      <ArrowRight className="ml-2 h-4 w-4" />
+                    </Link>
+                  </Button>
                 </div>
-                <ol className="grid grid-cols-1 gap-2 sm:grid-cols-2 lg:grid-cols-4">
-                  {cockpitSteps.map((step, index) => (
-                    <li
-                      key={step.key}
-                      className={`rounded-md border px-3 py-2.5 ${
-                        step.current
-                          ? 'border-zinc-900 bg-white dark:border-white dark:bg-zinc-950'
-                          : 'border-zinc-200 bg-white/70 dark:border-zinc-800 dark:bg-zinc-950/40'
-                      }`}
-                    >
-                      <div className="flex items-center gap-2">
-                        <span className={`flex h-5 w-5 items-center justify-center rounded-full text-[10px] font-semibold ${
-                          step.done
-                            ? 'bg-zinc-900 text-white dark:bg-white dark:text-zinc-900'
-                            : step.current
-                              ? 'border border-zinc-900 text-zinc-900 dark:border-white dark:text-white'
-                              : 'border border-zinc-300 text-zinc-400 dark:border-zinc-700'
-                        }`}>
-                          {step.done ? <Check className="h-3 w-3" /> : index + 1}
-                        </span>
-                        <span className={`text-xs font-medium ${step.done || step.current ? 'text-zinc-900 dark:text-zinc-100' : 'text-zinc-500'}`}>
-                          {t(`dashboard.status.step.${step.key}`)}
-                        </span>
-                      </div>
-                      <p className="mt-1.5 pl-7 text-[11px] leading-4 text-zinc-500 dark:text-zinc-400">
-                        {t(`dashboard.status.step.${step.key}Hint`)}
-                      </p>
-                    </li>
-                  ))}
-                </ol>
               </div>
             </section>
-            {data.personalization && (
+            <section className="order-2 grid grid-cols-1 gap-3 sm:grid-cols-3">
+              <MetricCard
+                label={t('dashboard.metricResume')}
+                value={`${data.metrics.resumeImpact}%`}
+                hint={t('dashboard.metricResumeHint')}
+                progress={data.metrics.resumeImpact}
+                href="/optimize"
+                actionLabel={t('dashboard.metricAction')}
+              />
+              <MetricCard
+                label={t('dashboard.metricInterview')}
+                value={`${data.metrics.interviewStrength}`}
+                hint={t('dashboard.metricInterviewHint')}
+                progress={Math.min(100, Math.round((data.metrics.interviewStrength / 3) * 100))}
+                href="/mock-interview"
+                actionLabel={t('dashboard.metricAction')}
+              />
+              <MetricCard
+                label={t('dashboard.metricHealth')}
+                value={data.weeklyGoal > 0 ? `${data.weeklyApplications}/${data.weeklyGoal}` : '—'}
+                hint={data.weeklyGoal > 0 ? `${data.metrics.applicationHealth}% ${t('dashboard.metricHealthDone')}` : t('dashboard.metricHealthNoGoal')}
+                progress={data.weeklyGoal > 0 ? data.metrics.applicationHealth : null}
+                href="/jobs"
+                actionLabel={t('dashboard.metricAction')}
+              />
+            </section>
+            {data.profileReady === false && (
+              <section className="order-2 rounded-lg border border-zinc-200 bg-zinc-50/60 dark:border-zinc-800 dark:bg-zinc-900/20">
+                <div className="flex flex-col gap-4 px-4 py-4 md:flex-row md:items-center md:justify-between md:px-5">
+                  <div className="min-w-0">
+                    <p className="text-sm font-semibold text-zinc-900 dark:text-zinc-100">
+                      {t('dashboard.onboardingRequired')}
+                    </p>
+                    <p className="mt-1 text-xs text-zinc-500 dark:text-zinc-400">
+                      {(data.missingSteps || []).map((step) => t(`dashboard.onboardingStep.${step}`)).join(' / ')}
+                    </p>
+                  </div>
+                  <Button asChild size="sm" variant="outline" className="border-zinc-300 bg-transparent text-zinc-800 hover:bg-zinc-100 dark:border-zinc-600 dark:bg-transparent dark:text-zinc-100 dark:hover:bg-zinc-800">
+                    <Link href="/resume">
+                      {t('dashboard.action.onboarding')}
+                      <ArrowRight className="ml-1.5 h-3.5 w-3.5" />
+                    </Link>
+                  </Button>
+                </div>
+                {(data.missingSteps || []).includes('role') && data.latestResumeId && !onboardingRoleSaved && (
+                  <div className="mx-4 mb-4 rounded-lg border border-zinc-200 bg-white p-3 dark:border-zinc-700 dark:bg-zinc-950">
+                    <div className="flex flex-col gap-2 sm:flex-row sm:items-center">
+                      <Input
+                        value={onboardingRole}
+                        onChange={(event) => setOnboardingRole(event.target.value)}
+                        placeholder={t('dashboard.onboardingRolePlaceholder')}
+                        className="h-9 flex-1 text-sm"
+                      />
+                      <Button
+                        size="sm"
+                        onClick={() => void saveOnboardingRole()}
+                        disabled={onboardingRoleSaving || !onboardingRole.trim()}
+                        className="bg-zinc-900 text-white hover:bg-zinc-800 dark:bg-white dark:text-zinc-900 dark:hover:bg-zinc-200"
+                      >
+                        {onboardingRoleSaving && <Loader2 className="mr-1.5 h-3.5 w-3.5 animate-spin" />}
+                        {t('dashboard.onboardingRoleSave')}
+                      </Button>
+                      {onboardingRoleError && (
+                        <span className="text-xs text-red-600 dark:text-red-400">{onboardingRoleError}</span>
+                      )}
+                    </div>
+                    {directionChips.length > 0 && (
+                      <div className="mt-2 flex flex-wrap gap-1.5">
+                        {directionChips.map((option) => (
+                          <button
+                            key={option.id}
+                            type="button"
+                            onClick={() => setOnboardingRole(option.config_value)}
+                            className="rounded-full border border-zinc-300 px-2.5 py-1 text-xs text-zinc-600 transition-colors hover:border-zinc-500 hover:bg-zinc-50 dark:border-zinc-600 dark:text-zinc-300 dark:hover:border-zinc-400 dark:hover:bg-zinc-800"
+                          >
+                            {option.config_value}
+                          </button>
+                        ))}
+                      </div>
+                    )}
+                  </div>
+                )}
+                {onboardingRoleSaved && (
+                  <div className="mx-4 mb-4 rounded-lg border border-emerald-200 bg-emerald-50 px-3 py-2 text-xs font-medium text-emerald-700 dark:border-emerald-800 dark:bg-emerald-950/40 dark:text-emerald-300">
+                    {t('dashboard.onboardingRoleSaved')}
+                  </div>
+                )}
+              </section>
+            )}
+            {data.profileReady && data.personalization && (
               <section className="order-3 border-y border-zinc-200 py-5 dark:border-zinc-800 md:py-6">
                 <div className="mb-4 flex flex-col gap-1">
                   <h3 className="text-lg font-semibold tracking-tight text-zinc-900 dark:text-zinc-100">
@@ -832,12 +753,6 @@ export default function DashboardPage() {
                 </div>
               </section>
             )}
-            {!data.diagnosis && (
-              <section id="diagnosis" className="order-4 rounded-lg border border-dashed border-zinc-200 px-4 py-4 dark:border-zinc-800 md:px-5">
-                <p className="text-sm font-semibold text-zinc-900 dark:text-zinc-100">{t('dashboard.diagnosisEmpty.title')}</p>
-                <p className="mt-1 text-sm leading-6 text-zinc-500 dark:text-zinc-400">{t('dashboard.diagnosisEmpty.description')}</p>
-              </section>
-            )}
             {data.diagnosis && (
               <details id="diagnosis" className="order-4 group rounded-lg border border-zinc-200 bg-zinc-50/60 dark:border-zinc-800 dark:bg-zinc-900/20">
                 <summary className="flex cursor-pointer list-none items-center justify-between gap-4 px-4 py-3.5 marker:hidden md:px-5">
@@ -854,15 +769,20 @@ export default function DashboardPage() {
                 </summary>
                 <section className="border-t border-zinc-200 p-4 dark:border-zinc-800 md:p-5">
                 {data.selectedRegion && (data.planRegions?.length ?? 0) <= 1 && REGION_DNA[data.selectedRegion as RegionKey] && (
-                  <div className="mb-4 rounded-lg border border-zinc-200 p-4 dark:border-zinc-800">
-                    <div className="mb-3 flex items-center justify-between gap-2">
-                      <p className="text-sm font-semibold text-zinc-900 dark:text-zinc-100">
+                  <details className="group mb-4 rounded-lg border border-zinc-200 dark:border-zinc-800">
+                    <summary className="flex cursor-pointer list-none items-center justify-between gap-2 px-4 py-3 marker:hidden">
+                      <span className="text-sm font-medium text-zinc-900 dark:text-zinc-100">
                         {t('dashboard.diagnosis.regionLogic')}
-                      </p>
-                      <Badge variant="outline" className="text-[10px]">
-                        {t(`region.${data.selectedRegion}`)}
-                      </Badge>
-                    </div>
+                      </span>
+                      <span className="flex items-center gap-2">
+                        <Badge variant="outline" className="text-[10px]">
+                          {t(`region.${data.selectedRegion}`)}
+                        </Badge>
+                        <ArrowRight className="h-4 w-4 text-zinc-400 transition-transform group-open:rotate-90" />
+                      </span>
+                    </summary>
+                    <div className="border-t border-zinc-200 p-4 dark:border-zinc-800">
+                    <p className="mb-3 text-xs leading-5 text-zinc-500 dark:text-zinc-400">{t('dashboard.diagnosis.dnaIndustryNote')}</p>
                     <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-4">
                       {[
                         { labelKey: 'dashboard.diagnosis.atsPrefs', items: REGION_DNA[data.selectedRegion as RegionKey].atsPreferences },
@@ -882,7 +802,8 @@ export default function DashboardPage() {
                         </div>
                       ))}
                     </div>
-                  </div>
+                    </div>
+                  </details>
                 )}
                 {data.planRegions && data.planRegions.length > 1 && (
                   <div className="mb-4 space-y-4">
@@ -963,7 +884,12 @@ export default function DashboardPage() {
                               )}
                             </div>
                           </div>
-                          <div className="mt-4 grid grid-cols-1 gap-3 border-t border-zinc-200 pt-4 sm:grid-cols-2 lg:grid-cols-4 dark:border-zinc-800">
+                          <details className="mt-4 border-t border-zinc-200 pt-3 dark:border-zinc-800">
+                            <summary className="cursor-pointer text-xs font-medium text-zinc-500 marker:hidden">
+                              {t('dashboard.diagnosis.regionLogic')}
+                            </summary>
+                            <p className="mb-3 text-xs leading-5 text-zinc-500 dark:text-zinc-400">{t('dashboard.diagnosis.dnaIndustryNote')}</p>
+                            <div className="mt-3 grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-4">
                             {[
                               { labelKey: 'dashboard.diagnosis.atsPrefs', items: REGION_DNA[regionPlan.region as RegionKey].atsPreferences },
                               { labelKey: 'dashboard.diagnosis.resumeStyle', items: REGION_DNA[regionPlan.region as RegionKey].resumeStyle },
@@ -981,7 +907,8 @@ export default function DashboardPage() {
                                 </ul>
                               </div>
                             ))}
-                          </div>
+                            </div>
+                          </details>
                         </div>
                       );
                     })}
@@ -1443,12 +1370,6 @@ export default function DashboardPage() {
               </section>
             */}
             {/* 个性化求职规划 */}
-            {!data.plan && (
-              <section id="plan" className="order-3 scroll-mt-24 rounded-lg border border-dashed border-zinc-200 px-4 py-4 dark:border-zinc-800 md:px-5">
-                <p className="text-sm font-semibold text-zinc-900 dark:text-zinc-100">{t('dashboard.planEmpty.title')}</p>
-                <p className="mt-1 text-sm leading-6 text-zinc-500 dark:text-zinc-400">{t('dashboard.planEmpty.description')}</p>
-              </section>
-            )}
             {data.plan && planGroups && (
               <section id="plan" className="order-3 scroll-mt-24">
                 <div className="flex flex-col md:flex-row md:items-center md:justify-between gap-4 mb-4">
@@ -1491,7 +1412,14 @@ export default function DashboardPage() {
                     </div>
                   </div>
                 </div>
-                <div className="grid grid-cols-1 divide-y divide-zinc-200 border-y border-zinc-200 md:grid-cols-3 md:divide-x md:divide-y-0 dark:divide-zinc-800 dark:border-zinc-800">
+                <details className="group rounded-lg border border-zinc-200 dark:border-zinc-800">
+                  <summary className="flex cursor-pointer list-none items-center justify-between gap-4 px-4 py-3 marker:hidden">
+                    <span className="text-sm font-medium text-zinc-900 dark:text-zinc-100">
+                      {t('dashboard.planNow')} / {t('dashboard.planWeek')} / {t('dashboard.planMonth')}
+                    </span>
+                    <ArrowRight className="h-4 w-4 text-zinc-400 transition-transform group-open:rotate-90" />
+                  </summary>
+                  <div className="grid grid-cols-1 divide-y divide-zinc-200 border-t border-zinc-200 md:grid-cols-3 md:divide-x md:divide-y-0 dark:divide-zinc-800 dark:border-zinc-800">
                   <PlanColumn
                     icon={<Zap className="h-4 w-4" />}
                     label={t('dashboard.planNow')}
@@ -1510,7 +1438,8 @@ export default function DashboardPage() {
                     items={planGroups.month}
                     translate={t}
                   />
-                </div>
+                  </div>
+                </details>
               </section>
             )}
 
@@ -1543,24 +1472,29 @@ export default function DashboardPage() {
                     {t('dashboard.actionsTitle')}
                   </h3>
                 </div>
-                <div className="border-y border-zinc-200 dark:border-zinc-800">
+                <div className="space-y-3">
                     {data.actions.map((action, idx) => (
                       <Link
                         key={`${action.titleKey}-${idx}`}
                         href={action.href}
-                        className="group flex items-center justify-between border-b border-zinc-200 p-4 transition-colors last:border-0 hover:bg-zinc-50 dark:border-zinc-800 dark:hover:bg-zinc-900/50 md:p-5"
+                        className="group flex items-center justify-between gap-3 rounded-2xl border border-zinc-200 p-4 transition-colors hover:border-zinc-500 hover:bg-zinc-50 dark:border-zinc-800 dark:hover:border-zinc-600 dark:hover:bg-zinc-900/50 md:p-5"
                       >
-                        <div className="flex items-center gap-4">
+                        <div className="flex min-w-0 items-center gap-3">
+                          <span className="flex h-8 w-8 shrink-0 items-center justify-center rounded-full bg-zinc-900 text-sm font-bold text-white dark:bg-white dark:text-zinc-900">
+                            {idx + 1}
+                          </span>
+                          <span className="min-w-0 text-sm md:text-base font-medium text-zinc-900 dark:text-zinc-900">
+                            {t(action.titleKey, action.titleParams)}
+                          </span>
+                        </div>
+                        <div className="flex shrink-0 items-center gap-3">
                           <span
                             className={`text-[10px] font-semibold px-2 py-0.5 rounded-full ${priorityBadge[action.priority].className}`}
                           >
                             {t(`dashboard.priority.${action.priority}`)}
                           </span>
-                          <span className="text-sm md:text-base font-medium text-zinc-900 dark:text-zinc-900">
-                            {t(action.titleKey, action.titleParams)}
-                          </span>
+                          <ArrowRight className="h-4 w-4 text-zinc-700 group-hover:translate-x-0.5 group-hover:text-zinc-900 dark:text-zinc-600 dark:group-hover:text-zinc-900 transition-all" />
                         </div>
-                        <ArrowRight className="h-4 w-4 text-zinc-700 group-hover:text-zinc-900 dark:text-zinc-600 dark:group-hover:text-zinc-900 transition-colors" />
                       </Link>
                     ))}
                 </div>
@@ -1647,7 +1581,7 @@ export default function DashboardPage() {
                             )}
                               {ev.reportGrade && (
                               <span className="text-xs font-medium text-zinc-500">
-                                {ev.reportGrade}
+                                {t('dashboard.evaluation.gradeLabel')} {ev.reportGrade}
                               </span>
                               )}
                               <ArrowRight className="h-4 w-4 text-zinc-400" aria-hidden="true" />
@@ -1793,7 +1727,11 @@ export default function DashboardPage() {
                                   );
                                 })}
                               </div>
-                              <Tabs defaultValue="people" className="mt-5">
+                                <details className="mt-4">
+                                  <summary className="cursor-pointer text-xs font-medium text-zinc-500 marker:hidden">
+                                    {t('dashboard.networking.playbook')}
+                                  </summary>
+                                  <Tabs defaultValue="people" className="mt-4">
                                 <TabsList className="w-full justify-start overflow-x-auto">
                                   <TabsTrigger value="people">{t('dashboard.networking.tabPeople')}</TabsTrigger>
                                   <TabsTrigger value="talk">{t('dashboard.networking.tabTalk')}</TabsTrigger>
@@ -1888,6 +1826,7 @@ export default function DashboardPage() {
                                   </div>
                                 </TabsContent>
                               </Tabs>
+                                </details>
                             </>
                           );
                         })()}
@@ -1900,34 +1839,7 @@ export default function DashboardPage() {
               </section>
             )}
 
-            {/* 成长故事线 */}
-            <details id="story" className="order-6 group rounded-lg border border-zinc-200 dark:border-zinc-800">
-              <summary className="flex cursor-pointer list-none items-center justify-between gap-4 px-4 py-3.5 marker:hidden md:px-5">
-                <div>
-                  <p className="text-sm font-medium text-zinc-900 dark:text-zinc-100">{t('dashboard.storyTitle')}</p>
-                  <p className="mt-0.5 text-xs text-zinc-500 dark:text-zinc-400">{t(data.story.resumeKey, data.story.resumeParams)}</p>
-                </div>
-                <ArrowRight className="h-4 w-4 text-zinc-400 transition-transform group-open:rotate-90" />
-              </summary>
-              <div className="grid grid-cols-1 gap-3 border-t border-zinc-200 p-4 dark:border-zinc-800 md:grid-cols-3 md:p-5">
-                <StoryCard
-                  icon={<LineChart className="h-4 w-4" />}
-                  title={t('dashboard.storyResume')}
-                  description={t(data.story.resumeKey, data.story.resumeParams)}
-                />
-                <StoryCard
-                  icon={<Zap className="h-4 w-4" />}
-                  title={t('dashboard.storyInterview')}
-                  description={t(data.story.interviewKey, data.story.interviewParams)}
-                />
-                <StoryCard
-                  icon={<Briefcase className="h-4 w-4" />}
-                  title={t('dashboard.storyMindset')}
-                  description={t(data.story.mindsetKey, data.story.mindsetParams)}
-                />
-              </div>
-            </details>
-
+            {/* 成长故事线已下线：纯叙事内容无行动价值（如需恢复见 git 历史） */}
           </div>
         )}
         </main>
@@ -1981,24 +1893,112 @@ const priorityBadge: Record<
   },
 };
 
+// 驾驶舱接口的参数值可能是字典键（如 region.hk），渲染前先翻译
+function resolveDisplayParams(
+  params: Record<string, string | number> | undefined,
+  t: (key: string) => string,
+): Record<string, string | number> | undefined {
+  if (!params) return params;
+  const resolved: Record<string, string | number> = {};
+  for (const [key, value] of Object.entries(params)) {
+    resolved[key] = typeof value === 'string' && value.startsWith('region.') ? t(value) : value;
+  }
+  return resolved;
+}
+
+function MetricCard({
+  label,
+  value,
+  hint,
+  progress,
+  href,
+  actionLabel,
+}: {
+  label: string;
+  value: string;
+  hint: string;
+  progress?: number | null;
+  href?: string;
+  actionLabel?: string;
+}) {
+  const body = (
+    <>
+      <div className="flex items-center justify-between gap-2">
+        <p className="truncate text-xs text-zinc-500 dark:text-zinc-400">{label}</p>
+        {typeof progress === 'number' && (
+          <span className="text-xs font-semibold text-zinc-400 dark:text-zinc-500">{progress}%</span>
+        )}
+      </div>
+      <p className="mt-1 text-2xl font-semibold tracking-tight text-zinc-950 dark:text-zinc-50">{value}</p>
+      {typeof progress === 'number' && (
+        <div className="mt-2 h-1.5 overflow-hidden rounded-full bg-zinc-100 dark:bg-zinc-800">
+          <div
+            className="h-full rounded-full bg-zinc-900 transition-all dark:bg-white"
+            style={{ width: `${Math.max(0, Math.min(100, progress))}%` }}
+          />
+        </div>
+      )}
+      <p className="mt-2 text-xs leading-5 text-zinc-500 dark:text-zinc-400">
+        {hint}
+        {href && actionLabel && (
+          <span className="ml-1.5 inline-flex items-center gap-0.5 font-medium text-zinc-900 dark:text-zinc-100">
+            {actionLabel}
+            <ArrowRight className="h-3 w-3" />
+          </span>
+        )}
+      </p>
+    </>
+  );
+  const frame = 'block rounded-2xl border border-zinc-200 bg-white p-4 dark:border-zinc-800 dark:bg-zinc-950';
+  if (href) {
+    return (
+      <Link href={href} className={`group transition-colors hover:border-zinc-400 dark:hover:border-zinc-600 ${frame}`}>
+        {body}
+      </Link>
+    );
+  }
+  return <div className={frame}>{body}</div>;
+}
+
 function OverviewMetric({
   label,
   value,
   hint,
   last = false,
+  href,
+  actionLabel,
 }: {
   label: string;
   value: string;
   hint: string;
   last?: boolean;
+  href?: string;
+  actionLabel?: string;
 }) {
-  return (
-    <div className={`min-w-0 px-4 py-3.5 sm:border-r sm:border-zinc-200 lg:border-r-0 lg:px-5 lg:py-4 dark:sm:border-zinc-800 ${last ? 'sm:border-r-0' : 'border-b border-zinc-200 lg:border-b dark:border-zinc-800'}`}>
+  const body = (
+    <>
       <p className="truncate text-xs text-zinc-500 dark:text-zinc-400">{label}</p>
       <p className="mt-1 text-xl font-semibold tracking-tight text-zinc-950 dark:text-zinc-50">{value}</p>
-      <p className="mt-1 line-clamp-2 text-xs leading-5 text-zinc-500 dark:text-zinc-400">{hint}</p>
-    </div>
+      <p className="mt-1 line-clamp-2 text-xs leading-5 text-zinc-500 dark:text-zinc-400">
+        {hint}
+        {href && actionLabel && (
+          <span className="ml-1.5 inline-flex items-center gap-0.5 font-medium text-zinc-900 dark:text-zinc-100">
+            {actionLabel}
+            <ArrowRight className="h-3 w-3" />
+          </span>
+        )}
+      </p>
+    </>
   );
+  const frame = `min-w-0 px-4 py-3.5 sm:border-r sm:border-zinc-200 lg:border-r-0 lg:px-5 lg:py-4 dark:sm:border-zinc-800 ${last ? 'sm:border-r-0' : 'border-b border-zinc-200 lg:border-b dark:border-zinc-800'}`;
+  if (href) {
+    return (
+      <Link href={href} className={`group block min-w-0 transition-colors hover:bg-zinc-100/60 dark:hover:bg-zinc-800/40 ${frame}`}>
+        {body}
+      </Link>
+    );
+  }
+  return <div className={frame}>{body}</div>;
 }
 
 function PlanColumn({

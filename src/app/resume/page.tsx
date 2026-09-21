@@ -349,7 +349,7 @@ function ResumeContent() {
   return (
     <div className="min-h-screen bg-white dark:bg-zinc-950">
       <Header1 />
-        <main className="relative container mx-auto px-4 pt-20 pb-16 sm:px-6 md:pt-24">
+        <main className="light-scope relative container mx-auto px-4 pt-20 pb-16 sm:px-6 md:pt-24">
         {/* Hero：左对齐 eyebrow + 大标题（Tailark 式） */}
         <div className="relative mb-8 max-w-3xl md:mb-10">
           <p className="text-sm font-medium text-zinc-400 dark:text-zinc-500 mb-3">{t('resume.eyebrow')}</p>

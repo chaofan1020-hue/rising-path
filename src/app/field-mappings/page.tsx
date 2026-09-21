@@ -118,7 +118,7 @@ export function AutoApplicationContent({ initialTab = 'start' }: { initialTab?: 
   return (
     <div className="min-h-screen bg-background">
       <Header1 />
-      <main className="container mx-auto max-w-6xl px-4 pb-16 pt-24 md:px-6 md:pt-28">
+      <main className="light-scope container mx-auto max-w-6xl px-4 pb-16 pt-24 md:px-6 md:pt-28">
         <header className="mb-8 flex items-start gap-3">
           <span className="mt-1 flex h-10 w-10 shrink-0 items-center justify-center rounded-lg bg-red-600 text-white shadow-sm shadow-red-600/20"><ClipboardList className="h-5 w-5" /></span>
           <div>
