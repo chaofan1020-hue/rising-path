@@ -581,11 +581,10 @@ function JobListRow({
   onFavorite: (jobId: number) => void;
   t: (key: string, params?: Record<string, string | number>) => string;
 }) {
-  const metaItems = [
-    formatExperienceLabel(job),
-    localizeJobEnum(job.direction, t),
-    localizeJobEnum(job.job_type, t),
-  ].filter((item): item is string => Boolean(item));
+  const experience = formatExperienceLabel(job);
+  const direction = localizeJobEnum(job.direction, t);
+  const jobType = localizeJobEnum(job.job_type, t);
+  const metaBadgeClass = 'rounded-full border-zinc-200 bg-zinc-50 px-2 py-0.5 text-[11px] font-normal text-zinc-600 dark:border-zinc-700 dark:bg-zinc-900 dark:text-zinc-300';
 
   return (
     <div
@@ -604,15 +603,20 @@ function JobListRow({
         <div className="min-w-0 flex-1 overflow-hidden">
           <h3 className="truncate text-sm font-semibold text-zinc-900 dark:text-zinc-50">{job.title}</h3>
           <p className="truncate text-xs text-zinc-500 dark:text-zinc-400" translate="no">{job.company}</p>
-          {metaItems.length > 0 && (
-            <p className="mt-1 flex min-w-0 items-center overflow-hidden text-xs text-zinc-400 dark:text-zinc-500" translate="no">
-              {metaItems.map((item, index) => (
-                <span key={`${index}-${item}`} className="flex min-w-0 items-center">
-                  {index > 0 && <span className="mx-1 shrink-0 text-zinc-300 dark:text-zinc-600">·</span>}
-                  <span className={index === 0 ? 'min-w-0 truncate' : 'max-w-[42%] shrink-0 truncate'}>{item}</span>
-                </span>
-              ))}
-            </p>
+          {(experience || direction || jobType) && (
+            <div className="mt-1.5 flex flex-wrap gap-1" translate="no">
+              {experience && (
+                <Badge variant="outline" title={experience} className={`max-w-full min-w-0 shrink ${metaBadgeClass}`}>
+                  <span className="truncate">{experience}</span>
+                </Badge>
+              )}
+              {direction && (
+                <Badge variant="outline" className={metaBadgeClass}>{direction}</Badge>
+              )}
+              {jobType && (
+                <Badge variant="outline" className={metaBadgeClass}>{jobType}</Badge>
+              )}
+            </div>
           )}
         </div>
       </button>
