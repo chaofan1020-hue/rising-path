@@ -3,7 +3,7 @@ import { getSupabaseClient } from '@/storage/database/supabase-client';
 import { detectSponsorship } from '@/lib/utils';
 import { ADMIN_PERMISSIONS, requireAdminPermission } from '@/lib/admin-permissions';
 import { isDisplayableJobDescription, sanitizeJobContent } from '@/lib/job-content';
-import { TARGET_REGION_KEYWORDS, targetRegionPostgrestClauses } from '@/lib/job-region-scope';
+import { TARGET_REGION_KEYWORDS } from '@/lib/job-region-scope';
 import { recordAdminAuditEvent, recordAdminAuditFailure } from '@/lib/admin-audit';
 import { resolveDisplayLogoUrls } from '@/lib/company-logo';
 import { isVerifiedField } from '@/lib/job-field-provenance';
@@ -193,9 +193,12 @@ export async function GET(request: NextRequest) {
 
     // Supabase's generated select parser requires a literal column string;
     // the route intentionally chooses one of two fixed projections here.
+    // Exact count stays accurate, but the default market scope must be an
+    // indexed boolean. A hundred region ILIKE clauses made that count scan
+    // the jobs table and took several seconds.
     let query = summaryOnly
-      ? client.from('jobs').select('id,title,company,region,direction,audience,job_type,employment_category,experience_min_years,experience_max_years,experience_text,description,salary_range,employment_type,workplace_type,job_url,sponsorship,valid_through,deadline_time_zone,deadline_source,salary_source,location_source,field_evidence,is_active,is_closed,posted_at,created_at,updated_at', { count: 'planned' })
-      : client.from('jobs').select('id,title,company,region,direction,audience,job_type,employment_category,experience_min_years,experience_max_years,experience_text,description,requirements,salary_range,employment_type,workplace_type,job_url,sponsorship,valid_through,deadline_time_zone,deadline_source,salary_source,location_source,field_evidence,is_active,is_closed,posted_at,created_at,updated_at', { count: 'planned' });
+      ? client.from('jobs').select('id,title,company,region,direction,audience,job_type,employment_category,experience_min_years,experience_max_years,experience_text,description,salary_range,employment_type,workplace_type,job_url,sponsorship,valid_through,deadline_time_zone,deadline_source,salary_source,location_source,field_evidence,is_active,is_closed,posted_at,created_at,updated_at', { count: 'exact' })
+      : client.from('jobs').select('id,title,company,region,direction,audience,job_type,employment_category,experience_min_years,experience_max_years,experience_text,description,requirements,salary_range,employment_type,workplace_type,job_url,sponsorship,valid_through,deadline_time_zone,deadline_source,salary_source,location_source,field_evidence,is_active,is_closed,posted_at,created_at,updated_at', { count: 'exact' });
 
     if (diverseFeed) {
       // updated_at reflects the active feed refresh and naturally mixes the
@@ -264,7 +267,7 @@ export async function GET(request: NextRequest) {
       }
       if (regionClauses.size > 0) query = query.or([...regionClauses].join(','));
     } else if (regionScope !== 'all') {
-      query = query.or(targetRegionPostgrestClauses().join(','));
+      query = query.eq('matches_target_region', true);
     }
 
     if (directions.length > 0) {
@@ -273,8 +276,8 @@ export async function GET(request: NextRequest) {
 
     // 不允许把完整岗位库一次传回浏览器。全量同步后岗位数据可达数万条，
     // 因此前端按页请求，默认 100 条。
-    // Fetch one extra row so pagination remains correct even though the total
-    // count uses the planner estimate instead of a full-table exact count.
+    // Fetch one extra row so has_more stays correct even if a later
+    // compatibility filter drops a handful of rows from the page.
     // Fetch a little extra for entry-level filters. Legacy rows may carry an
     // incorrect category, so filtering after retrieval must not leave a page
     // empty when a handful of rows are rejected.
@@ -362,7 +365,7 @@ export async function GET(request: NextRequest) {
         limit: pageLimit,
         returned: jobsWithLogo.length,
         total: count ?? 0,
-        total_is_estimate: true,
+        total_is_estimate: false,
         has_more: hasMore,
       },
     }, {

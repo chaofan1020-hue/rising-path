@@ -838,6 +838,7 @@ function JobsContent() {
     audience: JobConfig[];
   }>({ region: [], direction: [], audience: [] });
   const jobsRequestIdRef = useRef(0);
+  const jobsFetchedAtRef = useRef(0);
   const previousFilterKeyRef = useRef<string | null>(null);
 
   const { t } = useLanguage();
@@ -928,6 +929,7 @@ function JobsContent() {
       setTotalJobs(data.pagination?.total || 0);
       setTotalJobsIsEstimate(Boolean(data.pagination?.total_is_estimate));
       setHasMoreJobs(Boolean(data.pagination?.has_more));
+      jobsFetchedAtRef.current = Date.now();
     } catch (error) {
       if (requestId !== jobsRequestIdRef.current) return;
       console.error('Failed to fetch jobs:', error);
@@ -1021,7 +1023,9 @@ function JobsContent() {
 
   useEffect(() => {
     const refresh = () => {
-      if (document.visibilityState === 'visible') void fetchJobs({ background: true });
+      if (document.visibilityState !== 'visible') return;
+      if (Date.now() - jobsFetchedAtRef.current < 45_000) return;
+      void fetchJobs({ background: true });
     };
     const timer = window.setInterval(refresh, 60_000);
     window.addEventListener('focus', refresh);
@@ -1032,7 +1036,7 @@ function JobsContent() {
   }, [fetchJobs]);
 
   useEffect(() => {
-    if (!filterOpen || companyOptionsLoaded) return;
+    if (companyOptionsLoaded) return;
     let cancelled = false;
     setCompanyOptionsLoading(true);
     apiFetch('/api/jobs/companies')
@@ -1053,7 +1057,7 @@ function JobsContent() {
     return () => {
       cancelled = true;
     };
-  }, [companyOptionsLoaded, filterOpen]);
+  }, [companyOptionsLoaded]);
 
   const handleFavorite = async (jobId: number) => {
     const isFavorite = favoriteJobIds.has(jobId);
