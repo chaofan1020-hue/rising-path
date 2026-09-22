@@ -302,9 +302,10 @@ function AIMatchContent() {
   };
 
   return (
-    <div className="min-h-screen bg-white dark:bg-white">
+    <div className="min-h-screen bg-white dark:bg-background">
       <Header1 />
-      <main className="light-scope relative container mx-auto px-4 pt-20 pb-16 sm:px-6 md:pt-24">
+      <div className="light-scope rounded-t-3xl bg-white pt-8 md:pt-10">
+      <main className="relative container mx-auto px-4 pt-6 pb-16 sm:px-6">
         {/* Hero：单行紧凑头部 */}
         <div className="relative mb-4 flex flex-wrap items-center gap-x-3 gap-y-2">
           <PageBackButton fallbackHref="/resume" />
@@ -587,6 +588,7 @@ function AIMatchContent() {
           </div>
         )}
       </main>
+      </div>
     </div>
   );
 }

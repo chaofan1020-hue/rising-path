@@ -98,9 +98,10 @@ export function AutoApplicationContent() {
   const handleSave = async () => { if (!profile || saving) return; setSaving(true); try { const response = await apiFetch('/api/application-profile', { method: 'PUT', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ profile, version: profileVersion }) }); const data = await response.json(); if (!response.ok || !data.profile) throw new Error(data.error || c.openFailed); setProfile(data.profile); setSource(data.fieldStats || data.source || {}); setProfileVersion(typeof data.version === 'number' ? data.version : profileVersion + 1); setSaveDone(true); } catch (error) { window.alert(error instanceof Error ? error.message : c.openFailed); } finally { setSaving(false); } };
   const handleStart = () => { if (!selectedJob || !selectedResumeId) { window.alert(c.selectFirst); return; } setStarting(true); window.location.assign(`/jobs/${selectedJob.id}?resumeId=${selectedResumeId}`); };
   return (
-    <div className="min-h-screen bg-background">
+    <div className="min-h-screen bg-white dark:bg-background">
       <Header1 />
-      <main className="container mx-auto max-w-6xl px-4 pb-16 pt-24 md:px-6 md:pt-28">
+      <div className="light-scope rounded-t-3xl bg-white pt-8 md:pt-10">
+      <main className="container mx-auto max-w-6xl px-4 pb-16 pt-4 md:px-6 md:pt-6">
         <header className="mb-8 flex items-start gap-3">
           <span className="mt-1 flex h-10 w-10 shrink-0 items-center justify-center rounded-lg bg-zinc-900 text-white dark:bg-white dark:text-zinc-900"><ClipboardList className="h-5 w-5" /></span>
           <div>
@@ -140,6 +141,7 @@ export function AutoApplicationContent() {
            <TabsContent value="profile" className="mt-0"><section className="rounded-lg border bg-card"><div className="flex flex-col gap-4 border-b px-5 py-5 sm:flex-row sm:items-start sm:justify-between md:px-6"><div><p className="text-xs font-semibold uppercase tracking-[0.16em] text-zinc-500 dark:text-zinc-400">{c.profileSettings}</p><h2 className="mt-1 text-base font-semibold">{c.profileTitle}</h2><p className="mt-1 max-w-2xl text-sm leading-6 text-muted-foreground">{c.profileHint}</p></div><div className="flex gap-2"><Button variant="outline" size="sm" onClick={handleAiFill} disabled={!selectedResumeId || aiFilling}>{aiFilling ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <Sparkles className="mr-2 h-4 w-4" />}{aiFilling ? c.filling : c.aiFill}</Button><Button size="sm" onClick={handleSave} disabled={!profile || saving}>{saving ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <Save className="mr-2 h-4 w-4" />}{saving ? c.saving : saveDone ? c.saved : c.save}</Button></div></div><div className="px-5 py-6 md:px-6">{profileLoading || !profile ? <div className="py-16 text-center text-sm text-muted-foreground"><Loader2 className="mx-auto mb-3 h-6 w-6 animate-spin" />{c.loading}</div> : <ProfileEditor profile={profile} copy={c} updateProfile={updateProfile} />}</div></section></TabsContent>
         </Tabs>
       </main>
+      </div>
     </div>
   );
 }

@@ -3291,53 +3291,47 @@ function MockInterviewContent() {
   // ========== 面试设置阶段 ==========
   if (stage === "setup") {
     return (
-        <div className="min-h-screen bg-white dark:bg-white">
+        <div className="min-h-screen bg-white dark:bg-background">
           <Header1 />
-          <main className="light-scope pb-8 pt-24 md:pb-12 md:pt-28">
-            <div className="container mx-auto px-4 max-w-5xl">
-              <PageBackButton fallbackHref="/home" className="mb-4" />
-              <div className="grid gap-6 lg:grid-cols-[20rem_minmax(0,1fr)] items-start">
-                {/* 左侧：产品介绍 */}
-                <aside className="rounded-2xl border border-zinc-200 bg-white p-6 dark:border-zinc-800 dark:bg-zinc-950">
-                  <div className="mb-4 inline-flex items-center justify-center h-12 w-12 rounded-2xl bg-zinc-900 dark:bg-white">
-                    <Bot className="h-6 w-6 text-white dark:text-zinc-900" />
-                  </div>
-                  <h1 className="text-2xl font-bold tracking-tight text-zinc-900 dark:text-zinc-900 mb-2">
-                    {t("mockInterview.title")}
-                  </h1>
-                  <p className="text-sm leading-6 text-zinc-500 dark:text-zinc-400">{t("mockInterview.subtitle")}</p>
-                  <ul className="mt-5 space-y-3 border-t border-zinc-100 pt-5 dark:border-zinc-800">
-                    <li className="flex items-start gap-2.5 text-sm text-zinc-600 dark:text-zinc-300">
-                      <Mic className="mt-0.5 h-4 w-4 shrink-0 text-zinc-400" />
-                      {t("mockInterview.featureVoice")}
+          <main className="flex min-h-[calc(100vh-4rem)] flex-col lg:h-[calc(100vh-4.75rem)] lg:flex-row lg:gap-8 lg:overflow-hidden">
+            {/* 左栏：品牌 + 步骤（深色模式下呈石墨底，固定不滚动） */}
+            <aside className="flex shrink-0 flex-col justify-between px-6 py-6 lg:w-64 lg:py-10 lg:pl-10">
+              <div>
+                <PageBackButton fallbackHref="/home" className="mb-6" />
+                <div className="mb-6 inline-flex items-center justify-center h-11 w-11 rounded-2xl bg-zinc-900 dark:bg-white">
+                  <Bot className="h-5 w-5 text-white dark:text-zinc-900" />
+                </div>
+                <h1 className="text-xl font-bold tracking-tight text-zinc-900 dark:text-zinc-100">{t("mockInterview.title")}</h1>
+                <p className="mt-2 text-xs leading-5 text-zinc-500 dark:text-zinc-400">{t("mockInterview.subtitle")}</p>
+                <ol className="mt-8 space-y-5">
+                  {[
+                    { n: 1, label: t("mockInterview.stepRole") },
+                    { n: 2, label: t("mockInterview.stepResume") },
+                    { n: 3, label: t("mockInterview.stepStart") },
+                  ].map((step) => (
+                    <li key={step.n} className="flex items-center gap-3">
+                      <span className="flex h-7 w-7 items-center justify-center rounded-full bg-zinc-900 text-xs font-bold text-white dark:bg-white dark:text-zinc-900">{step.n}</span>
+                      <span className="text-sm font-medium text-zinc-900 dark:text-zinc-100">{step.label}</span>
                     </li>
-                    <li className="flex items-start gap-2.5 text-sm text-zinc-600 dark:text-zinc-300">
-                      <ClipboardList className="mt-0.5 h-4 w-4 shrink-0 text-zinc-400" />
-                      {t("mockInterview.featureRounds")}
-                    </li>
-                    <li className="flex items-start gap-2.5 text-sm text-zinc-600 dark:text-zinc-300">
-                      <Check className="mt-0.5 h-4 w-4 shrink-0 text-zinc-400" />
-                      {t("mockInterview.featureFeedback")}
-                    </li>
-                    <li className="flex items-start gap-2.5 text-sm text-zinc-600 dark:text-zinc-300">
-                      <FileText className="mt-0.5 h-4 w-4 shrink-0 text-zinc-400" />
-                      {t("mockInterview.featureSummary")}
-                    </li>
-                  </ul>
-                </aside>
+                  ))}
+                </ol>
+              </div>
+              <ul className="mt-8 hidden space-y-2 text-xs leading-5 text-zinc-400 dark:text-zinc-500 lg:block">
+                <li>{t("mockInterview.featureVoice")}</li>
+                <li>{t("mockInterview.featureRounds")}</li>
+                <li>{t("mockInterview.featureFeedback")}</li>
+                <li>{t("mockInterview.featureSummary")}</li>
+              </ul>
+            </aside>
 
-                {/* 右侧：面试设置卡片 */}
-                <div className="min-w-0 rounded-2xl border border-zinc-200 bg-white p-5 dark:border-zinc-800 dark:bg-zinc-950 md:p-6">
-                  <h2 className="text-lg font-semibold tracking-tight text-zinc-900 dark:text-zinc-900">
-                    {t("mockInterview.setupTitle")}
-                  </h2>
-                  <p className="mt-1 text-sm text-zinc-500 dark:text-zinc-400">{t("mockInterview.subtitle")}</p>
-
-                  <div className="mt-5 space-y-5">
+            {/* 右侧：白色设置面板（首页式黑白混合：石墨底上浮白色圆角面板） */}
+            <div className="light-scope mt-6 flex-1 rounded-t-3xl bg-white px-5 py-6 shadow-sm lg:mt-4 lg:mr-6 lg:overflow-y-auto lg:rounded-3xl lg:px-8 lg:py-7 dark:bg-white">
+              <div className="mx-auto max-w-xl space-y-6">
+                <h2 className="sr-only">{t("mockInterview.setupTitle")}</h2>
 
                 {/* 从我的网申快速选择 */}
                 {myApplications.length > 0 && (
-                  <div className="mb-6 rounded-xl border border-zinc-200 dark:border-zinc-700 bg-zinc-50 dark:bg-zinc-800/50 p-4">
+                  <div className="rounded-xl border border-zinc-200 dark:border-zinc-700 bg-zinc-50 dark:bg-zinc-800/50 p-4">
                     <div className="flex items-center justify-between gap-2 mb-1.5">
                       <p className="text-sm font-semibold text-zinc-900 dark:text-zinc-100">{t("mockInterview.quickPickTitle")}</p>
                       {quickPickJob && (
@@ -3375,7 +3369,7 @@ function MockInterviewContent() {
                 )}
 
                 {/* 公司/岗位筛选 */}
-                <div className="grid md:grid-cols-2 gap-4 mb-6">
+                <div className="grid md:grid-cols-2 gap-4">
                   <div>
                     <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
                       {t("mockInterview.selectCompany")}
@@ -3407,7 +3401,7 @@ function MockInterviewContent() {
                 </div>
 
                 {/* 简历选择 */}
-                <div className="mb-6">
+                <div>
                   <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
                     {t("mockInterview.resume")}
                   </label>
@@ -3504,8 +3498,6 @@ function MockInterviewContent() {
                   </Button>
                 </div>
               </div>
-            </div>
-            </div>
           </main>
         </div>
   );

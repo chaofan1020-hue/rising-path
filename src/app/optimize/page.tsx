@@ -1511,9 +1511,10 @@ function OptimizeContent() {
   };
 
   return (
-    <div className="min-h-screen bg-white dark:bg-white">
+    <div className="min-h-screen bg-white dark:bg-background">
       <Header1 />
-      <main className="light-scope relative container mx-auto px-4 pt-20 pb-16 sm:px-6 md:pt-24">
+      <div className="light-scope rounded-t-3xl bg-white pt-8 md:pt-10">
+      <main className="relative container mx-auto px-4 pt-6 pb-16 sm:px-6">
         {/* Hero：左对齐 eyebrow + 大标题（Tailark 式） */}
         <div className="relative mb-8 max-w-3xl md:mb-10">
           <p className="text-sm font-medium text-zinc-400 dark:text-zinc-500 mb-3">{t('optimize.eyebrow')}</p>
@@ -2198,6 +2199,7 @@ function OptimizeContent() {
           </div>
         </DialogContent>
       </Dialog>
+      </div>
     </div>
   );
 }

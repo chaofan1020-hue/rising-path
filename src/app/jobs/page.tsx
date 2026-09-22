@@ -1052,9 +1052,10 @@ function JobsContent() {
   }, [selectedJobId]);
 
   return (
-    <div className="min-h-screen bg-white dark:bg-white">
+    <div className="min-h-screen bg-white dark:bg-background">
       <Header1 />
-      <main className="light-scope relative container mx-auto px-4 pt-20 pb-12 sm:px-6 md:pb-16">
+      <div className="light-scope rounded-t-3xl bg-white pt-8 md:pt-10">
+      <main className="relative container mx-auto px-4 pt-2 pb-12 sm:px-6 md:pb-16">
         {/* 深色模式顶部琥珀氛围光 */}
         <div aria-hidden="true" className="pointer-events-none absolute inset-x-0 top-0 hidden h-80 bg-[radial-gradient(60%_60%_at_50%_0%,rgba(255,255,255,0.05),transparent_70%)] dark:block" />
         {/* Hero：单行紧凑头部 */}
@@ -1322,6 +1323,7 @@ function JobsContent() {
           )}
         </div>
       </main>
+      </div>
     </div>
   );
 }

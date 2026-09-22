@@ -563,9 +563,10 @@ export default function DashboardPage() {
 
   return (
     <AuthGuard showAccountBar={false}>
-      <div className="min-h-screen bg-white dark:bg-white">
+      <div className="min-h-screen bg-white dark:bg-background">
         <Header1 />
-        <main className="light-scope container mx-auto max-w-6xl px-4 pb-16 pt-20 md:pt-24">
+        <div className="light-scope rounded-t-3xl bg-white pt-8 md:pt-10">
+        <main className="container mx-auto max-w-6xl px-4 pb-16 pt-4 md:pt-6">
         <div className="mb-7 md:mb-8">
           <p className="mb-2 text-xs font-medium text-zinc-400 dark:text-zinc-500">
             {t('dashboard.eyebrow')}
@@ -1866,6 +1867,7 @@ export default function DashboardPage() {
             ) : null}
           </DialogContent>
         </Dialog>
+        </div>
       </div>
     </AuthGuard>
   );
