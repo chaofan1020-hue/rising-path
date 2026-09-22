@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, useEffect, useCallback, useRef, type ComponentType, type ReactNode } from 'react';
+import { useState, useEffect, useCallback, useLayoutEffect, useRef, type ComponentType, type ReactNode } from 'react';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent } from '@/components/ui/card';
 import { Input } from '@/components/ui/input';
@@ -563,6 +563,81 @@ function JobsPagination({
   );
 }
 
+function JobListMeta({
+  experience,
+  direction,
+  jobType,
+  postedLabel,
+}: {
+  experience: string | null;
+  direction: string;
+  jobType: string;
+  postedLabel: string | null;
+}) {
+  const rowRef = useRef<HTMLDivElement>(null);
+  const [hideDirection, setHideDirection] = useState(false);
+  const [truncateExperience, setTruncateExperience] = useState(false);
+  const metaBadgeClass = 'rounded-full border-zinc-200 bg-zinc-50 px-2 py-0.5 text-[11px] font-normal text-zinc-600 dark:border-zinc-700 dark:bg-zinc-900 dark:text-zinc-300';
+
+  useLayoutEffect(() => {
+    const row = rowRef.current;
+    if (!row) return;
+
+    const measure = () => {
+      const directionBadge = row.querySelector<HTMLElement>('[data-meta="direction"]');
+      const experienceBadge = row.querySelector<HTMLElement>('[data-meta="experience"]');
+      if (directionBadge) directionBadge.hidden = false;
+      experienceBadge?.classList.remove('min-w-0', 'shrink');
+      experienceBadge?.classList.add('shrink-0');
+
+      const overflows = () => row.scrollWidth > row.clientWidth + 1;
+      const shouldHideDirection = Boolean(directionBadge && postedLabel && overflows());
+      if (directionBadge) directionBadge.hidden = shouldHideDirection;
+      const shouldTruncateExperience = Boolean(experienceBadge && overflows());
+      if (shouldTruncateExperience) {
+        experienceBadge?.classList.remove('shrink-0');
+        experienceBadge?.classList.add('min-w-0', 'shrink');
+      }
+
+      setHideDirection((current) => (current === shouldHideDirection ? current : shouldHideDirection));
+      setTruncateExperience((current) => (current === shouldTruncateExperience ? current : shouldTruncateExperience));
+    };
+
+    measure();
+    const observer = new ResizeObserver(measure);
+    observer.observe(row);
+    return () => observer.disconnect();
+  }, [experience, direction, jobType, postedLabel]);
+
+  if (!experience && !direction && !jobType && !postedLabel) return null;
+
+  return (
+    <div ref={rowRef} className="mt-1.5 flex min-w-0 flex-nowrap items-center gap-1 overflow-hidden" translate="no">
+      {experience && (
+        <Badge
+          variant="outline"
+          title={experience}
+          data-meta="experience"
+          className={`${truncateExperience ? 'max-w-full min-w-0 shrink' : 'shrink-0'} ${metaBadgeClass}`}
+        >
+          <span className={truncateExperience ? 'min-w-0 truncate' : undefined}>{experience}</span>
+        </Badge>
+      )}
+      {direction && (
+        <Badge variant="outline" data-meta="direction" hidden={hideDirection} className={`shrink-0 ${metaBadgeClass}`}>
+          {direction}
+        </Badge>
+      )}
+      {jobType && (
+        <Badge variant="outline" className={`shrink-0 ${metaBadgeClass}`}>{jobType}</Badge>
+      )}
+      {postedLabel && (
+        <Badge variant="outline" className={`shrink-0 ${metaBadgeClass}`}>{postedLabel}</Badge>
+      )}
+    </div>
+  );
+}
+
 // lg+ 左列：紧凑岗位行（点击选中，右侧展示详情）
 function JobListRow({
   job,
@@ -581,10 +656,9 @@ function JobListRow({
   onFavorite: (jobId: number) => void;
   t: (key: string, params?: Record<string, string | number>) => string;
 }) {
-  const experience = formatExperienceLabel(job);
-  const direction = localizeJobEnum(job.direction, t);
-  const jobType = localizeJobEnum(job.job_type, t);
-  const metaBadgeClass = 'rounded-full border-zinc-200 bg-zinc-50 px-2 py-0.5 text-[11px] font-normal text-zinc-600 dark:border-zinc-700 dark:bg-zinc-900 dark:text-zinc-300';
+  const { locale } = useLanguage();
+  const postedAt = formatPostedDate(job.posted_at, locale);
+  const postedLabel = postedAt ? `${t('jobs.postedOn')} ${postedAt}` : null;
 
   return (
     <div
@@ -603,21 +677,12 @@ function JobListRow({
         <div className="min-w-0 flex-1 overflow-hidden">
           <h3 className="truncate text-sm font-semibold text-zinc-900 dark:text-zinc-50">{job.title}</h3>
           <p className="truncate text-xs text-zinc-500 dark:text-zinc-400" translate="no">{job.company}</p>
-          {(experience || direction || jobType) && (
-            <div className="mt-1.5 flex flex-wrap gap-1" translate="no">
-              {experience && (
-                <Badge variant="outline" title={experience} className={`max-w-full min-w-0 shrink ${metaBadgeClass}`}>
-                  <span className="truncate">{experience}</span>
-                </Badge>
-              )}
-              {direction && (
-                <Badge variant="outline" className={metaBadgeClass}>{direction}</Badge>
-              )}
-              {jobType && (
-                <Badge variant="outline" className={metaBadgeClass}>{jobType}</Badge>
-              )}
-            </div>
-          )}
+          <JobListMeta
+            experience={formatExperienceLabel(job)}
+            direction={localizeJobEnum(job.direction, t)}
+            jobType={localizeJobEnum(job.job_type, t)}
+            postedLabel={postedLabel}
+          />
         </div>
       </button>
       <FavoriteButton
