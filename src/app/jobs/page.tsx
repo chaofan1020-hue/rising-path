@@ -569,7 +569,6 @@ function JobListRow({
   selected,
   isFavorite,
   favoriteLoading,
-  deadlineNow,
   onSelect,
   onFavorite,
   t,
@@ -578,11 +577,16 @@ function JobListRow({
   selected: boolean;
   isFavorite: boolean;
   favoriteLoading: boolean;
-  deadlineNow: number;
   onSelect: (jobId: number) => void;
   onFavorite: (jobId: number) => void;
   t: (key: string, params?: Record<string, string | number>) => string;
 }) {
+  const metaItems = [
+    formatExperienceLabel(job),
+    localizeJobEnum(job.direction, t),
+    localizeJobEnum(job.job_type, t),
+  ].filter((item): item is string => Boolean(item));
+
   return (
     <div
       className={`flex min-w-0 items-stretch gap-1 overflow-hidden rounded-xl border p-3 transition-colors ${
@@ -600,12 +604,14 @@ function JobListRow({
         <div className="min-w-0 flex-1 overflow-hidden">
           <h3 className="truncate text-sm font-semibold text-zinc-900 dark:text-zinc-50">{job.title}</h3>
           <p className="truncate text-xs text-zinc-500 dark:text-zinc-400" translate="no">{job.company}</p>
-          <p className="mt-1 truncate text-xs text-zinc-400 dark:text-zinc-500" translate="no">
-            {getRegionDisplayText(job.region)} · {localizeJobEnum(job.direction, t)} · {localizeJobEnum(job.job_type, t) || localizeJobEnum(job.audience, t)}
-          </p>
-          {formatDeadlineRemaining(job.valid_through, deadlineNow, t) && (
-            <p className="mt-1 text-xs font-semibold text-red-600 dark:text-red-400">
-              {formatDeadlineRemaining(job.valid_through, deadlineNow, t)}
+          {metaItems.length > 0 && (
+            <p className="mt-1 flex min-w-0 items-center overflow-hidden text-xs text-zinc-400 dark:text-zinc-500" translate="no">
+              {metaItems.map((item, index) => (
+                <span key={`${index}-${item}`} className="flex min-w-0 items-center">
+                  {index > 0 && <span className="mx-1 shrink-0 text-zinc-300 dark:text-zinc-600">·</span>}
+                  <span className={index === 0 ? 'min-w-0 truncate' : 'max-w-[42%] shrink-0 truncate'}>{item}</span>
+                </span>
+              ))}
             </p>
           )}
         </div>
@@ -1282,7 +1288,6 @@ function JobsContent() {
                         selected={selectedJob?.id === job.id}
                         isFavorite={favoriteJobIds.has(job.id)}
                         favoriteLoading={favoriteLoadingJobId === job.id}
-                        deadlineNow={deadlineNow}
                         onSelect={setSelectedJobId}
                         onFavorite={handleFavorite}
                         t={t}
