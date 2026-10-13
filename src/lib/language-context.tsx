@@ -245,10 +245,9 @@ const translations: Record<Locale, Record<string, string>> = {
     "faq5.a": "你可以通过平台内的客服系统提交问题，也可以发送邮件至 support@liorvix.com。我们会优先处理与账号、简历、申请和功能使用相关的问题，并在 24 小时内回复。",
     // 平台介绍
     "intro.greeting": "亲爱的同学：",
-    "intro.p1": "当几乎所有机构都在把自己包装成精致的都市丽人，穿西装在高档写字楼里谈“赋能”“赛道”时，我们选择一头扎进泥土里。泥土里有被折叠的真实信息——那些机构不愿明说“这个岗位今年只招三人”的数据；那些被包装成“独家”其实公开可查的链接；那些用漂亮话掩盖的冰冷但有用的行业真相。泥土里也有被消费升级和求职焦虑抛弃的普通学生——他们不是不想花十几万块买安心，是花不起；不是不想被精心服务，是发现所谓精心服务最终只是为了把自己塞进更贵的链条。",
-    "intro.p2": "对于一个清醒意识到求职重要性的同学来说，能花极低的成本解决最直接的问题，就是最大的进步。",
-    "intro.p3": "我们管这叫“决策降级”——不是消费降级，是把选择权、评判权、止损权，一样一样还给你。以前做一个求职决策，先被销售教育两小时，再被合同困住半年，最后被维权消耗一个月。现在，你来决定值不值，你来决定要不要继续，你来决定什么时候转身就走。",
-    "intro.p4": "我们只负责一件事：把真正有用的工具，做到足够便宜、足够直接、足够没废话。",
+    "intro.signoff": "与你一同踏实前行的我们",
+    "intro.valediction": "谨启",
+    "intro.body": "一路走来，我们深知，人生关键的选择时刻，大多是孤独的。\n\n很多重要的信息，散落各处、隐晦不清。它们明明是公开的真相，却细碎、零散，很少有人愿意耐心整理、直白讲透。\n\n于是很多人只能凭着猜测做决定，带着忐忑往前走。\n\n我们见过太多认真努力的同学，却困在迷茫里。\n不是你不够优秀，也不是你不够努力，\n只是没有人帮你把路照亮，没有人把真实的情况、现实的利弊，诚恳地告诉你。\n\n这也是我们做这件事，最纯粹的初心。\n\n我们不想做华丽的包装，不讲空洞的漂亮话，也不制造焦虑。\n我们只想俯身做一件踏实、朴素的小事：\n把那些真实、有用、却极少被摊开来讲的信息，一点点收集、核对、整理清楚。\n\n我们希望你做的每一次选择，\n不是跟风、不是将就、不是为了换取一份昂贵的心安，\n而是看得清楚、想得明白、选得笃定。\n\n真正的安心，不该来自别人的承诺，应该来自你自己的知情和判断。\n\n在这里，所有的选择权都在你手上。\n值不值得，你说了算；要不要前行，你说了算。\n\n我们只安静地做一束光，\n帮你看清前路、看清现实、看清自己的方向。\n\n愿你往后每一步选择，都清醒、踏实、不慌不忙。",
     // 功能页面
     "page.jobs.title": "岗位查询",
     "page.jobs.eyebrow": "岗位探索",
@@ -1591,10 +1590,9 @@ const translations: Record<Locale, Record<string, string>> = {
     "faq5.a": "你可以透過平台內的客服系統提交問題，也可以發送郵件至 support@liorvix.com。我們會優先處理與帳號、履歷、申請和功能使用相關的問題，並在 24 小時內回覆。",
     // 平台介紹
     "intro.greeting": "親愛的同學：",
-    "intro.p1": "當幾乎所有機構都在把自己包裝成精緻的都市麗人，穿西裝在高檔寫字樓裡談「賦能」「賽道」時，我們選擇一頭扎進泥土裡。泥土裡有被摺疊的真實資訊——那些機構不願明說「這個崗位今年只招三人」的數據；那些被包裝成「獨家」其實公開可查的連結；那些用漂亮話掩蓋的冰冷但有用的行業真相。泥土裡也有被消費升級和求職焦慮拋棄的普通學生——他們不是不想花十幾萬塊買安心，是花不起；不是不想被精心服務，是發現所謂精心服務最終只是為了把自己塞進更貴的鏈條。",
-    "intro.p2": "對於一個清醒意識到求職重要性的同學來說，能花極低的成本解決最直接的問題，就是最大的進步。",
-    "intro.p3": "我們管這叫「決策降級」——不是消費降級，是把選擇權、評判權、止損權，一樣一樣還給你。以前做一個求職決策，先被銷售教育兩小時，再被合同困住半年，最後被維權消耗一個月。現在，你來決定值不值，你來決定要不要繼續，你來決定什麼時候轉身就走。",
-    "intro.p4": "我們只負責一件事：把真正有用的工具，做到足夠便宜、足夠直接、足夠沒廢話。",
+    "intro.signoff": "與你一同踏實前行的我們",
+    "intro.valediction": "謹啟",
+    "intro.body": "一路走來，我們深知，人生關鍵的選擇時刻，大多是孤獨的。\n\n很多重要的資訊，散落各處、隱晦不清。它們明明是公開的真相，卻細碎、零散，很少有人願意耐心整理、直白講透。\n\n於是很多人只能憑著猜測做決定，帶著忐忑往前走。\n\n我們見過太多認真努力的同學，卻困在迷茫裡。\n不是你不夠優秀，也不是你不夠努力，\n只是沒有人幫你把路照亮，沒有人把真實的情況、現實的利弊，誠懇地告訴你。\n\n這也是我們做這件事，最純粹的初心。\n\n我們不想做華麗的包裝，不講空洞的漂亮話，也不製造焦慮。\n我們只想俯身做一件踏實、樸素的小事：\n把那些真實、有用、卻極少被攤開來講的資訊，一點點收集、核對、整理清楚。\n\n我們希望你做的每一次選擇，\n不是跟風、不是將就、不是為了換取一份昂貴的心安，\n而是看得清楚、想得明白、選得篤定。\n\n真正的安心，不該來自別人的承諾，應該來自你自己的知情和判斷。\n\n在這裡，所有的選擇權都在你手上。\n值不值得，你說了算；要不要前行，你說了算。\n\n我們只安靜地做一束光，\n幫你看清前路、看清現實、看清自己的方向。\n\n願你往後每一步選擇，都清醒、踏實、不慌不忙。",
     // 功能頁面
     "page.jobs.title": "崗位查詢",
     "page.jobs.eyebrow": "崗位探索",
@@ -2933,10 +2931,9 @@ const translations: Record<Locale, Record<string, string>> = {
     "faq5.a": "You can submit questions through the in-platform support system or email support@liorvix.com. We prioritize issues related to your account, resume, applications, and feature usage, and will respond within 24 hours.",
     // Platform Introduction
     "intro.greeting": "Dear Student,",
-    "intro.p1": "While almost all agencies package themselves as polished urban professionals, wearing suits in fancy office buildings talking about \"empowerment\" and \"market segments,\" we choose to dive straight into the mud. In the mud lies the folded truth — data that agencies won't openly share like \"this position only hires three people this year\"; links that are packaged as \"exclusive\" but are actually publicly available; cold but useful industry truths hidden behind fancy words. The mud also holds ordinary students abandoned by consumption upgrades and job-seeking anxiety — they don't refuse to spend hundreds of thousands for peace of mind, they simply can't afford it; they don't refuse to be carefully served, they just realize that so-called careful service is ultimately just about squeezing them into a more expensive chain.",
-    "intro.p2": "For a student who is clearly aware of the importance of job seeking, being able to solve the most direct problems at the lowest cost is the greatest progress.",
-    "intro.p3": "We call this \"decision downgrade\" — not consumption downgrade, but returning the right to choose, judge, and cut losses back to you, one by one. Before, making a job-seeking decision meant being educated by sales for two hours, trapped by a contract for six months, and consumed by rights protection for a month. Now, you decide if it's worth it, you decide whether to continue, you decide when to walk away.",
-    "intro.p4": "We are only responsible for one thing: making truly useful tools cheap enough, direct enough, and without nonsense.",
+    "intro.signoff": "The ones walking steadily beside you",
+    "intro.valediction": "Sincerely,",
+    "intro.body": "Looking back on the road we have traveled, we know this too well: life's pivotal moments of choice are, more often than not, lonely ones.\n\nSo much of the information that matters sits scattered and half-hidden. It is public truth — yet fragmented and dispersed, and few are willing to patiently gather it and speak it plainly.\n\nSo many people can only decide on guesswork, moving forward with unease.\n\nWe have seen too many earnest, hardworking students lost in that fog.\nIt is not that you are not good enough, nor that you have not tried hard enough —\nonly that no one helped light the road for you, no one told you, honestly, how things truly are and what the real trade-offs look like.\n\nThat is the purest reason we do this work.\n\nWe have no interest in glossy packaging, empty slogans, or manufactured anxiety.\nWe simply want to bend down and do one humble, honest thing well:\ntake the information that is true, useful, and rarely laid out in the open, and collect, verify, and organize it — bit by bit — into clarity.\n\nWe hope every choice you make\nis not about following the crowd, not about settling, not about trading for an expensive peace of mind,\nbut about seeing clearly, thinking it through, and choosing with conviction.\n\nTrue peace of mind should not come from someone else's promises. It should come from your own knowledge and judgment.\n\nHere, every choice is yours to make.\nWhether it is worth it — you decide. Whether to go on — you decide.\n\nWe simply want to be a quiet light,\nhelping you see the road ahead, see reality, and see your own direction.\n\nMay every choice you make from here on be clear-eyed, grounded, and unhurried.",
     // Feature Pages
     "page.jobs.title": "Job Search",
     "page.jobs.eyebrow": "Job Explorer",
