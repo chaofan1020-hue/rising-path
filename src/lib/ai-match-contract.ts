@@ -93,6 +93,55 @@ export const AI_MATCH_RESPONSE_SCHEMA: Record<string, unknown> = {
   required: ['matches'],
 };
 
+const explanationMatchSchema = z.object({
+  job_id: z.number().int().positive(),
+  match_reason: z.string().trim().min(1).max(2000),
+  evidence: z.array(z.string().trim().min(1).max(500)).max(8),
+  key_gaps: z.array(z.string().trim().min(1).max(500)).max(8),
+  suggestions: z.string().trim().min(1).max(2000),
+});
+
+export type MatchExplanation = z.infer<typeof explanationMatchSchema>;
+
+export const AI_MATCH_EXPLANATION_SCHEMA: Record<string, unknown> = {
+  type: 'object',
+  additionalProperties: false,
+  properties: {
+    matches: {
+      type: 'array',
+      minItems: 1,
+      items: {
+        type: 'object',
+        additionalProperties: false,
+        properties: {
+          job_id: { type: 'integer', minimum: 1 },
+          match_reason: { type: 'string', minLength: 1 },
+          evidence: { type: 'array', maxItems: 4, items: { type: 'string', minLength: 1 } },
+          key_gaps: { type: 'array', maxItems: 4, items: { type: 'string', minLength: 1 } },
+          suggestions: { type: 'string', minLength: 1 },
+        },
+        required: ['job_id', 'match_reason', 'evidence', 'key_gaps', 'suggestions'],
+      },
+    },
+  },
+  required: ['matches'],
+};
+
+export function parseMatchExplanations(raw: string): MatchExplanation[] {
+  const normalized = raw
+    .trim()
+    .replace(/^```(?:json)?\s*/i, '')
+    .replace(/\s*```$/, '')
+    .trim();
+  const parsed: unknown = JSON.parse(normalized);
+  const matches = Array.isArray(parsed)
+    ? parsed
+    : typeof parsed === 'object' && parsed !== null && 'matches' in parsed
+      ? (parsed as { matches: unknown }).matches
+      : parsed;
+  return z.array(explanationMatchSchema).min(1).parse(matches);
+}
+
 export function parseModelMatches(raw: string): ModelMatch[] {
   const normalized = raw
     .trim()

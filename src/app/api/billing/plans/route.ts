@@ -34,9 +34,10 @@ export async function GET() {
     }),
     billing: {
       enabled: getBillingConfig().enabled,
-      wechatEnabled: readiness.wechat.enabled && readiness.wechat.configured,
+      // This rollout exposes only Alipay computer website payment.
+      wechatEnabled: false,
       alipayEnabled: readiness.alipay.enabled && readiness.alipay.configured,
-      checkoutReady: readiness.checkoutReady,
+      checkoutReady: readiness.alipay.enabled && readiness.alipay.configured,
       displayCurrency: BILLING_DISPLAY_CURRENCY,
       chargeCurrency: defaultCurrency,
     },

@@ -85,6 +85,7 @@ function Lanyard({
   lanyardWidth = 1,
 }: LanyardProps) {
   const [isMobile, setIsMobile] = useState<boolean>(() => typeof window !== 'undefined' && window.innerWidth < 768);
+  const [isReady, setIsReady] = useState(false);
 
   useEffect(() => {
     const handleResize = (): void => setIsMobile(window.innerWidth < 768);
@@ -93,12 +94,15 @@ function Lanyard({
   }, []);
 
   return (
-    <div className="lanyard-wrapper">
+    <div className={`lanyard-wrapper${isReady ? ' is-ready' : ''}`}>
       <Canvas
         camera={{ position, fov }}
         dpr={[1, isMobile ? 1.5 : 2]}
-        gl={{ alpha: transparent }}
-        onCreated={({ gl }) => gl.setClearColor(new THREE.Color(0x000000), transparent ? 0 : 1)}
+        gl={{ alpha: transparent, powerPreference: 'high-performance' }}
+        onCreated={({ gl }) => {
+          gl.setClearColor(new THREE.Color(0x000000), transparent ? 0 : 1);
+          requestAnimationFrame(() => setIsReady(true));
+        }}
       >
         <ambientLight intensity={Math.PI} />
         <Physics gravity={gravity} timeStep={isMobile ? 1 / 30 : 1 / 60}>

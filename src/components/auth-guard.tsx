@@ -7,6 +7,8 @@ import { Button } from '@/components/ui/button';
 import { Loader2 as AnimatedLoader } from '@/components/ui/loader-2';
 import { getSupabaseBrowserClient } from '@/lib/supabase-browser';
 import { isEmailVerified } from '@/lib/auth-shared';
+import { createLocalDevUser } from '@/lib/dev-auth';
+import { readLocalDevAuthEnabled } from '@/lib/dev-auth-client';
 
 interface AuthContextType {
   user: User | null;
@@ -68,6 +70,10 @@ export function AuthGuard({
 
     const init = async () => {
       try {
+        if (await readLocalDevAuthEnabled()) {
+          applySession(createLocalDevUser());
+          return;
+        }
         const client = await getSupabaseBrowserClient();
         const {
           data: { session },

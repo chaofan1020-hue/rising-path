@@ -55,6 +55,8 @@ export function parsePhenomJob(rawValue: unknown, options: ConnectorParseOptions
   const workplace = normalizeWorkplace([
     raw.workplaceType,
     raw.workplace_type,
+    raw.RemoteType,
+    raw.remoteType,
     raw.location,
     raw.multi_location,
     raw.isRemote === true ? 'remote' : '',
@@ -65,7 +67,7 @@ export function parsePhenomJob(rawValue: unknown, options: ConnectorParseOptions
   const category = normalizeEmploymentCategory([employmentType, jobType, title, description]);
   // Phenom list teasers are not treated as candidate requirements. Only the
   // job detail's official description can provide experience, pay or deadline.
-  const experience = parseExperience([description]);
+  const experience = parseExperience([title, description]);
   const salary = extractSalaryFromDescription(description);
   const deadline = extractDeadline([raw.applicationDeadline, raw.application_deadline, raw.deadline, description]);
   const fields = sourceEvidence(sourceUrl, 'phenom', {

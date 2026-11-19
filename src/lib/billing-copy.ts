@@ -15,6 +15,7 @@ export type BillingCopy = {
   paymentTitle: string;
   wechat: string;
   alipay: string;
+  alipayDesktop: string;
   wechatH5: string;
   alipayWap: string;
   createOrder: string;
@@ -73,6 +74,7 @@ export const BILLING_COPY: Record<Locale, BillingCopy> = {
     paymentTitle: '支付',
     wechat: '微信支付',
     alipay: '支付宝',
+    alipayDesktop: '支付宝电脑网站支付',
     wechatH5: '微信支付',
     alipayWap: '支付宝',
     createOrder: '去支付',
@@ -129,6 +131,7 @@ export const BILLING_COPY: Record<Locale, BillingCopy> = {
     paymentTitle: '付款',
     wechat: '微信支付',
     alipay: '支付寶',
+    alipayDesktop: '支付寶電腦網站付款',
     wechatH5: '微信支付',
     alipayWap: '支付寶',
     createOrder: '去付款',
@@ -185,6 +188,7 @@ export const BILLING_COPY: Record<Locale, BillingCopy> = {
     paymentTitle: 'Pay',
     wechat: 'WeChat Pay',
     alipay: 'Alipay',
+    alipayDesktop: 'Alipay (desktop website)',
     wechatH5: 'WeChat Pay',
     alipayWap: 'Alipay',
     createOrder: 'Pay',

@@ -26,6 +26,7 @@ import PageBackButton from "@/components/page-back-button";
 import { readActiveResumeId, writeActiveResumeId } from "@/lib/active-resume";
 import { pickEligibleResumeId } from "@/lib/resume-availability";
 import { useResumeAvailability } from "@/hooks/use-resume-availability";
+import { useCreditPrices } from "@/hooks/use-credit-prices";
 import { ResumeAvailabilityHint } from "@/components/resume-availability-hint";
 
 // 通用下拉选择器（与 jobs 页一致的 Popover 交互，避免原生 select 交互问题）
@@ -476,6 +477,7 @@ function TrendChart({ points, current }: { points: HistoryPoint[]; current: numb
 
 function MockInterviewContent() {
   const { t, locale } = useLanguage();
+  const { actionLabel } = useCreditPrices();
   const [stage, setStage] = useState<Stage>("setup");
 
   // 设置项
@@ -491,6 +493,12 @@ function MockInterviewContent() {
   const { loading: resumesLoading, error: resumesError, availability, reload: reloadResumes } = useResumeAvailability<ResumeItem>();
   const resumes = availability.eligible;
   const [selectedResumeId, setSelectedResumeId] = useState<number | null>(null);
+  const urlPrefillRef = useRef<{ company: string; jobId: number | null; position: string; resumeId: number | null }>({
+    company: '',
+    jobId: null,
+    position: '',
+    resumeId: null,
+  });
 
   // 企业面试基因预览（设置页）
   interface DNAPreview {
@@ -898,12 +906,50 @@ function MockInterviewContent() {
   }, []);
 
   useEffect(() => {
+    const params = new URLSearchParams(window.location.search);
+    const company = (params.get("company") || "").trim();
+    const position = (params.get("position") || "").trim();
+    const jobIdValue = Number(params.get("jobId"));
+    const resumeIdValue = Number(params.get("resumeId"));
+    const jobId = Number.isInteger(jobIdValue) && jobIdValue > 0 ? jobIdValue : null;
+    const resumeId = Number.isInteger(resumeIdValue) && resumeIdValue > 0 ? resumeIdValue : null;
+    urlPrefillRef.current = { company, jobId, position, resumeId };
+    if (company) {
+      setCompanies((current) => current.includes(company) ? current : [company, ...current]);
+      setSelectedCompany(company);
+    }
+  }, []);
+
+  useEffect(() => {
     if (resumesLoading) return;
     const stored = readActiveResumeId();
-    const next = pickEligibleResumeId(resumes, stored);
+    const preferred = urlPrefillRef.current.resumeId || stored;
+    const next = pickEligibleResumeId(resumes, preferred);
     setSelectedResumeId(next);
     if (next) writeActiveResumeId(next);
   }, [resumes, resumesLoading]);
+
+  const applyPrefillJob = (nextJobs: JobItem[]) => {
+    const prefill = urlPrefillRef.current;
+    const pendingJobId = prefill.jobId;
+    let merged = nextJobs;
+    if (pendingJobId && !merged.some((job) => job.id === pendingJobId) && (prefill.position || prefill.company)) {
+      merged = [{
+        id: pendingJobId,
+        title: prefill.position || String(pendingJobId),
+        company: selectedCompany || prefill.company,
+      }, ...merged];
+    }
+    setJobs(merged);
+    setSelectedJobId((current) => {
+      if (pendingJobId && merged.some((job) => job.id === pendingJobId)) {
+        urlPrefillRef.current = { ...prefill, jobId: null };
+        return pendingJobId;
+      }
+      if (current && merged.some((job) => job.id === current)) return current;
+      return null;
+    });
+  };
 
   // 公司变化时加载岗位
   useEffect(() => {
@@ -917,8 +963,7 @@ function MockInterviewContent() {
     if (cachedJobs) {
       const starred = favoriteJobs.filter((job) => job.company === selectedCompany);
       const merged = [...starred, ...cachedJobs].filter((job, index, all) => all.findIndex((item) => item.id === job.id) === index);
-      setJobs(merged);
-      setSelectedJobId(null);
+      applyPrefillJob(merged);
       setJobsLoading(false);
       return;
     }
@@ -934,7 +979,7 @@ function MockInterviewContent() {
           jobsByCompanyRef.current.set(companyAtRequest, nextJobs);
           pickerJobsCache.set(companyAtRequest, nextJobs);
           const starred = favoriteJobs.filter((job) => job.company === companyAtRequest);
-          setJobs([...starred, ...nextJobs].filter((job, index, all) => all.findIndex((item) => item.id === job.id) === index));
+          applyPrefillJob([...starred, ...nextJobs].filter((job, index, all) => all.findIndex((item) => item.id === job.id) === index));
         }
       })
       .catch((error) => {
@@ -943,7 +988,6 @@ function MockInterviewContent() {
       .finally(() => {
         if (!controller.signal.aborted && companyAtRequest === selectedCompany) setJobsLoading(false);
       });
-    setSelectedJobId(null);
     return () => controller.abort();
   }, [selectedCompany, favoriteJobs]);
 
@@ -3718,7 +3762,7 @@ function MockInterviewContent() {
                   {streaming ? (
                     <><Loader2 className="h-5 w-5 mr-2 animate-spin" />{t("mockInterview.starting")}</>
                   ) : (
-                    <><Mic className="h-5 w-5 mr-2" />{t("mockInterview.start")}</>
+                    <><Mic className="h-5 w-5 mr-2" />{actionLabel(t("mockInterview.start"), "interview_turn", t("credits.unit"))}</>
                   )}
                 </Button>
               </ModalFooter>

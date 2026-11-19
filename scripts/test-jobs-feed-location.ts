@@ -6,6 +6,8 @@ import { isTargetRegion } from '@/lib/job-region-scope';
 assert.equal(normalizeFeedLocation({ city: 'San Francisco', state: 'CA', country: 'US' }), 'San Francisco, CA, US');
 assert.equal(normalizeFeedLocation([{ city: 'London' }, { city: 'New York' }]), 'London, New York');
 assert.equal(isTargetRegion('Singapore', 'Singapore'), true);
+assert.equal(isTargetRegion('Americas', null), true);
+assert.equal(isTargetRegion('ANZ', null), true);
 assert.equal(isTargetRegion('Berlin', 'Germany'), false);
 assert.equal(isTargetRegion('Albany, NY', 'NY'), true);
 assert.equal(isTargetRegion('Morristown, NJ', 'NJ'), true);
@@ -167,6 +169,312 @@ const appleEvidence = appleListing?.field_evidence as {
 } | undefined;
 assert.equal(appleEvidence?.fields?.location?.status, 'verified');
 assert.equal(appleEvidence?.fields?.location?.source, 'official_payload');
+const shopifyListing = normalizeFeedItem({
+  id: 'bb323341-092c-4be6-b5f4-608fe66af833',
+  external_job_id: 'bb323341-092c-4be6-b5f4-608fe66af833',
+  company_name: 'Shopify',
+  title: 'Account Executive, Existing Business',
+  source_url: 'https://www.shopify.com/careers/account-executive-existing-business_bb323341-092c-4be6-b5f4-608fe66af833',
+  location: 'Americas',
+  description: 'A Shopify official careers description with more than three hundred characters of real role detail so the body is kept.',
+  employment_type: 'FullTime',
+  workplace_type: 'Remote',
+  date_posted: '2026-09-08',
+  source_type: 'shopify',
+  source_evidence: {
+    source_type: 'shopify',
+    structured_field_sources: {
+      location: 'official_payload',
+      employment_type: 'official_payload',
+      workplace_type: 'official_payload',
+      date_posted: 'official_payload',
+    },
+  },
+});
+assert.equal(shopifyListing?.region, 'Americas');
+assert.equal(shopifyListing?.location_source, 'official_payload');
+assert.equal(shopifyListing?.employment_type, 'FullTime');
+assert.equal(shopifyListing?.workplace_type, 'Remote');
+assert.equal(shopifyListing?.posted_at, '2026-09-08T00:00:00.000Z');
+const shopifyEvidence = shopifyListing?.field_evidence as {
+  fields?: Record<string, { status?: string; source?: string }>;
+} | undefined;
+assert.equal(shopifyEvidence?.fields?.location?.status, 'verified');
+assert.equal(shopifyEvidence?.fields?.workplace_type?.status, 'verified');
+const airbnbListing = normalizeFeedItem({
+  id: '8184174',
+  external_job_id: '8184174',
+  company_name: 'Airbnb',
+  title: 'Account Manager',
+  source_url: 'https://careers.airbnb.com/positions/8184174?gh_jid=8184174',
+  location: 'London, United Kingdom',
+  country: 'United Kingdom',
+  description: 'An Airbnb official Greenhouse description with more than three hundred characters of real role detail so the body is kept for the public catalog.',
+  workplace_type: 'Hybrid',
+  date_posted: '2026-09-09T04:35:19-04:00',
+  source_type: 'greenhouse',
+  source_evidence: {
+    source_type: 'official_ats',
+    structured_field_sources: {
+      location: 'official_payload',
+      workplace_type: 'official_payload',
+      date_posted: 'official_payload',
+    },
+  },
+});
+assert.equal(airbnbListing?.region, 'London, United Kingdom');
+assert.equal(airbnbListing?.location_source, 'official_payload');
+assert.equal(airbnbListing?.workplace_type, 'Hybrid');
+assert.equal(airbnbListing?.posted_at, '2026-09-09T08:35:19.000Z');
+const airbnbEvidence = airbnbListing?.field_evidence as {
+  fields?: Record<string, { status?: string; source?: string }>;
+} | undefined;
+assert.equal(airbnbEvidence?.fields?.location?.status, 'verified');
+assert.equal(airbnbEvidence?.fields?.workplace_type?.status, 'verified');
+assert.equal(airbnbListing?.valid_through, null);
+const lyftListing = normalizeFeedItem({
+  id: '8792050002',
+  external_job_id: '8792050002',
+  company_name: 'Lyft',
+  title: 'Account Manager, Automotive Vertical',
+  source_url: 'https://app.careerpuck.com/job-board/lyft/job/8792050002?gh_jid=8792050002',
+  location: 'New York, NY',
+  country: 'United States',
+  description: 'A Lyft official Greenhouse description with more than three hundred characters of real role detail so the body is kept for the public catalog.',
+  date_posted: '2026-09-10T10:47:35-04:00',
+  source_type: 'greenhouse',
+  source_evidence: {
+    source_type: 'official_ats',
+    structured_field_sources: {
+      location: 'official_payload',
+      date_posted: 'official_payload',
+    },
+  },
+});
+assert.equal(lyftListing?.region, 'New York, NY, United States');
+assert.equal(lyftListing?.location_source, 'official_payload');
+assert.equal(lyftListing?.workplace_type, null);
+assert.equal(lyftListing?.valid_through, null);
+assert.equal(lyftListing?.posted_at, '2026-09-10T14:47:35.000Z');
+const lyftEvidence = lyftListing?.field_evidence as {
+  fields?: Record<string, { status?: string; source?: string }>;
+} | undefined;
+assert.equal(lyftEvidence?.fields?.location?.status, 'verified');
+const uberListing = normalizeFeedItem({
+  id: '149940',
+  external_job_id: '149940',
+  company_name: 'Uber',
+  title: 'Engineering Manager - Inventory Prediction & Availability',
+  source_url: 'https://iaziqy.fa.ocs.oraclecloud.com/hcmUI/CandidateExperience/en/sites/UberCareers/job/149940',
+  location: 'San Francisco, CA, United States',
+  country: 'United States',
+  description: 'An Uber official Oracle description with more than three hundred characters of real role detail so the body is kept for the public catalog.',
+  employment_type: 'Full time',
+  date_posted: '2026-09-15',
+  source_type: 'oracle_hcm',
+  source_evidence: {
+    source_type: 'official_ats',
+    structured_field_sources: {
+      location: 'official_payload',
+      employment_type: 'official_payload',
+      date_posted: 'official_payload',
+    },
+  },
+});
+assert.equal(uberListing?.region, 'San Francisco, CA, United States');
+assert.equal(uberListing?.location_source, 'official_payload');
+assert.equal(uberListing?.employment_type, 'Full time');
+assert.equal(uberListing?.workplace_type, null);
+assert.equal(uberListing?.valid_through, null);
+const uberEvidence = uberListing?.field_evidence as {
+  fields?: Record<string, { status?: string; source?: string }>;
+} | undefined;
+assert.equal(uberEvidence?.fields?.location?.status, 'verified');
+const ciscoListing = normalizeFeedItem({
+  id: 'CISCISGLOBAL2016926EXTERNALENGLOBAL',
+  external_job_id: 'CISCISGLOBAL2016926EXTERNALENGLOBAL',
+  company_name: 'Cisco',
+  title: 'Product Lifecycle Supply Chain Program Manager',
+  source_url: 'https://careers.cisco.com/global/en/job/CISCISGLOBAL2016926EXTERNALENGLOBAL',
+  location: 'San Jose, California, United States of America',
+  country: 'United States of America',
+  description: 'A Cisco official Phenom description with more than three hundred characters of real role detail so the body is kept for the public catalog. The application window is expected to close on: 10/15/2026 Job posting may be removed earlier if the position is filled.',
+  employment_type: 'Full time',
+  workplace_type: 'Hybrid',
+  date_posted: '2026-09-01T00:00:00.000+0000',
+  source_type: 'phenom',
+  source_evidence: {
+    source_type: 'official_ats',
+    structured_field_sources: {
+      location: 'official_payload',
+      employment_type: 'official_payload',
+      workplace_type: 'official_payload',
+      date_posted: 'official_payload',
+    },
+  },
+});
+assert.equal(ciscoListing?.region, 'San Jose, California, United States of America');
+assert.equal(ciscoListing?.location_source, 'official_payload');
+assert.equal(ciscoListing?.employment_type, 'Full time');
+assert.equal(ciscoListing?.workplace_type, 'Hybrid');
+assert.equal(ciscoListing?.valid_through, '2026-10-15T23:59:59.999Z');
+const ciscoEvidence = ciscoListing?.field_evidence as {
+  fields?: Record<string, { status?: string; source?: string }>;
+} | undefined;
+assert.equal(ciscoEvidence?.fields?.location?.status, 'verified');
+assert.equal(ciscoEvidence?.fields?.workplace_type?.status, 'verified');
+assert.equal(ciscoEvidence?.fields?.deadline?.status, 'verified');
+assert.equal(ciscoEvidence?.fields?.deadline?.source, 'official_description');
+const qualcommListing = normalizeFeedItem({
+  id: '3094633',
+  external_job_id: '3094633',
+  company_name: 'Qualcomm',
+  title: 'Data Engineer, Staff (Semiconductor Engineering)',
+  source_url: 'https://careers.qualcomm.com/careers/job/446721048564',
+  location: 'San Diego, California, United States of America',
+  country: 'United States of America',
+  description: 'A Qualcomm official Eightfold description with more than three hundred characters of real role detail so the body is kept for the public catalog.',
+  workplace_type: 'onsite',
+  date_posted: '2026-09-15',
+  source_type: 'eightfold',
+  source_evidence: {
+    source_type: 'official_ats',
+    structured_field_sources: {
+      location: 'official_payload',
+      workplace_type: 'official_payload',
+      date_posted: 'official_payload',
+    },
+  },
+});
+assert.equal(qualcommListing?.region, 'San Diego, California, United States of America');
+assert.equal(qualcommListing?.location_source, 'official_payload');
+assert.equal(qualcommListing?.workplace_type, 'onsite');
+assert.equal(qualcommListing?.valid_through, null);
+const qualcommEvidence = qualcommListing?.field_evidence as {
+  fields?: Record<string, { status?: string; source?: string }>;
+} | undefined;
+assert.equal(qualcommEvidence?.fields?.location?.status, 'verified');
+assert.equal(qualcommEvidence?.fields?.workplace_type?.status, 'verified');
+assert.equal(qualcommEvidence?.fields?.deadline?.status, 'pending_recheck');
+const amdListing = normalizeFeedItem({
+  id: '85884',
+  external_job_id: '85884',
+  company_name: 'AMD',
+  title: 'AI Data Center System Architect',
+  source_url: 'https://careers.amd.com/careers-home/jobs/85884',
+  location: 'Santa Clara, California, United States',
+  country: 'United States',
+  description: 'A AMD official Jibe description with more than three hundred characters of real role detail so the body is kept for the public catalog. Compensation is USD $229,600.00 to USD $344,400.00 per year.',
+  employment_type: 'FULL_TIME',
+  date_posted: '2026-09-15T07:00:00+0000',
+  source_type: 'jibe',
+  source_evidence: {
+    source_type: 'official_ats',
+    structured_field_sources: {
+      location: 'official_payload',
+      employment_type: 'official_payload',
+      date_posted: 'official_payload',
+    },
+  },
+});
+assert.equal(amdListing?.region, 'Santa Clara, California, United States');
+assert.equal(amdListing?.location_source, 'official_payload');
+assert.equal(amdListing?.employment_type, 'FULL_TIME');
+assert.equal(amdListing?.workplace_type, null);
+assert.equal(amdListing?.valid_through, null);
+const amdEvidence = amdListing?.field_evidence as {
+  fields?: Record<string, { status?: string; source?: string }>;
+} | undefined;
+assert.equal(amdEvidence?.fields?.location?.status, 'verified');
+assert.equal(amdEvidence?.fields?.employment_type?.status, 'verified');
+assert.equal(amdEvidence?.fields?.deadline?.status, 'pending_recheck');
+const dellListing = normalizeFeedItem({
+  id: '293104',
+  external_job_id: '293104',
+  company_name: 'Dell Technologies',
+  title: 'Consultant Machine Learning & Knowledge Graph Engineer',
+  source_url: 'https://iawmqy.fa.ocs.oraclecloud.com/hcmUI/CandidateExperience/en/sites/careers/job/293104',
+  location: 'Round Rock, TX, United States',
+  country: 'United States',
+  description: 'A Dell Technologies official Oracle description with more than three hundred characters of real role detail so the body is kept for the public catalog.',
+  employment_type: 'Full time',
+  workplace_type: 'On-site',
+  date_posted: '2026-09-15',
+  valid_through: '2026-10-31T04:00:00+00:00',
+  source_type: 'oracle_hcm',
+  source_evidence: {
+    source_type: 'official_ats',
+    structured_field_sources: {
+      location: 'official_payload',
+      employment_type: 'official_payload',
+      workplace_type: 'official_payload',
+      date_posted: 'official_payload',
+      valid_through: 'official_payload',
+    },
+  },
+});
+assert.equal(dellListing?.region, 'Round Rock, TX, United States');
+assert.equal(dellListing?.location_source, 'official_payload');
+assert.equal(dellListing?.employment_type, 'Full time');
+assert.equal(dellListing?.workplace_type, 'On-site');
+assert.equal(dellListing?.valid_through, '2026-10-31T04:00:00.000Z');
+const dellEvidence = dellListing?.field_evidence as {
+  fields?: Record<string, { status?: string; source?: string }>;
+} | undefined;
+assert.equal(dellEvidence?.fields?.location?.status, 'verified');
+assert.equal(dellEvidence?.fields?.workplace_type?.status, 'verified');
+assert.equal(dellEvidence?.fields?.deadline?.status, 'verified');
+const broadcomListing = normalizeFeedItem({
+  id: 'R026486',
+  external_job_id: '/job/USA-CA-San-Jose-Innovation-Drive/Digital-Design-Verification-Engineer_R026486',
+  company_name: 'Broadcom',
+  title: 'Digital Design Verification Engineer',
+  source_url: 'https://broadcom.wd1.myworkdayjobs.com/External_Career/job/USA-CA-San-Jose-Innovation-Drive/Digital-Design-Verification-Engineer_R026486',
+  location: 'USA-CA San Jose Innovation Drive',
+  country: 'United States',
+  description: 'A Broadcom official Workday description with more than three hundred characters of real role detail so the body is kept for the public catalog.',
+  source_type: 'workday',
+  source_evidence: {
+    source_type: 'official_ats',
+    structured_field_sources: {
+      location: 'official_payload',
+    },
+  },
+});
+assert.equal(broadcomListing?.region, 'USA-CA San Jose Innovation Drive, United States');
+assert.equal(broadcomListing?.location_source, 'official_payload');
+assert.equal(broadcomListing?.valid_through, null);
+const broadcomEvidence = broadcomListing?.field_evidence as {
+  fields?: Record<string, { status?: string; source?: string }>;
+} | undefined;
+assert.equal(broadcomEvidence?.fields?.location?.status, 'verified');
+assert.equal(broadcomEvidence?.fields?.deadline?.status, 'pending_recheck');
+const servicenowListing = normalizeFeedItem({
+  id: '744000149968139',
+  external_job_id: '744000149968139',
+  company_name: 'ServiceNow',
+  title: 'Principal Platform Architect',
+  source_url: 'https://jobs.smartrecruiters.com/ServiceNow/744000149968139',
+  location: 'Sydney, NSW, Australia',
+  country: 'Australia',
+  description: 'A ServiceNow official SmartRecruiters description with more than three hundred characters of real role detail so the body is kept for the public catalog.',
+  source_type: 'smartrecruiters',
+  source_evidence: {
+    source_type: 'official_ats',
+    structured_field_sources: {
+      location: 'official_payload',
+    },
+  },
+});
+assert.equal(servicenowListing?.region, 'Sydney, NSW, Australia');
+assert.equal(servicenowListing?.location_source, 'official_payload');
+assert.equal(servicenowListing?.valid_through, null);
+const servicenowEvidence = servicenowListing?.field_evidence as {
+  fields?: Record<string, { status?: string; source?: string }>;
+} | undefined;
+assert.equal(servicenowEvidence?.fields?.location?.status, 'verified');
+assert.equal(servicenowEvidence?.fields?.deadline?.status, 'pending_recheck');
+
 assert.equal(isDisplayableJobDescription('A real job description with {context}.'), true);
 assert.equal(isDisplayableJobDescription('{"source_type":"public_feed","structured_field_sources":{}}'), false);
 assert.equal(normalizeFeedItem({
@@ -225,4 +533,44 @@ assert.equal(normalizeFeedItem({
   country: 'United States',
   source_type: 'amazon',
 })?.feed_has_date_posted, false);
+const citadelSitemap = normalizeFeedItem({
+  id: 'software-engineer-intern-us',
+  external_job_id: 'software-engineer-intern-us',
+  company_name: 'Citadel',
+  title: 'Software Engineer Intern Us',
+  source_url: 'https://www.citadel.com/careers/details/software-engineer-intern-us/',
+  location: 'United States',
+  country: 'United States',
+  source_type: 'sitemap',
+  source_evidence: {
+    source_type: 'sitemap',
+    structured_field_sources: { location: 'official_payload' },
+  },
+});
+assert.equal(citadelSitemap?.region, 'United States');
+assert.equal(citadelSitemap?.location_source, 'official_payload');
+assert.equal(normalizeFeedItem({
+  id: 'global-quantitative-strategies-gqs-quantitative-researcher',
+  external_job_id: 'global-quantitative-strategies-gqs-quantitative-researcher',
+  company_name: 'Citadel',
+  title: 'Global Quantitative Strategies Gqs Quantitative Researcher',
+  source_url: 'https://www.citadel.com/careers/details/global-quantitative-strategies-gqs-quantitative-researcher/',
+  source_type: 'sitemap',
+  source_evidence: { source_type: 'sitemap' },
+}), null);
+const citadelBrowser = normalizeFeedItem({
+  id: 'equities-citadel-associate-program-summer-internship-2028',
+  external_job_id: 'equities-citadel-associate-program-summer-internship-2028',
+  company_name: 'Citadel',
+  title: 'Equities Citadel Associate Program Summer Internship 2028',
+  source_url: 'https://www.citadel.com/careers/details/equities-citadel-associate-program-summer-internship-2028/',
+  location: 'New York',
+  description: 'A Citadel official careers description with more than three hundred characters of real role detail so the imported body is kept for the public catalog and AI matching.',
+  source_evidence: {
+    source_type: 'official_browser_detail',
+    structured_field_sources: { location: 'official_detail_page', description: 'official_detail_page' },
+  },
+});
+assert.equal(citadelBrowser?.region, 'New York');
+assert.equal(citadelBrowser?.location_source, 'official_detail_page');
 console.log('jobs feed location tests passed');

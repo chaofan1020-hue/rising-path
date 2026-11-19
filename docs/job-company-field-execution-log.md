@@ -2,6 +2,490 @@
 
 本记录对应 [`all-company-job-field-completion-plan.md`](all-company-job-field-completion-plan.md)。它记录真实运行结果，不以测试环境或历史快照代替生产验收。
 
+## 2026-09-20：Wave A 工厂第十五家 DoorDash
+
+执行位置：上游采集器 `/opt/global-jobs`。公司 ID `42571797-24cc-4915-b99d-9a127059cd43`，完整源 `68defe69-084f-4572-8388-b3afc3e0563b`。只给现有 `GreenhouseConnector` 增加 `board_tokens` 多看板去重，Airbnb / Lyft 的 `board_token` 路径保留。未改 IBM / Amazon / Workday / Salesforce / Oracle 连接器。未把 Wolt / Deliveroo 并进 DoorDash。美国站只作为 Feed 消费者，主 Feed 游标未重置。
+
+官方源探测（采集器出口，未猜测、未过 WAF）：
+
+- `careers.doordash.com` / `www.doordash.com/careers` / `careersatdoordash.com` HTML 仍是 HTTP 403，不当列表源，也不做验证码/Cookie 绕过。
+- 浏览器官网 `https://careersatdoordash.com/job-search` 显示 1–25 of 776，是 CMS listing 行，不是唯一岗位。申请链到 Greenhouse job-board，不是 403 HTML。
+- 完整官方列表是公开 Greenhouse API 五块互斥看板，按 job id 去重：`doordashusa` 462、`doordashcanada` 34、`doordashmexico` 23、`doordashaustralia` 32、`doordashindia` 20，合计唯一 ID **571**，跨板重复 0。`doordashglobal` 存在但 n=0。旧探测用的 `doordash` / `doordashus` / `doordashinc` 是错 token。
+- 稳定外部 ID 为 Greenhouse job id。申请 URL `https://job-boards.greenhouse.io/{board}/jobs/{id}`。
+- Dry-run 571/571，`source_complete=true`，`source_count_basis=complete_official_list`，`source_board_count=5`。20/20 样本有 title、地点、部门、官方 GH URL、正文≥300。截止日期/薪资/workplace/employment 官网列表未给，保持空，未猜测。
+- 776 不得当覆盖目标，也不能把 HTML 403 标成 incomplete。
+
+采集器验收（UTC 2026-09-20 08:47:07–08:47:19 列表 success）：
+
+| 指标 | 结果 |
+| ---: | ---: |
+| crawl | success，`publisher_reported_complete` |
+| 官方 / 发现 / 在招唯一 ID | 571 / 571 / 571 |
+| 看板 | usa 462 / canada 34 / mexico 23 / australia 32 / india 20 |
+| 覆盖 / 质量 | `coverage=complete`，`quality=ok`（地点 571、部门 571、正文≥300 为 571/571） |
+| 关闭 | 新公司，无历史关岗 |
+| 目录公司数 / failed | 90 / 0 |
+
+列表 `content=true` 已带全文，无需 `repair_job_details_task`。IBM 1850/1854、Workday 365/365、Airbnb 168、Lyft 178 仍 complete。连接器备份 `app/connectors.py.backup.before-doordash-20260920T084604Z`；Amazon `default_page_size=100`、IBM `default_page_size=1000` 未改。
+
+下一步：观察 3 个成功周期后标 `regular`。美国站若要补官方字段，需登记 host `boards-api.greenhouse.io` / `job-boards.greenhouse.io` / `careersatdoordash.com`，不得重置主 Feed，也不得绕过 careers HTML 403。Wave A 推荐队列已走完。
+
+## 2026-09-20：Wave A 工厂第十四家 Workday（公司）
+
+执行位置：上游采集器 `/opt/global-jobs`。公司 ID `4ca63e6f-d18a-49e4-bf68-d8de054bb951`，完整源 `1d3a6c86-7cad-489e-982d-aaa5efdd6f9a`。未改 IBM / Amazon / Salesforce / Oracle 连接器。DoorDash 仍停放。美国站只作为 Feed 消费者，主 Feed 游标未重置。复用现有 `WorkdayConnector`，没有新 ATS 类。
+
+官方源探测（采集器出口，未猜测）：
+
+- Greenhouse / Ashby / Lever 均 404，不是完整官方列表。
+- 官网 `https://www.workday.com/en-us/company/careers/overview.html` 指向 `workday.wd5.myworkdayjobs.com`。公开职位页跳到 `https://workday.wd5.myworkdayjobs.com/Workday`。
+- 完整官方列表是 Workday CXS `https://workday.wd5.myworkdayjobs.com/wday/cxs/workday/Workday/jobs`，`total` 365，低于分区帽 2000，无需 `partition_facets`。
+- 稳定外部 ID 为 listing `externalPath`（如 `/job/USAVAReston/...` / JR 号）。样本 20/20 有 title、地点、官方 URL。列表无正文、无部门、无截止日期/薪资。
+- `Workday_External` / `wd1` / `wd12` 不是当前对外招聘站。
+
+采集器验收（UTC 2026-09-20 08:06–08:07 列表 success）：
+
+| 指标 | 结果 |
+| ---: | ---: |
+| crawl | success，`publisher_reported_complete` |
+| 官方 / 发现 / 在招唯一 ID | 365 / 365 / 365 |
+| 覆盖 / 质量 | `coverage=complete`，`quality=partial`（列表无正文；已排队 1 批有界 Workday 详情 repair，`company_name=Workday`） |
+| 关闭 | 新公司，无历史关岗 |
+| 目录公司数 / failed | 89 / 0 |
+
+Repair 批次 80 后，正文≥300 为 80 / 365，未扩散到 Salesforce 或其他 Workday 租户。其余描述走现有 beat，不重开覆盖工单。
+
+下一步：观察 3 个成功周期后标 `regular`。美国站若要补官方字段，需登记 host `workday.wd5.myworkdayjobs.com`，不得重置主 Feed。Wave A 推荐队列只剩 DoorDash（官网 403，继续停放）。
+
+## 2026-09-20：Wave A 工厂第十三家 IBM
+
+执行位置：上游采集器 `/opt/global-jobs`。公司 ID `f3866a73-c3d6-4cf5-85c8-6bc0be0f86db`，完整源 `09d27856-e3af-44da-9214-15e25ba10df8`。未改 Amazon / Salesforce / Oracle / Eightfold 连接器。DoorDash 仍停放。美国站只作为 Feed 消费者，主 Feed 游标未重置。未把 IBM 加入 `DETAIL_PAGE_SOURCES`。
+
+官方源探测（采集器出口，未猜测、未过 WAF）：
+
+- Avature `ibmglobal.avature.net` / `careers.ibm.com` 列表 HTML 是 AWS WAF HTTP 202，不能当列表源，也不做验证码/Cookie 绕过。
+- 完整官方列表是 IBM Falcon search：`https://www-api.ibm.com/search/api/v1-1/ibmcom/appid/careers/responseFormat/json`，`appid=careers`，`scope=careers2`。采集器出口 `totalresults=1854`。
+- 稳定外部 ID 为 Avature `jobId` / `field_text_01`（如 `129622`）。申请 URL `https://careers.ibm.com/careers/JobDetail?jobId={id}`。
+- 地点 `field_keyword_19`，部门 `field_keyword_08`，工作方式 `field_keyword_17`。`dcdate` / `effectivedate` 只映射 `PostedDate`。`expiredate` 是 +4 年占位（2030-…），禁止当截止日期。
+- 列表 JSON 只有 teaser（约 240–256 字），详情 HTML 仍 WAF，故不跑 HTML repair。
+- Falcon `nr` 上限 1000。`page_size=100` 会在相邻页出现窗口重叠（约 50 个重复 ID）。现网连接器默认/上限改为 1000。
+
+采集器验收（UTC 2026-09-20 07:06–07:07 列表 success）：
+
+| 指标 | 结果 |
+| ---: | ---: |
+| crawl | success，`publisher_reported_complete` |
+| 官方 / 发现 / 在招唯一 ID | 1854 / 1850 / 1850 |
+| 覆盖 / 质量 | `coverage=complete`，`quality=partial`（列表 teaser；详情 WAF，不进 HTML 详情源） |
+| 关闭 | 新公司，无历史关岗 |
+| 目录公司数 / failed | 88 / 0 |
+
+4 条差额与 Oracle 同口径：publisher 总数按 listing 行计数，翻页窗口会重复 4 个 jobId；唯一 ID 1850 + duplicate 4 即可对账，不重开覆盖工单，也不为赶齐去关岗。Dry-run 20/20 有 title、地点、官方 URL；截止日期/薪资均为 0，未猜测。
+
+下一步：观察 3 个成功周期后标 `regular`。美国站若要补官方字段，需登记 host `www-api.ibm.com` / `careers.ibm.com`，不得重置主 Feed，也不得绕过 WAF。按日限额今天不再开第二家。队列下一手 Workday（公司）。DoorDash 继续停放。
+
+## 2026-09-20：Wave A 工厂第十二家 Oracle
+
+执行位置：上游采集器 `/opt/global-jobs`。公司 ID `0891cdb7-e40c-488f-b487-1009ffe8f7f6`，完整源 `99f5ef06-e1b0-45fc-a4af-cc88432113f9`。未改 Salesforce / Eightfold 连接器。DoorDash 仍停放。美国站只作为 Feed 消费者，主 Feed 游标未重置。
+
+官方源探测（采集器出口与本地一致，未猜测）：
+
+- Greenhouse / Ashby / Lever 不是完整官方列表。旧探测里的 `CX_1` / `CX_1001` 不是当前 Oracle 对外招聘站。
+- 官网 `https://careers.oracle.com/` 进入 `/en/sites/jobsearch`，站点号是 `CX_45001`。
+- 完整官方列表是 Oracle HCM CE `https://eeho.fa.us2.oraclecloud.com/hcmRestApi/resources/latest/recruitingCEJobRequisitions`，`finder=findReqs;siteNumber=CX_45001`，`TotalJobsCount` 2251。
+- 稳定外部 ID 为 listing `Id`（如 `333911`）。详情/申请 URL `.../sites/jobsearch/job/{id}` 返回 200，preview 会 302 到同一路径。
+- 样本 20/20 有 title、地点、PostedDate；列表有短描述，完整正文走详情 repair。
+
+采集器验收（UTC 2026-09-20 05:38–05:40 列表 success）：
+
+| 指标 | 结果 |
+| ---: | ---: |
+| crawl | success，`publisher_reported_complete` |
+| 官方 / 发现 / 在招唯一 ID | 2251 / 2248 / 2248 |
+| 覆盖 / 质量 | `coverage=complete`，`quality=partial`（列表短描述；已排队 1 批有界详情 repair） |
+| 关闭 | 新公司，无历史关岗 |
+| 目录公司数 / failed | 87 / 0 |
+
+3 条差额按现有 Oracle HCM 连接器口径：publisher 总数会把重复 listing 算进去，唯一 ID 2248 + duplicate 即可对账，不重开覆盖工单，也不为赶齐去关岗。
+
+下一步：观察 3 个成功周期后标 `regular`。美国站若要补官方字段，需登记 host `eeho.fa.us2.oraclecloud.com` / `careers.oracle.com`，不得重置主 Feed。按日限额今天不再开第三家。队列下一手 IBM，然后 Workday（公司）。DoorDash 继续停放。
+
+## 2026-09-20：Wave A 工厂第十一家 Salesforce
+
+执行位置：上游采集器 `/opt/global-jobs`。公司 ID `499dcae0-9fa8-4247-9bcf-e58dffb7c8d8`，完整源 `2a7b2348-3a31-425d-8b47-e480a40dabd3`。未改 Amazon / BofA / ServiceNow 连接器。DoorDash 仍停放。美国站只作为 Feed 消费者，主 Feed 游标未重置。
+
+官方源探测（采集器出口与本地一致，未猜测）：
+
+- Greenhouse / Ashby / Lever / SmartRecruiters 无完整官方列表。
+- `careers.salesforce.com` 对采集器 403，营销页不能当列表源。
+- 完整官方列表是 Workday CXS `https://salesforce.wd12.myworkdayjobs.com/wday/cxs/salesforce/External_Career_Site/jobs`，`total` 1481，与官网 `https://www.salesforce.com/company/careers/jobs/` 的 1481 Results 一致。
+- 稳定外部 ID 为 Workday `externalPath` / JR 号（如 `JR358512`）。样本 20/20 有 title、地点、官方 URL。
+
+采集器验收（UTC 2026-09-20 05:24 列表 success）：
+
+| 指标 | 结果 |
+| ---: | ---: |
+| crawl | success，`publisher_reported_complete` |
+| 官方 / 发现 / 在招 | 1481 / 1481 / 1481 |
+| 覆盖 / 质量 | `coverage=complete`，`quality=partial`（列表无正文，已排队 1 批有界 Workday 详情 repair） |
+| 关闭 | 新公司，无历史关岗 |
+| 目录公司数 / failed | 86 / 0 |
+
+下一步：观察 3 个成功周期后标 `regular`。美国站若要补官方字段，需登记新 host `salesforce.wd12.myworkdayjobs.com`，不得重置主 Feed。队列下一手 Oracle / IBM / Workday（公司）。DoorDash 继续停放。
+
+## 2026-09-20：Qualcomm Eightfold 漏抓修复
+
+执行位置：上游采集器 `/opt/global-jobs`。备份 `app/connectors.py.backup.before-ef-retry-20260920T052359Z`。未重开覆盖工单，不完整快照没有关岗。
+
+根因：2026-09-19 16:05 UTC 起 Qualcomm 连续 incomplete。Eightfold PCS 会 429，空页按 offset 继续会直接跳过该窗，`sort_by=relevance` 又没有 timestamp 第二遍。最新一轮 1983 / 2013，在招仍 2014，未关闭。ServiceNow 646/646、Morgan Stanley Eightfold 1323/1323 仍 complete。
+
+代码：
+
+- Eightfold 列表请求对 429/5xx/空页做有界重试。
+- 第一排序抓不齐时，自动补 `timestamp` / `relevance` 另一遍。
+- Qualcomm 源配置补 `listing_retry_attempts=5`、`request_delay=0.15`（`connector_config` 是 json 不是 jsonb，合并时要先 `::jsonb`）。
+
+采集器验收（UTC 2026-09-20 05:24–05:27 success）：
+
+| 指标 | 结果 |
+| ---: | ---: |
+| crawl | success，`publisher_reported_complete` |
+| 官方 / 发现 / 在招 | 2013 / 2013 / 2013 |
+| 覆盖 / 质量 | `coverage=complete`，`quality=partial` |
+| ServiceNow / Morgan Stanley | 仍 646/646、1323+124 Taleo，complete |
+| 目录 / failed | 随后 Salesforce 接入后为 86 / 0 |
+
+下一步：Qualcomm 继续观察满 3 个成功周期。不把美国站地区过滤数当成覆盖。
+
+## 2026-09-18：ServiceNow SmartRecruiters 回归修复
+
+执行位置：上游采集器 `/opt/global-jobs`。未改 Amazon / BofA / Wave A 其它连接器，未重开覆盖工单。DoorDash 仍停放。美国站只作为 Feed 消费者，主 Feed 游标未重置。
+
+根因：2026-09-17 15:30 UTC 的 `discover_financial_sources` 从职业页链出了 `jobs.smartrecruiters.com/ServiceNow` 和 `www.smartrecruiters.com/?utm_source=...`，并把已验证的完整源 `careers.smartrecruiters.com/ServiceNow` 标成“重复详情源”停用。UTM 源没有 company slug，连接器把 query 拼进 `/v1/companies/{company}/postings`，官方计数变成 404 / `unavailable`。
+
+采集器代码（备份 `*.backup.before-sr-slug-20260918T040714Z`）：
+
+- `SmartRecruitersConnector` 只接受 `[A-Za-z][A-Za-z0-9_-]{1,79}` 的 company identifier。
+- 发现层丢掉无 token 的 SmartRecruiters 营销 URL，并为 board 写入 `company`。
+- 发现任务不再停用 `completeness_source=true` 的源，也不再把“同一 token 的另一个 board host”当成详情页重复。
+
+数据：重新启用完整源 `175eb5a0-cdee-45ac-b751-17a9e5ab09e4`；停用 UTM 源和重复 board。不删岗位。
+
+采集器验收（UTC 2026-09-18 04:10–04:11 列表 success）：
+
+| 指标 | 结果 |
+| ---: | ---: |
+| crawl | success，`complete_official_list` |
+| 官方 / 发现 / 在招 | 645 / 645 / 645 |
+| 覆盖 / 质量 | `coverage=complete`，`quality=partial`（列表无正文，走 repair） |
+| 关闭 | 完整快照下关闭 29 条不在官方列表中的岗位；总记录仍 679，未删除 |
+| 目录公司数 / failed | 85 / 0 |
+
+公网抽样：`https://liorvix.com/api/jobs?company=ServiceNow` 目标地区 272 条，抽样仍 `is_active=true`。
+
+下一步：Morgan Stanley 只按 Eightfold 计覆盖；Taleo/public_feed 实习岗不得因完整源切换被关掉。队列仍是 Salesforce / Oracle / IBM / Workday。DoorDash 继续停放。
+
+## 2026-09-18：Morgan Stanley Eightfold 分页修复
+
+执行位置：上游采集器 `/opt/global-jobs`。备份 `*.backup.before-ms-eightfold-20260918T054425Z`。未改 ServiceNow 连接器，未启动 Salesforce。Taleo 不绕验证码。
+
+根因：Eightfold PCS 每页最多 10 条；按时间戳链式翻页会在窗口滑动时漏行，上一轮 1313 / 1317。本地并发按 `start=0,10,20...` 一次可抓全 1316 / 1316，唯一 ID 与 ATS ID 无碰撞。
+
+代码：
+
+- Eightfold 改为固定 offset 翻页，中空页不提前结束；若仍短于官方总数，再补一轮 `relevance`。
+- 完整快照只关闭完整源自己的 `source_type` 岗位，避免 Eightfold 完整后误关 Taleo 实习岗。
+
+采集器验收（UTC 2026-09-18 05:44–05:47 success）：
+
+| 指标 | 结果 |
+| ---: | ---: |
+| crawl | success，`publisher_reported_complete` |
+| 官方 / 发现 / Eightfold 在招 | 1316 / 1316 / 1316 |
+| 覆盖 / 质量 | `coverage=complete`，`quality=ok` |
+| Taleo public_feed | 仍 124 条 OPEN，24 条 CLOSED，未动 |
+| Eightfold 关闭 | 完整快照下关闭 48 条不在当前官方列表中的 Eightfold 岗；未删记录 |
+| ServiceNow | 仍 645 / 645 complete |
+| 目录 / failed | 85 / 0 |
+
+下一步：观察满 3 个成功周期后再标 regular。队列下一手 Salesforce。DoorDash 继续停放。
+
+## 2026-09-18：Morgan Stanley 完整源收口（未完成覆盖）
+
+执行位置：上游采集器。`public_feed` 的 `completeness_source` 改为 false；Eightfold 仍是唯一完整源。124 条 Taleo（`morganstanley.tal.net`）实习/项目岗与 Eightfold 外部 ID 无交集，保持在招，不关闭。
+
+随后一次 crawl（UTC 04:17–04:19）`partial`：Eightfold 报 1317，实际发现 1313，差 4 条，`source coverage not verified; no roles were closed`。在招仍 1488 = Eightfold 1364 + public_feed 124。质量变为 `ok`。
+
+下一步：先查 Eightfold PCS 分页为何少 4 条，禁止为赶覆盖关掉 Taleo。未完成前不开始 Salesforce。
+
+## 2026-09-17：Wave A 工厂第十家 ServiceNow
+
+执行位置：上游采集器 `/opt/global-jobs`；美国应用 `/opt/liorvix`。采集器公司 ID `9c0f3615-d867-49ae-9515-52dea998a56e`，来源 `175eb5a0-cdee-45ac-b751-17a9e5ab09e4`。未改 Broadcom / Dell / AMD 连接器，未重开覆盖工单。DoorDash 仍停放。用户要求加速扩公司数量；ServiceNow 是已有 SmartRecruiters 连接器的稳定 ATS。现网 `ref` 实际是字符串 URL，旧代码按 dict 取 `.url` 会崩。已备份 `connectors.py` 后只修 URL/地点映射，canonical URL 使用 `https://jobs.smartrecruiters.com/ServiceNow/{id}`。
+
+官方源探测：Greenhouse / Ashby / Lever 404。完整官方列表是 `https://api.smartrecruiters.com/v1/companies/ServiceNow/postings`，`totalFound` 639。稳定外部 ID 为 posting `id`（如 `744000149976740`）。申请页 `careers.smartrecruiters.com/ServiceNow/{id}` 会 302 回列表，不以申请壳当 canonical。
+
+采集器验收（UTC 2026-09-17 列表 success）：
+
+| 指标 | 结果 |
+| ---: | ---: |
+| crawl | success，`complete_official_list` |
+| 官方 / 发现 / 在招 | 639 / 639 / 639 |
+| 唯一外部 ID | 639 |
+| 覆盖 / 质量 | `coverage=complete`，`quality=partial` |
+| 正文 ≥300 / 地点 / 部门 | 列表无正文 / 639 / 560 |
+| 详情已抓 | 列表不含 jobAd 正文，缺描述走质量/repair，不关岗 |
+| 目录公司数 / failed | 85 / 0 |
+
+字段口径：地点用 city / region / country 拼接（如 `Austin, Texas, us`），不猜全称。截止日期列表没有 `validThrough`，保持空。非目标地区由美国站过滤。
+
+下一步：观察 3 个成功周期后标 `regular`。队列下一手 Salesforce / Oracle / IBM / Workday（公司）。DoorDash 继续停放。
+
+## 2026-09-17：Wave A 工厂第九家 Broadcom
+
+执行位置：上游采集器 `/opt/global-jobs`；美国应用 `/opt/liorvix`。采集器公司 ID `e5b346e9-c90d-4515-b6b8-e510c5ce6cf4`，来源 `f4cae51b-da88-4dd3-b1d0-35f2e21be17b`。未改 Microsoft / Shopify / Airbnb / Lyft / Uber / Cisco / Qualcomm / AMD / Dell 连接器，未重开覆盖工单。DoorDash 仍停放。Broadcom 走已有 Workday 连接器，不是新的高风险自定义源。
+
+官方源探测：Greenhouse / Ashby / Lever 无完整源。完整官方列表是 Workday `https://broadcom.wd1.myworkdayjobs.com/wday/cxs/broadcom/External_Career/jobs`，`total` 367。稳定外部 ID 为 `externalPath`。Canonical URL 为 `https://broadcom.wd1.myworkdayjobs.com/External_Career/job/...`。
+
+采集器验收（UTC 2026-09-17 02:29 列表 success）：
+
+| 指标 | 结果 |
+| ---: | ---: |
+| crawl | success，`publisher_reported_complete` |
+| 官方 / 发现 / 在招 | 367 / 367 / 367 |
+| 唯一外部 ID | 367 |
+| 覆盖 / 质量 | `coverage=complete`，`quality=partial` |
+| 正文 ≥300 / 地点 / 部门 | 列表无正文 / 367 / 0 |
+| 详情已抓 | Workday 列表不含详情，缺描述走质量/repair，不关岗 |
+| 目录公司数 / failed | 84 / 0（随后 ServiceNow 接入后为 85） |
+
+字段口径：地点保留 Workday 官方 location 原文（如 `USA-CA San Jose Innovation Drive`）。截止日期列表没有结构化字段，保持空。印度、新加坡等地由美国站地区过滤丢弃。
+
+美国站：已增加 Broadcom 官方 host `broadcom.wd1.myworkdayjobs.com` 字段规则。主 Feed 游标未重置。Workday 详情仍走现有 `myworkdayjobs.com` 官方详情队列。
+
+## 2026-09-17：Wave A 工厂第八家 Dell Technologies
+
+执行位置：上游采集器 `/opt/global-jobs`；美国应用 `/opt/liorvix`。采集器公司 ID `0491d61b-3a50-4027-9508-e0fc65240894`，来源 `c81820cc-7b26-4753-b667-37da992c0bf8`。未改 Microsoft / Shopify / Airbnb / Lyft / Uber / Cisco / Qualcomm / AMD 连接器，未重开覆盖工单。DoorDash 仍停放。用户同意把剩余顺序改成 Dell → Oracle → Broadcom；Dell 走已有 Oracle HCM 连接器，不是新的高风险自定义源。
+
+官方源探测：Greenhouse `dell` / `delltechnologies` 均 404。`jobs.dell.com` 跳到 Oracle Candidate Experience `https://enterpriseplatform.dell.com/hcmUI/CandidateExperience/en/sites/careers`。完整官方列表是 `https://iawmqy.fa.ocs.oraclecloud.com/hcmRestApi/resources/latest/recruitingCEJobRequisitions`，`siteNumber=CX_1`，`TotalJobsCount` 466。稳定外部 ID 为官网 `Id`（如 `295350`、`R286431`）。Canonical URL 为 `https://iawmqy.fa.ocs.oraclecloud.com/hcmUI/CandidateExperience/en/sites/careers/job/{id}`。
+
+采集器验收（UTC 2026-09-17 02:24–02:26 列表 success）：
+
+| 指标 | 结果 |
+| ---: | ---: |
+| crawl | success，`publisher_reported_complete` |
+| 官方 / 发现 / 在招 | 466 / 466 / 466 |
+| 唯一外部 ID | 466 |
+| 覆盖 / 质量 | `coverage=complete`，`quality=partial` |
+| 正文 ≥300 / 地点 / 部门 | 详情 repair 进行中；列表地点 466 / 部门 96 |
+| date_posted / employment | 466 / 列表无 JobSchedule，详情补 `Full time` |
+| workplace / 带币种薪资 / 截止日期 | 列表 448 `On-site`/`Field` / 详情正文抽取 / 详情 `ExternalPostedEndDate` |
+| 详情已抓 | 有界 repair 首批 160 `fetched`，0 关闭、0 错误；其余走定时 beat |
+| 目录公司数 / failed | 83 / 0 |
+| 仍观察 | Microsoft、JPMorgan Chase（本轮未改这两家） |
+
+字段口径：地点保留官网 `PrimaryLocation` 原文（如 `Round Rock, TX, United States`）。workplace 来自官网 `WorkplaceType`（`On-site` / `Field`），不把 `Field` 猜成 Hybrid。雇佣类型来自详情 `JobSchedule`。截止日期只用官网 `ExternalPostedEndDate`，没有该字段就保持空。薪资列表没有结构化金额，只在详情正文出现带币种金额时由美国站抽取。印度、巴西、以色列、波兰等非目标地区由美国站地区过滤丢弃。
+
+美国站：已部署 Dell 官方 host `iawmqy.fa.ocs.oraclecloud.com` / `enterpriseplatform.dell.com` / `jobs.dell.com` 字段规则，以及已有 Oracle HCM 连接器配置。主 Feed 游标未重置。公网 `/api/jobs?company=Dell%20Technologies` 目标地区 **240** 条在招；抽样 `/api/jobs/86795`（Round Rock，Signal Integrity Principal Engineer）地点/工作方式/雇佣类型 `official_payload` / `verified`，薪资 `$166,600 - $185000` 来自官网正文，截止日期为空，正文 3276 字，`is_active=true`，`is_closed=false`。`/api/jobs/86864` 地点 `Round Rock, TX, United States; Hopkinton, MA, United States`，雇佣类型 `Full time`。Shopify / AMD / Uber 公网抽样仍在招。
+
+下一步：观察 Shopify / Airbnb / Lyft / Uber / Cisco / Qualcomm / AMD / Dell Technologies 各 3 个成功周期后标 `regular`。队列下一手是 Oracle。DoorDash 继续停放。
+
+## 2026-09-16：Wave A 工厂第七家 AMD
+
+执行位置：上游采集器 `/opt/global-jobs`；美国应用 `/opt/liorvix`。采集器公司 ID `5360af70-dfe6-40e3-9f73-af6621d56360`，来源 `2a2dfca8-0b6b-4eca-8590-4352259fe6ed`。未改 Microsoft / Shopify / Airbnb / Lyft / Uber / Cisco / Qualcomm 连接器，未重开覆盖工单。DoorDash 仍停放。用户要求继续推进下一手；AMD 官方源是 Jibe `/api/jobs`，现网没有现成 Jibe 连接器，因此新增通用 `jibe` 连接器，不是把 AMD 硬塞进 Phenom/Workday/iCIMS。
+
+官方源探测：Greenhouse / Lever 404；SmartRecruiters 空列表；Eightfold `Not Supported`；Workday 各租户 POST 422；iCIMS 搜索页 405 人机验证，不是完整快照源。完整官方列表是 `https://careers.amd.com/api/jobs`，`totalCount`/`count` 1226。稳定外部 ID 为 `req_id`（如 `91544`）。Canonical URL 为 `https://careers.amd.com/careers-home/jobs/{req_id}`。sitemap 1228 条 `/jobs/{id}` 只作交叉核对，不以 sitemap 关岗。分页 `limit=100` 可用，`limit=200` 返回 422。
+
+采集器验收（UTC 2026-09-16 09:16 列表 success）：
+
+| 指标 | 结果 |
+| ---: | ---: |
+| crawl | success，`publisher_reported_complete` |
+| 官方 / 发现 / 在招 | 1226 / 1226 / 1226 |
+| 唯一外部 ID | 1226 |
+| 覆盖 / 质量 | `coverage=complete`，`quality=ok` |
+| 正文 ≥300 / 地点 / 部门 | 1226 / 1226 / 1226 |
+| date_posted / employment | 1226 / 1226 |
+| workplace / 带币种薪资 / 截止日期 | 736（官网正文抽取 Hybrid/Onsite/Remote） / 894（tags2/tags3 含币种） / 0 |
+| 详情已抓 | 列表即含完整正文，1226 `fetched_json`；未因缺字段下架 |
+| 目录公司数 / failed | 82 / 0 |
+| 仍 incomplete | Microsoft、JPMorgan Chase（本轮未改这两家） |
+
+字段口径：地点只用 `city` / `state` / `country` 完整标签（如 `San Jose, California, United States`），不用 `location_name` 代码 `US,CA,San Jose`。`location_type=LAT_LNG` 是地理编码标记，已改名为 `jibe_location_type`，不映射成工作方式。employment 来自官网 `employment_type`（`FULL_TIME` / `INTERNSHIP` 等）。截止日期官网没有 `applicationDeadline` / `validThrough`，保持空，不猜。薪资 `salary_*_value=0` 丢弃；只保留 tags 里带币种的金额。申请链接是 iCIMS login，不作为 canonical URL。印度、中国内地、台湾、马来西亚等非目标地区由美国站地区过滤丢弃。
+
+美国站：已部署 AMD 官方 host `careers.amd.com` 字段规则，以及 Feed 对 `jibe` 官方 payload 的信任。主 Feed 游标未重置。首轮同步早于规则发布，公网地点曾显示「未注明」；只把 AMD 的 `feed_updated_at` 前移后重放，未重置主游标。抽样 `/api/jobs/85198` 地点 `San Jose, California, United States`、`location_source=official_payload` / `verified`；`/api/jobs/85194` 地点 `Boxborough, Massachusetts, United States`，薪资 `USD $106,470.00/Yr. - USD $152,100.00/Yr.` 来自 `official_description`，截止日期为空，`is_active=true`，`is_closed=false`。Shopify / Qualcomm 公网抽样仍在招。
+
+下一步：观察 Shopify / Airbnb / Lyft / Uber / Cisco / Qualcomm / AMD 各 3 个成功周期后标 `regular`。队列下一手是 Broadcom。DoorDash 继续停放。
+
+## 2026-09-16：Wave A 工厂第六家 Qualcomm
+
+执行位置：上游采集器 `/opt/global-jobs`；美国应用 `/opt/liorvix`。采集器公司 ID `d421947d-c5fc-458b-b961-d818b7fa3d3e`，来源 `1f70853b-f384-4e88-878b-024cb73af39b`。未改 Microsoft / Shopify / Airbnb / Lyft / Uber / Cisco 连接器，未重开覆盖工单。DoorDash 仍停放。用户要求继续推进下一手；Qualcomm 走已有 Eightfold 连接器，不是新的高风险自定义源。
+
+官方源探测：Greenhouse / Ashby / Lever 404；SmartRecruiters 空列表；`/api/apply/v2/jobs` 403 `Not authorized for PCSX`。`jobs.qualcomm.com` 跳到 Eightfold `https://careers.qualcomm.com/careers`。完整官方列表是 `https://careers.qualcomm.com/api/pcsx/search?domain=qualcomm.com`，`count` 2003。稳定外部 ID 为官网 Job ID / `atsJobId`（如 `3094633`）。Canonical URL 为 `https://careers.qualcomm.com/careers/job/{eightfold_id}`。Workday 租户 400/内部错误，不是完整快照源。
+
+采集器验收（UTC 2026-09-16 07:41 第三轮列表 success）：
+
+| 指标 | 结果 |
+| ---: | ---: |
+| crawl | success，`publisher_reported_complete` |
+| 官方 / 发现 / 在招 | 2003 / 2003 / 2003 |
+| 唯一外部 ID | 2003 |
+| 覆盖 / 质量 | `coverage=complete`，`quality=partial` |
+| 正文 ≥300 / 地点 / 部门 | 详情 repair 进行中 / 2003 / 2003 |
+| date_posted / employment | 2003 / 0（官网 `type=ATS` 不是雇佣类型，保持空） |
+| workplace / 带币种薪资 / 截止日期 | 2003 `onsite` / 详情正文抽取 / 0（无结构化截止字段） |
+| 详情已抓 | 有界 repair 已开始，抽样 80/80 `fetched_json`，0 关闭、0 错误；其余走定时 beat |
+| 目录公司数 / failed | 81 / 0 |
+| 仍 incomplete | Microsoft、JPMorgan Chase（本轮未改这两家） |
+
+字段口径：地点只用 Eightfold `location` / `locations` 完整标签（如 `San Diego, California, United States of America`），不拼接 `standardizedLocations` 碎片。workplace 来自 `workLocationOption`（`onsite`）。`postedTs` 转为 ISO 日期写入 `date_posted`。列表没有正文，不把 listing 标成 `fetched_json`。截止日期官网没有 `applicationDeadline` / `validThrough`，保持空，不猜。薪资只在详情正文出现带币种金额时由美国站抽取。印度、中国内地、台湾、墨西哥、以色列、法国等非目标地区由美国站地区过滤丢弃。
+
+质量尾巴：首轮抓取时 publisher `count` 从 2004 变为 2003（列表尾页已空），已按当前官方总数 2003/2003 对账。详情 repair 与列表 crawl 并行，未因缺正文下架。Eightfold 连接器补了 camelCase（`atsJobId` / `positionUrl` / `workLocationOption`）和 `max_pages`，Morgan Stanley 源配置未改。
+
+美国站：已部署 Qualcomm 官方 host `careers.qualcomm.com` 字段规则，以及 Feed 对 `eightfold` 官方 payload 的信任。主 Feed 游标未重置。公网 `/api/jobs?company=Qualcomm` 目标地区约 386 条在招；抽样 `/api/jobs/84392` 地点/工作方式 `official_payload` / `verified`，薪资 `$191,800.00 - $287,800.00` 来自 `official_description`，截止日期为空，`is_active=true`，`is_closed=false`。Shopify / Airbnb / Lyft / Uber / Cisco 公网抽样仍在招。
+
+下一步：观察 Shopify / Airbnb / Lyft / Uber / Cisco / Qualcomm 各 3 个成功周期后标 `regular`。队列下一手是 AMD。DoorDash 继续停放。
+
+## 2026-09-16：Wave A 工厂第五家 Cisco
+
+执行位置：上游采集器 `/opt/global-jobs`；美国应用 `/opt/liorvix`。采集器公司 ID `1d111f89-aa87-4822-91c6-31a5e0cfcdcd`，来源 `297a6a1c-c12f-48b1-af36-f0fe0f36f597`。未改 Microsoft / Shopify / Airbnb / Lyft / Uber 连接器，未重开覆盖工单。DoorDash 仍停放。用户要求按下一手继续；Cisco 走已有 Phenom 连接器，不是新的高风险自定义源。
+
+官方源探测：Greenhouse / Ashby / Lever 404；SmartRecruiters 空列表；Eightfold 404。`jobs.cisco.com` 跳到 Phenom `https://careers.cisco.com/global/en`。完整官方列表是 `https://careers.cisco.com/global/en/search-results` 的 `phApp.ddo.eagerLoadRefineSearch`，`totalHits` 1311。稳定外部 ID 为 `jobSeqNo`（如 `CISCISGLOBAL2016926EXTERNALENGLOBAL`）。Canonical URL 为 `https://careers.cisco.com/global/en/job/{jobSeqNo}`。Workday `cisco.wd5.myworkdayjobs.com` 只是申请页，不是完整快照源。
+
+采集器验收（UTC 2026-09-16 05:47 列表，随后详情 repair）：
+
+| 指标 | 结果 |
+| ---: | ---: |
+| crawl | success，`publisher_reported_complete` |
+| 官方 / 发现 / 在招 | 1311 / 1311 / 1311 |
+| 唯一外部 ID | 1311 |
+| 覆盖 / 质量 | `coverage=complete`，`quality=partial` |
+| 正文 ≥300 / 地点 / 部门 | 1252 / 1310 / 1311 |
+| date_posted / employment | 1311 / 1311 |
+| workplace / 带币种薪资 / 截止日期 | 1284 / 412 / 采集库 0；美国站已从官网正文回填 359 条 |
+| 详情已抓 | 904 `fetched_json`；405 `detail_unavailable`（限流 403）保持在招 |
+| 目录公司数 / failed | 80 / 0 |
+| 仍 incomplete | Microsoft、JPMorgan Chase（本轮未改这两家） |
+
+字段口径：地点只用 Phenom `location` / `cityStateCountry` 和 `multi_location` 对象的完整标签，不拼接 city/state 碎片，不把 dict 打成字符串。employment 来自列表 `type`（如 `Full time`）。workplace 来自 `RemoteType`（Hybrid / Onsite Only）；空则保持空。截止日期官网没有 `applicationDeadline` / JSON-LD `validThrough`；正文有明确标签 `The application window is expected to close on: MM/DD/YYYY` 时写入，采集库 386 条含该句，美国站目标地区回填 359 条。没有该句的保持空。不把 `targetHireDate` 当申请截止。薪资只在正文出现带币种金额时写入。越南、台湾、中国内地等非目标地区由美国站地区过滤丢弃。过期的官网窗口日期只展示，不因此下架。
+
+质量尾巴：1 条斯洛伐克校招 `2013016` 官网地点为空，保持空，不猜城市。405 条详情被 Cloudflare 限流，保持 `OPEN`。首次 repair 曾因正文页脚 “Job posting may be removed” 误关 165 条；这些详情页仍有匹配的 `jobDetail.jobSeqNo`，已重开并补正文，现网关闭数为 0。公网抽样薪资曾抽出 `0.00 to $159,200.00`，官网原文是 `$125,700.00 to $159,200.00`，记为抽取尾巴，不改生命周期。
+
+美国站：已部署 Cisco Phenom host 规则、board `CISCISGLOBAL`、`RemoteType` 工作方式映射，以及 `application window is expected to close on` 截止日期抽取。主 Feed 游标未重置。生产库 dry-run 后写入 359 条缺失截止日期，未改 `is_active` / `is_closed`。公网 `/api/jobs/83521` 抽样返回 `valid_through=2026-09-10`，证据 `official_description` / `verified`，仍在招。
+
+下一步：观察 Shopify / Airbnb / Lyft / Uber / Cisco 各 3 个成功周期后标 `regular`。队列下一手是 Qualcomm。DoorDash 继续停放。
+
+## 2026-09-16：Wave A 工厂第四家 Uber
+
+执行位置：上游采集器 `/opt/global-jobs`；美国应用 `/opt/liorvix`。采集器公司 ID `15ba6e1c-a4bf-467a-bf7a-91d3e599fff9`，来源 `aff2639e-9f5b-4d87-bac7-c5ae9baebb85`。未改 Microsoft / Shopify / Airbnb / Lyft 连接器，未重开覆盖工单。DoorDash 仍停放。用户明确要求接下一家；Uber 走已有 Oracle HCM 连接器，不是新的高风险自定义源。
+
+官方源探测：Greenhouse `uber` / Ashby / Lever 均 404。候选页 `jobs.uber.com/en/jobs/` 与 sitemap `https://jobs.uber.com/en/jobs/sitemap.xml` 公开 506 个唯一 ID，但岗位详情页 Cloudflare 403。完整官方列表是 Oracle HCM `https://iaziqy.fa.ocs.oraclecloud.com/hcmRestApi/resources/latest/recruitingCEJobRequisitions`，`siteNumber=CX_1`，`TotalJobsCount` 与 sitemap 1:1。Canonical URL 为 `https://iaziqy.fa.ocs.oraclecloud.com/hcmUI/CandidateExperience/en/sites/UberCareers/job/{id}`。
+
+采集器验收（UTC 2026-09-16 05:15 首轮，05:21 第二轮）：
+
+| 指标 | 结果 |
+| ---: | ---: |
+| crawl | 两轮均为 success |
+| 官方 / 发现 / 在招 | 505 / 505 / 505（首轮 506，第二轮官方少 1 条已按完整快照关闭） |
+| 唯一外部 ID | 505 |
+| 覆盖 / 质量 | `coverage=complete`，`quality=partial` |
+| 正文 ≥300 / 地点 / 部门 | 503 / 505 / 505 |
+| date_posted / employment | 505 / 501 |
+| workplace / 带币种薪资 / 截止日期 | 84 / 246 / 30 |
+| 详情已抓 | 505；1 条 `detail_unavailable` 保持在招 |
+| 目录公司数 / failed | 79 / 0 |
+| 仍 incomplete | Microsoft、JPMorgan Chase（本轮未改这两家） |
+
+字段口径：地点用 Oracle `PrimaryLocation`（可含多个城市，用 `; ` 连接），不猜城市。employment 来自详情 `JobSchedule`（如 `Full time`）。workplace / 薪资 / 截止日期官网结构化字段大多为空，只在详情正文或官方 payload 明确出现时写入；没有证据保持空。墨西哥、智利、印度、菲律宾、日本、荷兰等地由美国站地区过滤丢弃。
+
+质量尾巴：岗位 `152551` 官方详情正文仅 22 字；`160400` 详情不可用。两者保持 `OPEN`，不因字段失败下架。
+
+美国站：已部署 Uber Oracle host 规则、`JobSchedule` 映射和 board `UberCareers`。主 Feed 游标未重置。公网 `/api/jobs?company=Uber` 已返回目标地区在招岗位（抽样 id `82952`），地点/雇佣类型证据 `verified`，官方 Oracle 链接，`is_active=true`，`is_closed=false`。
+
+下一步：观察 Shopify / Airbnb / Lyft / Uber 各 3 个成功周期后标 `regular`。队列下一手是 Cisco。DoorDash 继续停放。
+
+## 2026-09-16：Wave A 工厂第三家 Lyft
+
+执行位置：上游采集器 `/opt/global-jobs`；美国应用 `/opt/liorvix`。采集器公司 ID `4e79d137-c67a-41c2-9c3f-cc8903012a32`，来源 `b8daf7a6-ac08-465e-be63-81e865406d89`。未改 Microsoft / Shopify 连接器，未重开覆盖工单。DoorDash 仍停放。
+
+官方源探测：Greenhouse board `lyft` 公开 JSON 179 个唯一 ID。`boards.greenhouse.io/lyft` 跳到 `www.lyft.com/careers`。岗位 canonical URL 全部是 `https://app.careerpuck.com/job-board/lyft/job/{id}?gh_jid={id}`，详情页 200。元数据只有 `Career Site Category`，没有 Workplace Type / application_deadline。
+
+采集器验收（UTC 2026-09-16 04:14）：
+
+| 指标 | 结果 |
+| ---: | ---: |
+| crawl | success，6 秒 |
+| 官方 / 发现 / 写入 | 179 / 179 / 179 |
+| 唯一外部 ID | 179 |
+| 覆盖 / 质量 | `coverage=complete`，`quality=ok` |
+| 正文 ≥300 / 地点 / 部门 | 179 / 179 / 179 |
+| date_posted | 179 |
+| workplace / employment（正文抽取） | 166 / 33 |
+| 带币种薪资 / 截止日期 | 12 / 0 |
+| 详情 `fetched_json` | 179 |
+| 目录公司数 / failed | 78 / 0 |
+| 仍 incomplete | 仅 Microsoft |
+
+字段口径：地点只用 Greenhouse `location.name`（如 `New York, NY`），不把 offices 里的另一个城市拼进来；截止日期官网没有结构化字段，保持空；employment / workplace 官网 metadata 未提供，仅在正文出现明确 full-time/internship/remote/hybrid/on-site 时写入。墨西哥等地由美国站地区过滤丢弃。
+
+美国站：已部署 `app.careerpuck.com` / `www.lyft.com` 官方 host 规则和 Greenhouse board `lyft`。主 Feed 游标未重置。公网 `/api/jobs?company=Lyft` 已返回在招岗位，地点证据 `verified`，官方 CareerPuck 链接，`is_active=true`，`is_closed=false`，截止日期为空。
+
+下一步：观察 Shopify / Airbnb / Lyft 各 3 个成功周期后标 `regular`。队列下一手是 Uber。DoorDash 继续停放。当天不再接入第四家。
+
+## 2026-09-16：Wave A 工厂第二家 Airbnb
+
+执行位置：上游采集器 `/opt/global-jobs`；美国应用 `/opt/liorvix`。采集器公司 ID `da4155f7-30db-4457-aa8c-d2e4cc95aa3c`，来源 `cf2c8fea-a36a-4ed9-b3a7-fecd1dc1bb95`。未改 Microsoft 连接器，未重开 Amazon / BofA / Accenture 覆盖工单，未改 Shopify 连接器。
+
+官方源探测：Greenhouse board `airbnb` 公开 JSON `https://boards-api.greenhouse.io/v1/boards/airbnb/jobs?content=true`，158 个唯一 ID，岗位 URL 全部在 `careers.airbnb.com/positions/{id}?gh_jid={id}`。元数据只有 `Workplace Type` 和 `Is this job part of ACC?`，没有官方 `application_deadline`。
+
+采集器验收（UTC 2026-09-16 03:52）：
+
+| 指标 | 结果 |
+| ---: | ---: |
+| crawl | success，4 秒 |
+| 官方 / 发现 / 写入 | 158 / 158 / 158 |
+| 唯一外部 ID | 158 |
+| 覆盖 / 质量 | `coverage=complete`，`quality=ok` |
+| 正文 ≥300 / 地点 / 部门 | 158 / 158 / 158 |
+| workplace / date_posted | 158 / 158 |
+| 官方 employment / 截止日期 | 0 / 0 |
+| 详情 `fetched_json` | 158 |
+| 目录公司数 / failed | 77 / 0 |
+| 仍 incomplete | 仅 Microsoft |
+
+字段口径：地点只用 Greenhouse `location.name`（如 `London, United Kingdom`），不拼接 offices 造成重复；workplace 来自官方 metadata `Workplace Type`（Hybrid/Remote）；employment 官网未提供则保持空，仅 15 条从正文明确 full-time/contract 补上；截止日期官网没有结构化字段，保持空。Greenhouse 连接器只做空字段回填和 `source_complete`，不改岗位生命周期。
+
+质量尾巴：采集库 `raw_payload.salary_range` 有 128 条被结构化抽取写成逗号，不是覆盖缺口。美国站展示层拒绝无币种/金额的值，公网抽样没有把 `,` 当成薪资。
+
+美国站：已部署 Airbnb 官方 host 规则、Greenhouse board `airbnb`，以及地点 `name`/`location` 去重。主 Feed 游标未重置。公网 `/api/jobs?company=Airbnb` 已返回在招岗位，地点/工作方式证据为 `verified`，`is_active=true`，`is_closed=false`。非目标地区（法国、日本、西班牙等）由地区过滤丢弃。
+
+下一步：观察 Airbnb 与 Shopify 各 3 个成功周期后标 `regular`。队列下一手是 Lyft（Greenhouse 稳定 ATS）；DoorDash 官网 403，继续停放。当天不再接入第三家。
+
+## 2026-09-16：Wave A 工厂首家 Shopify
+
+执行位置：上游采集器 `/opt/global-jobs`；美国应用 `/opt/liorvix`。采集器公司 ID `ed9e9a7d-55ec-4190-8f58-5ef19294e0fa`。未改 Microsoft 连接器，未重开 Amazon / BofA / Accenture 覆盖工单。
+
+官方源探测：Greenhouse board `shopify` 404；公开 Ashby posting-api 404。官网 careers 页带 `ashby_jid`，完整官方列表是 `https://www.shopify.com/careers.data` 与 `https://www.shopify.com/careers/sitemap.xml`，岗位详情是 `{canonical}.data`。listing 与 sitemap 均为 115 个唯一 posting UUID，1:1 对齐。
+
+采集器验收（UTC 2026-09-16 02:57）：
+
+| 指标 | 结果 |
+| ---: | ---: |
+| crawl | success，33 秒 |
+| 官方 / 发现 / 写入 | 115 / 115 / 115 |
+| 唯一外部 ID | 115 |
+| 覆盖 / 质量 | `coverage=complete`，`quality=ok` |
+| 正文 ≥300 / 地点 / 部门 | 115 / 115 / 115 |
+| workplace / employment / date_posted | 115 / 115 / 115 |
+| 官方薪资 / 截止日期 | 13 / 0 |
+| 详情 `fetched_json` | 115 |
+| 目录公司数 / failed | 76 / 0 |
+| 仍 incomplete | 仅 Microsoft |
+
+字段口径：地点保留官网原值（`Americas`、`United Kingdom`、`Toronto` 等），不猜城市；部门用 `teamName`；薪资只在官网 `shouldDisplayCompensation` 为真时写入；截止日期若早于 `publishedDate` 或官网为空则保持空。岗位 URL 用 sitemap/canonical `https://www.shopify.com/careers/{slug}_{uuid}`，不用 `?ashby_jid=` 列表壳。
+
+美国站：已部署 `Americas`/`ANZ` 目标地区识别、`shopify` 官方 payload 信任和 `www.shopify.com` 字段规则。主 Feed 游标未重置；Shopify 岗位随增量 Feed 进入美国库。未对已有岗位做生命周期变更。
+
+下一步：观察 Shopify 3 个成功周期后标 `regular`。同一天不再接入第二家高风险源。队列下一手是 Airbnb（Greenhouse `airbnb`，158 条已样本通过）。
+
 ## 2026-09-07：Google 官方详情 20 条 canary
 
 执行位置：美国应用服务器 `/opt/liorvix`；目标 Supabase project ref：`weqvdtdjdzmqflhwobec`。上游采集器位于独立服务器，本轮未在上游服务器启动抓取或修改配置。
@@ -1361,3 +1845,170 @@ BoA 走 Workday（`ghr.wd1.myworkdayjobs.com`），40 条 `location rejected_leg
 
 Citadel 的详情页允许正常浏览器访问，但对采集服务器返回 HTTP 403。为避免复制浏览器 cookie 或绕过 Cloudflare，新增 `pnpm import:citadel-browser-details` 作为一次性官方证据导入工具：输入只能来自正常浏览器看到的 Citadel 详情页，脚本会校验官方 host、详情 URL、正文长度和反爬标记，并把 `official_browser_detail`、`official_detail_page`、抓取时间写入 `field_evidence`。默认 dry-run，生产写入必须显式设置 `CITADEL_BROWSER_DETAIL_WRITE_ENABLED=true`、使用生产环境文件并追加 `--write`；已有可展示正文的岗位不会覆盖。后续 sitemap 同步保留已导入正文。
 - 仅补写了 3 条缺失地点证据（岗位 ID `63734`、`63733`、`70442`），没有改变岗位上下架状态；后续由现有上游定时任务持续同步 sitemap。
+
+## 2026-10-12 Citadel 详情 repair 空转停放
+
+- 上游 `/opt/global-jobs`：定时 `repair_job_details` 每个整点 05 分仍把 Citadel HTML 详情当可重试 403。sitemap 每 5 分钟把 `detail_status` 写回 `not_fetched`，13 条缺正文岗位反复被选中，抓取结果始终是 `blocked=13, fetched=0`。
+- 已在 `repair_job_details` 默认排除公司 `Citadel` 和 host `www.citadel.com`。显式传入 `include_parked_blocked_details=true` 才能再审计。未改 sitemap 调度、主 Feed 游标或岗位开闭。
+- 备份 `app/services.py.backup.before-citadel-park-repair-*`、`app/tasks.py.backup.before-citadel-park-repair-*`；worker/beat 已重建。验收：`company_name=Citadel` 返回 `selected=0, parked_excluded=1`；试跑 repair 只请求 Microsoft / Qualcomm / JPMorgan 官方详情 API，日志无 `citadel.com/careers/details`；Citadel 在招仍为 73。
+
+## 2026-10-12 看板 recent-runs 按公司去重
+
+- 上游 `/dashboard/recent-runs` 默认改为每家公司只返回最近一次运行（`unique_company=true`，limit 24）。Citadel sitemap 仍每 5 分钟写入 `crawl_runs`，但运行状态页不再被同一条 success 刷满。原始时间线用 `unique_company=false`。
+- 看板 `app.js` 改为请求 `limit=24&unique_company=true`。未改 5 分钟调度、主 Feed 游标或岗位开闭。
+- 公网验收：`/collector-api/dashboard/recent-runs` 24 条、24 家、Citadel 1 条；`unique_company=false&limit=12` 仍是 Citadel 占 10 条。
+
+## 2026-10-12 Citadel 目标地区岗位对齐与浏览器导入收口
+
+- 对照：官方 sitemap 63 条，采集器在招 73 条，美国站目标地区在招 39 条。Feed 目标地区 39 条已全部在美国站，无缺失。采集器多出的 10 条不在当前 sitemap（含旧 GQS URL 与已撤 Asia/US campus referrals），未关岗。
+- 美国站缺正文 4 条（均为已在招 US intern/HR）。sitemap 另有 8 条无地点：6 条是现有 GQS 岗的新 slug，2 条（Equities 2028 intern、Business Manager）无地点故未入库。禁止用标题猜地点。
+- `pnpm import:citadel-browser-details` 改为按规范化官方 URL 匹配，已有岗只补缺失正文；`--create-missing` 仅在 JSON 含官方地点且属于目标地区时建岗，不重开已关闭岗。Citadel 字段规则增加 `official_detail_page`。
+- 清理会把 Citadel 打回 `discovery_required` 的台账脚本，以及 Playwright 探测、一次性 collector-cmd、`.before-citadel-*` 备份。未改主 Feed 游标、sitemap 调度或岗位开闭。
+- 待导入清单：`output/citadel-browser-import-queue.json`。
+
+## 2026-10-12 Citadel 本机每日补正文
+
+- 新增 `pnpm capture:citadel-browser-details`：用本机 Chrome/Edge 打开官方详情页，写入 `output/citadel-browser-details-latest.json`，再交给现有导入脚本。只处理美国站缺正文的在招岗，以及 sitemap 新增且不是 GQS 换链、不是亚欧排除 slug 的岗位。
+- 本机配置目录 `%LOCALAPPDATA%\liorvix\citadel-chrome-profile`。连续两次验证页即停。默认不写库；`--write` 需 `CITADEL_BROWSER_DETAIL_WRITE_ENABLED=true` 和 `.env.production.local`。
+- 每日任务脚本 `scripts/citadel-daily-detail-sync.ps1`。本机已用 Chrome 打通 1 条缺正文 intern 岗并写入生产。计划任务因权限拒绝未注册；已改到当前用户「启动」目录 `Liorvix-Citadel-Daily.cmd`，每天第一次登录跑一次。桌面和项目根目录有手动入口「更新Citadel岗位正文」，双击会强制跑一次。需要整点调度时再以有权限的账户运行 `scripts/install-citadel-daily-task.ps1`。未改采集器、主 Feed 游标或岗位开闭。
+
+## 2026-10-12 Wave B 开工：Pinterest
+
+- 查重：上游 `companies` / 目录无 Pinterest；美国生产 `job_company_sources` 无行。
+- 官方源：Greenhouse board `pinterest`（board API 名称 Pinterest），采集器出口 179 条、唯一 ID 179。官方 careers `https://www.pinterestcareers.com/`（HTML 403 不影响列表 API）。岗位 URL 全部 `www.pinterestcareers.com/jobs/?gh_jid=`。
+- 连接器样本：`GreenhouseConnector` 179/179，地点 179、部门 179、用工类型 179、上架日期 179、正文≥300 179、`source_complete` 179。截止日期和薪资官网未提供，保持空。workplace 列表未给，未猜测。
+- 登记一条 `completeness_source`：`companies.id=38b2801e-5faf-45e3-aa7f-bc87ac278c40`，`company_sources` Greenhouse `board_token=pinterest`。未改连接器代码，未改主 Feed 游标，未关岗。
+- 全量 crawl `7fabf454-c836-44f1-80d6-44bcce876172`：`success`，3 秒，discovered/expected/official/created = 179/179/179/179，updated 0，`official_count_status=publisher_reported_complete`。
+- 现网目录 91 家、0 failed。Pinterest `open_jobs=179`、`official_open_jobs=179`、`coverage=complete`、`quality=ok`、`completeness_source=greenhouse`。公网 `/collector-api/dashboard/company-directory` 一致。Greenhouse 列表已含全文，未跑详情 repair。
+- 连续 3 个成功周期后标 `regular`。下一家稳定 ATS：Box（Greenhouse `boxinc`）。
+
+## 2026-10-12 Wave B：Box
+
+- 查重：上游 `companies` / 目录无 Box（`%box%` 无命中）；美国生产 `job_company_sources` 无行。Pinterest 仍为 179 / 179 complete。
+- 官方源：Greenhouse board `boxinc`（board API 名称 Box），采集器出口 127 条、唯一 ID 127。官方 careers `https://www.box.com/careers`（HTML 403 不影响列表 API）。岗位 URL 全部 `job-boards.greenhouse.io/boxinc/jobs/{id}`。
+- 连接器样本：`GreenhouseConnector` 127/127，地点 127、部门 127、用工类型 127、上架日期 127、正文≥300 127、`source_complete` 127。截止日期和薪资官网未提供，保持空。workplace 列表未给，未猜测。
+- 登记一条 `completeness_source`：`companies.id=d19d02c2-e8c9-437a-a635-35b189a5acc2`，`company_sources` Greenhouse `board_token=boxinc`。未改连接器代码，未改主 Feed 游标，未关岗。
+- 全量 crawl `e64edbcc-4199-4ef8-b9f7-d628eaed068c`：`success`，3 秒，discovered/expected/official/created = 127/127/127/127，updated 0，`official_count_status=publisher_reported_complete`。
+- 现网目录 92 家、0 failed。Box `open_jobs=127`、`official_open_jobs=127`、`coverage=complete`、`quality=ok`、`completeness_source=greenhouse`。公网 `/collector-api/dashboard/company-directory` 一致。Greenhouse 列表已含全文，未跑详情 repair。Pinterest 仍 179 / 179 complete。
+- 当天稳定 ATS 配额已用完（Pinterest + Box）。连续 3 个成功周期后标 `regular`。下一家：Instacart（Greenhouse `instacart`）。
+
+## 2026-10-12 Wave B：Instacart
+
+- 查重：上游 `companies` / 目录无 Instacart；美国生产 `job_company_sources` 无行。Pinterest 179 / 179、Box 127 / 127 仍 complete。
+- 官方源：Greenhouse board `instacart`（board API 名称 Instacart），采集器出口 119 条、唯一 ID 119。官方 careers `https://www.instacart.careers/`（200）。岗位 URL 全部 `instacart.careers/job/?gh_jid=`。
+- 连接器样本：`GreenhouseConnector` 119/119，地点 119、部门 119、用工类型 119、上架日期 119、正文≥300 119、`source_complete` 119。截止日期和薪资官网未提供，保持空。workplace 列表未给，未猜测。
+- 登记一条 `completeness_source`：`companies.id=17dd001d-be1c-4306-86d1-f9a0a9202f83`，`company_sources` Greenhouse `board_token=instacart`。未改连接器代码，未改主 Feed 游标，未关岗。
+- 全量 crawl `42f4c080-5de6-4503-8864-0416aefa5e1d`：`success`，2 秒，discovered/expected/official/created = 119/119/119/119，updated 0，`official_count_status=publisher_reported_complete`。
+- 现网目录 93 家、0 failed。Instacart `open_jobs=119`、`official_open_jobs=119`、`coverage=complete`、`quality=ok`、`completeness_source=greenhouse`。公网 `/collector-api/dashboard/company-directory` 一致。Greenhouse 列表已含全文，未跑详情 repair。Pinterest、Box 仍 complete。
+- 连续 3 个成功周期后标 `regular`。下一家稳定 ATS：Plaid（Ashby `plaid`）。
+
+## 2026-10-13 Wave B：Plaid
+
+- 查重：上游 `companies` / 目录无 Plaid；美国生产 `job_company_sources` 此前无行。Pinterest、Box、Instacart 仍 complete。
+- 官方源：Ashby board `plaid`（posting-api 200，`jobs` 121、唯一 ID 121）。官方 careers `https://plaid.com/careers/`（200）。岗位 URL 全部 `jobs.ashbyhq.com/plaid/{id}`。Greenhouse / Lever 404，不是完整列表。备用 token `plaidinc` / `plaidhq` 404。
+- 连接器样本：`AshbyConnector` 121/121，地点 121、部门 121、工作方式 121、用工类型 121、上架日期 121、正文≥300 121。截止日期和薪资官网未提供，保持空。部门字段官网返回 `All Departments`，未猜测。`source_complete` 由 crawl 层按完整官方列表写入。
+- 登记一条 `completeness_source`：`companies.id=a09e83dd-ba05-424e-9d37-31d50a440c99`，`company_sources` Ashby `board_name=plaid`（`3294c653-9f69-475e-85ce-323284a0c343`）。未改连接器代码，未改主 Feed 游标，未关岗。
+- 全量 crawl `ebd6ffcf-c3c6-409f-bb6e-0d50a9ecd047`：`success`，约 1.5 秒，discovered/expected/official/created = 121/121/121/121，updated 0，`official_count_status=complete_official_list`。
+- 现网目录 94 家、0 failed。Plaid `open_jobs=121`、`official_open_jobs=121`、`coverage=complete`、`quality=ok`、`completeness_source=ashby`。公网 `/collector-api/dashboard/company-directory` 一致。Ashby 列表已含全文，未跑详情 repair。Pinterest、Box、Instacart 仍 complete。
+- 连续 3 个成功周期后标 `regular`。下一家稳定 ATS：Chime。
+
+## 2026-10-13 Wave B：Chime
+
+- 查重：上游 `companies` / 目录无 Chime。Plaid 121 / 121、Pinterest / Box / Instacart 仍 complete。
+- 官方源：Greenhouse board `chime`（board API 名称 Chime Financial, Inc），采集器出口 66 条、唯一 ID 66。官方 careers `https://www.chime.com/careers/`（HTML 403 不影响列表 API）。岗位 URL 全部 `boards.greenhouse.io/chime/jobs/{id}`。Ashby / Lever 404，备用 token `chimeinc` / `chimecard` / `chimefinancial` 404。
+- 连接器样本：`GreenhouseConnector` 66/66，地点 66、部门 66、上架日期 66、正文≥300 66、`source_complete` 66。截止日期、薪资、工作方式和用工类型官网列表未给，保持空。
+- 登记一条 `completeness_source`：`companies.id=99cdbbfd-3202-495b-b5ed-2cca94504cd9`，`company_sources` Greenhouse `board_token=chime`（`b4899a83-e984-43aa-9679-25e2c1ccbd8e`）。未改连接器代码，未改主 Feed 游标，未关岗。
+- 全量 crawl `5063cf76-bfe5-4892-98b0-9cab1470d75f`：`success`，约 1.8 秒，discovered/expected/official/created = 66/66/66/66，updated 0，`official_count_status=publisher_reported_complete`。
+- 现网目录 95 家、0 failed。Chime `open_jobs=66`、`official_open_jobs=66`、`coverage=complete`、`quality=ok`、`completeness_source=greenhouse`。公网 `/collector-api/dashboard/company-directory` 一致。Greenhouse 列表已含全文，未跑详情 repair。Plaid、Pinterest、Box、Instacart 仍 complete。
+- 连续 3 个成功周期后标 `regular`。下一家稳定 ATS：Dropbox。
+
+## 2026-10-13 Wave B：Dropbox
+
+- 查重：上游 `companies` / 目录无 Dropbox。Chime 66 / 66、Plaid / Pinterest / Box / Instacart 仍 complete。
+- 官方源：Greenhouse board `dropbox`（board API 名称 Dropbox），采集器出口 32 条、唯一 ID 32。官方 careers `https://www.dropbox.jobs/en/`（`jobs.dropbox.com/` 与 Greenhouse 看板均 302 到该页，200）。`dropbox.com/jobs` 与 `dropbox.com/careers` 404。岗位 URL 全部 `jobs.dropbox.com/listing/{id}`。Ashby / Lever 404，备用 token `dropboxinc` / `dbx` / `dropboxhq` 404。
+- 连接器样本：`GreenhouseConnector` 32/32，地点 32、部门 32、用工类型 32、上架日期 32、正文≥300 32、`source_complete` 32。截止日期、薪资和工作方式官网列表未给，保持空。
+- 登记一条 `completeness_source`：`companies.id=7d93c38c-ed8e-4d77-bb7c-7547919de0c2`，`company_sources` Greenhouse `board_token=dropbox`（`16e5fd54-2c8c-4509-907e-88e959bc08c4`）。未改连接器代码，未改主 Feed 游标，未关岗。
+- 全量 crawl `af13566d-a719-4182-8f87-660a37342380`：`success`，约 1 秒，discovered/expected/official/created = 32/32/32/32，updated 0，`official_count_status=publisher_reported_complete`。
+- 现网目录 96 家、0 failed。Dropbox `open_jobs=32`、`official_open_jobs=32`、`coverage=complete`、`quality=ok`、`completeness_source=greenhouse`。公网 `/collector-api/dashboard/company-directory` 一致。Greenhouse 列表已含全文，未跑详情 repair。Chime、Plaid、Pinterest、Box、Instacart 仍 complete。
+- 连续 3 个成功周期后标 `regular`。下一家稳定 ATS：GitHub（Jibe，复用 AMD）。
+
+## 2026-10-13 Wave B：GitHub
+
+- 查重：上游 `companies` / 目录无 GitHub。Dropbox 32 / 32、Chime / Plaid 仍 complete。AMD Jibe 仍 1296 / 1296 complete。
+- 官方源：Jibe `https://www.github.careers/api/jobs`，`totalCount`/`count` 73。官方 careers `https://www.github.careers/careers-home/`（200；`github.com/about/careers` 302 到该页）。`careers.github.com` 无解析，`jobs.github.com` 拒绝连接。稳定外部 ID 为 `req_id`。Canonical URL `https://www.github.careers/careers-home/jobs/{req_id}`。Greenhouse / Ashby / Lever 404。
+- 连接器样本：复用现成 `JibeConnector`，`page_size=20`/`max_pages=1` 得到 20/20，地点 20、部门 20、用工类型 18、上架日期 20、正文≥300 20、`detail_status=fetched_json`。截止日期、薪资和工作方式官网列表未给，保持空。样本 `source_complete=false` 是因为只取 20 条、官方 73 条。
+- 登记一条 `completeness_source`：`companies.id=3c52f80d-d42c-44a6-abb0-473c4621ccc4`，`company_sources` Jibe `api_url=https://www.github.careers/api/jobs`（`764b5547-ab4c-4524-a1b3-0f77c94cf240`），`page_size=100`，`max_pages=10`。未改连接器代码，未改主 Feed 游标，未关岗。
+- 全量 crawl `6ef951b4-2b78-491c-900a-d33b8d735a30`：`success`，约 3.5 秒，discovered/expected/official/created = 73/73/73/73，updated 0，`official_count_status=publisher_reported_complete`。
+- 现网目录 97 家、0 failed。GitHub `open_jobs=73`、`official_open_jobs=73`、`coverage=complete`、`quality=ok`、`completeness_source=jibe`。公网 `/collector-api/dashboard/company-directory` 一致。列表 JSON 已含全文，未跑详情 repair。Dropbox、Chime、Plaid、AMD 仍 complete。
+- 连续 3 个成功周期后标 `regular`。下一家稳定 ATS：DocuSign（Jibe）。
+
+## 2026-10-13 Wave B：DocuSign
+
+- 查重：上游 `companies` / 目录无 DocuSign。GitHub 73 / 73、Dropbox / Chime 仍 complete。AMD Jibe 仍 1296 / 1296 complete。
+- 官方源：Jibe `https://careers.docusign.com/api/jobs`，`totalCount`/`count` 270。官方 careers `https://careers.docusign.com/careers-home/`（200；`docusign.com/careers` 与 `docusign.com/company/careers` 均 302 到该页）。稳定外部 ID 为 `req_id`。Canonical URL `https://careers.docusign.com/careers-home/jobs/{req_id}`。列表 `apply_url` 指向 iCIMS 登录壳（如 `latamcareers-docusign.icims.com/.../login`），不当 canonical，也不当列表源。Greenhouse / Ashby / Lever 404。
+- 连接器样本：复用现成 `JibeConnector`，`page_size=20`/`max_pages=1` 得到 20/20，地点 20、部门 20、用工类型 20、上架日期 20、正文≥300 20、`detail_status=fetched_json`。截止日期、薪资和工作方式官网列表未给，保持空。样本 `source_complete=false` 是因为只取 20 条、官方 270 条。
+- 登记一条 `completeness_source`：`companies.id=eefacbdf-d2d0-4629-9afc-357713800b9f`，`company_sources` Jibe `api_url=https://careers.docusign.com/api/jobs`（`3e2807ee-0a52-4b28-bf45-e8c05e630251`），`page_size=100`，`max_pages=10`。未改连接器代码，未改主 Feed 游标，未关岗。
+- 全量 crawl `33db52c3-d147-4e3c-94d7-b386cf490d44`：`success`，约 8 秒，discovered/expected/official/created = 270/270/270/270，updated 0，`official_count_status=publisher_reported_complete`。
+- 现网目录 98 家、0 failed。DocuSign `open_jobs=270`、`official_open_jobs=270`、`coverage=complete`、`quality=ok`、`completeness_source=jibe`。公网 `/collector-api/dashboard/company-directory` 一致。列表 JSON 已含全文，未跑详情 repair。GitHub、Dropbox、Chime、AMD 仍 complete。
+- 连续 3 个成功周期后标 `regular`。已知稳定连接器队列已走完。下一家先探测 Snowflake。
+
+## 2026-10-13 Wave B：Snowflake
+
+- 查重：上游 `companies` / 目录无 Snowflake。DocuSign 270 / 270、GitHub 73 / 73 仍 complete。
+- 官方源探测：Greenhouse / Lever 404；SmartRecruiters 空列表；Jibe `/api/jobs` 500；Workday 各租户 422/401；Ashby `snowflake` 200 但无 jobs 列表。官网 `https://www.snowflake.com/careers/` 302 到 `https://careers.snowflake.com/us/en`。完整官方列表是 Phenom `https://careers.snowflake.com/us/en/search-results` 的 `phApp.ddo.eagerLoadRefineSearch`，`totalHits` 364。稳定外部 ID 为 `jobSeqNo`。Canonical URL `https://careers.snowflake.com/us/en/job/{jobSeqNo}`。
+- 连接器样本：Phenom 连接器不允许不完整快照（`max_pages=2` 会因 20 < 364 失败）。第一页 DDO 10/10 唯一 ID，地点 10、部门 10、用工类型 10、上架日期 10。列表是 teaser（`listing_teaser_only`）。截止日期、薪资和工作方式官网列表未给，保持空。
+- 登记一条 `completeness_source`：`companies.id=8f92499d-c57a-4700-8833-455de209f756`，`company_sources` Phenom `https://careers.snowflake.com/us/en/search-results`（`5af842f1-deee-406e-b209-9c18aae5c880`），`page_size=10`，`max_pages=80`。未改连接器代码，未改主 Feed 游标，未关岗。
+- 全量 crawl `c09d7cce-332e-4dec-a4f1-7b61bf908114`：`success`，约 27 秒，discovered/expected/official/created = 364/364/364/364，updated 0，`official_count_status=publisher_reported_complete`。
+- 有界详情 repair：20 + 4×80 + 24 = 364，`fetched` 364，unavailable/blocked/timeout/error 均为 0。正文≥300 为 364/364。`description_status` 仍为 `listing_teaser_only`（与 Cisco Phenom 相同），目录 `quality=partial`，不重开覆盖工单。
+- 现网目录 99 家、0 failed。Snowflake `open_jobs=364`、`official_open_jobs=364`、`coverage=complete`、`quality=partial`、`completeness_source=phenom`。公网 `/collector-api/dashboard/company-directory` 一致。岗位 URL 全部 `careers.snowflake.com`。DocuSign、GitHub 仍 complete。
+- 连续 3 个成功周期后标 `regular`。下一家先探测 Zoom。
+
+## 2026-10-13 Wave B：Zoom
+
+- 查重：上游 `companies` / 目录无 Zoom。Snowflake 364 / 364、DocuSign 270 / 270、GitHub 73 / 73 仍 complete。
+- 官方源探测：Greenhouse / Ashby / Lever 404；SmartRecruiters 空列表；Jibe / Eightfold / Phenom 不是列表源。`www.zoom.com/careers` HTML 403（Cloudflare）不是关岗信号。`zoom.us/careers` 200 到营销页 `https://explore.zoom.us/en/careers/`，再链到 `https://careers.zoom.us/home` → `https://www.careers.zoom.us/`。该 CMS 的 RSS/Atom 是博客 3 条，不是岗位列表。完整官方列表是 Workday CXS `https://zoom.wd5.myworkdayjobs.com/wday/cxs/zoom/Zoom/jobs`（站点名 `Zoom` 与 `zoom` 岗位集合相同）。采集时官方 `total` 从 101 落到 100；crawl 时 `total=100`，唯一 `externalPath` 100。Canonical URL `https://zoom.wd5.myworkdayjobs.com/Zoom{externalPath}`。
+- 连接器样本：复用现成 `WorkdayConnector`，`page_size=20`。列表 101/101 时地点 101、正文 0（Workday 列表无 JD）。截止日期和部门列表未给，保持空。
+- 登记一条 `completeness_source`：`companies.id=1d272e4b-6a88-44d2-ac21-e2567c8572ca`，`company_sources` Workday `https://zoom.wd5.myworkdayjobs.com/Zoom`（`f2509e1f-f1c7-4f1e-accd-7e99fc4bd304`），`api_url=https://zoom.wd5.myworkdayjobs.com/wday/cxs/zoom/Zoom/jobs`，`page_size=20`。官方 careers `https://www.careers.zoom.us/`。未改连接器代码，未改主 Feed 游标，未关岗。
+- 全量 crawl `8e77783c-029c-42e3-8ad3-8c07e060ffd2`：`success`，约 3 秒，discovered/expected/official/created = 100/100/100/100，updated 0，`official_count_status=publisher_reported_complete`。现网 CXS `total` 仍为 100。
+- 有界详情 repair：20 + 40 + 40 = 100，`fetched` 100，unavailable/closed/blocked/timeout/error 均为 0。正文≥300 为 100/100，地点 100，工作方式 100，用工类型 100，上架相对文案 100，部门 34，薪资 67。截止日期官网详情未映射为 `valid_through`，保持空。`detail_status=fetched`。目录 `quality=partial`（与 Broadcom Workday 相同），不重开覆盖工单。
+- 现网目录 100 家、0 failed。Zoom `open_jobs=100`、`official_open_jobs=100`、`coverage=complete`、`quality=partial`、`completeness_source=workday`。公网 `/collector-api/dashboard/company-directory` 一致。岗位 URL 全部 `zoom.wd5.myworkdayjobs.com`。Snowflake、DocuSign、GitHub 仍 complete。
+- 连续 3 个成功周期后标 `regular`。下一家先探测 HubSpot。
+
+## 2026-10-13 Wave B：HubSpot（探测停放，未登记）
+
+- 查重：上游 `companies` / 目录无 HubSpot。Zoom 100 / 100、Snowflake 364 / 364、DocuSign 270 / 270、GitHub 73 / 73 仍 complete。目录 100 家、0 failed。
+- 官方 careers：`https://www.hubspot.com/careers/jobs` 与 `/careers/jobs/all` 200，标题 All Openings。`jobs.hubspot.com` 302 到该页。页面是 HubSpot CMS + `template_careers-directory` React 目录，不是可解析的岗位列表 HTML。
+- 常见 ATS：Greenhouse token `hubspot` / `hubspotjobs` / `hubspotinc` 均为 404。Ashby / Lever 404。SmartRecruiters 空列表。Jibe / Eightfold / Phenom 不是列表源。Workday 租户 401/422。`www.careers.zoom.us` 式 CMS RSS 对 HubSpot 不存在；`www.hubspot.com/sitemap.xml` 3071 条无 `/careers/jobs/{id}`。
+- 官方列表机制：`window.careersUrlConfig.serverUrl=https://wtcfns.hubspot.com/careers/graphql`（`template_careers-language.min.js`）。schema 字段 `jobs` / `job` / `search` / `offices` / `departments`；`Job` 形状含 Greenhouse 式 `absolute_url`、`internal_job_id`、`requisition_id`、`content`。官网 Job Alerts 链到 `my.greenhouse.io/...job_board=hubspotjobs`，公开 board API 仍 404。
+- 采集器出口实测：GraphQL 网关 200，但所有 list/detail/search/offices/departments resolver 的底层 REST 返回 404 `Job not found` / `Office not found` / `Department not found`。`search(searchQuery:)` 类型是 `[Job]`，同样 404。`wtcfns.hubspot.com/careers/jobs` 要 API Gateway token。Altru `data-altru-directory=7146` / `data-altru-post=7046` 的 `api.altrulabs.com/dist-api/us/widgets/{id}` 无匹配记录。
+- 现成连接器：`OfficialConnector` 只 GET JSON-LD；`PublicFeedConnector` 只 GET JSON 列表；没有 GraphQL POST 连接器。不新写连接器去包一层 404 后端。
+- 未登记 `companies` / `company_sources`，未改连接器代码，未改主 Feed 游标，未关岗。HubSpot 停放，等官方 GraphQL 底层列表恢复或出现可复用的完整官方 JSON 后再走样本/登记。
+- 下一家先探测 LinkedIn。
+
+## 2026-10-13 Wave B：LinkedIn（探测停放，未登记）
+
+- 查重：上游 `companies` / 目录无 LinkedIn。Zoom 100 / 100、Snowflake 364 / 364、HubSpot 未登记。目录 100 家、0 failed。incomplete 仍是 Microsoft / Barclays / State Street，不并入扩公司队列。
+- 官方 careers：`https://careers.linkedin.com/` 200，Adobe AEM（`content.linkedin.com/lem` + `delivery-p143253-e1476319.adobeaemcloud.com`）。JSON-LD 只有 Organization / WebSite / WebPage，没有 JobPosting 列表。`/jobs`、`/openings`、`/search`、`.model.json`、sitemap 均 404/400。页面 CTA 链到 LinkedIn Jobs `f_C=1337,9202023,2561065,2587638,290903,39939`（地点页），不是 careers 站内列表。
+- 常见 ATS：Greenhouse `linkedin` 404；`linkedinjobs` 200 但是 Talon.One 的 19 条，不是 LinkedIn 公司。Ashby 404。Lever `linkedin` 23 条，标题含 `Deauth Test` / `Kritika Bug Bash`，是测试板。SmartRecruiters 空列表。Jibe / Eightfold / Phenom 不是列表源。Workday 租户 401/422。Avature `linkedin.avature.net` 200 但是空标题登录壳，`SearchJobs` 路径 404，不是现成 Avature 门户。iCIMS 405 人机验证。
+- Microsoft 已有独立公司（PCSX `apply.careers.microsoft.com`）。Microsoft 在招标题含 LinkedIn 为 0。本轮 PCSX GET 429、POST 401，不能把 LinkedIn 登记成 Microsoft 过滤子集。
+- 实际开口：`https://www.linkedin.com/jobs/search?f_C=1337` 标题 197 条（美国）、`geoId=92000000` 标题 415 条（全球）。JSON-LD 是 `ItemList` 首页 60 条 `ListItem`（不是 `JobPosting`），`OfficialConnector` 只会得到 0 条。guest HTML `jobs-guest/jobs/api/seeMoreJobPostings/search` 每页约 10 张卡片，同出口连续请求已 429。`www.linkedin.com/robots.txt` 禁止未授权自动化。`/jobs/linkedin-jobs` 标题 11,000+ 是平台上含 LinkedIn 字样的岗位，不是公司在招，不当源。
+- 现成连接器：`OfficialConnector` 只 GET JSON-LD JobPosting；`PublicFeedConnector` 只 GET JSON 列表；没有 LinkedIn guest HTML 连接器。不为 429/反爬 HTML 分页新写连接器，也不把测试 Lever 或 Talon.One Greenhouse 登记成 completeness 源。
+- 未登记 `companies` / `company_sources`，未改连接器代码，未改主 Feed 游标，未关岗。LinkedIn 停放，等官方出现可复用的完整 JSON/ATS 列表后再走样本/登记。
+- 下一家先探测 Snap。
+
+## 2026-10-13 Wave B：LinkedIn（本机官方快照 + public_feed，已登记）
+
+- 办法 1：本机 headed Edge 专用配置 `%LOCALAPPDATA%\liorvix\linkedin-edge-profile` 登录后，抓官方公司筛选 `f_C=1337&geoId=92000000`。guest HTML 登录后 451，改走页面已发出的官方 JobCards GET（`voyagerJobsDashJobCards`）和职位简介 GET（`JOB_DESCRIPTION_CARD`）。采集器侧只登记现成 `public_feed`，不新写 GraphQL/HTML 连接器。
+- 快照：`list_complete=true`，官方 `paging.total` 416，抓到 416 条，地点 416，正文≥300 为 416，招聘方均为 LinkedIn，URL 全部 `www.linkedin.com/jobs/view/{id}`。
+- 写入：静态 feed `http://api:8000/static/feeds/linkedin-official-jobs.json`（worker 实测 200 / 2,759,685 bytes / 416 jobs）。`companies` + 一条 `public_feed` `completeness_source=true`。
+- crawl `6c4fe21b-9c1c-4a4e-bb78-8f99ad28c792` success：discovered 416 / expected 416 / official 416 / `publisher_reported_complete` / created 416。目录 101 家、0 failed。LinkedIn `open_jobs=416`，`coverage=complete`，`quality=partial`（部门/雇佣类型未在官方卡片保证，不猜）。incomplete 仍是 Microsoft / Barclays / State Street。HubSpot 未登记。
+- 未改主 Feed 游标，未关其它公司岗位。日常入口：登录后关专用 Edge，再跑桌面 `Update LinkedIn Jobs`。
+- 下一家先探测 Snap。
+
+## 2026-10-13 LinkedIn 地点证据回填
+
+- 现象：采集器 416 条都有官方地点，生产库 250 条目标地区岗位 `region` 也有值，但 `location_source` 为空。公开 API 按证据规则把地点显示成「未注明」。
+- 原因：LinkedIn 不在 `job-company-field-rules` 里，collector `public_feed` 又不带 `structured_field_sources.location`，Feed 无法把 `www.linkedin.com` 上的 JobCards 地点标成 `official_payload`。
+- 修复：登记 LinkedIn 官方 host（`www.linkedin.com` / `linkedin.com`），允许 `official_payload`。地点字符串里的 Hybrid/Remote/On-site 作为官方 workplace。生产只补缺失证据，不改开关状态、不改 Feed 游标。
+- 生产库 `weqvdtdjdzmqflhwobec`：250 条在招全部写入 `location_source=official_payload`，workplace 250/250。公网 `/api/jobs?company=LinkedIn` 抽样 8 条地点均可见；详情 `123455` 为 `Montreal, QC (On-site)`。
+- 仍不猜部门、薪资、截止日期。印度/爱尔兰等非目标地区岗位继续只留在采集器，不进美国站目录。

@@ -5,7 +5,7 @@ const names = [
   'BILLING_ENABLED', 'WECHAT_PAY_ENABLED', 'ALIPAY_ENABLED', 'WECHAT_PAY_MCH_ID', 'WECHAT_PAY_APP_ID',
   'WECHAT_PAY_SERIAL_NO', 'WECHAT_PAY_PRIVATE_KEY', 'WECHAT_PAY_API_V3_KEY', 'WECHAT_PAY_NOTIFY_URL',
   'WECHAT_PAY_PLATFORM_CERTIFICATE', 'WECHAT_PAY_PLATFORM_PUBLIC_KEY', 'ALIPAY_APP_ID', 'ALIPAY_PRIVATE_KEY',
-  'ALIPAY_PUBLIC_KEY', 'ALIPAY_NOTIFY_URL',
+  'ALIPAY_PUBLIC_KEY', 'ALIPAY_NOTIFY_URL', 'PAYMENT_HANDOFF_SECRET',
 ];
 const previous = new Map(names.map((name) => [name, process.env[name]]));
 
@@ -14,16 +14,37 @@ try {
   let readiness = getBillingReadiness();
   assert.equal(readiness.checkoutReady, false);
   assert.equal(readiness.wechat.enabled, false);
+  assert.equal(readiness.handoffReady, false);
   assert.ok(readiness.wechat.missing.includes('WECHAT_PAY_MCH_ID'));
+  // A channel with keys but no handoff secret cannot open /pay/checkout, so it
+  // must not report itself as ready.
+  assert.ok(readiness.wechat.missing.includes('PAYMENT_HANDOFF_SECRET'));
+  assert.ok(readiness.alipay.missing.includes('PAYMENT_HANDOFF_SECRET'));
 
   process.env.BILLING_ENABLED = 'true';
   process.env.WECHAT_PAY_ENABLED = 'true';
   for (const name of ['WECHAT_PAY_MCH_ID', 'WECHAT_PAY_APP_ID', 'WECHAT_PAY_SERIAL_NO', 'WECHAT_PAY_PRIVATE_KEY', 'WECHAT_PAY_API_V3_KEY', 'WECHAT_PAY_NOTIFY_URL', 'WECHAT_PAY_PLATFORM_PUBLIC_KEY']) process.env[name] = 'configured';
   process.env.WECHAT_PAY_NOTIFY_URL = 'https://example.com/api/payments/wechat/notify';
   readiness = getBillingReadiness();
+  // Provider keys alone are not enough: the handoff secret is still missing, so
+  // checkout must stay closed while handoffReady reports the real gap.
+  assert.equal(readiness.handoffReady, false);
+  assert.equal(readiness.checkoutReady, false);
+  assert.ok(readiness.wechat.missing.includes('PAYMENT_HANDOFF_SECRET'));
+
+  process.env.PAYMENT_HANDOFF_SECRET = 'a'.repeat(32);
+  readiness = getBillingReadiness();
+  assert.equal(readiness.handoffReady, true);
   assert.equal(readiness.wechat.configured, true);
   assert.equal(readiness.checkoutReady, true);
 
+  process.env.PAYMENT_HANDOFF_SECRET = 'too-short';
+  readiness = getBillingReadiness();
+  assert.equal(readiness.handoffReady, false);
+  assert.equal(readiness.checkoutReady, false);
+  assert.ok(readiness.wechat.warnings.some((warning) => warning.includes('PAYMENT_HANDOFF_SECRET')));
+
+  process.env.PAYMENT_HANDOFF_SECRET = 'a'.repeat(32);
   process.env.WECHAT_PAY_NOTIFY_URL = 'http://localhost:5000/api/payments/wechat/notify';
   readiness = getBillingReadiness();
   assert.equal(readiness.wechat.configured, false);
@@ -37,4 +58,3 @@ try {
 }
 
 console.log('billing readiness tests passed');
-

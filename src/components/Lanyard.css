@@ -5,4 +5,17 @@
 
 .lanyard-wrapper canvas {
   display: block;
+  opacity: 0;
+  transition: opacity 280ms ease;
+}
+
+.lanyard-wrapper.is-ready canvas {
+  opacity: 1;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .lanyard-wrapper canvas {
+    opacity: 1;
+    transition: none;
+  }
 }

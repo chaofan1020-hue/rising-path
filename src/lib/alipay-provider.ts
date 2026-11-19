@@ -108,13 +108,13 @@ async function callAlipay(method: string, bizContent: Record<string, unknown>, n
   return result;
 }
 
-function buildAlipayWapUrl(input: BillingPaymentRequest, expiresAt: Date): string {
+function buildAlipayPageUrl(input: BillingPaymentRequest, expiresAt: Date): string {
   const timeoutMinutes = Math.max(1, Math.ceil((expiresAt.getTime() - Date.now()) / 60000));
-  const params = signedParams('alipay.trade.wap.pay', {
+  const params = signedParams('alipay.trade.page.pay', {
     out_trade_no: input.orderNo,
     total_amount: (input.amountMinor / 100).toFixed(2),
     subject: (input.description || input.planCode).slice(0, 256),
-    product_code: 'QUICK_WAP_WAY',
+    product_code: 'FAST_INSTANT_TRADE_PAY',
     timeout_express: `${timeoutMinutes}m`,
   }, {
     notify_url: input.notifyUrl || required('ALIPAY_NOTIFY_URL'),
@@ -129,41 +129,37 @@ export class AlipayProvider implements BillingProvider {
   async createPaymentSession(input: BillingPaymentRequest): Promise<BillingPaymentSession> {
     const expiresAt = input.expiresAt || paymentExpiryDate(120);
     const timeoutMinutes = Math.max(1, Math.ceil((expiresAt.getTime() - Date.now()) / 60000));
-    if (input.channel === 'alipay_wap') {
+    if (input.channel === 'alipay_page') {
       return {
         provider: this.name,
         channel: input.channel,
         merchantOrderNo: input.orderNo,
         qrCode: null,
-        redirectUrl: buildAlipayWapUrl(input, expiresAt),
+        redirectUrl: buildAlipayPageUrl(input, expiresAt),
         status: 'pending',
         expiresAt: expiresAt.toISOString(),
         enabled: true,
       };
     }
-    if (input.channel !== 'alipay_qr') throw new Error('当前阶段仅开放支付宝扫码和 WAP 支付');
-    const result = await callAlipay('alipay.trade.precreate', {
-      out_trade_no: input.orderNo,
-      total_amount: (input.amountMinor / 100).toFixed(2),
-      subject: (input.description || input.planCode).slice(0, 256),
-      timeout_express: `${timeoutMinutes}m`,
-    }, input.notifyUrl);
-    return {
-      provider: this.name,
-      channel: input.channel,
-      merchantOrderNo: input.orderNo,
-      qrCode: typeof result.qr_code === 'string' ? result.qr_code : null,
-      redirectUrl: null,
-      status: 'pending',
-      expiresAt: expiresAt.toISOString(),
-      enabled: true,
-    };
+    throw new Error('当前仅开放支付宝电脑网站支付');
   }
 
   async queryPayment(input: BillingPaymentQuery): Promise<BillingPaymentQueryResult> {
     const result = await callAlipay('alipay.trade.query', { out_trade_no: input.merchantOrderNo, ...(input.providerTradeNo ? { trade_no: input.providerTradeNo } : {}) });
+    const refundFee = result.refund_fee;
+    const refunded = refundFee != null && Number(refundFee) > 0;
+    // Alipay returns the original order total in total_amount even after a
+    // refund. After a full refund trade_status is TRADE_CLOSED, which must not
+    // be read as "user abandoned the order", otherwise a refunded order gets
+    // marked cancelled/expired. Use refund_fee to tell the two apart.
+    let status: BillingPaymentStatus = refunded ? 'refunded' : mapAlipayTradeStatus(result.trade_status);
+    if (status === 'refunded') {
+      const total = yuanToMinor(result.total_amount) ?? 0;
+      const refundedMinor = yuanToMinor(refundFee) ?? 0;
+      if (refundedMinor < total) status = 'partially_refunded';
+    }
     return {
-      status: mapAlipayTradeStatus(result.trade_status),
+      status,
       amountMinor: yuanToMinor(result.total_amount),
       providerTradeNo: typeof result.trade_no === 'string' ? result.trade_no : null,
     };
@@ -205,11 +201,20 @@ export class AlipayProvider implements BillingProvider {
     const params: Record<string, string> = {};
     values.forEach((value, key) => { if (key !== 'sign' && key !== 'sign_type') params[key] = value; });
     if (!verifyParams(params, sign)) throw new Error('支付宝回调验签失败');
+    // A signed notification whose app_id is not ours is a replay of another
+    // merchant's message: reject instead of recording it against our orders.
+    const expectedAppId = process.env.ALIPAY_APP_ID?.trim();
+    if (!expectedAppId) throw new Error('缺少支付宝配置：ALIPAY_APP_ID');
+    if (values.get('app_id') !== expectedAppId) throw new Error('支付宝回调 app_id 不匹配');
     const tradeStatus = values.get('trade_status');
     const refundFee = values.get('refund_fee');
+    const sortable = `${values.get('out_trade_no') || ''}:${values.get('trade_no') || ''}:${tradeStatus || ''}:${refundFee || ''}`;
     const status = refundFee && Number(refundFee) > 0 ? 'refunded' as const : mapAlipayTradeStatus(tradeStatus);
     return {
-      eventId: values.get('notify_id') || `${values.get('out_trade_no') || ''}:${values.get('trade_no') || ''}:${status}`,
+      // notify_id stays stable across Alipay retries of the same message, so it
+      // is the natural idempotency key. The fallback includes trade_status and
+      // refund_fee so a refund notification never looks like a payment replay.
+      eventId: values.get('notify_id') || sortable,
       eventType: tradeStatus || 'notify',
       merchantOrderNo: values.get('out_trade_no'),
       providerTradeNo: values.get('trade_no'),

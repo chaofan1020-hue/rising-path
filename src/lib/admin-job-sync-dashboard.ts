@@ -2,11 +2,12 @@ import type { SupabaseClient } from '@supabase/supabase-js';
 import { resolveDisplayLogoUrls } from '@/lib/company-logo';
 import {
   DASHBOARD_FIELDS,
+  buildCompanySyncReport,
   cursorPreview,
-  deriveCompanyStatus,
   derivePipelineStatus,
   isLeaseActive,
   isStale,
+  timestampMs,
   normalizeCoverage,
   sanitizeError,
   type DashboardFailureCounts,
@@ -224,11 +225,29 @@ function sourceLogo(source: SourceRow, logos: Map<string, { logo_url: string | n
   };
 }
 
+function feedStateForCompany(companyFeedState: SyncState | null, globalFeedState: SyncState | null): SyncState | null {
+  if (!companyFeedState) return globalFeedState;
+  if (!globalFeedState) return companyFeedState;
+  if (isLeaseActive(companyFeedState)) return companyFeedState;
+  const companySuccess = timestampMs(companyFeedState.last_incremental_success_at || companyFeedState.last_success_at) || 0;
+  const globalSuccess = timestampMs(globalFeedState.last_incremental_success_at || globalFeedState.last_success_at) || 0;
+  // A one-off company cursor must not mask the live global feed.
+  return companySuccess >= globalSuccess ? companyFeedState : globalFeedState;
+}
+
+function attachPipelineDetail(reasons: Array<{ code: string; label: string }>, code: string, error: string | null | undefined) {
+  const detail = sanitizeError(error, 180);
+  if (!detail) return;
+  const reason = reasons.find((item) => item.code === code);
+  if (reason && !reason.label.includes(detail)) reason.label = `${reason.label}：${detail}`;
+}
+
 function buildCard(source: SourceRow, counts: Map<string, number>, states: Map<string, SyncState>, failures: Map<string, DashboardFailureCounts>, logos: Map<string, { logo_url: string | null; fallback_logo_url: string | null; source: string }>, liveRuns: Map<string, LiveRunRow>, staleRunSources: Set<string>, historicalReviews: Map<string, HistoricalReviewRow>) {
   const localActiveJobs = counts.get(source.company_name) ?? (Number(source.active_jobs) || 0);
   const companyFeedState = source.upstream_company_id ? states.get(`feed:company:${source.upstream_company_id}`) || null : null;
   const globalFeedState = states.get('collector_feed') || null;
-  const feedState = companyFeedState || globalFeedState;
+  const feedState = feedStateForCompany(companyFeedState, globalFeedState);
+  const feedUsesCompanyCursor = Boolean(feedState && companyFeedState && feedState.source_system === companyFeedState.source_system);
   const feedStatusBase = derivePipelineStatus({
     state: feedState,
     stale: Boolean(feedState && isStale(feedState.last_incremental_success_at || feedState.last_success_at, FEED_STALE_MS)),
@@ -275,39 +294,31 @@ function buildCard(source: SourceRow, counts: Map<string, number>, states: Map<s
   const countReconciliationFresh = source.official_count_observed_at
     ? !isStale(source.official_count_observed_at, UPSTREAM_SNAPSHOT_STALE_MS)
     : upstreamFresh;
-  const countMismatch = countReconciliationFresh
-    && officialCount !== null
-    && upstreamDiscoveredCount !== null
-    && officialCount !== upstreamDiscoveredCount;
-  const derivedStatus = deriveCompanyStatus({
+  const report = buildCompanySyncReport({
     sourceStatus: source.status,
     feedStatus,
     officialStatus,
     pendingFields: fieldCounts.pending,
     rejectedFields: fieldCounts.rejected,
-    countMismatch,
+    officialCount,
+    discoveredCount: upstreamDiscoveredCount,
+    upstreamActiveJobs: upstreamFresh ? source.upstream_active_jobs : null,
+    countReconciliationFresh,
+    officialCountStatus: source.official_count_status || (officialCount !== null ? 'legacy' : 'unavailable'),
+    latestRunStatus: source.upstream_latest_run_status,
+    snapshotError: sanitizeError(source.upstream_snapshot_error),
   });
-  const status = historicalLiveRun ? 'running' as const : derivedStatus;
-  const reasons: Array<{ code: string; label: string }> = [];
-  if (source.status === 'discovery_required') reasons.push({ code: 'discovery_required', label: '来源待探测' });
-  if (feedStatus === 'stalled') reasons.push({ code: 'feed_stalled', label: '主 Feed 游标停滞' });
-  if (feedStatus === 'failed') reasons.push({ code: 'feed_failed', label: '主 Feed 同步失败' });
-  if (officialStatus === 'stalled') reasons.push({ code: 'official_stalled', label: '官方字段游标停滞' });
-  if (officialStatus === 'failed') reasons.push({ code: 'official_failed', label: '官方字段同步失败' });
-  if (officialStatus === 'unknown' && source.status !== 'discovery_required') reasons.push({ code: 'official_uninitialized', label: '官方游标未初始化' });
-  if (countMismatch) reasons.push({ code: 'count_mismatch', label: '官方与上游岗位数量不一致' });
-  if (fieldCounts.pending > 0) {
-    reasons.push({
-      code: 'pending_fields',
-      label: officialLiveRun
-        ? `${fieldCounts.pending} 个字段待处理`
-        : `历史字段待复核 ${fieldCounts.pending} 条（当前增量已追平）`,
-    });
-  }
-  if (fieldCounts.rejected > 0) reasons.push({ code: 'rejected_fields', label: `${fieldCounts.rejected} 个字段被拒绝` });
+  attachPipelineDetail(report.reasons, 'feed_failed', feedState?.last_error);
+  attachPipelineDetail(report.reasons, 'feed_stalled', feedState?.last_error);
+  attachPipelineDetail(report.reasons, 'official_failed', officialState?.last_error);
+  attachPipelineDetail(report.reasons, 'official_stalled', officialState?.last_error);
+  // Historical field review is quality work. It must not hide a real failure.
+  const status = historicalLiveRun && !report.actionable ? 'running' as const : report.status;
+  const reasons = report.reasons;
+  const qualityNotes = report.qualityNotes;
 
   const stateForCard = feedState;
-  const liveRunCandidate = liveRuns.get(companyFeedState?.source_system || globalFeedState?.source_system || 'collector_feed') || null;
+  const liveRunCandidate = liveRuns.get(feedState?.source_system || globalFeedState?.source_system || 'collector_feed') || null;
   const liveRun = liveRunCandidate && isLeaseActive(stateForCard || {}) ? liveRunCandidate : null;
   return {
     companyName: source.company_name,
@@ -328,7 +339,9 @@ function buildCard(source: SourceRow, counts: Map<string, number>, states: Map<s
       timezone: source.timezone,
     },
     status,
+    actionable: report.actionable,
     reasons,
+    qualityNotes,
     counts: {
       localActiveJobs,
       upstreamActiveJobs: source.upstream_active_jobs,
@@ -342,10 +355,11 @@ function buildCard(source: SourceRow, counts: Map<string, number>, states: Map<s
       upstreamObservedAt: source.upstream_last_observed_at,
       upstreamFresh,
       countReconciliationFresh,
+      upstreamLatestRunStatus: source.upstream_latest_run_status,
     },
     feed: {
-      mode: companyFeedState ? 'company_cursor' : 'global',
-      stateSource: companyFeedState?.source_system || globalFeedState?.source_system || 'collector_feed',
+      mode: feedUsesCompanyCursor ? 'company_cursor' : 'global',
+      stateSource: feedState?.source_system || globalFeedState?.source_system || 'collector_feed',
       status: feedStatus,
       cursor: stateForCard?.cursor || source.collector_last_cursor,
       cursorPreview: cursorPreview(stateForCard?.cursor || source.collector_last_cursor),
@@ -544,7 +558,8 @@ export async function loadJobSyncDashboard(client = getSupabaseClient()) {
     summary: {
       activeCompanies: companies.length,
       healthyCompanies: statuses.healthy,
-      attentionCompanies: statuses.attention + statuses.retrying + statuses.stalled + statuses.discovery_required + statuses.unknown,
+      attentionCompanies: companies.filter((company) => company.actionable).length,
+      qualityOnlyCompanies: companies.filter((company) => !company.actionable && company.qualityNotes.length > 0).length,
       failedCompanies: statuses.failed,
       runningCompanies: statuses.running,
       localActiveJobs,
@@ -616,7 +631,7 @@ export async function loadJobSyncDashboardCompany(companyName: string, client = 
   const dashboard = await loadJobSyncDashboard(client);
   const company = dashboard.companies.find((entry) => entry.companyName.toLocaleLowerCase() === companyName.trim().toLocaleLowerCase());
   if (!company) return null;
-  const sourceSystem = company.upstreamCompanyId ? `feed:company:${company.upstreamCompanyId}` : 'collector_feed';
+  const sourceSystem = company.feed.stateSource || 'collector_feed';
   const [companyRuns, sourceRuns, failures] = await Promise.all([
     client.from('job_sync_runs').select('id,source_system,company_name,company_id,mode,status,cursor_before,cursor_after,total_candidates,processed_candidates,remaining_candidates,pages,received,upserted,closed,skipped,row_failures,fatal_failures,write_batches,write_batch_failures,write_fallback_rows,write_duration_ms,error_message,started_at,completed_at').eq('company_name', company.companyName).order('started_at', { ascending: false }).limit(20),
     client.from('job_sync_runs').select('id,source_system,company_name,company_id,mode,status,cursor_before,cursor_after,total_candidates,processed_candidates,remaining_candidates,pages,received,upserted,closed,skipped,row_failures,fatal_failures,write_batches,write_batch_failures,write_fallback_rows,write_duration_ms,error_message,started_at,completed_at').eq('source_system', sourceSystem).order('started_at', { ascending: false }).limit(20),

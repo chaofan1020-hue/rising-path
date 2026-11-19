@@ -169,6 +169,8 @@
 | /api/networking/recommend | GET | 获取分层化 Networking 建议 |
 | /api/networking/progress | GET/PATCH | 获取/更新 Networking 进度 |
 | /api/application-profile/ai-fill | POST | 基于指定简历生成求职档案 |
+| /api/apply/resolve | POST | 网申扫描结果 → 逐字段填写计划（配方+词库+档案推导，默认零 AI） |
+| /api/apply/resume-file | GET | 按登录用户返回原始简历字节，供本地 Agent 原生上传 |
 | /api/interview/chat | POST | 模拟面试（流式；新会话/继续/轮次切换） |
 | /api/interview/feedback | POST | 面试真实度反馈（<6分进人工审查） |
 | /api/company-dna | GET/PATCH | 获取企业基因摘要/人工更新基因（version+1） |

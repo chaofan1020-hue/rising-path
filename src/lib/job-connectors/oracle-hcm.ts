@@ -50,11 +50,12 @@ export function parseOracleHcmJob(rawValue: unknown, options: ConnectorParseOpti
   // entire qualifications paragraph.
   const salary = extractSalary([raw.SalaryRange, raw.salaryRange, raw.Compensation]) || extractSalaryFromDescription(raw.ExternalDescriptionStr);
   const deadline = extractDeadline([raw.ExternalPostedEndDate, raw.PostingEndDate, raw.ApplicationDeadline]);
-  const employmentCategory = normalizeEmploymentCategory([raw.RequisitionType, raw.ContractType, raw.WorkerType, raw.JobType, raw.StudyLevel, title, description]);
+  const employmentType = text(raw.JobSchedule || raw.ContractType || raw.WorkerType || raw.JobType) || null;
+  const employmentCategory = normalizeEmploymentCategory([raw.RequisitionType, raw.ContractType, raw.WorkerType, raw.JobType, raw.JobSchedule, raw.StudyLevel, title, description]);
   const fields = sourceEvidence(sourceUrl, 'oracle_hcm', {
     location: locations.length ? 'official_payload' : null,
     workplace_type: workplace.workplaceType ? 'official_payload' : null,
-    employment_type: raw.ContractType || raw.WorkerType || raw.JobType ? 'official_payload' : null,
+    employment_type: employmentType ? 'official_payload' : null,
     employment_category: employmentCategory !== '未知' ? 'official_payload' : null,
     experience: experience.text ? 'official_description' : null,
     salary_range: salary ? 'official_description' : null,
@@ -70,7 +71,7 @@ export function parseOracleHcmJob(rawValue: unknown, options: ConnectorParseOpti
     description: description || null,
     source_url: sourceUrl,
     location: locations.length ? locations : null,
-    employment_type: text(raw.ContractType || raw.WorkerType || raw.JobType) || null,
+    employment_type: employmentType,
     employment_category: employmentCategory,
     experience: experience.text,
     experience_min_years: experience.min,

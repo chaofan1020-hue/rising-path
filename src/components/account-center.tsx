@@ -11,6 +11,7 @@ import { apiFetch } from '@/lib/api-client';
 import { cn } from '@/lib/utils';
 import { useLanguage } from '@/lib/language-context';
 import { ACCOUNT_COPY } from '@/lib/account-copy';
+import { useTheme } from '@/lib/theme-context';
 
 type AccountCenterProps = {
   user: User;
@@ -28,6 +29,7 @@ function fallbackName(user: User, displayName: string, fallback: string) {
 
 export function AccountCenter({ user, displayName, onLogout }: AccountCenterProps) {
   const { locale } = useLanguage();
+  const { theme } = useTheme();
   const copy = ACCOUNT_COPY[locale];
   const [open, setOpen] = useState(false);
   const [profile, setProfile] = useState<Profile>({
@@ -86,7 +88,7 @@ export function AccountCenter({ user, displayName, onLogout }: AccountCenterProp
         <span className="hidden max-w-36 truncate text-sm font-medium text-black dark:text-white 2xl:block">{name}</span>
       </button>
     </DropdownMenuTrigger>
-    <DropdownMenuContent align="end" sideOffset={8} onCloseAutoFocus={(event) => event.preventDefault()} className="w-[330px] p-0 data-[state=closed]:animate-none data-[state=open]:animate-none">
+    <DropdownMenuContent align="end" sideOffset={8} onCloseAutoFocus={(event) => event.preventDefault()} className={cn('w-[330px] p-0 data-[state=closed]:animate-none data-[state=open]:animate-none', theme === 'dark' && 'dark')}>
       <div className="border-b px-4 py-4"><div className="flex items-center gap-3"><Avatar className="h-11 w-11 border border-zinc-200 dark:border-zinc-700"><AvatarImage src={avatarUrl || undefined} alt="" /><AvatarFallback className="bg-zinc-900 text-white dark:bg-white dark:text-zinc-900">{initials}</AvatarFallback></Avatar><div className="min-w-0"><p className="truncate font-semibold">{name}</p><p className="truncate text-xs text-muted-foreground">{profile?.email || user.email}</p></div></div></div>
       <div className="p-3"><div className="rounded-lg border border-zinc-200 bg-zinc-50 p-3 dark:border-zinc-800 dark:bg-zinc-900"><div className="flex items-start justify-between gap-3"><div><p className="text-xs text-muted-foreground">{copy.aiCredits}</p><p className="mt-1 text-2xl font-semibold tracking-tight">{creditLoading ? '...' : credits ? number(credits.balance, locale) : '--'} <span className="text-xs font-normal text-muted-foreground">{locale === 'en' ? 'credits' : '分'}</span></p></div><Coins className="h-5 w-5 text-amber-600" /></div><p className="mt-2 text-xs text-muted-foreground">{copy.balanceDescription}</p><Link href="/account/credits" onClick={() => setOpen(false)} className="mt-3 inline-flex items-center gap-1 text-xs font-medium text-primary hover:underline">{copy.viewCreditHistory}<ArrowRight className="h-3.5 w-3.5" /></Link></div></div>
       <div className="px-2 pb-2"><Link href="/account" onClick={() => setOpen(false)} className="flex items-center gap-3 rounded-md px-2.5 py-2.5 text-sm hover:bg-zinc-100 dark:hover:bg-zinc-800"><UserRound className="h-4 w-4 text-muted-foreground" /><span>{copy.profileSettings}</span><ArrowRight className="ml-auto h-4 w-4 text-muted-foreground" /></Link><Link href="/resume" onClick={() => setOpen(false)} className="flex items-center gap-3 rounded-md px-2.5 py-2.5 text-sm hover:bg-zinc-100 dark:hover:bg-zinc-800"><FileText className="h-4 w-4 text-muted-foreground" /><span>{copy.myResume}</span><ArrowRight className="ml-auto h-4 w-4 text-muted-foreground" /></Link><Link href="/pricing" onClick={() => setOpen(false)} className="flex items-center gap-3 rounded-md px-2.5 py-2.5 text-sm hover:bg-zinc-100 dark:hover:bg-zinc-800"><ShoppingCart className="h-4 w-4 text-muted-foreground" /><span>{copy.purchaseCredits}</span><ArrowRight className="ml-auto h-4 w-4 text-muted-foreground" /></Link><Link href="/account/credits" onClick={() => setOpen(false)} className="flex items-center gap-3 rounded-md px-2.5 py-2.5 text-sm hover:bg-zinc-100 dark:hover:bg-zinc-800"><History className="h-4 w-4 text-muted-foreground" /><span>{copy.viewCreditHistory}</span><ArrowRight className="ml-auto h-4 w-4 text-muted-foreground" /></Link><Link href="/account/billing" onClick={() => setOpen(false)} className="flex items-center gap-3 rounded-md px-2.5 py-2.5 text-sm hover:bg-zinc-100 dark:hover:bg-zinc-800"><Coins className="h-4 w-4 text-muted-foreground" /><span>{copy.viewBillingOrders}</span><ArrowRight className="ml-auto h-4 w-4 text-muted-foreground" /></Link></div>

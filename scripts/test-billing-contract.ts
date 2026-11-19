@@ -31,15 +31,19 @@ assert.match(hardeningSql, /billing_orders_one_open_per_user_uidx/, 'one open ch
 assert.match(hardeningSql, /cancelled', 'expired', 'failed/, 'delayed paid callbacks must still settle after local cancel/expiry');
 assert.match(hardeningSql, /complete_billing_refund/, 'refund callbacks must settle through a database function');
 
+const alipayPageSql = read('supabase/migrations/0132_alipay_page_payment_channel.sql');
+assert.match(alipayPageSql, /payment_attempts_channel_check/, 'Alipay website payment must be accepted by the payment-attempt constraint');
+assert.match(alipayPageSql, /'alipay_page'/, 'the payment-attempt constraint must allow Alipay computer website payment');
+
 const ordersRoute = read('src/app/api/billing/orders/route.ts');
-assert.match(ordersRoute, /wechat_h5/);
-assert.match(ordersRoute, /alipay_wap/);
-assert.match(ordersRoute, /CLIENT_IP_REQUIRED/);
+assert.match(ordersRoute, /alipay_page/);
+assert.doesNotMatch(ordersRoute, /wechat_native|wechat_h5|alipay_qr|alipay_wap/);
 assert.match(ordersRoute, /subscription/);
 assert.match(ordersRoute, /AMOUNT_NOT_CLIENT_SETTABLE/, 'checkout must reject client-submitted prices');
 assert.match(ordersRoute, /display_amount_minor/, 'orders must snapshot the USD catalog amount without charging it');
 assert.match(ordersRoute, /planCatalogUsdCents/, 'order USD snapshots must come from the stored catalog price');
 assert.doesNotMatch(ordersRoute, /cnyFenToUsdCents/, 'orders must not convert CNY into a live USD quote');
+assert.match(ordersRoute, /sameReturnPath/, 'an open payment order must be recreated when its Alipay return page changes');
 
 const plansRoute = read('src/app/api/billing/plans/route.ts');
 assert.match(plansRoute, /displayAmountMinor/, 'catalog USD amounts must be returned by the server');
@@ -53,5 +57,27 @@ assert.match(catalogSql, /699/, 'explorer catalog price must be a fixed USD amou
 const settlementService = read('src/lib/billing-order-service.ts');
 assert.match(settlementService, /merchant_order_no/, 'status sync must use the payment attempt merchant order no');
 assert.match(settlementService, /amountMinor/, 'status sync must require a provider amount');
+
+const alipayProvider = read('src/lib/alipay-provider.ts');
+assert.match(alipayProvider, /alipay\.trade\.page\.pay/, 'Alipay checkout must use computer website payment');
+assert.match(alipayProvider, /FAST_INSTANT_TRADE_PAY/, 'computer website payment must use the page product code');
+assert.doesNotMatch(alipayProvider, /alipay\.trade\.precreate|alipay\.trade\.wap\.pay/, 'QR and WAP products must not be used');
+
+const adminBillingRoute = read('src/app/api/admin/billing/route.ts');
+assert.match(adminBillingRoute, /requireAdminPermission\(request, ADMIN_PERMISSIONS\.billingWrite\)/, 'plan changes must require billing write permission');
+assert.match(adminBillingRoute, /action === 'update_plan'/, 'admin billing must support plan price and credit updates');
+assert.match(adminBillingRoute, /\.eq\('version', Number\(expectedVersion\)\)/, 'plan updates must reject stale versions');
+assert.match(adminBillingRoute, /billing\.plan\.update/, 'plan updates must be audited');
+
+const returnPath = read('src/lib/payment-return.ts');
+assert.match(returnPath, /'\/pricing', '\/account\/billing'/, 'payment return paths must be restricted to purchase pages');
+assert.match(returnPath, /https:\/\/liorvix\.com/, 'payment return URLs must use the fixed product-site origin');
+const checkoutCancel = read('src/app/api/payments/session/cancel/route.ts');
+assert.match(checkoutCancel, /paymentReturnUrl\(session\.returnPath\)/, 'cancel response must return the signed purchase-page URL');
+const checkoutUi = read('src/components/payment-checkout.tsx');
+assert.match(checkoutUi, /window\.location\.replace\(value\.returnUrl/, 'closed payment sessions must navigate back automatically');
+const handoffRoute = read('src/app/api/payments/handoff/route.ts');
+assert.match(handoffRoute, /normalizePaymentReturnPath\(body\.returnPath \?\? metadata\.return_path\)/, 'each handoff must bind the active purchase page');
+assert.match(handoffRoute, /metadata: \{ \.\.\.metadata, return_path: returnPath \}/, 'the active handoff must update only its order return-path metadata');
 
 console.log('billing contract tests passed');

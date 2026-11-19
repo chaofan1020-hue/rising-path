@@ -2,13 +2,13 @@
 
 import Link from 'next/link';
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
-import { Check, Clipboard, Clock3, Coins, ExternalLink, Loader2, QrCode, RefreshCw, ShieldCheck, Smartphone, XCircle } from 'lucide-react';
+import { Check, Clipboard, Clock3, Coins, ExternalLink, Loader2, RefreshCw, ShieldCheck, XCircle } from 'lucide-react';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardDescription, CardFooter, CardHeader, CardTitle } from '@/components/ui/card';
 import { Skeleton } from '@/components/ui/skeleton';
 import { apiFetch } from '@/lib/api-client';
-import { defaultChannelForSurface, isChannelAllowedOnSurface, readBrowserBillingSurface, type BillingSurface } from '@/lib/billing-device';
+import { defaultChannelForSurface, isChannelAllowedOnSurface } from '@/lib/billing-device';
 import { formatCnyFen, formatUsdCents } from '@/lib/billing-fx';
 import { useLanguage, type Locale } from '@/lib/language-context';
 import { BILLING_COPY } from '@/lib/billing-copy';
@@ -60,6 +60,14 @@ type Order = {
 };
 type Checkout = { order: Order; payment: Payment | null };
 type CheckoutChannel = BillingPaymentChannel;
+
+async function readApiJson<T>(response: Response): Promise<T> {
+  const contentType = response.headers.get('content-type') || '';
+  if (!contentType.toLowerCase().includes('application/json')) {
+    throw new Error(`支付接口返回了非 JSON 响应（HTTP ${response.status}），请刷新页面后重试`);
+  }
+  return await response.json() as T;
+}
 
 function localized(value: LocalizedValue, locale: Locale, fallback: string): string {
   if (!value) return fallback;
@@ -118,8 +126,8 @@ export function BillingCenter() {
   const [orders, setOrders] = useState<Order[]>([]);
   const [balance, setBalance] = useState<number | null>(null);
   const [selectedPlanCode, setSelectedPlanCode] = useState<string | null>(null);
-  const [surface, setSurface] = useState<BillingSurface>('desktop');
-  const [channel, setChannel] = useState<CheckoutChannel>('wechat_native');
+  const surface = 'desktop' as const;
+  const [channel, setChannel] = useState<CheckoutChannel>('alipay_page');
   const [checkout, setCheckout] = useState<Checkout | null>(null);
   const [loading, setLoading] = useState(true);
   const [ordersLoading, setOrdersLoading] = useState(true);
@@ -137,11 +145,11 @@ export function BillingCenter() {
     setLoading(true);
     try {
       const response = await apiFetch('/api/billing/plans', { cache: 'no-store' });
-      const json = await response.json() as { data?: Plan[]; billing?: { enabled?: boolean; wechatEnabled?: boolean; alipayEnabled?: boolean }; error?: { code?: string } };
+      const json = await readApiJson<{ data?: Plan[]; billing?: { enabled?: boolean; wechatEnabled?: boolean; alipayEnabled?: boolean }; error?: { code?: string } }>(response);
       if (!response.ok || !json.data) throw new Error(errorMessage(json.error?.code, copy));
       setPlans(json.data);
       if (json.billing) {
-        const availability = { wechat: json.billing.enabled === true && json.billing.wechatEnabled === true, alipay: json.billing.enabled === true && json.billing.alipayEnabled === true };
+        const availability = { wechat: false, alipay: json.billing.enabled === true && json.billing.alipayEnabled === true };
         setBillingUnavailable(!availability.wechat && !availability.alipay);
         setChannelAvailability(availability);
       }
@@ -159,14 +167,14 @@ export function BillingCenter() {
     setOrdersLoading(true);
     try {
       const response = await apiFetch('/api/billing/orders', { cache: 'no-store' });
-      const json = await response.json() as { data?: Order[]; error?: { code?: string } };
+      const json = await readApiJson<{ data?: Order[]; error?: { code?: string } }>(response);
       if (!response.ok || !json.data) throw new Error(errorMessage(json.error?.code, copy));
       setOrders(json.data);
       if (resumePending) {
         const pending = json.data.find((item) => item.status === 'pending' || item.status === 'created');
         if (pending) {
           const statusResponse = await apiFetch(`/api/billing/orders/${pending.id}/status`, { cache: 'no-store' });
-          const statusJson = await statusResponse.json() as { data?: Checkout };
+          const statusJson = await readApiJson<{ data?: Checkout }>(statusResponse);
           if (statusResponse.ok && statusJson.data) setCheckout(statusJson.data);
         }
       }
@@ -180,20 +188,20 @@ export function BillingCenter() {
   const loadBalance = useCallback(async () => {
     try {
       const response = await apiFetch('/api/credits', { cache: 'no-store' });
-      const json = await response.json() as { data?: { balance?: number } };
+      const json = await readApiJson<{ data?: { balance?: number } }>(response);
       if (response.ok && json.data) setBalance(Number(json.data.balance || 0));
     } catch { /* Balance is supplementary to checkout. */ }
-  }, []);
-
-  useEffect(() => {
-    setSurface(readBrowserBillingSurface());
   }, []);
 
   useEffect(() => {
     setChannel((current) => isChannelAllowedOnSurface(current, surface) ? current : defaultChannelForSurface(surface, channelAvailability));
   }, [channelAvailability, surface]);
 
-  useEffect(() => { void loadPlans(); void loadOrders(true); void loadBalance(); }, [loadBalance, loadOrders, loadPlans]);
+  useEffect(() => {
+    const returnedFromPayment = new URLSearchParams(window.location.search).has('payment_return');
+    if (returnedFromPayment) window.history.replaceState({}, '', window.location.pathname);
+    void loadPlans(); void loadOrders(!returnedFromPayment); void loadBalance();
+  }, [loadBalance, loadOrders, loadPlans]);
 
   const selectedPlan = useMemo(() => plans.find((plan) => plan.plan_code === selectedPlanCode) || null, [plans, selectedPlanCode]);
 
@@ -206,14 +214,23 @@ export function BillingCenter() {
     }
     setCreating(true); setError(''); setBillingUnavailable(false); setCopied(false);
     try {
-      const response = await apiFetch('/api/billing/orders', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ planCode: selectedPlan.plan_code, channel: checkoutChannel }) });
-      const json = await response.json() as { data?: Checkout; error?: { code?: string } };
+      const returnPath = ['/pricing', '/account/billing'].includes(window.location.pathname) ? window.location.pathname : '/account/billing';
+      const response = await apiFetch('/api/billing/orders', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ planCode: selectedPlan.plan_code, channel: checkoutChannel, returnPath }) });
+      const json = await readApiJson<{ data?: Checkout; error?: { code?: string } }>(response);
       if (!response.ok || !json.data) {
         if (json.error?.code === 'BILLING_DISABLED' || json.error?.code === 'BILLING_PROVIDER_DISABLED') setBillingUnavailable(true);
         throw new Error(errorMessage(json.error?.code, copy));
       }
       setCheckout(json.data);
       void loadOrders();
+      const handoffResponse = await apiFetch('/api/payments/handoff', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ orderId: json.data.order.id, returnPath }),
+      });
+      const handoffJson = await readApiJson<{ data?: { paymentUrl?: string } }>(handoffResponse);
+      if (!handoffResponse.ok || !handoffJson.data?.paymentUrl) throw new Error(copy.orderCreateFailed);
+      window.location.assign(handoffJson.data.paymentUrl);
     } catch (reason: unknown) {
       setError(reason instanceof Error ? reason.message : copy.orderCreateFailed);
     } finally {
@@ -226,7 +243,7 @@ export function BillingCenter() {
     setRefreshing(true);
     try {
       const response = await apiFetch(`/api/billing/orders/${checkoutOrderId}/status`, { cache: 'no-store' });
-      const json = await response.json() as { data?: Checkout; error?: { code?: string } };
+      const json = await readApiJson<{ data?: Checkout; error?: { code?: string } }>(response);
       if (!response.ok || !json.data) throw new Error(errorMessage(json.error?.code, copy));
       setCheckout(json.data);
       if (json.data.order.status === 'paid') { await loadBalance(); await loadOrders(); }
@@ -244,12 +261,13 @@ export function BillingCenter() {
   }, [checkout, refreshCheckout]);
 
   useEffect(() => {
+    if (new URLSearchParams(window.location.search).has('payment_return')) return;
     const redirectUrl = checkout?.payment?.redirectUrl;
     const orderId = checkout?.order?.id;
     if (!redirectUrl || !orderId || !checkout?.payment?.channel) return;
     if (!['pending', 'created'].includes(checkout.order.status)) return;
     if (openedRedirect.current === orderId) return;
-    if (checkout.payment.channel !== 'wechat_h5' && checkout.payment.channel !== 'alipay_wap') return;
+    if (checkout.payment.channel !== 'alipay_page') return;
     openedRedirect.current = orderId;
     window.open(redirectUrl, '_blank', 'noopener,noreferrer');
   }, [checkout]);
@@ -259,7 +277,7 @@ export function BillingCenter() {
     setCancelling(true); setError('');
     try {
       const response = await apiFetch(`/api/billing/orders/${checkoutOrderId}/cancel`, { method: 'POST' });
-      const json = await response.json() as { data?: Checkout; error?: { code?: string } };
+      const json = await readApiJson<{ data?: Checkout; error?: { code?: string } }>(response);
       if (json.data) setCheckout(json.data);
       else setCheckout(null);
       if (json.data?.order.status === 'paid') { await loadBalance(); }
@@ -284,11 +302,7 @@ export function BillingCenter() {
 
   const catalogPrice = (plan: Plan) => usdPrice(plan.displayAmountMinor, locale, plan.amountMinor, copy.free);
   const orderPrice = (order: Order) => usdPrice(order.displayAmountMinor, locale, order.amountMinor ?? order.amount_minor ?? 0, copy.free);
-  const visibleChannels = useMemo((): Array<[CheckoutChannel, string, 'wechat' | 'alipay']> => (
-    surface === 'mobile'
-      ? [['wechat_h5', copy.wechatH5, 'wechat'], ['alipay_wap', copy.alipayWap, 'alipay']]
-      : [['wechat_native', copy.wechat, 'wechat'], ['alipay_qr', copy.alipay, 'alipay']]
-  ), [copy, surface]);
+  const visibleChannels = useMemo((): Array<[CheckoutChannel, string, 'alipay']> => ([['alipay_page', copy.alipayDesktop, 'alipay']]), [copy.alipayDesktop]);
   const hasActiveCheckout = Boolean(checkout && ['pending', 'created'].includes(checkout.order.status));
 
   return (
@@ -366,7 +380,7 @@ export function BillingCenter() {
           <CardContent className="space-y-5">
             <div className="grid gap-3 sm:grid-cols-2">
               {visibleChannels.map(([value, label, provider]) => {
-                const available = provider === 'wechat' ? channelAvailability.wechat : channelAvailability.alipay;
+                const available = channelAvailability.alipay;
                 return (
                   <button
                     key={value}
@@ -375,8 +389,8 @@ export function BillingCenter() {
                     className={`flex items-center gap-3 rounded-lg border px-4 py-3 text-left transition-colors disabled:cursor-not-allowed disabled:opacity-50 ${channel === value ? 'border-primary bg-primary/[0.04]' : 'hover:bg-muted/50'}`}
                     onClick={() => setChannel(value)}
                   >
-                    <span className={`flex h-9 w-9 items-center justify-center rounded-full ${provider === 'wechat' ? 'bg-emerald-100 text-emerald-700' : 'bg-sky-100 text-sky-700'}`}>
-                      {surface === 'mobile' ? <Smartphone className="h-4 w-4" /> : <QrCode className="h-4 w-4" />}
+                    <span className="flex h-9 w-9 items-center justify-center rounded-full bg-sky-100 text-sky-700">
+                      <ExternalLink className="h-4 w-4" />
                     </span>
                     <span className="block text-sm font-medium">{label}</span>
                   </button>

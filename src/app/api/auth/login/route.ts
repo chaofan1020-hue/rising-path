@@ -3,6 +3,7 @@ import { getSupabaseAnonClient } from '@/storage/database/supabase-client';
 import { getClientIp } from '@/lib/auth-server';
 import { isValidEmail } from '@/lib/auth-shared';
 import { authErrorMessage, consumeAuthRateLimit, normalizeEmail } from '@/lib/auth-security';
+import { grantSignupWelcomeCredits } from '@/lib/credits';
 
 export async function POST(request: NextRequest) {
   const ip = getClientIp(request);
@@ -33,6 +34,7 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ error: authErrorMessage(error) }, { status: 401 });
     }
 
+    await grantSignupWelcomeCredits(data.user?.id);
     return NextResponse.json({
       user: data.user,
       session: data.session,

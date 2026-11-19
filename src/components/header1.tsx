@@ -15,8 +15,11 @@ import { LanguageSwitcher } from "@/components/language-switcher";
 import { useLanguage } from "@/lib/language-context";
 import { getSupabaseBrowserClient } from "@/lib/supabase-browser";
 import type { User as SupabaseUser, AuthChangeEvent, Session } from "@supabase/supabase-js";
+import { createLocalDevSession } from "@/lib/dev-auth";
+import { readLocalDevAuthEnabled } from "@/lib/dev-auth-client";
 import { cn } from "@/lib/utils";
 import { AccountCenter } from "@/components/account-center";
+import { useTheme } from "@/lib/theme-context";
 
 let headerSessionCache: Session | null | undefined;
 
@@ -33,6 +36,7 @@ function getDisplayName(user: SupabaseUser | null): string {
 
 function Header1() {
     const { t } = useLanguage();
+    const { theme } = useTheme();
     const pathname = usePathname();
     const [isOpen, setOpen] = useState(false);
     const [toolsOpen, setToolsOpen] = useState(false);
@@ -50,16 +54,23 @@ function Header1() {
             if (mounted) setSession(nextSession);
         };
 
-        getSupabaseBrowserClient().then(supabase => {
-            supabase.auth.getSession().then(({ data: { session } }: { data: { session: Session | null } }) => {
-                applySession(session);
-            });
-            const { data: { subscription } } = supabase.auth.onAuthStateChange(
-                (_event: AuthChangeEvent, session: Session | null) => {
+        void readLocalDevAuthEnabled().then((enabled) => {
+            if (!mounted) return;
+            if (enabled) {
+                applySession(createLocalDevSession());
+                return;
+            }
+            getSupabaseBrowserClient().then(supabase => {
+                supabase.auth.getSession().then(({ data: { session } }: { data: { session: Session | null } }) => {
                     applySession(session);
-                }
-            );
-            return () => subscription.unsubscribe();
+                });
+                const { data: { subscription } } = supabase.auth.onAuthStateChange(
+                    (_event: AuthChangeEvent, session: Session | null) => {
+                        applySession(session);
+                    }
+                );
+                return () => subscription.unsubscribe();
+            });
         });
 
         return () => {
@@ -130,7 +141,10 @@ function Header1() {
     const applicationsActive = applicationItems.some((item) => isActive(item.href));
 
     return (
-        <header className="w-full z-40 fixed top-0 left-0 border-b border-zinc-200/80 bg-background dark:border-zinc-800/80">
+        <header className={cn(
+            "w-full z-40 fixed top-0 left-0 border-b bg-background text-foreground",
+            theme === "dark" ? "dark border-zinc-800/80" : "border-zinc-200/80",
+        )}>
             <div className="container relative mx-auto min-h-16 flex gap-3 flex-row items-center px-4">
                 <div className="flex min-w-0 items-center gap-2 2xl:gap-6">
                     <Link href={isLoggedIn ? "/home" : "/"} className="flex shrink-0 items-center gap-2 font-semibold text-lg text-black dark:text-white">
@@ -177,7 +191,7 @@ function Header1() {
                                     <ChevronDown className={`h-3.5 w-3.5 transition-transform duration-200 ${applicationsOpen ? 'rotate-180' : ''}`} aria-hidden="true" />
                                 </button>
                             </DropdownMenuTrigger>
-                            <DropdownMenuContent align="start" sideOffset={8} className="w-[280px] p-2 data-[state=closed]:animate-none data-[state=open]:animate-none">
+                            <DropdownMenuContent align="start" sideOffset={8} className={cn("w-[280px] p-2 data-[state=closed]:animate-none data-[state=open]:animate-none", theme === "dark" && "dark")}>
                                 {applicationItems.map((item) => {
                                     const Icon = item.icon;
                                     const active = isActive(item.href);
@@ -201,7 +215,7 @@ function Header1() {
                                     <ChevronDown className={`h-3.5 w-3.5 transition-transform duration-200 ${toolsOpen ? 'rotate-180' : ''}`} aria-hidden="true" />
                                 </button>
                             </DropdownMenuTrigger>
-                            <DropdownMenuContent align="start" sideOffset={8} className="w-[280px] p-2 data-[state=closed]:animate-none data-[state=open]:animate-none">
+                            <DropdownMenuContent align="start" sideOffset={8} className={cn("w-[280px] p-2 data-[state=closed]:animate-none data-[state=open]:animate-none", theme === "dark" && "dark")}>
                                 {toolItems.map((item) => {
                                     const Icon = item.icon;
                                     return (

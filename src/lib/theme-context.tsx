@@ -22,15 +22,7 @@ export function ThemeProvider({ children }: { children: React.ReactNode }) {
   }, []);
 
   useEffect(() => {
-    // 应用主题到 HTML
-    const root = document.documentElement;
-    if (theme === "light") {
-      root.classList.remove("dark");
-      root.classList.add("light");
-    } else {
-      root.classList.remove("light");
-      root.classList.add("dark");
-    }
+    document.documentElement.classList.remove("dark", "light");
     localStorage.setItem("theme", theme);
   }, [theme]);
 

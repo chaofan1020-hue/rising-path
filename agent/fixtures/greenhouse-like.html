@@ -1,0 +1,108 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <title>Greenhouse · Apply</title>
+  <style>
+    body { font: 15px/1.5 system-ui, sans-serif; margin: 0; background: #f7f7f8; color: #111; }
+    form { max-width: 680px; margin: 32px auto; background: #fff; border: 1px solid #e3e5e8; border-radius: 10px; padding: 26px 30px; }
+    h2 { font-size: 18px; margin: 0 0 18px; }
+    .field { margin-bottom: 16px; }
+    label { display: block; font-weight: 600; font-size: 13px; margin-bottom: 6px; }
+    input[type="text"], input[type="email"], textarea { width: 100%; box-sizing: border-box; padding: 9px 10px; border: 1px solid #c9ccd1; border-radius: 6px; font: inherit; }
+    .combo { position: relative; }
+    .combo button { width: 100%; text-align: left; background: #fff; color: #111; border: 1px solid #c9ccd1; border-radius: 6px; padding: 9px 10px; font: inherit; cursor: pointer; }
+    .combo ul { position: absolute; z-index: 10; left: 0; right: 0; top: 100%; margin: 4px 0 0; padding: 4px 0; list-style: none; background: #fff; border: 1px solid #c9ccd1; border-radius: 6px; box-shadow: 0 8px 20px rgba(0,0,0,.08); }
+    .combo li { padding: 8px 12px; cursor: pointer; }
+    .combo li:hover { background: #f1f2f4; }
+    .agree { display: flex; gap: 8px; align-items: center; font-weight: 400; }
+    .agree input { width: auto; }
+    .actions { margin-top: 22px; }
+    button[type="submit"] { font: inherit; padding: 10px 18px; border-radius: 6px; border: 1px solid #111; background: #111; color: #fff; cursor: pointer; }
+    [hidden] { display: none !important; }
+  </style>
+</head>
+<body>
+  <form id="application_form">
+    <h2>Apply for this job</h2>
+
+    <div class="field">
+      <label for="first_name">First Name</label>
+      <input id="first_name" name="first_name" type="text" required />
+    </div>
+
+    <div class="field">
+      <label for="last_name">Last Name</label>
+      <input id="last_name" name="last_name" type="text" required />
+    </div>
+
+    <!-- 阴影 DOM：验证扫描器能穿透 shadow root -->
+    <div class="field" id="shadowHost"></div>
+
+    <div class="field">
+      <label id="countryLabel">Country</label>
+      <div class="combo">
+        <button type="button" role="combobox" aria-haspopup="listbox" aria-expanded="false" aria-labelledby="countryLabel" id="countryTrigger">Select a country…</button>
+        <ul role="listbox" id="countryList" hidden>
+          <li role="option">Canada</li>
+          <li role="option">China</li>
+          <li role="option">United States</li>
+        </ul>
+      </div>
+    </div>
+
+    <div class="field">
+      <label for="resume">Resume/CV</label>
+      <input id="resume" name="resume" type="file" accept=".pdf,.doc,.docx" />
+    </div>
+
+    <div class="field">
+      <label class="agree"><input type="checkbox" id="terms" name="terms" /> I agree to the terms and conditions</label>
+    </div>
+
+    <div class="actions">
+      <button type="submit" id="submit_app">Submit application</button>
+    </div>
+  </form>
+
+  <script>
+    const host = document.getElementById('shadowHost');
+    const root = host.attachShadow({ mode: 'open' });
+    root.innerHTML = `
+      <label for="shadow-email" style="display:block;font-weight:600;font-size:13px;margin-bottom:6px">Email</label>
+      <input id="shadow-email" name="email" type="email" aria-label="Email"
+             style="width:100%;box-sizing:border-box;padding:9px 10px;border:1px solid #c9ccd1;border-radius:6px;font:inherit" />
+    `;
+
+    const trigger = document.getElementById('countryTrigger');
+    const list = document.getElementById('countryList');
+    trigger.addEventListener('click', () => {
+      const open = !list.hidden;
+      list.hidden = open;
+      trigger.setAttribute('aria-expanded', String(!open));
+    });
+    list.addEventListener('click', (event) => {
+      const option = event.target.closest('li[role="option"]');
+      if (!option) return;
+      trigger.textContent = option.textContent.trim();
+      trigger.dataset.value = option.textContent.trim();
+      list.hidden = true;
+      trigger.setAttribute('aria-expanded', 'false');
+    });
+
+    document.getElementById('application_form').addEventListener('submit', (event) => {
+      event.preventDefault();
+      const shadowEmail = root.getElementById('shadow-email').value;
+      window.__submitted = {
+        first_name: document.getElementById('first_name').value,
+        last_name: document.getElementById('last_name').value,
+        email: shadowEmail,
+        country: trigger.dataset.value || '',
+        terms: document.getElementById('terms').checked,
+        resume: (document.getElementById('resume').files || [])[0]?.name || '',
+      };
+      document.body.innerHTML = '<div style="max-width:680px;margin:48px auto;font:16px system-ui"><h2>Thank you for applying</h2><p>Your application was received. Reference number: GH-55201</p></div>';
+    });
+  </script>
+</body>
+</html>

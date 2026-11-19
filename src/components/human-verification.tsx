@@ -1,6 +1,6 @@
 'use client';
 
-import { useEffect, useRef, useState, useSyncExternalStore } from 'react';
+import { memo, useEffect, useRef, useState, useSyncExternalStore } from 'react';
 import { Loader2, RefreshCw } from 'lucide-react';
 import 'altcha';
 import 'altcha/i18n/zh-cn';
@@ -13,13 +13,31 @@ const ALTCHA_CONFIGURATION = JSON.stringify({
   hideLogo: true,
 });
 
+const ALTCHA_WIDGET_STYLE = {
+  width: '100%',
+  maxWidth: '100%',
+  '--altcha-border-color': '#e4e4e7',
+  '--altcha-border-radius': '8px',
+  '--altcha-color-base': '#fafafa',
+  '--altcha-max-width': '100%',
+} as const;
+
+type AltchaWidgetElement = HTMLElement & {
+  reset: () => void;
+  verify: () => Promise<unknown>;
+};
+
 function localeToAltchaLanguage(locale?: string): string {
   if (locale === 'zh-TW' || locale === 'zh-tw') return 'zh-tw';
   if (locale === 'en') return 'en';
   return 'zh-cn';
 }
 
-function AltchaWidget({
+function isVerifiedPayload(detail: { payload?: string; state?: string } | undefined): detail is { payload: string; state: string } {
+  return detail?.state === 'verified' && typeof detail.payload === 'string' && detail.payload.length > 0;
+}
+
+const AltchaWidget = memo(function AltchaWidget({
   language,
   onToken,
   resetSignal = 0,
@@ -28,8 +46,9 @@ function AltchaWidget({
   onToken: (token: string | null) => void;
   resetSignal?: number;
 }) {
-  const widgetRef = useRef<HTMLElement | null>(null);
+  const widgetRef = useRef<AltchaWidgetElement | null>(null);
   const onTokenRef = useRef(onToken);
+  const lastResetSignalRef = useRef(resetSignal);
 
   useEffect(() => {
     onTokenRef.current = onToken;
@@ -39,45 +58,49 @@ function AltchaWidget({
     const widget = widgetRef.current;
     if (!widget) return undefined;
 
-    onTokenRef.current(null);
     const handleStateChange = (event: Event) => {
       const detail = (event as CustomEvent<{ payload?: string; state?: string }>).detail;
-      if (detail?.state === 'verified' && typeof detail.payload === 'string' && detail.payload) {
+      if (isVerifiedPayload(detail)) {
         onTokenRef.current(detail.payload);
         return;
       }
-      onTokenRef.current(null);
+      if (detail?.state === 'error' || detail?.state === 'expired' || detail?.state === 'unverified') {
+        onTokenRef.current(null);
+      }
     };
 
     widget.addEventListener('statechange', handleStateChange);
     return () => {
       widget.removeEventListener('statechange', handleStateChange);
-      onTokenRef.current(null);
     };
+  }, []);
+
+  useEffect(() => {
+    if (resetSignal === lastResetSignalRef.current) return;
+    lastResetSignalRef.current = resetSignal;
+    const widget = widgetRef.current;
+    if (!widget) return;
+    onTokenRef.current(null);
+    widget.reset();
+    void widget.verify();
   }, [resetSignal]);
 
   return (
-    <div key={resetSignal} className="w-full">
+    <div className="w-full">
       <altcha-widget
         ref={(node) => {
-          widgetRef.current = node;
+          widgetRef.current = node as AltchaWidgetElement | null;
         }}
+        auto="onload"
         challenge="/api/auth/captcha"
         configuration={ALTCHA_CONFIGURATION}
         language={language}
         type="checkbox"
-        style={{
-          width: '100%',
-          maxWidth: '100%',
-          '--altcha-border-color': '#e4e4e7',
-          '--altcha-border-radius': '8px',
-          '--altcha-color-base': '#fafafa',
-          '--altcha-max-width': '100%',
-        }}
+        style={ALTCHA_WIDGET_STYLE}
       />
     </div>
   );
-}
+});
 
 export function HumanVerification({
   onToken,

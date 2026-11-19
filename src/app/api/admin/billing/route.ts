@@ -22,7 +22,10 @@ export async function GET(request: NextRequest) {
   let orderQuery = client.from('billing_orders').select('id,order_no,plan_code,status,provider,amount,amount_minor,currency,credits_granted,price_version,paid_at,refunded_at,created_at,updated_at').order('created_at', { ascending: false }).limit(limit);
   if (status) orderQuery = orderQuery.eq('status', status);
   if (search) orderQuery = orderQuery.or(`order_no.ilike.%${search}%,plan_code.ilike.%${search}%`);
-  const [{ data: orders, error: orderError }, { data: plans, error: planError }] = await Promise.all([orderQuery, client.from('billing_plans').select('plan_code,name,description,currency')]);
+  const [{ data: orders, error: orderError }, { data: plans, error: planError }] = await Promise.all([
+    orderQuery,
+    client.from('billing_plans').select('plan_code,plan_type,name,description,currency,amount_minor,display_currency,display_amount_minor,credits,duration_days,version,is_active').order('display_order', { ascending: true }),
+  ]);
   if (orderError || planError) return jsonError('ADMIN_BILLING_QUERY_FAILED', '读取支付订单失败', 500);
   const rows = orders || [];
   const ids = rows.map((row) => row.id);
@@ -33,7 +36,21 @@ export async function GET(request: NextRequest) {
   for (const attempt of attempts || []) attemptMap.set(attempt.order_id, [...(attemptMap.get(attempt.order_id) || []), attempt]);
   const normalized = rows.map((order) => ({ ...order, amountMinor: order.amount_minor === null ? null : Number(order.amount_minor), creditsGranted: Number(order.credits_granted || 0), plan: planMap.get(order.plan_code) || null, attempts: attemptMap.get(order.id) || [] }));
   const summary = normalized.reduce((result, order) => { result.total += 1; result.byStatus[order.status] = (result.byStatus[order.status] || 0) + 1; result.grossAmountMinor += Number(order.amount_minor || 0); if (['paid', 'refunded', 'partially_refunded'].includes(order.status)) result.paidAmountMinor += Number(order.amount_minor || 0); return result; }, { total: 0, byStatus: {} as Record<string, number>, grossAmountMinor: 0, paidAmountMinor: 0 });
-  return NextResponse.json({ data: { orders: normalized, summary, billing: getBillingReadiness() }, error: null });
+  return NextResponse.json({
+    data: {
+      orders: normalized,
+      plans: (plans || []).map((plan) => ({
+        ...plan,
+        amount_minor: Number(plan.amount_minor || 0),
+        display_amount_minor: Number(plan.display_amount_minor || 0),
+        credits: Number(plan.credits || 0),
+        version: Number(plan.version || 1),
+      })),
+      summary,
+      billing: getBillingReadiness(),
+    },
+    error: null,
+  });
 }
 
 export async function POST(request: NextRequest) {
@@ -43,6 +60,44 @@ export async function POST(request: NextRequest) {
   try {
     const body = await request.json() as Record<string, unknown>;
     action = typeof body.action === 'string' ? body.action : 'unknown';
+    if (action === 'update_plan') {
+      const planCode = typeof body.planCode === 'string' ? body.planCode.trim() : '';
+      const amountMinor = body.amountMinor;
+      const displayAmountMinor = body.displayAmountMinor;
+      const credits = body.credits;
+      const expectedVersion = body.expectedVersion;
+      if (!/^[a-z0-9_-]{2,80}$/i.test(planCode)) return jsonError('INVALID_BILLING_PLAN', '套餐编号无效', 400);
+      if (!Number.isSafeInteger(amountMinor) || Number(amountMinor) < 0 || Number(amountMinor) > 100_000_000) return jsonError('INVALID_BILLING_PRICE', '人民币价格无效', 400);
+      if (!Number.isSafeInteger(displayAmountMinor) || Number(displayAmountMinor) < 0 || Number(displayAmountMinor) > 100_000_000) return jsonError('INVALID_BILLING_DISPLAY_PRICE', '美元展示价格无效', 400);
+      if (typeof credits !== 'number' || !Number.isFinite(credits) || credits < 0 || credits > 1_000_000_000 || !/^\d+(?:\.\d{1,4})?$/.test(String(body.credits))) return jsonError('INVALID_BILLING_CREDITS', '积分数量无效，最多支持 4 位小数', 400);
+      if (!Number.isInteger(expectedVersion) || Number(expectedVersion) < 1) return jsonError('INVALID_BILLING_PLAN_VERSION', '套餐版本无效，请刷新后重试', 400);
+      const client = getSupabaseClient();
+      const { data: before, error: readError } = await client.from('billing_plans')
+        .select('plan_code,plan_type,name,currency,amount_minor,display_currency,display_amount_minor,credits,version')
+        .eq('plan_code', planCode).maybeSingle();
+      if (readError) throw new Error(readError.message);
+      if (!before) return jsonError('BILLING_PLAN_NOT_FOUND', '套餐不存在', 404);
+      if (Number(amountMinor) > 0 && Number(credits) <= 0) return jsonError('INVALID_BILLING_CREDITS', '收费套餐的积分必须大于 0', 400);
+      const { data: updated, error: updateError } = await client.from('billing_plans').update({
+        amount_minor: Number(amountMinor),
+        display_amount_minor: Number(displayAmountMinor),
+        credits: Number(credits),
+        version: Number(before.version || 1) + 1,
+        updated_at: new Date().toISOString(),
+      }).eq('plan_code', planCode).eq('version', Number(expectedVersion))
+        .select('plan_code,plan_type,name,currency,amount_minor,display_currency,display_amount_minor,credits,duration_days,version,is_active').maybeSingle();
+      if (updateError) throw new Error(updateError.message);
+      if (!updated) return jsonError('BILLING_PLAN_CHANGED', '套餐已被其他管理员修改，请刷新后重试', 409);
+      await recordAdminAuditEvent({
+        request,
+        action: 'billing.plan.update',
+        resourceType: 'billing_plan',
+        resourceId: planCode,
+        beforeData: { amount_minor: before.amount_minor, display_amount_minor: before.display_amount_minor, credits: before.credits, version: before.version },
+        afterData: { amount_minor: updated.amount_minor, display_amount_minor: updated.display_amount_minor, credits: updated.credits, version: updated.version },
+      });
+      return NextResponse.json({ data: { ...updated, amount_minor: Number(updated.amount_minor || 0), display_amount_minor: Number(updated.display_amount_minor || 0), credits: Number(updated.credits || 0), version: Number(updated.version || 1) }, error: null });
+    }
     id = validId(body.orderId);
     if (!id) return jsonError('INVALID_BILLING_ORDER_ID', '订单 ID 无效', 400);
     const client = getSupabaseClient();
@@ -105,7 +160,7 @@ export async function POST(request: NextRequest) {
       throw providerError;
     }
   } catch (error) {
-    await recordAdminAuditFailure({ request, action: `billing.order.${action}`, resourceType: 'billing_order', resourceId: id, error });
+    await recordAdminAuditFailure({ request, action: action === 'update_plan' ? 'billing.plan.update' : `billing.order.${action}`, resourceType: action === 'update_plan' ? 'billing_plan' : 'billing_order', resourceId: action === 'update_plan' ? undefined : id, error });
     if (error instanceof BillingProviderDisabledError) return jsonError('BILLING_PROVIDER_DISABLED', '支付渠道尚未配置完成', 503);
     console.error('[Admin Billing] operation failed:', error instanceof Error ? error.message : error);
     return jsonError('ADMIN_BILLING_OPERATION_FAILED', '支付订单操作失败', 502);

@@ -41,7 +41,7 @@ const MONTH_NUMBERS: Record<string, number> = {
   dec: 12, december: 12,
 };
 const TEXT_DEADLINE_RE = new RegExp(
-  `(?:application\\s+(?:closing\\s+)?deadline|application\\s+period|submission\\s+deadline|closing\\s+date|deadline(?:\\s+to\\s+apply)?|last\\s+day\\s+to\\s+apply|applications?\\s+(?:(?:will|are)\\s+)?(?:close|closing|end|ending)|(?:apply|submit)(?: your application)?\\s+(?:by|before|no later than)|申请(?:截止|截至|报名截止)(?:日期|时间)?|截止(?:日期|时间))[^\\d]{0,80}(${DATE_TOKEN})`,
+  `(?:application\\s+(?:closing\\s+)?deadline|application\\s+period|application\\s+window(?:.{0,60}?)(?:close|closes|closing|closed)(?:\\s+on)?|submission\\s+deadline|closing\\s+date|deadline(?:\\s+to\\s+apply)?|last\\s+day\\s+to\\s+apply|applications?\\s+(?:(?:will|are)\\s+)?(?:close|closing|end|ending)|(?:apply|submit)(?: your application)?\\s+(?:by|before|no later than)|申请(?:截止|截至|报名截止)(?:日期|时间)?|截止(?:日期|时间))[^\\d]{0,80}(${DATE_TOKEN})`,
   'i',
 );
 const CHINESE_TEXT_DEADLINE_RE = /(?:申请(?:截止|截至|报名截止)(?:日期|时间)?|截止(?:日期|时间)?)[^\d]{0,30}(20\d{2}年\d{1,2}月\d{1,2}日?)/i;

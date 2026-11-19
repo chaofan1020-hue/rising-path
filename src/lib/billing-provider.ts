@@ -7,7 +7,10 @@ import { BillingProviderDisabledError } from '@/lib/billing-errors';
 export { BillingProviderDisabledError } from '@/lib/billing-errors';
 
 export type BillingProviderName = 'manual_beta' | 'wechat' | 'alipay';
-export type BillingPaymentChannel = 'wechat_native' | 'wechat_h5' | 'wechat_jsapi' | 'alipay_qr' | 'alipay_wap' | 'manual';
+// `alipay_page` is the only channel exposed by the current checkout. The
+// legacy values stay in the type so historical payment_attempts can still be
+// read and reconciled safely after the channel rollout.
+export type BillingPaymentChannel = 'wechat_native' | 'wechat_h5' | 'wechat_jsapi' | 'alipay_page' | 'alipay_qr' | 'alipay_wap' | 'manual';
 export type BillingPaymentStatus = 'created' | 'pending' | 'paid' | 'failed' | 'cancelled' | 'refunded' | 'partially_refunded' | 'expired';
 
 export interface BillingCheckoutRequest {

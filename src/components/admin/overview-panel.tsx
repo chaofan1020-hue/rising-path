@@ -5,6 +5,7 @@ import Link from 'next/link';
 import {
   Activity,
   Briefcase,
+  Coins,
   FileText,
   Globe,
   HeartPulse,
@@ -54,6 +55,7 @@ const SHORTCUTS = [
   { href: '/admin/quality', label: '质量', icon: Activity },
   { href: '/admin/usage', label: '用量', icon: TrendingUp },
   { href: '/admin/health', label: '健康', icon: HeartPulse },
+  { href: '/admin/credits', label: '积分', icon: Coins },
 ];
 
 function BarList({ items, color }: { items: [string, number][]; color: string }) {

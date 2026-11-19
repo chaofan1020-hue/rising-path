@@ -52,6 +52,32 @@ export const applicationProfilePatchSchema = z.object({
   }).strict(),
 }).strict();
 
+export const applyScanFieldSchema = z.object({
+  key: shortText.min(1),
+  label: z.string().trim().max(1_000).optional(),
+  name: shortText.optional(),
+  id: shortText.optional(),
+  placeholder: z.string().trim().max(1_000).optional(),
+  ariaLabel: z.string().trim().max(1_000).optional(),
+  automationId: shortText.optional(),
+  section: z.string().trim().max(500).optional(),
+  type: z.string().trim().max(40).optional(),
+  required: z.boolean().optional(),
+  disabled: z.boolean().optional(),
+  currentValue: z.string().max(2_000).optional(),
+  options: z.array(z.string().max(500)).max(200).optional(),
+}).strict();
+
+export const applyResolveRequestSchema = z.object({
+  url: z.string().trim().max(2_000),
+  resumeId: z.number().int().positive().optional(),
+  jobId: z.number().int().positive().optional(),
+  domain: shortText.optional(),
+  pageText: z.string().max(20_000).optional(),
+  automationIds: z.array(z.string().trim().max(200)).max(300).optional(),
+  fields: z.array(applyScanFieldSchema).min(1).max(400),
+}).strict();
+
 export const applicationPrefillRequestSchema = z.object({
   resumeId: z.number().int().positive().optional(),
   jobId: z.number().int().positive().optional(),

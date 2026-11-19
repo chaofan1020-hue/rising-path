@@ -7,7 +7,7 @@ import {
   type JobSyncRecord,
 } from '@/lib/job-sync';
 import { jobHtmlToPlainText, sanitizeJobContent } from '@/lib/job-content';
-import { parseExperience } from '@/lib/job-connectors/utils';
+import { normalizeWorkplace, parseExperience } from '@/lib/job-connectors/utils';
 import { isTargetRegion } from '@/lib/job-region-scope';
 import { resolveJobDeadline } from '@/lib/job-deadline';
 import { fieldEvidence as buildFieldEvidence } from '@/lib/job-field-provenance';
@@ -477,6 +477,7 @@ function extractExperience(item: JobsFeedItem): { min: number | null; max: numbe
     };
   }
   return parseExperience([
+    item.title,
     item.experience,
     item.experience_text,
     item.level,
@@ -528,7 +529,28 @@ export function normalizeFeedItem(item: JobsFeedItem): JobSyncRecord | null {
     }
     : rawHealth;
   const closed = isClosedItem(item);
-  const resolvedDeadline = resolveJobDeadline(item);
+  const existingDeadlineSources = item.source_evidence
+    && typeof item.source_evidence === 'object'
+    && !Array.isArray(item.source_evidence)
+    && item.source_evidence.structured_field_sources
+    && typeof item.source_evidence.structured_field_sources === 'object'
+    && !Array.isArray(item.source_evidence.structured_field_sources)
+    ? item.source_evidence.structured_field_sources as Record<string, unknown>
+    : {};
+  const resolvedDeadline = resolveJobDeadline({
+    ...item,
+    source_evidence: {
+      ...(item.source_evidence && typeof item.source_evidence === 'object' && !Array.isArray(item.source_evidence)
+        ? item.source_evidence
+        : {}),
+      structured_field_sources: {
+        ...existingDeadlineSources,
+        ...(hasOfficialCompanyHost(company, sourceUrl) && text(item.description) && !sourceForField(item, 'description')
+          ? { description: 'official_description' }
+          : {}),
+      },
+    },
+  });
   // Feed payload dates can come from hidden ATS metadata or list snapshots.
   // A labelled deadline in the official description is candidate-safe. A
   // structured value is also safe, but only when the connector identifies
@@ -543,10 +565,8 @@ export function normalizeFeedItem(item: JobsFeedItem): JobSyncRecord | null {
     : null;
   const salary = normalizeSalary(item, company, sourceUrl);
   const employmentSource = sourceForField(item, 'employment_type');
-  const workplaceSource = sourceForField(item, 'workplace_type');
   const employmentCategorySource = sourceForField(item, 'employment_category') || employmentSource;
   const employmentType = isCompanyFieldEvidenceTrusted(company, sourceUrl, employmentSource) ? text(item.employment_type).slice(0, 50) || null : null;
-  const workplaceType = isCompanyFieldEvidenceTrusted(company, sourceUrl, workplaceSource) ? text(item.workplace_type).slice(0, 50) || null : null;
   const employmentCategory = inferJobType(item);
   const experience = extractExperience(item);
   const rawLocationSource = sourceForField(item, 'official_location')
@@ -554,7 +574,7 @@ export function normalizeFeedItem(item: JobsFeedItem): JobSyncRecord | null {
     || sourceForField(item, 'offices')
     || sourceForField(item, 'country');
   const feedSourceType = text(item.source_evidence?.source_type || item.source_type).toLowerCase();
-  const officialFeedPayload = /(?:official[_ -]?ats|oracle[_ -]?hcm|greenhouse|lever|ashby|workday|smartrecruiters|icims|taleo|successfactors|mckinsey|amazon|apple)/i.test(feedSourceType);
+  const officialFeedPayload = /(?:official[_ -]?ats|oracle[_ -]?hcm|greenhouse|lever|ashby|workday|smartrecruiters|icims|taleo|successfactors|mckinsey|amazon|apple|shopify|eightfold|phenom|jibe)/i.test(feedSourceType);
   // Talent Gateway list payloads used by Morgan Stanley expose a canonical
   // location but omit the individual source tag. Restrict this fallback to
   // the configured official ATS host; no generic third-party list is trusted.
@@ -565,6 +585,12 @@ export function normalizeFeedItem(item: JobsFeedItem): JobSyncRecord | null {
     : hasOfficialCompanyHost(company, sourceUrl) && (rawLocation || rawCountry)
       ? 'official_payload'
       : null;
+  const inferredWorkplace = normalizeWorkplace([item.workplace_type, item.location, item.official_location]);
+  const workplaceSource = sourceForField(item, 'workplace_type')
+    || (inferredWorkplace.workplaceType && locationSource === 'official_payload' ? 'official_payload' : null);
+  const workplaceType = isCompanyFieldEvidenceTrusted(company, sourceUrl, workplaceSource)
+    ? (text(item.workplace_type) || inferredWorkplace.workplaceType || '').slice(0, 50) || null
+    : null;
   const now = new Date().toISOString();
   const fieldEvidence = {
     version: 1,

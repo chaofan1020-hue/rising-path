@@ -42,8 +42,9 @@ const RULES: JobCompanyFieldRule[] = [
     // The public career sitemap encodes an explicit location token in the
     // canonical URL (for example `...-new-york/` or `...-us/`). Treat the
     // resulting location as official payload evidence, while leaving fields
-    // absent from the sitemap unset.
-    allowedSources: ['official_payload'],
+    // absent from the sitemap unset. Browser-imported official detail pages
+    // may later fill description and location that the sitemap omitted.
+    allowedSources: ['official_payload', 'official_detail_page'],
   },
   {
     company: 'Morgan Stanley',
@@ -67,6 +68,66 @@ const RULES: JobCompanyFieldRule[] = [
     ],
   },
   {
+    company: 'Shopify',
+    aliases: ['shopify'],
+    officialHosts: ['www.shopify.com', 'shopify.com'],
+    allowedSources: ['official_payload', 'official_description'],
+  },
+  {
+    company: 'Airbnb',
+    aliases: ['airbnb'],
+    officialHosts: ['careers.airbnb.com', 'boards.greenhouse.io', 'job-boards.greenhouse.io'],
+    allowedSources: ['official_payload', 'official_description'],
+  },
+  {
+    company: 'Lyft',
+    aliases: ['lyft'],
+    officialHosts: ['app.careerpuck.com', 'www.lyft.com', 'boards.greenhouse.io', 'job-boards.greenhouse.io'],
+    allowedSources: ['official_payload', 'official_description'],
+  },
+  {
+    company: 'Uber',
+    aliases: ['uber'],
+    officialHosts: ['iaziqy.fa.ocs.oraclecloud.com', 'jobs.uber.com'],
+    allowedSources: ['official_payload', 'official_description'],
+  },
+  {
+    company: 'Cisco',
+    aliases: ['cisco'],
+    officialHosts: ['careers.cisco.com'],
+    allowedSources: ['official_payload', 'official_description'],
+  },
+  {
+    company: 'Qualcomm',
+    aliases: ['qualcomm'],
+    officialHosts: ['careers.qualcomm.com'],
+    allowedSources: ['official_payload', 'official_description'],
+  },
+  {
+    company: 'AMD',
+    aliases: ['amd', 'advanced micro devices'],
+    officialHosts: ['careers.amd.com'],
+    allowedSources: ['official_payload', 'official_description'],
+  },
+  {
+    company: 'Dell Technologies',
+    aliases: ['dell technologies', 'dell'],
+    officialHosts: ['iawmqy.fa.ocs.oraclecloud.com', 'enterpriseplatform.dell.com', 'jobs.dell.com'],
+    allowedSources: ['official_payload', 'official_description'],
+  },
+  {
+    company: 'Broadcom',
+    aliases: ['broadcom'],
+    officialHosts: ['broadcom.wd1.myworkdayjobs.com'],
+    allowedSources: ['official_payload', 'official_description'],
+  },
+  {
+    company: 'ServiceNow',
+    aliases: ['servicenow'],
+    officialHosts: ['jobs.smartrecruiters.com', 'careers.smartrecruiters.com', 'api.smartrecruiters.com'],
+    allowedSources: ['official_payload', 'official_description'],
+  },
+  {
     company: 'McKinsey & Company',
     aliases: ['mckinsey & company', 'mckinsey'],
     // The upstream collector uses McKinsey's public gateway API for the
@@ -74,6 +135,15 @@ const RULES: JobCompanyFieldRule[] = [
     // URL as its official source URL.
     officialHosts: ['mckinsey.avature.net', 'jobs.mckinsey.com', 'gateway.mckinsey.com'],
     allowedSources: ['official_payload', 'official_description'],
+  },
+  {
+    company: 'LinkedIn',
+    aliases: ['linkedin'],
+    officialHosts: ['www.linkedin.com', 'linkedin.com'],
+    // Official company-job cards expose city/workplace in the list payload.
+    // The collector public_feed currently omits structured_field_sources, so
+    // the US feed trusts the official host the same way as Evercore RSS.
+    allowedSources: ['official_payload', 'official_detail_page'],
   },
 ];
 

@@ -58,6 +58,7 @@ import { useLanguage } from '@/lib/language-context';
 import { readActiveResumeId, writeActiveResumeId } from '@/lib/active-resume';
 import { pickEligibleResumeId } from '@/lib/resume-availability';
 import { useResumeAvailability } from '@/hooks/use-resume-availability';
+import { useCreditPrices } from '@/hooks/use-credit-prices';
 import { ResumeAvailabilityHint } from '@/components/resume-availability-hint';
 import {
   applyOptimizationChangeReapply,
@@ -759,6 +760,7 @@ function OptimizeContent() {
   const [showSavedToast, setShowSavedToast] = useState(false);
   const [optimizeError, setOptimizeError] = useState('');
   const { t } = useLanguage();
+  const { actionLabel } = useCreditPrices();
 
   // 地区列表
   const regionList = [
@@ -1005,6 +1007,7 @@ function OptimizeContent() {
     const suggestionsParam = searchParams.get('suggestions');
     const jobIdParam = searchParams.get('jobId');
     const regionParam = searchParams.get('region');
+    const resumeParam = searchParams.get('resumeId');
     
     if (companyParam) setTargetCompany(companyParam);
     if (positionParam) setTargetPosition(positionParam);
@@ -1013,6 +1016,24 @@ function OptimizeContent() {
       setTargetJobId(Number(jobIdParam));
     }
     if (regionParam) setTargetRegion(regionParam);
+
+    if (suggestionsParam || !resumeParam || !jobIdParam) return;
+    const jobId = Number(jobIdParam);
+    if (!Number.isInteger(jobId) || jobId <= 0) return;
+    let cancelled = false;
+    apiFetch(`/api/ai/match?resumeId=${encodeURIComponent(resumeParam)}&jobId=${encodeURIComponent(String(jobId))}`)
+      .then((response) => (response.ok ? response.json() : null))
+      .then((data: { match?: { suggestions?: string; key_gaps?: string[]; region?: string | null } } | null) => {
+        if (cancelled || !data?.match) return;
+        const gapText = Array.isArray(data.match.key_gaps) ? data.match.key_gaps.filter(Boolean).slice(0, 3).join('\n') : '';
+        const nextSuggestions = [data.match.suggestions, gapText].filter((item) => typeof item === 'string' && item.trim()).join('\n');
+        if (nextSuggestions) setSuggestions(nextSuggestions);
+        if (!regionParam && data.match.region) setTargetRegion(data.match.region);
+      })
+      .catch(() => undefined);
+    return () => {
+      cancelled = true;
+    };
   }, [searchParams]);
 
   useEffect(() => {
@@ -1747,7 +1768,7 @@ function OptimizeContent() {
                 ) : (
                   <>
                     <Sparkles className="mr-2 h-4 w-4" />
-                    {t('optimize.startOptimize')}
+                    {actionLabel(t('optimize.startOptimize'), 'resume_optimize', t('credits.unit'))}
                   </>
                 )}
               </Button>

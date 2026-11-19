@@ -3,6 +3,7 @@
 import { useEffect, useState } from 'react';
 import { useRouter } from 'next/navigation';
 import { getSupabaseBrowserClient } from '@/lib/supabase-browser';
+import { readLocalDevAuthEnabled } from '@/lib/dev-auth-client';
 import LoginSignup, { type RegisterData } from '@/components/ui/login-signup';
 import RegistrationSuccess, { preloadRegistrationSuccess } from '@/components/RegistrationSuccess';
 import { isEmailVerified, validatePassword } from '@/lib/auth-shared';
@@ -130,20 +131,28 @@ export default function LoginPage() {
 
     if (verificationRequested) setMode('verify');
 
-    getSupabaseBrowserClient().then(async (supabase) => {
-      const { data } = await supabase.auth.getSession();
+    void readLocalDevAuthEnabled().then(async (devAuth) => {
       if (!mounted) return;
-
-      if (data.session?.user && !isEmailVerified(data.session.user)) {
-        setVerificationEmail(data.session.user.email ?? '');
-        setMode('verify');
-      } else if (data.session) {
-        router.replace('/home');
-      } else if (verificationRequested) {
-        setMode('verify');
+      if (devAuth) {
+        router.replace('/ai-match');
+        return;
       }
-    }).catch((error: unknown) => {
-      if (mounted) setError(localizeAuthError(error instanceof Error ? error.message : undefined, feedback, feedback.signInFailed, locale));
+      try {
+        const supabase = await getSupabaseBrowserClient();
+        const { data } = await supabase.auth.getSession();
+        if (!mounted) return;
+
+        if (data.session?.user && !isEmailVerified(data.session.user)) {
+          setVerificationEmail(data.session.user.email ?? '');
+          setMode('verify');
+        } else if (data.session) {
+          router.replace('/home');
+        } else if (verificationRequested) {
+          setMode('verify');
+        }
+      } catch (error: unknown) {
+        if (mounted) setError(localizeAuthError(error instanceof Error ? error.message : undefined, feedback, feedback.signInFailed, locale));
+      }
     });
     return () => {
       mounted = false;
@@ -194,15 +203,15 @@ export default function LoginPage() {
     const passwordError = validatePassword(data.password);
     if (passwordError) {
       setError(localizePasswordError(passwordError));
-      return;
+      return false;
     }
     if (data.confirmPassword !== data.password) {
       setError(feedback.passwordsMismatch);
-      return;
+      return false;
     }
     if (!data.terms) {
       setError(feedback.acceptTerms);
-      return;
+      return false;
     }
 
     setLoading(true);
@@ -229,8 +238,10 @@ export default function LoginPage() {
       setRegistrationName(data.username.trim());
       setVerificationEmail(data.email);
       setMessage(feedback.codeSentForSignup);
+      return true;
     } catch (err) {
       setError(localizeAuthError(err instanceof Error ? err.message : undefined, feedback, feedback.signUpFailed, locale));
+      return true;
     } finally {
       setLoading(false);
     }
@@ -452,7 +463,10 @@ export default function LoginPage() {
       {process.env.NODE_ENV === 'development' && (
         <button
           type="button"
-          onClick={() => setShowRegistrationSuccess(true)}
+          onClick={() => {
+            if (!registrationName) setRegistrationName(locale === 'en' ? 'Alex Chen' : '陈思远');
+            setShowRegistrationSuccess(true);
+          }}
           className="fixed bottom-4 left-4 z-[10000] rounded-md border border-border bg-background px-3 py-2 text-xs text-muted-foreground shadow-sm transition-colors hover:bg-muted"
         >
           {locale === 'en' ? 'Preview success card' : locale === 'zh-TW' ? '測試卡片展示' : '测试卡片展示'}

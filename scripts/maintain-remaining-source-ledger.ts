@@ -7,9 +7,11 @@ loadDotenv({ path: process.env.ENV_FILE || '.env.local' });
  * Ledger maintenance for the remaining discovery_required companies:
  *  - Rothschild & Co: promoted to configured_connector (Workday official
  *    detail auto-backfill already verified on production).
- *  - McKinsey / UBS / Citadel: keep discovery_required, write blocker notes
- *    so the admin dashboard shows an honest "blocked / needs auth" state
- *    instead of an idle/unclassified one.
+ *  - McKinsey / UBS: keep discovery_required, write blocker notes so the
+ *    admin dashboard shows an honest "blocked / needs auth" state instead
+ *    of an idle/unclassified one.
+ *  - Citadel: keep sitemap as the list source. Do not revert it to
+ *    discovery_required, and do not enqueue official HTML detail fetches.
  *
  * Guarded by OFFICIAL_DETAIL_PROMOTION_WRITE_ENABLED=true.
  */
@@ -48,8 +50,9 @@ const UPDATES: LedgerUpdate[] = [
   {
     companyName: 'Citadel',
     patch: {
-      status: 'discovery_required',
-      notes: '官方页面 403 反爬，无写入（2026-09-05 记录）。恢复条件：官方公开 API 或生产出口 allowlist。',
+      status: 'source_family_identified',
+      source_type: 'sitemap',
+      notes: '列表源为官方 career-sitemap.xml，覆盖 complete。详情页机房出口 403，定时 repair 已停放。缺正文用 pnpm import:citadel-browser-details 导入官方浏览器证据。403 不得作为关岗证据。',
     },
   },
 ];

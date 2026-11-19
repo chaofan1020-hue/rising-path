@@ -85,6 +85,44 @@ export async function POST(request: NextRequest) {
   }
 }
 
+export async function DELETE(request: NextRequest) {
+  try {
+    const auth = await getAuthContext(request);
+    if (!auth) return unauthorizedResponse();
+    const body: unknown = await request.json().catch(() => null);
+    const payload = body && typeof body === 'object' && !Array.isArray(body) ? body as Record<string, unknown> : {};
+    const resumeId = positiveInteger(payload.resumeId ?? payload.resume_id ?? request.nextUrl.searchParams.get('resumeId'));
+    const jobId = positiveInteger(payload.jobId ?? payload.job_id ?? request.nextUrl.searchParams.get('jobId'));
+    if (!resumeId || !jobId) {
+      return NextResponse.json({ error: '反馈参数无效' }, { status: 400 });
+    }
+
+    const { data: resume, error: resumeError } = await auth.client
+      .from('resumes')
+      .select('id, profile_version')
+      .eq('id', resumeId)
+      .eq('user_id', auth.user.id)
+      .maybeSingle();
+    if (resumeError) throw new Error(`验证简历归属失败: ${resumeError.message}`);
+    if (!resume) return NextResponse.json({ error: '简历不存在或无权使用' }, { status: 404 });
+    const profileVersion = positiveInteger(resume.profile_version);
+    if (!profileVersion) return NextResponse.json({ ok: true });
+
+    const { error } = await auth.client
+      .from('ai_match_feedback')
+      .delete()
+      .eq('user_id', auth.user.id)
+      .eq('resume_id', resumeId)
+      .eq('job_id', jobId)
+      .eq('resume_profile_version', profileVersion);
+    if (error) throw new Error(`删除匹配反馈失败: ${error.message}`);
+    return NextResponse.json({ ok: true });
+  } catch (error) {
+    console.error('[AI match feedback] delete failed:', error);
+    return NextResponse.json({ error: '删除反馈失败' }, { status: 500 });
+  }
+}
+
 export async function GET(request: NextRequest) {
   try {
     const auth = await getAuthContext(request);

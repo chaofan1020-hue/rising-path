@@ -242,6 +242,65 @@ function splitName(name?: string): { firstName: string; lastName: string } {
   return { firstName: parts.slice(0, -1).join(' '), lastName: parts[parts.length - 1] };
 }
 
+/**
+ * 简历里的教育与经历在 `resume.profile` 里是结构化的，但旧版档案只保留了 `raw` 一段文本，
+ * 导致「学校 / 学位 / 专业 / GPA / 公司 / 职位」这 6 个网申高频字段永远要手打。
+ * 这里保留结构化字段，同时仍写一份 `raw` 供工作台展示与用户编辑。
+ */
+function buildEducationEntries(rawEntries: string[] | undefined, structured: unknown): Array<Record<string, string>> {
+  const entries: Array<Record<string, string>> = [];
+  const list = Array.isArray(structured) ? structured : [];
+  for (const item of list) {
+    if (!isRecord(item)) continue;
+    const record: Record<string, string> = {};
+    const take = (key: string, value: unknown) => {
+      if (typeof value === 'string' && value.trim()) record[key] = value.trim();
+      else if (typeof value === 'number' && Number.isFinite(value)) record[key] = String(value);
+    };
+    take('school', item.school);
+    take('degree', item.degree);
+    take('major', item.major);
+    take('gpa', item.gpa);
+    take('startDate', item.startYear);
+    take('endDate', item.endYear);
+    if (!record.school && !record.degree && !record.major) continue;
+    record.raw = record.raw || [record.school, record.degree, record.major, record.gpa ? `GPA ${record.gpa}` : '', record.endDate ? `Class of ${record.endDate}` : '']
+      .filter(Boolean)
+      .join(' | ');
+    entries.push(record);
+  }
+  if (entries.length > 0) return entries;
+  return (rawEntries || []).map((entry) => ({ raw: entry }));
+}
+
+function buildExperienceEntries(rawEntries: string[] | undefined, structured: unknown): Array<Record<string, string>> {
+  const entries: Array<Record<string, string>> = [];
+  const list = Array.isArray(structured) ? structured : [];
+  for (const item of list) {
+    if (!isRecord(item)) continue;
+    const record: Record<string, string> = {};
+    const take = (key: string, value: unknown) => {
+      if (typeof value === 'string' && value.trim()) record[key] = value.trim();
+      else if (typeof value === 'number' && Number.isFinite(value)) record[key] = String(value);
+    };
+    take('company', item.company);
+    take('role', item.role);
+    take('startDate', item.startDate);
+    take('endDate', item.endDate);
+    if (Array.isArray(item.highlights)) {
+      const highlights = item.highlights.filter((value): value is string => typeof value === 'string' && Boolean(value.trim()));
+      if (highlights.length) record.description = highlights.join('\n');
+    }
+    if (!record.company && !record.role) continue;
+    record.raw = record.raw || [record.company, record.role, [record.startDate, record.endDate].filter(Boolean).join(' - ')]
+      .filter(Boolean)
+      .join(' | ');
+    entries.push(record);
+  }
+  if (entries.length > 0) return entries;
+  return (rawEntries || []).map((entry) => ({ raw: entry }));
+}
+
 export function buildProfileFromResume(
   userInfo: ResumeUserInfo | null | undefined,
   profile: ResumeProfile | null | undefined
@@ -267,8 +326,11 @@ export function buildProfileFromResume(
       country: '',
     },
     links: {},
-    education: (info.education || []).map((entry) => ({ raw: entry })),
-    experience: (info.experience || []).map((entry) => ({ raw: entry })),
+    education: buildEducationEntries(info.education, profile?.education),
+    experience: buildExperienceEntries(info.experience, [
+      ...((profile?.internships as unknown[]) || []),
+      ...((profile?.workExperience as unknown[]) || []),
+    ]),
     skills: info.skills || [],
     languages: profile?.languages || [],
     workAuthorization: profile?.intention?.workAuthorization || '',

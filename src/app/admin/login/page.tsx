@@ -179,7 +179,6 @@ export default function AdminLoginPage() {
                 />
               </div>
               <HumanVerification
-                key={captchaKey}
                 language="zh-CN"
                 onToken={setCaptchaToken}
                 onEnabled={(enabled) => {

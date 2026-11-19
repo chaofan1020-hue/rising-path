@@ -1,8 +1,9 @@
 begin;
 
--- Default jobs listing and the brand filter both counted active target-region
--- rows by evaluating ~100 ILIKE patterns per row. That exact count took about
--- four seconds. Store the boolean once and keep it current on region writes.
+-- Adding the column and trigger takes an exclusive lock. Commit that before
+-- rewriting rows so job listing reads are not blocked.
+
+set local statement_timeout = '60s';
 
 alter table public.jobs
   add column if not exists matches_target_region boolean;
@@ -23,9 +24,20 @@ create trigger jobs_sync_matches_target_region
   before insert or update of region on public.jobs
   for each row execute function public.jobs_sync_matches_target_region();
 
+revoke all on function public.jobs_sync_matches_target_region() from public;
+grant execute on function public.jobs_sync_matches_target_region() to anon, authenticated, service_role;
+
+commit;
+
+-- Role default statement_timeout is 2 minutes. This rewrite can take longer,
+-- but it only uses a row lock, so reads continue.
+set statement_timeout = '10min';
+
 update public.jobs
 set matches_target_region = public.job_region_matches_target(region)
 where matches_target_region is null;
+
+set statement_timeout = '5min';
 
 create index if not exists jobs_target_active_feed_idx
   on public.jobs (updated_at desc nulls last, created_at desc, id desc)
@@ -35,12 +47,13 @@ create index if not exists jobs_target_active_created_idx
   on public.jobs (created_at desc, id desc)
   where is_active = true and matches_target_region;
 
+create index if not exists jobs_target_active_company_url_idx
+  on public.jobs (company) include (job_url)
+  where is_active = true and matches_target_region;
 create index if not exists jobs_target_active_company_idx
   on public.jobs (company)
   where is_active = true and matches_target_region;
 
--- One representative URL is enough for logo fallback. array_agg sorted every
--- active job URL and dominated the cold brand-filter query.
 create or replace function public.list_active_company_options()
 returns table (
   company_name text,
@@ -77,19 +90,7 @@ as $$
   order by counts.job_count desc, counts.company_name asc;
 $$;
 
-revoke all on function public.jobs_sync_matches_target_region() from public;
-grant execute on function public.jobs_sync_matches_target_region() to anon, authenticated, service_role;
-
 revoke all on function public.list_active_company_options() from public;
 grant execute on function public.list_active_company_options() to anon, authenticated, service_role;
-
-notify pgrst, 'reload schema';
-
-commit;
-
--- Catch rows inserted while the column was being added.
-update public.jobs
-set matches_target_region = public.job_region_matches_target(region)
-where matches_target_region is null;
 
 notify pgrst, 'reload schema';

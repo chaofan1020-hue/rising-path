@@ -54,10 +54,22 @@ export function getBillingReadiness() {
   if (hasValue('ALIPAY_NOTIFY_URL') && !isHttpsUrl('ALIPAY_NOTIFY_URL')) alipayWarnings.push('ALIPAY_NOTIFY_URL must use HTTPS');
   const wechat: BillingProviderReadiness = { enabled: config.enabled && config.wechatEnabled, configured: wechatMissing.length === 0 && wechatWarnings.length === 0, missing: wechatMissing, warnings: wechatWarnings };
   const alipay: BillingProviderReadiness = { enabled: config.enabled && config.alipayEnabled, configured: alipayMissing.length === 0 && alipayWarnings.length === 0, missing: alipayMissing, warnings: alipayWarnings };
+  // The handoff secret signs every checkout ticket and payment session. Without
+  // it order creation succeeds but /pay/checkout fails, so it belongs in the
+  // same preflight list instead of surfacing as a 502 later.
+  if (!hasValue('PAYMENT_HANDOFF_SECRET')) {
+    wechatMissing.push('PAYMENT_HANDOFF_SECRET');
+    alipayMissing.push('PAYMENT_HANDOFF_SECRET');
+  } else if ((process.env.PAYMENT_HANDOFF_SECRET || '').trim().length < 32) {
+    wechatWarnings.push('PAYMENT_HANDOFF_SECRET must be at least 32 characters');
+    alipayWarnings.push('PAYMENT_HANDOFF_SECRET must be at least 32 characters');
+  }
+  const handoffReady = hasValue('PAYMENT_HANDOFF_SECRET') && (process.env.PAYMENT_HANDOFF_SECRET || '').trim().length >= 32;
   return {
     enabled: config.enabled,
     defaultCurrency: config.defaultCurrency,
-    checkoutReady: wechat.enabled && wechat.configured || alipay.enabled && alipay.configured,
+    checkoutReady: handoffReady && (wechat.enabled && wechat.configured || alipay.enabled && alipay.configured),
+    handoffReady,
     wechat,
     alipay,
   };

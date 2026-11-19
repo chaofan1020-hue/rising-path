@@ -33,27 +33,28 @@ export default function Home() {
   }));
 
   return (
-    <div className="min-h-screen bg-white dark:bg-background">
+    <div className="min-h-screen bg-white">
       <Header1 />
-      <div className="pt-[4.5rem] md:pt-[4.75rem]">
+      <div className="dark min-h-screen bg-background text-foreground">
+        <div className="bg-white pt-[4.5rem] md:pt-[4.75rem]">
         <section className="bg-white px-4 pb-4 pt-16">
           <div className="mx-auto max-w-7xl lg:flex lg:items-start lg:gap-8">
-            <aside className="relative hidden shrink-0 lg:-mt-12 lg:ml-24 lg:block lg:h-[520px] lg:w-[440px]">
+            <aside className="relative hidden min-w-0 shrink-0 grid-cols-[180px_minmax(0,1fr)] items-center gap-3 lg:grid lg:h-[520px] lg:w-[480px]">
+              <div className="flex min-w-0 items-center whitespace-nowrap">
+                <svg viewBox="0 0 40 20" fill="currentColor" aria-hidden="true" className="h-7 w-auto shrink-0 text-zinc-950">
+                  <path d="M0 0h29a4 4 0 0 1 0 8H0V0z" />
+                  <path d="M40 20H11a4 4 0 0 1 0-8h29v8z" />
+                </svg>
+                <span className="ml-2 text-4xl font-bold tracking-tight text-zinc-950 2xl:text-5xl">Liorvix</span>
+              </div>
               <HaloReel
                 items={haloCards}
                 cardWidth={100}
                 cardHeight={120}
                 minScale={0.4}
                 radiusYRatio={0.32}
-                className="h-full rounded-3xl"
+                className="h-full min-w-0 rounded-3xl"
               />
-              <div className="pointer-events-none absolute inset-y-0 left-0 z-10 flex lg:-translate-x-24 2xl:-translate-x-44 items-center">
-                <svg viewBox="0 0 40 20" fill="currentColor" aria-hidden="true" className="h-8 w-auto shrink-0 text-zinc-950">
-                  <path d="M0 0h29a4 4 0 0 1 0 8H0V0z" />
-                  <path d="M40 20H11a4 4 0 0 1 0-8h29v8z" />
-                </svg>
-                <span className="ml-2 text-6xl font-bold tracking-tight text-zinc-950">Liorvix</span>
-              </div>
             </aside>
             <div className="min-w-0 flex-1">
               <HoverEffect
@@ -69,25 +70,28 @@ export default function Home() {
             </div>
           </div>
         </section>
+        </div>
         
         {/* Platform Introduction */}
-        <section className="py-16 px-4 bg-white dark:bg-background">
-          <div className="max-w-7xl mx-auto text-left space-y-3">
-            <p className="text-sm md:text-base text-gray-500 dark:text-gray-400 leading-relaxed">
+        <section className="bg-white px-4 py-16 dark:bg-background md:py-20">
+          <div className="mx-auto max-w-4xl">
+            <p className="text-base font-medium text-gray-900 dark:text-gray-100 md:text-lg">
               {t('intro.greeting')}
             </p>
-            <p className="text-sm md:text-base text-gray-500 dark:text-gray-400 leading-relaxed">
-              {t('intro.p1')}
-            </p>
-            <p className="text-sm md:text-base text-gray-500 dark:text-gray-400 leading-relaxed">
-              {t('intro.p2')}
-            </p>
-            <p className="text-sm md:text-base text-gray-500 dark:text-gray-400 leading-relaxed">
-              {t('intro.p3')}
-            </p>
-            <p className="text-sm md:text-base text-gray-500 dark:text-gray-400 leading-relaxed">
-              {t('intro.p4')}
-            </p>
+            <div className="mt-6 space-y-5">
+              {t('intro.body').split(/\n\n+/).map((stanza, index) => (
+                <p
+                  key={index}
+                  className="whitespace-pre-line text-sm leading-loose text-gray-500 dark:text-gray-400 md:text-base"
+                >
+                  {stanza}
+                </p>
+              ))}
+            </div>
+            <div className="mt-10 text-right">
+              <p className="text-sm text-gray-600 dark:text-gray-300 md:text-base">{t('intro.signoff')}</p>
+              <p className="mt-1.5 text-sm text-gray-400 dark:text-gray-500">{t('intro.valediction')}</p>
+            </div>
           </div>
         </section>
 

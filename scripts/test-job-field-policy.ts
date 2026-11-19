@@ -109,4 +109,38 @@ const evercoreEvidence = evercoreRssLocation.field_evidence as {
 assert.equal(evercoreEvidence?.fields?.location?.status, 'verified');
 assert.equal(evercoreEvidence?.fields?.location?.source, 'official_payload');
 
+const linkedInLocation = normalizeFeedItem({
+  ...baseline,
+  company_name: 'LinkedIn',
+  title: 'Senior AI Engineer (NYC)',
+  source_url: 'https://www.linkedin.com/jobs/view/4450661220',
+  location: 'New York, NY (Hybrid)',
+  country: null,
+  source_type: 'public_feed',
+  source_evidence: { source_type: 'public_feed', structured_field_sources: {} },
+});
+assert.ok(linkedInLocation);
+assert.equal(linkedInLocation.region, 'New York, NY (Hybrid)');
+assert.equal(linkedInLocation.location_source, 'official_payload');
+assert.equal(linkedInLocation.workplace_type, 'Hybrid');
+const linkedInEvidence = linkedInLocation.field_evidence as {
+  fields?: Record<string, { status?: string; source?: string }>;
+} | undefined;
+assert.equal(linkedInEvidence?.fields?.location?.status, 'verified');
+assert.equal(linkedInEvidence?.fields?.location?.source, 'official_payload');
+
+const linkedInOnsite = normalizeFeedItem({
+  ...baseline,
+  company_name: 'LinkedIn',
+  title: 'Coordonnateur des soins aux patient',
+  source_url: 'https://www.linkedin.com/jobs/view/4478348462',
+  location: 'Montreal, QC (On-site)',
+  country: null,
+  source_type: 'public_feed',
+  source_evidence: { source_type: 'public_feed', structured_field_sources: {} },
+});
+assert.ok(linkedInOnsite);
+assert.equal(linkedInOnsite.location_source, 'official_payload');
+assert.equal(linkedInOnsite.workplace_type, 'On-site');
+
 console.log('job field policy tests passed');

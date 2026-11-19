@@ -518,6 +518,7 @@ function JobsPagination({
   page,
   totalJobs,
   totalJobsIsEstimate,
+  totalJobsIsUnknown,
   hasMoreJobs,
   loading,
   onPageChange,
@@ -527,16 +528,22 @@ function JobsPagination({
   page: number;
   totalJobs: number;
   totalJobsIsEstimate: boolean;
+  totalJobsIsUnknown: boolean;
   hasMoreJobs: boolean;
   loading: boolean;
   onPageChange: (next: number) => void;
-  t: (key: string) => string;
+  t: (key: string, params?: Record<string, string | number>) => string;
   className?: string;
 }) {
-  if (totalJobs <= 0) return null;
+  if (totalJobs <= 0 && !hasMoreJobs && page === 0) return null;
   return (
     <div className={`flex flex-col items-center gap-3 text-xs md:text-sm text-zinc-400 dark:text-zinc-500 ${className ?? ''}`}>
-      <span>{t('jobs.foundJobs')} {totalJobsIsEstimate ? t('jobs.estimatedPrefix') : ''}{totalJobs} {t('jobs.jobsUnit')} · {t('jobs.page')} {page + 1}</span>
+      <span>
+        {!totalJobsIsUnknown && totalJobs > 0 && (
+          <>{t('jobs.foundJobs')} {totalJobsIsEstimate ? t('jobs.estimatedPrefix') : ''}{totalJobs} {t('jobs.jobsUnit')} · </>
+        )}
+        {t('jobs.pageOf', { page: page + 1 })}
+      </span>
       <div className="flex items-center gap-2">
         <Button
           type="button"
@@ -801,12 +808,14 @@ function JobDetailPanel({
 function JobsContent() {
   const [jobs, setJobs] = useState<Job[]>([]);
   const [loading, setLoading] = useState(true);
+  const [loadError, setLoadError] = useState<string | null>(null);
   const [searchTerm, setSearchTerm] = useState('');
   const [debouncedSearchTerm, setDebouncedSearchTerm] = useState('');
   const [page, setPage] = useState(0);
   const pageSize = 30;
   const [totalJobs, setTotalJobs] = useState(0);
   const [totalJobsIsEstimate, setTotalJobsIsEstimate] = useState(false);
+  const [totalJobsIsUnknown, setTotalJobsIsUnknown] = useState(false);
   const [hasMoreJobs, setHasMoreJobs] = useState(false);
   const [selectedRegions, setSelectedRegions] = useState<string[]>([]);
   const [selectedDirections, setSelectedDirections] = useState<string[]>([]);
@@ -924,15 +933,29 @@ function JobsContent() {
 
       const response = await apiFetch(`/api/jobs?${params.toString()}`, { cache: 'no-store' });
       const data = await response.json();
+      if (!response.ok) {
+        throw new Error(typeof data?.error === 'string' ? data.error : `岗位接口请求失败 (${response.status})`);
+      }
       if (requestId !== jobsRequestIdRef.current) return;
       setJobs(data.jobs || []);
       setTotalJobs(data.pagination?.total || 0);
       setTotalJobsIsEstimate(Boolean(data.pagination?.total_is_estimate));
+      setTotalJobsIsUnknown(Boolean(data.pagination?.total_is_unknown));
       setHasMoreJobs(Boolean(data.pagination?.has_more));
+      setLoadError(null);
       jobsFetchedAtRef.current = Date.now();
     } catch (error) {
       if (requestId !== jobsRequestIdRef.current) return;
       console.error('Failed to fetch jobs:', error);
+      // A failed request must not keep the previous filter's rows on screen:
+      // it looked like "many jobs, then none after filtering" and hid the real
+      // server error. Show an explicit, retryable state instead.
+      setJobs([]);
+      setTotalJobs(0);
+      setTotalJobsIsEstimate(false);
+      setTotalJobsIsUnknown(false);
+      setHasMoreJobs(false);
+      setLoadError(error instanceof Error ? error.message : '');
     } finally {
       if (requestId === jobsRequestIdRef.current) setLoading(false);
     }
@@ -1248,6 +1271,21 @@ function JobsContent() {
               <Loader2 className="h-8 w-8 animate-spin mx-auto mb-2" />
               {t('jobs.loading')}
             </div>
+          ) : loadError ? (
+            <div className="rounded-2xl border border-dashed border-zinc-200 dark:border-zinc-800 py-14 text-center">
+              <p className="text-sm text-zinc-500 dark:text-zinc-400">{t('jobs.loadFailed')}</p>
+              <Button
+                type="button"
+                variant="outline"
+                size="sm"
+                className="mt-4"
+                onClick={() => { void fetchJobs(); }}
+                disabled={loading}
+              >
+                <RotateCcw className="mr-2 h-4 w-4" />
+                {t('jobs.retry')}
+              </Button>
+            </div>
           ) : filteredJobs.length === 0 ? (
             <div className="rounded-2xl border border-dashed border-zinc-200 dark:border-zinc-800 py-14 text-center text-zinc-400">
               <Briefcase className="h-10 w-10 mx-auto mb-3 opacity-40" />
@@ -1342,6 +1380,7 @@ function JobsContent() {
                   page={page}
                   totalJobs={totalJobs}
                   totalJobsIsEstimate={totalJobsIsEstimate}
+                  totalJobsIsUnknown={totalJobsIsUnknown}
                   hasMoreJobs={hasMoreJobs}
                   loading={loading}
                   onPageChange={setPage}
@@ -1371,6 +1410,7 @@ function JobsContent() {
                     page={page}
                     totalJobs={totalJobs}
                     totalJobsIsEstimate={totalJobsIsEstimate}
+                    totalJobsIsUnknown={totalJobsIsUnknown}
                     hasMoreJobs={hasMoreJobs}
                     loading={loading}
                     onPageChange={setPage}

@@ -1,6 +1,6 @@
 export const TARGET_REGION_KEYWORDS: Record<string, string[]> = {
   north_america: [
-    'North America', 'North-American', 'NorthAmerican',
+    'North America', 'North-American', 'NorthAmerican', 'Americas',
     'United States', 'USA', 'U.S.', 'Canada',
     // 常见的仅城市/州缩写地址
     'New York', 'San Francisco', 'Los Angeles', 'Seattle', 'Chicago', 'Boston', 'Austin',
@@ -10,7 +10,7 @@ export const TARGET_REGION_KEYWORDS: Record<string, string[]> = {
     'Milwaukee', 'Colorado Springs', 'Baton Rouge', 'Fresno', 'San Antonio', 'Jacksonville',
     'San Diego', 'Toronto', 'Vancouver', 'Ottawa', 'Montreal', 'Mississauga', 'Quebec',
   ],
-  australia: ['Australia', 'Sydney', 'Melbourne', 'Brisbane', 'Perth', 'Adelaide', 'Canberra', 'Ballarat'],
+  australia: ['Australia', 'ANZ', 'Sydney', 'Melbourne', 'Brisbane', 'Perth', 'Adelaide', 'Canberra', 'Ballarat'],
   hong_kong: ['Hong Kong', 'Kowloon', 'Hong Kong Island'],
   singapore: ['Singapore'],
   united_kingdom: [
@@ -27,8 +27,8 @@ export const TARGET_REGION_KEYWORDS: Record<string, string[]> = {
 const US_STATE_OR_TERRITORY_CODES = 'al|ak|as|az|ar|ca|co|ct|de|dc|fl|ga|gu|hi|id|il|in|ia|ks|ky|la|me|md|ma|mi|mn|ms|mo|mt|ne|nv|nh|nj|nm|ny|nc|nd|mp|oh|ok|or|pa|pr|ri|sc|sd|tn|tx|ut|vt|vi|va|wa|wv|wi|wy';
 
 const TARGET_PATTERNS: Array<[string, RegExp]> = [
-  ['north_america', new RegExp(`\\b(north america|north-american|northamerican|united states|usa|u\\.s\\.?|us|canada|new york|san francisco|los angeles|seattle|chicago|boston|austin|dallas|houston|atlanta|denver|miami|philadelphia|washington|jersey city|newark|palo alto|mountain view|arlington|raleigh|charlotte|tampa|orlando|columbus|wilmington|fort lauderdale|milwaukee|colorado springs|baton rouge|fresno|san antonio|jacksonville|san diego|toronto|vancouver|ottawa|montreal|mississauga|quebec|${US_STATE_OR_TERRITORY_CODES})\\b`, 'i')],
-  ['australia', /\b(australia|sydney|melbourne|brisbane|perth|adelaide|canberra|ballarat)\b/i],
+  ['north_america', new RegExp(`\\b(north america|north-american|northamerican|americas|united states|usa|u\\.s\\.?|us|canada|new york|san francisco|los angeles|seattle|chicago|boston|austin|dallas|houston|atlanta|denver|miami|philadelphia|washington|jersey city|newark|palo alto|mountain view|arlington|raleigh|charlotte|tampa|orlando|columbus|wilmington|fort lauderdale|milwaukee|colorado springs|baton rouge|fresno|san antonio|jacksonville|san diego|toronto|vancouver|ottawa|montreal|mississauga|quebec|${US_STATE_OR_TERRITORY_CODES})\\b`, 'i')],
+  ['australia', /\b(australia|anz|sydney|melbourne|brisbane|perth|adelaide|canberra|ballarat)\b/i],
   ['hong_kong', /\b(hong kong|kowloon|hong kong island)\b/i],
   ['singapore', /\bsingapore\b/i],
   ['united_kingdom', /\b(united kingdom|u\.k\.?|uk|england|scotland|wales|northern ireland|london|bournemouth|bristol|manchester|edinburgh|glasgow|birmingham|leeds|cardiff|belfast|cambridge|oxford|southampton|reading|guildford|crawley|aberdeen|newcastle|sheffield|liverpool)\b/i],
@@ -52,7 +52,7 @@ export function isExcludedRegion(location?: string | null, country?: string | nu
   return /\b(germany|france|italy|spain|netherlands|ireland|switzerland|belgium|sweden|denmark|norway|finland|austria|portugal|poland|czech|czechia|luxembourg|greece|romania|hungary|european union|europe|berlin|munich|münchen|dusseldorf|düsseldorf|kronberg|frankfurt|hamburg|amsterdam|brussels|paris|madrid|lisbon|warsaw|bucharest|rome|roma|milan|oslo|stockholm|copenhagen|helsinki|vienna|zurich|geneva|prague|krakow|sevilla|brest)\b/i.test(value);
 }
 
-export function targetRegionPostgrestClauses(): string[] {
+function targetRegionKeywords(): string[] {
   return Object.values(TARGET_REGION_KEYWORDS)
     .flat()
     // PostgREST's `or()` grammar treats commas as clause separators. A raw
@@ -60,8 +60,20 @@ export function targetRegionPostgrestClauses(): string[] {
     // versions, so omit those overly-specific aliases; the surrounding city
     // and country keywords still keep the region covered without breaking the
     // entire query.
-    .filter((keyword) => !keyword.includes(','))
-    .map((keyword) => `region.ilike.%${keyword.replace(/[\\%_,()]/g, (character) => `\\${character}`)}%`);
+    .filter((keyword) => !keyword.includes(','));
+}
+
+/**
+ * ILIKE patterns shared by the public jobs list and
+ * `list_active_company_options`. Keep the SQL twin in
+ * `0126_target_region_company_options.sql` in sync.
+ */
+export function targetRegionIlikePatterns(): string[] {
+  return targetRegionKeywords().map((keyword) => `%${keyword.replace(/[\\%_]/g, (character) => `\\${character}`)}%`);
+}
+
+export function targetRegionPostgrestClauses(): string[] {
+  return targetRegionKeywords().map((keyword) => `region.ilike.%${keyword.replace(/[\\%_,()]/g, (character) => `\\${character}`)}%`);
 }
 
 const CONFIGURED_REGION_KEYWORDS: Record<string, string[]> = {
@@ -83,6 +95,46 @@ const CONFIGURED_REGION_SCOPE_KEYS: Record<string, string[]> = {
   '香港': ['hong_kong'],
   '新加坡': ['singapore'],
 };
+
+/**
+ * Indexed listing filters backed by the `jobs_listing` view (migration 0134).
+ * `region_market` classifies a single market; `region_group` additionally
+ * lumps the United States and Canada together as `north_america`, so every
+ * supported market filter is one equality predicate instead of dozens of
+ * `region ILIKE` clauses. A multi-value column would force the planner to
+ * sort instead of returning rows in `updated_at` order.
+ */
+export type RegionListingFilter = {
+  column: 'region_market' | 'region_group';
+  value: string;
+};
+
+const REGION_LISTING_FILTERS: Record<string, RegionListingFilter> = {
+  '北美': { column: 'region_group', value: 'north_america' },
+  '美国': { column: 'region_market', value: 'us' },
+  '加拿大': { column: 'region_market', value: 'canada' },
+  '英国': { column: 'region_market', value: 'uk' },
+  '澳大利亚': { column: 'region_market', value: 'australia' },
+  '香港': { column: 'region_market', value: 'hong_kong' },
+  '新加坡': { column: 'region_market', value: 'singapore' },
+};
+
+/**
+ * Collapses the selected market labels into one indexed predicate. Returns
+ * `null` when the selection mixes columns or contains a custom configuration
+ * value; callers then keep the legacy ILIKE behavior for full compatibility.
+ */
+export function configuredRegionListingFilter(regions: string[]): RegionListingFilter | null {
+  if (regions.length === 0) return null;
+  let filter: RegionListingFilter | null = null;
+  for (const region of regions) {
+    const candidate = REGION_LISTING_FILTERS[region.trim()];
+    if (!candidate) return null;
+    if (filter && filter.column !== candidate.column) return null;
+    filter = candidate;
+  }
+  return filter;
+}
 
 /** Stable database values used by the AI-match retrieval RPC. */
 export function configuredRegionScopeKeys(regions: string[]): string[] {
@@ -128,7 +180,5 @@ export function configuredRegionSearchPatterns(regions: string[]): string[] {
 }
 
 export function targetRegionSearchPatterns(): string[] {
-  return Object.values(TARGET_REGION_KEYWORDS)
-    .flat()
-    .map((keyword) => `%${keyword.replace(/[\\%_]/g, (character) => `\\${character}`)}%`);
+  return targetRegionIlikePatterns();
 }

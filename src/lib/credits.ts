@@ -1,5 +1,6 @@
 import { randomUUID } from 'node:crypto';
 import { getSupabaseClient } from '@/storage/database/supabase-client';
+import { isLocalDevAuthEnabled } from '@/lib/dev-auth';
 
 export type CreditMetric =
   | 'resume_parse'
@@ -37,8 +38,22 @@ export class CreditBalanceError extends Error {
   }
 }
 
+export const SIGNUP_WELCOME_CREDITS = 300;
+
 export function isCreditsEnforced(): boolean {
   return process.env.CREDITS_ENFORCED?.trim().toLowerCase() === 'true';
+}
+
+export async function grantSignupWelcomeCredits(userId?: string | null): Promise<void> {
+  if (!userId) return;
+  try {
+    const { error } = await getSupabaseClient().rpc('grant_signup_welcome_credits', {
+      p_user_id: userId,
+    });
+    if (error) console.error('[Credits] signup welcome grant failed:', error.message);
+  } catch (error) {
+    console.error('[Credits] signup welcome grant failed:', error);
+  }
 }
 
 /**
@@ -47,6 +62,7 @@ export function isCreditsEnforced(): boolean {
  * switch used by the admin console.
  */
 async function isCreditEnforcementEnabled(): Promise<boolean> {
+  if (isLocalDevAuthEnabled()) return false;
   const fallback = isCreditsEnforced();
   try {
     const { data, error } = await getSupabaseClient()

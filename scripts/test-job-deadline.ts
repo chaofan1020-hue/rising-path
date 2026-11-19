@@ -56,6 +56,15 @@ assert.deepEqual(resolveJobDeadline({ description: 'Applications will close on O
   source: 'description',
   fieldSource: 'official_description',
 });
+assert.deepEqual(resolveJobDeadline({
+  description: 'The application window is expected to close on: 09/10/2026 Job posting may be removed earlier if the position is filled.',
+  date_posted: '2026-08-27',
+  source_evidence: officialPayload,
+}), {
+  value: '2026-09-10T23:59:59.999Z',
+  source: 'description',
+  fieldSource: 'official_description',
+});
 assert.deepEqual(resolveJobDeadline({ description: 'The deadline to apply is October 15, 2026.', source_evidence: officialPayload }), {
   value: '2026-10-15T23:59:59.999Z',
   source: 'description',

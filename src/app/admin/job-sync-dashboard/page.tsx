@@ -98,6 +98,8 @@ type Company = {
   };
   status: Status;
   reasons: Array<{ code: string; label: string }>;
+  actionable: boolean;
+  qualityNotes: Array<{ code: string; label: string }>;
   counts: {
     localActiveJobs: number;
     officialActiveJobs: number | null;
@@ -106,6 +108,7 @@ type Company = {
     officialCountSource?: string;
     officialCountStatus?: string;
     officialCountLowerBound?: number | null;
+    upstreamLatestRunStatus?: string | null;
   };
   feed: {
     mode: string;
@@ -182,6 +185,7 @@ type Dashboard = {
     activeCompanies: number;
     healthyCompanies: number;
     attentionCompanies: number;
+    qualityOnlyCompanies: number;
     failedCompanies: number;
     runningCompanies: number;
     localActiveJobs: number;
@@ -226,7 +230,7 @@ const fields: Record<Field, string> = {
 const statuses: Record<Status, string> = {
   healthy: "正常",
   running: "正在处理",
-  attention: "需要关注",
+  attention: "需要处理",
   failed: "处理失败",
   retrying: "等待重试",
   stalled: "长时间没有进展",
@@ -268,6 +272,16 @@ const when = (value: string | null | undefined) => {
 };
 const pct = (value: number | undefined) =>
   Math.max(0, Math.min(100, Number(value) || 0));
+function pipelineStageText(status: Status, liveRun: LiveRun | null) {
+  if (liveRun) return stages[liveRun.stage || ""] || "正在处理";
+  if (status === "healthy") return "已完成最近一轮";
+  if (status === "retrying") return "最近一轮已完成，下一轮复查已到点";
+  if (status === "failed") return "最近一轮失败";
+  if (status === "stalled") return "长时间没有进展";
+  if (status === "discovery_required") return "官方详情未开放，不猜测字段";
+  if (status === "running") return "正在处理";
+  return "等待处理";
+}
 function StatusTag({ status }: { status: Status }) {
   return (
     <Badge variant="outline" className={`gap-1.5 ${statusStyles[status]}`}>
@@ -391,6 +405,63 @@ function LiveProgress({ run, companyName }: { run: LiveRun; companyName?: string
     </div>
   );
 }
+function CoverageReport({
+  companies,
+  qualityOnlyCompanies,
+  onOpen,
+}: {
+  companies: Company[];
+  qualityOnlyCompanies: number;
+  onOpen: (name: string) => void;
+}) {
+  const problems = [...companies.filter((company) => company.actionable)].sort((left, right) =>
+    left.companyName.localeCompare(right.companyName, "zh"),
+  );
+  const clear = problems.length === 0;
+  return (
+    <section
+      className={`rounded-xl border p-4 shadow-sm md:p-5 ${clear ? "border-emerald-200 bg-emerald-50/80 dark:border-emerald-900 dark:bg-emerald-950/20" : "border-amber-300 bg-amber-50/80 dark:border-amber-900 dark:bg-amber-950/20"}`}
+    >
+      <div className="flex items-start gap-2">
+        {clear ? (
+          <CheckCircle2 className="mt-0.5 h-5 w-5 shrink-0 text-emerald-700" />
+        ) : (
+          <TriangleAlert className="mt-0.5 h-5 w-5 shrink-0 text-amber-700" />
+        )}
+        <div className="min-w-0 flex-1">
+          <h2 className="text-base font-semibold">
+            {clear ? "覆盖检查：正常" : `覆盖检查：${problems.length} 家需要处理`}
+          </h2>
+          {clear ? (
+            <p className="mt-1 text-sm leading-6">
+              没有需要处理的公司。缺字段、5 条以内的动态差额、多出来的列表行，都不进覆盖工单。
+            </p>
+          ) : (
+            <ul className="mt-2 space-y-2 text-sm leading-6">
+              {problems.map((company) => (
+                <li key={company.companyName}>
+                  <button
+                    type="button"
+                    className="font-semibold underline-offset-2 hover:underline"
+                    onClick={() => onOpen(company.companyName)}
+                  >
+                    {company.companyName}
+                  </button>
+                  <span>
+                    ：{company.reasons.map((reason) => reason.label).join("；")}
+                  </span>
+                </li>
+              ))}
+            </ul>
+          )}
+          <p className="mt-2 text-xs text-muted-foreground">
+            质量缺口 {fmt(qualityOnlyCompanies)} 家，不进覆盖工单。
+          </p>
+        </div>
+      </div>
+    </section>
+  );
+}
 function CompanyCard({
   company,
   onOpen,
@@ -420,15 +491,26 @@ function CompanyCard({
     : reviewProgress?.remainingCandidates || 0;
   const progress = total > 0 ? Math.min(100, Math.round((processed / total) * 100)) : null;
   const runLabel = company.feed.liveRun ? "正在同步岗位" : company.official.liveRun ? "正在补全字段" : "历史字段复核";
-  const statusText = running
-    ? activeRun
-      ? `${runLabel} · ${activeRun.currentCompany || company.companyName}`
-      : "任务正在准备"
-    : company.historicalReview?.status === "completed"
-      ? `历史复核已完成：补全 ${fmt(company.historicalReview.updatedJobs)} 个岗位，失败 ${fmt(company.historicalReview.failedJobs)} 个`
-      : company.historicalReview?.status === "paused"
-        ? `历史复核已暂停：${company.historicalReview.lastError || "等待来源或写入条件"}`
-    : company.reasons[0]?.label || (company.status === "healthy" ? "最近一轮已完成，等待新岗位" : "当前没有执行中的任务");
+  const faultText = company.reasons.map((reason) => reason.label).join("；");
+  const qualityOnly = !company.actionable && company.qualityNotes.length > 0;
+  const runningText = activeRun
+    ? `${runLabel} · ${activeRun.currentCompany || company.companyName}`
+    : "任务正在准备";
+  const statusText = company.actionable
+    ? running
+      ? `${runningText}。同时：${faultText}`
+      : faultText
+    : running
+      ? runningText
+      : qualityOnly
+        ? "覆盖正常。字段或小差额是质量缺口，不进工单。"
+        : company.historicalReview?.status === "completed"
+          ? `历史复核已完成：补全 ${fmt(company.historicalReview.updatedJobs)} 个岗位，失败 ${fmt(company.historicalReview.failedJobs)} 个`
+          : company.historicalReview?.status === "paused"
+            ? `历史复核已暂停：${company.historicalReview.lastError || "等待来源或写入条件"}`
+            : company.status === "healthy"
+              ? "最近一轮已完成，等待新岗位"
+              : "当前没有执行中的任务";
   return (
     <button
       type="button"
@@ -436,7 +518,7 @@ function CompanyCard({
       className="block w-full text-left"
     >
       <Card
-        className={`h-full min-w-0 overflow-hidden transition-shadow hover:shadow-md ${running ? "border-blue-300 ring-1 ring-blue-200" : ""}`}
+        className={`h-full min-w-0 overflow-hidden transition-shadow hover:shadow-md ${company.actionable ? "border-amber-300 ring-1 ring-amber-200" : running ? "border-blue-300 ring-1 ring-blue-200" : ""}`}
       >
         <CardHeader className="pb-4">
           <div className="flex items-start gap-3">
@@ -448,7 +530,7 @@ function CompanyCard({
                 </CardTitle>
                 <StatusTag status={company.status} />
               </div>
-              <p className={`mt-2 break-words text-sm leading-5 ${running ? "font-medium text-blue-700" : company.reasons.length ? "text-amber-700" : "text-muted-foreground"}`}>
+              <p className={`mt-2 break-words text-sm leading-5 ${company.actionable ? "font-medium text-amber-800" : running ? "font-medium text-blue-700" : "text-muted-foreground"}`}>
                 {statusText}
               </p>
             </div>
@@ -476,7 +558,7 @@ function CompanyCard({
           {progress !== null && <div><div className="mb-1 flex items-center justify-between text-sm"><span className="font-medium">{runLabel} · {company.companyName}</span><span className="font-semibold tabular-nums">{progress}%</span></div><Progress value={progress} className="h-2.5" /></div>}
           <div className="grid min-w-0 gap-3 rounded-xl border bg-muted/10 p-4 sm:grid-cols-[1fr_auto] sm:items-center">
             <div className="min-w-0"><div className="text-sm font-medium">字段覆盖</div><div className="mt-1 text-2xl font-bold tabular-nums">{Math.round(verified)}%</div><Progress value={pct(verified)} className="mt-2 h-2" /></div>
-            <div className="min-w-0 sm:text-right"><div className="text-sm text-muted-foreground">历史待复核</div><div className="mt-1 break-all text-2xl font-bold tabular-nums">{fmt(pending)}</div><div className="text-xs text-muted-foreground">不等于本轮剩余岗位</div></div>
+            <div className="min-w-0 sm:text-right"><div className="text-sm text-muted-foreground">质量缺口</div><div className="mt-1 break-all text-2xl font-bold tabular-nums">{fmt(pending)}</div><div className="text-xs text-muted-foreground">不进覆盖工单</div></div>
           </div>
           {company.historicalReview && (
             <div className="rounded-xl border border-violet-200 bg-violet-50/60 p-4 text-violet-950">
@@ -640,14 +722,10 @@ export default function JobSyncDashboardPage() {
       const statusMatch =
         status === "all" ||
         (status === "attention"
-          ? [
-              "attention",
-              "retrying",
-              "stalled",
-              "discovery_required",
-              "unknown",
-            ].includes(company.status)
-          : company.status === status);
+          ? company.actionable
+          : status === "quality"
+            ? !company.actionable && company.qualityNotes.length > 0
+            : company.status === status);
       const fieldMatch =
         field === "all" ||
         (company.official.fields[field]?.pending_recheck || 0) > 0 ||
@@ -661,22 +739,18 @@ export default function JobSyncDashboardPage() {
             .includes(search.trim().toLowerCase()))
       );
     });
+    const busy = (company: Company) =>
+      Boolean(
+        company.feed.liveRun ||
+          company.official.liveRun ||
+          company.historicalReview?.liveRun ||
+          company.status === "running",
+      );
     return [...list].sort(
       (left, right) =>
-        Number(
-          Boolean(
-            right.feed.liveRun ||
-              right.official.liveRun ||
-              right.status === "running",
-          ),
-        ) -
-          Number(
-            Boolean(
-              left.feed.liveRun ||
-                left.official.liveRun ||
-                left.status === "running",
-            ),
-          ) || left.companyName.localeCompare(right.companyName),
+        Number(right.actionable) - Number(left.actionable) ||
+        Number(busy(right)) - Number(busy(left)) ||
+        left.companyName.localeCompare(right.companyName, "zh"),
     );
   }, [dashboard, field, search, status]);
   if (permissionsLoading || (loading && !dashboard))
@@ -722,7 +796,7 @@ export default function JobSyncDashboardPage() {
               岗位同步
             </h1>
             <p className="mt-1 max-w-3xl text-sm text-muted-foreground">
-              同步运行状态、近 24 小时岗位变更，以及需要处理的公司问题。
+              只报告真正要处理的公司。缺字段和小差额算质量缺口，不进覆盖工单。
             </p>
           </div>
           <div className="flex items-center gap-2">
@@ -752,6 +826,13 @@ export default function JobSyncDashboardPage() {
           <div className="rounded-lg border border-emerald-200 bg-emerald-50 px-4 py-3 text-sm text-emerald-700">
             {notice}
           </div>
+        )}
+        {dashboard && (
+          <CoverageReport
+            companies={dashboard.companies}
+            qualityOnlyCompanies={dashboard.summary.qualityOnlyCompanies}
+            onOpen={(name) => void openDetail(name)}
+          />
         )}
         {summary && dashboard && (
           <section className="rounded-xl border bg-card p-4 shadow-sm md:p-5">
@@ -837,12 +918,12 @@ export default function JobSyncDashboardPage() {
                 fmt(summary.activeCompanies),
                 `正在处理 ${fmt(summary.runningCompanies)} 家`,
               ],
-              ["正常", fmt(summary.healthyCompanies), "当前没有阻塞"],
+              ["正常", fmt(summary.healthyCompanies), "没有需要处理的同步故障"],
               ["正在处理", fmt(summary.runningCompanies), "卡片会显示实时进度"],
               [
-                "需要关注",
+                "需要处理",
                 fmt(summary.attentionCompanies),
-                `失败 ${fmt(summary.failedCompanies)} 家`,
+                `质量缺口 ${fmt(summary.qualityOnlyCompanies)} 家不进工单`,
               ],
               ["本站有效岗位", fmt(summary.localActiveJobs), "按展示规则筛选后的岗位"],
             ].map(([label, value, note]) => (
@@ -898,7 +979,8 @@ export default function JobSyncDashboardPage() {
               <SelectContent>
                 <SelectItem value="all">全部公司</SelectItem>
                 <SelectItem value="running">正在处理</SelectItem>
-                <SelectItem value="attention">需要关注</SelectItem>
+                <SelectItem value="attention">需要处理</SelectItem>
+                <SelectItem value="quality">质量缺口</SelectItem>
                 <SelectItem value="failed">处理失败</SelectItem>
                 <SelectItem value="healthy">正常</SelectItem>
               </SelectContent>
@@ -968,9 +1050,30 @@ export default function JobSyncDashboardPage() {
                   <div className="flex flex-wrap items-center gap-2">
                     <StatusTag status={detail.status} />
                   </div>
-                  <p className="mt-1 break-words text-sm text-muted-foreground">
-                    {detail.reasons[0]?.label || "当前没有阻塞"}
-                  </p>
+                  <div className="mt-2 space-y-2">
+                    {detail.actionable ? (
+                      <div className="rounded-lg border border-amber-200 bg-amber-50 p-3 text-sm text-amber-950">
+                        <div className="font-medium">需要处理</div>
+                        <ul className="mt-1 list-disc space-y-1 pl-4">
+                          {detail.reasons.map((reason) => (
+                            <li key={reason.code}>{reason.label}</li>
+                          ))}
+                        </ul>
+                      </div>
+                    ) : (
+                      <p className="text-sm text-muted-foreground">覆盖正常，没有需要处理的故障。</p>
+                    )}
+                    {detail.qualityNotes.length > 0 && (
+                      <div className="rounded-lg border bg-muted/40 p-3 text-sm text-muted-foreground">
+                        <div className="font-medium text-foreground">质量缺口，不进覆盖工单</div>
+                        <ul className="mt-1 list-disc space-y-1 pl-4">
+                          {detail.qualityNotes.map((note) => (
+                            <li key={note.code}>{note.label}</li>
+                          ))}
+                        </ul>
+                      </div>
+                    )}
+                  </div>
                 </div>
               </div>
               {canWrite && (
@@ -1057,7 +1160,7 @@ export default function JobSyncDashboardPage() {
                       ? "未知"
                       : fmt(detail.counts.upstreamDiscoveredJobs)
                   }
-                  note="最近成功批次"
+                  note={detail.counts.upstreamLatestRunStatus ? `最近一轮 ${detail.counts.upstreamLatestRunStatus}` : "最近成功批次"}
                 />
                 <Metric
                   icon={Layers3}
@@ -1069,7 +1172,7 @@ export default function JobSyncDashboardPage() {
                   icon={CheckCircle2}
                   label="字段补全"
                   value={`${Math.round(Object.values(detail.official.fields).reduce((sum, item) => sum + pct(item.verified_percent), 0) / Math.max(1, Object.keys(detail.official.fields).length))}%`}
-                  note={`历史待复核 ${fmt(detail.official.fieldTotals.pending)} 条 · 历史拒绝 ${fmt(detail.official.fieldTotals.rejected)} 条`}
+                  note={`质量缺口 ${fmt(detail.official.fieldTotals.pending)} 条，不进覆盖工单 · 历史拒绝 ${fmt(detail.official.fieldTotals.rejected)} 条`}
                 />
               </div>
               <div className="space-y-2">
@@ -1088,7 +1191,7 @@ export default function JobSyncDashboardPage() {
                     岗位从上游服务器到本站数据库
                   </div>
                   <div className="mt-2 grid gap-1 text-xs">
-                    <div>处理阶段：{detail.feed.liveRun ? stages[detail.feed.liveRun.stage || ""] || "正在处理" : detail.feed.status === "healthy" ? "已完成最近一轮" : "等待处理"}</div>
+                    <div>处理阶段：{pipelineStageText(detail.feed.status, detail.feed.liveRun)}</div>
                     <div>
                       最近成功：{when(detail.feed.lastSuccessAt)} · 最近尝试：
                       {when(detail.feed.lastAttemptedAt)}
@@ -1110,7 +1213,7 @@ export default function JobSyncDashboardPage() {
                 <div className="rounded-lg border p-3 text-sm">
                   <div className="font-medium">官方字段补全</div>
                   <div className="mt-2 grid gap-1 text-xs">
-                    <div>处理阶段：{detail.official.liveRun ? stages[detail.official.liveRun.stage || ""] || "正在处理" : detail.official.status === "healthy" ? "已完成最近一轮" : "等待处理"}</div>
+                    <div>处理阶段：{pipelineStageText(detail.official.status, detail.official.liveRun)}</div>
                     <div>
                       最近成功：{when(detail.official.lastSuccessAt)} ·
                       最近尝试：{when(detail.official.lastAttemptedAt)}

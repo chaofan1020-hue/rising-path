@@ -1,7 +1,7 @@
 'use client'
 
 import { Accordion, AccordionContent, AccordionItem, AccordionTrigger } from '@/components/ui/accordion'
-import Link from 'next/link'
+import { ContactTeamButton } from '@/components/contact-team-dialog'
 import { useLanguage } from '@/lib/language-context'
 
 export default function FAQs() {
@@ -65,11 +65,11 @@ export default function FAQs() {
 
                     <p className="text-gray-500 mt-6">
                         {t("faqs.contact")}{' '}
-                        <Link
-                            href="#"
-                            className="text-purple-500 font-medium hover:underline">
+                        <ContactTeamButton
+                            topic="support"
+                            className="inline appearance-none border-0 bg-transparent p-0 font-medium text-purple-500 hover:underline">
                             {t("faqs.contactLink")}
-                        </Link>
+                        </ContactTeamButton>
                     </p>
                 </div>
             </div>

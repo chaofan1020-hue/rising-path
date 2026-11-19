@@ -4,6 +4,8 @@ import type { ConnectorBoardConfig } from '@/lib/job-connectors/types';
 export const PHASE2_CONNECTOR_BOARDS: ConnectorBoardConfig[] = [
   ...[
     ['Cloudflare', 'cloudflare'],
+    ['Airbnb', 'airbnb'],
+    ['Lyft', 'lyft'],
     ['Stripe', 'stripe'],
     ['Datadog', 'datadog'],
     ['Coinbase', 'coinbase'],
@@ -52,6 +54,12 @@ export const PHASE2_CONNECTOR_BOARDS: ConnectorBoardConfig[] = [
     phenomSearchUrl: 'https://careers.marsh.com/global/en/search-results',
   },
   {
+    connector: 'phenom',
+    company: 'Cisco',
+    board: 'CISCISGLOBAL',
+    phenomSearchUrl: 'https://careers.cisco.com/global/en/search-results',
+  },
+  {
     connector: 'oracle_hcm',
     company: 'Lazard',
     board: 'LazardProfessionalCareers',
@@ -74,6 +82,22 @@ export const PHASE2_CONNECTOR_BOARDS: ConnectorBoardConfig[] = [
     oracleApiBaseUrl: 'https://jpmc.fa.oraclecloud.com',
     oracleSiteNumber: 'CX_1001',
     oracleCareersUrl: 'https://jpmc.fa.oraclecloud.com/hcmUI/CandidateExperience/en/sites/CX_1001',
+  },
+  {
+    connector: 'oracle_hcm',
+    company: 'Uber',
+    board: 'UberCareers',
+    oracleApiBaseUrl: 'https://iaziqy.fa.ocs.oraclecloud.com',
+    oracleSiteNumber: 'CX_1',
+    oracleCareersUrl: 'https://iaziqy.fa.ocs.oraclecloud.com/hcmUI/CandidateExperience/en/sites/UberCareers',
+  },
+  {
+    connector: 'oracle_hcm',
+    company: 'Dell Technologies',
+    board: 'careers',
+    oracleApiBaseUrl: 'https://iawmqy.fa.ocs.oraclecloud.com',
+    oracleSiteNumber: 'CX_1',
+    oracleCareersUrl: 'https://iawmqy.fa.ocs.oraclecloud.com/hcmUI/CandidateExperience/en/sites/careers',
   },
 ];
 

@@ -52,6 +52,16 @@ assert.ok(seniorInternLabel);
 assert.equal(seniorInternLabel.employment_category, '实习');
 assert.equal(seniorInternLabel.experience_min_years, 3);
 
+const internCompanyHistory = normalizeFeedItem({
+  ...base,
+  title: 'Engineering Product Management Specialist I (Intern) – United States',
+  description: 'Why Cisco? We’ve been innovating fearlessly for 40 years to create solutions. Collaborate with engineering and design teams to define product strategy and requirements.',
+});
+assert.ok(internCompanyHistory);
+assert.equal(internCompanyHistory.employment_category, '实习');
+assert.equal(internCompanyHistory.experience_min_years, null);
+assert.equal(internCompanyHistory.experience_max_years, null);
+
 const malformedLargeRequirement = normalizeFeedItem({
   ...base,
   description: '1000 years of experience required.',

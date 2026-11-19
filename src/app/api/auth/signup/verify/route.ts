@@ -9,6 +9,7 @@ import {
   normalizeEmail,
   normalizeOtpToken,
 } from '@/lib/auth-security';
+import { grantSignupWelcomeCredits } from '@/lib/credits';
 
 export async function POST(request: NextRequest) {
   const ip = getClientIp(request);
@@ -47,6 +48,7 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ error: authErrorMessage(error) }, { status: 401 });
     }
 
+    await grantSignupWelcomeCredits(data.user?.id);
     return NextResponse.json({ session: data.session, user: data.user });
   } catch (error) {
     console.error('[Auth] Sign-up verification failed:', error);

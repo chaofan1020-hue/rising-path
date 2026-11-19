@@ -7,16 +7,18 @@ import { getBillingProvider, type BillingPaymentChannel, type BillingProviderNam
 import { BillingProviderDisabledError } from '@/lib/billing-errors';
 import { cancelOpenOrder, findOpenOrder, getCheckoutSnapshot } from '@/lib/billing-order-service';
 import { paymentExpiryDate } from '@/lib/billing-status';
+import { paymentReturnUrl } from '@/lib/payment-handoff';
+import { normalizePaymentReturnPath } from '@/lib/payment-return';
 import { getSupabaseClient } from '@/storage/database/supabase-client';
 
-const CHANNELS = new Set<BillingPaymentChannel>(['wechat_native', 'wechat_h5', 'alipay_qr', 'alipay_wap']);
+const CHANNELS = new Set<BillingPaymentChannel>(['alipay_page']);
 
 function orderNo(): string {
   return `LV${Date.now().toString(36).toUpperCase()}${randomBytes(5).toString('hex').toUpperCase()}`;
 }
 
 function providerFor(channel: BillingPaymentChannel): BillingProviderName {
-  return channel.startsWith('wechat_') ? 'wechat' : 'alipay';
+  return channel === 'alipay_page' ? 'alipay' : 'manual_beta';
 }
 
 function localizedPlanName(name: unknown): string {
@@ -61,6 +63,7 @@ export async function POST(request: NextRequest) {
     const body = await request.json() as Record<string, unknown>;
     const planCode = typeof body.planCode === 'string' ? body.planCode.trim() : '';
     const channel = typeof body.channel === 'string' ? body.channel as BillingPaymentChannel : null;
+    const returnPath = normalizePaymentReturnPath(body.returnPath);
     if (body.amount != null || body.amountMinor != null || body.credits != null || body.price != null || body.displayAmountMinor != null) {
       return NextResponse.json({ data: null, error: { code: 'AMOUNT_NOT_CLIENT_SETTABLE', message: '支付金额由套餐决定，不能由页面提交' } }, { status: 400 });
     }
@@ -74,10 +77,6 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ data: null, error: { code: 'BILLING_PROVIDER_DISABLED', message: '支付渠道尚未配置完成' } }, { status: 503 });
     }
     const clientIp = request.headers.get('x-forwarded-for')?.split(',')[0]?.trim() || request.headers.get('x-real-ip')?.trim() || '';
-    if (channel === 'wechat_h5' && !clientIp) {
-      return NextResponse.json({ data: null, error: { code: 'CLIENT_IP_REQUIRED', message: '微信 H5 支付需要可识别的客户端 IP' } }, { status: 400 });
-    }
-
     const currency = config.defaultCurrency;
     const client = getSupabaseClient();
     const { data: plan, error: planError } = await client
@@ -102,10 +101,12 @@ export async function POST(request: NextRequest) {
     const openOrder = await findOpenOrder(auth.user.id);
     if (openOrder) {
       const existing = await getCheckoutSnapshot(openOrder.id, auth.user.id);
+      const existingMetadata = openOrder.metadata && typeof openOrder.metadata === 'object' ? openOrder.metadata : {};
       const samePlan = openOrder.plan_code === planCode;
       const sameChannel = existing?.payment?.channel === channel;
+      const sameReturnPath = normalizePaymentReturnPath(existingMetadata.return_path) === returnPath;
       const notExpired = !existing?.payment?.expiresAt || new Date(existing.payment.expiresAt).getTime() > Date.now();
-      if (samePlan && sameChannel && notExpired && existing?.order.status === 'pending') {
+      if (samePlan && sameChannel && sameReturnPath && notExpired && existing?.order.status === 'pending') {
         return NextResponse.json({ data: existing, error: null }, { status: 200 });
       }
       const cancelled = await cancelOpenOrder(openOrder.id, auth.user.id);
@@ -114,8 +115,11 @@ export async function POST(request: NextRequest) {
       }
     }
 
+    // The channel-facing order number must be the same string that ends up in
+    // billing_orders.order_no. Callbacks and queries look the order up by
+    // order_no, so two different numbers here made every real payment land on
+    // ORDER_NOT_FOUND / PAYMENT_ATTEMPT_NOT_FOUND.
     const businessOrderNo = orderNo();
-    const merchantOrderNo = orderNo();
     const { data: order, error: orderError } = await client
       .from('billing_orders')
       .insert({
@@ -136,6 +140,7 @@ export async function POST(request: NextRequest) {
           charge_currency: plan.currency,
           display_currency: plan.display_currency || BILLING_DISPLAY_CURRENCY,
           display_amount_minor: displayAmountMinor,
+          return_path: returnPath,
         },
       })
       .select('id,order_no,plan_code,status,amount_minor,currency,credits_granted,created_at,updated_at,paid_at,provider')
@@ -153,13 +158,13 @@ export async function POST(request: NextRequest) {
       const expiresAt = paymentExpiryDate(120);
       const payment = await provider.createPaymentSession({
         userId: auth.user.id,
-        orderNo: merchantOrderNo,
+        orderNo: businessOrderNo,
         planCode,
         amountMinor,
         currency: plan.currency as 'CNY' | 'USD',
         channel,
         notifyUrl,
-        returnUrl: process.env.ALIPAY_RETURN_URL || `${request.nextUrl.origin}/account/billing`,
+        returnUrl: paymentReturnUrl(returnPath),
         clientIp,
         description: localizedPlanName(plan.name) || planCode,
         expiresAt,
@@ -179,7 +184,8 @@ export async function POST(request: NextRequest) {
         expires_at: payment.expiresAt || expiresAt.toISOString(),
       });
       if (attemptError) throw new Error(attemptError.message);
-      return NextResponse.json({ data: await getCheckoutSnapshot(order.id, auth.user.id), error: null }, { status: 201 });
+      const checkout = await getCheckoutSnapshot(order.id, auth.user.id);
+      return NextResponse.json({ data: checkout, error: null }, { status: 201 });
     } catch (error) {
       if (createdMerchantOrderNo) {
         try { await getBillingProvider(providerName).closePayment({ merchantOrderNo: createdMerchantOrderNo }); } catch { /* best effort */ }

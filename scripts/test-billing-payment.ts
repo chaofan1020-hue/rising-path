@@ -3,6 +3,7 @@ import { channelsForSurface, detectBillingSurface, defaultChannelForSurface } fr
 import { cnyFenToUsdCents, DEFAULT_USD_CNY_RATE, formatCnyFen, formatUsdCents, getUsdCnyRate, orderDisplayUsdCents, planCatalogUsdCents } from '../src/lib/billing-fx';
 import { qrSvgDataUrl } from '../src/lib/qr-svg';
 import { alipayTimestamp, mapAlipayTradeStatus, mapWechatRefundState, mapWechatTradeState, shanghaiRfc3339, yuanToMinor } from '../src/lib/billing-status';
+import { normalizePaymentReturnPath, paymentReturnUrl } from '../src/lib/payment-return';
 
 const shanghai = alipayTimestamp(new Date('2026-09-10T04:05:06.000Z'));
 assert.match(shanghai, /^\d{4}-\d{2}-\d{2} \d{2}:\d{2}:\d{2}$/);
@@ -44,13 +45,19 @@ else process.env.BILLING_USD_CNY_RATE = previousRate;
 assert.match(formatUsdCents(1375, 'en').replace(/\s/g, ''), /13\.75/);
 assert.match(formatCnyFen(9900, 'zh-CN').replace(/\s/g, ''), /99/);
 
-assert.deepEqual(channelsForSurface('desktop'), ['wechat_native', 'alipay_qr']);
-assert.deepEqual(channelsForSurface('mobile'), ['wechat_h5', 'alipay_wap']);
+assert.deepEqual(channelsForSurface('desktop'), ['alipay_page']);
+assert.deepEqual(channelsForSurface('mobile'), ['alipay_page']);
 assert.equal(detectBillingSurface({ userAgent: 'Mozilla/5.0 (Windows NT 10.0; Win64; x64)' }), 'desktop');
 assert.equal(detectBillingSurface({ userAgent: 'Mozilla/5.0 (iPhone; CPU iPhone OS 17_0 like Mac OS X)' }), 'mobile');
 assert.equal(detectBillingSurface({ userAgent: 'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7)', maxTouchPoints: 5 }), 'mobile');
-assert.equal(defaultChannelForSurface('desktop', { wechat: true, alipay: true }), 'wechat_native');
-assert.equal(defaultChannelForSurface('mobile', { wechat: true, alipay: true }), 'wechat_h5');
-assert.equal(defaultChannelForSurface('desktop', { wechat: false, alipay: true }), 'alipay_qr');
+assert.equal(defaultChannelForSurface('desktop', { wechat: true, alipay: true }), 'alipay_page');
+assert.equal(defaultChannelForSurface('mobile', { wechat: true, alipay: true }), 'alipay_page');
+assert.equal(defaultChannelForSurface('desktop', { wechat: false, alipay: true }), 'alipay_page');
+
+assert.equal(normalizePaymentReturnPath('/pricing'), '/pricing');
+assert.equal(normalizePaymentReturnPath('/account/billing'), '/account/billing');
+assert.equal(normalizePaymentReturnPath('https://attacker.example/'), '/account/billing');
+assert.equal(normalizePaymentReturnPath('//attacker.example/'), '/account/billing');
+assert.equal(paymentReturnUrl('/pricing'), 'https://liorvix.com/pricing?payment_return=1');
 
 console.log('billing payment tests passed');

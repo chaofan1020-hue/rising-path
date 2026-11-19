@@ -2,6 +2,7 @@ import { ADMIN_PERMISSIONS, type AdminPermission } from '@/lib/admin-permission-
 import {
   Activity,
   BriefcaseBusiness,
+  Coins,
   CreditCard,
   Dna,
   HeartPulse,
@@ -30,6 +31,7 @@ export const adminNavigation: AdminNavItem[] = [
   { label: '用量', href: '/admin/usage', icon: Activity, permission: ADMIN_PERMISSIONS.dashboardRead },
   { label: '健康', href: '/admin/health', icon: HeartPulse, permission: ADMIN_PERMISSIONS.dashboardRead },
   { label: '支付', href: '/admin/billing', icon: CreditCard, permission: ADMIN_PERMISSIONS.billingRead },
+  { label: '积分', href: '/admin/credits', icon: Coins, permission: ADMIN_PERMISSIONS.usersRead },
   { label: '设置', href: '/admin/settings', icon: Settings, permission: ADMIN_PERMISSIONS.configWrite },
   { label: '管理员', href: '/admin/accounts', icon: ShieldCheck, permission: ADMIN_PERMISSIONS.rolesWrite },
 ];
@@ -52,7 +54,6 @@ const TAB_ROUTES: Record<string, string> = {
 export function canonicalAdminPath(pathname: string, searchParams?: URLSearchParams): string {
   if (pathname === '/admin/dna-review') return '/admin/dna';
   if (pathname === '/admin/job-sync-dashboard' || pathname === '/admin/job-rotation') return '/admin/jobs/sync';
-  if (pathname === '/admin/credits') return '/admin/settings';
   if (pathname === '/admin') {
     const tab = searchParams?.get('tab');
     if (tab && TAB_ROUTES[tab]) return TAB_ROUTES[tab];

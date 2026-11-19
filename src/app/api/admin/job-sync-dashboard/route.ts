@@ -6,11 +6,11 @@ import { adminMigrationUnavailable } from '@/lib/admin-dependency-status';
 
 export const dynamic = 'force-dynamic';
 
-const STATUS_FILTERS = new Set(['all', 'healthy', 'attention', 'failed', 'running', 'retrying', 'stalled', 'discovery_required', 'unknown']);
+const STATUS_FILTERS = new Set(['all', 'healthy', 'attention', 'quality', 'failed', 'running', 'retrying', 'stalled', 'discovery_required', 'unknown']);
 const SORTS = new Set(['status', 'jobs', 'last_success']);
 
 function sortRank(status: DashboardStatus): number {
-  return { failed: 0, stalled: 1, retrying: 2, discovery_required: 3, attention: 4, unknown: 5, running: 6, healthy: 7 }[status];
+  return { failed: 0, stalled: 1, attention: 2, discovery_required: 3, retrying: 4, unknown: 5, running: 6, healthy: 7 }[status];
 }
 
 export async function GET(request: NextRequest) {
@@ -29,7 +29,11 @@ export async function GET(request: NextRequest) {
     if (field && !DASHBOARD_FIELDS.includes(field)) return NextResponse.json({ error: '字段筛选无效' }, { status: 400 });
 
     let companies = dashboard.companies.filter((company) => {
-      if (status !== 'all' && (status === 'attention' ? !['attention', 'retrying', 'stalled', 'discovery_required', 'unknown'].includes(company.status) : company.status !== status)) return false;
+      if (status === 'attention') {
+        if (!company.actionable) return false;
+      } else if (status === 'quality') {
+        if (company.actionable || company.qualityNotes.length === 0) return false;
+      } else if (status !== 'all' && company.status !== status) return false;
       if (sourceType && company.source.type.toLowerCase() !== sourceType) return false;
       if (field && company.official.fields[field]) {
         const value = company.official.fields[field];
@@ -41,7 +45,7 @@ export async function GET(request: NextRequest) {
     companies = [...companies].sort((left, right) => {
       if (sort === 'jobs') return right.counts.localActiveJobs - left.counts.localActiveJobs || left.companyName.localeCompare(right.companyName);
       if (sort === 'last_success') return (Date.parse(right.feed.lastSuccessAt || '') || 0) - (Date.parse(left.feed.lastSuccessAt || '') || 0);
-      return sortRank(left.status) - sortRank(right.status) || right.counts.localActiveJobs - left.counts.localActiveJobs;
+      return Number(right.actionable) - Number(left.actionable) || sortRank(left.status) - sortRank(right.status) || right.counts.localActiveJobs - left.counts.localActiveJobs;
     });
     return NextResponse.json({ ...dashboard, companies, meta: { filters: { status, sourceType: sourceType || null, field: field || null, search: search || null, sort } } }, { headers: { 'Cache-Control': 'private, no-store, max-age=0' } });
   } catch (error) {

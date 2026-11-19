@@ -3,99 +3,98 @@ import { getSupabaseClient } from '@/storage/database/supabase-client';
 import { targetRegionPostgrestClauses } from '@/lib/job-region-scope';
 
 // GET /api/jobs/stats - 获取岗位统计数据
+//
+// The previous implementation ran four exact COUNT(*) queries, each OR-ed over
+// dozens of `region ilike` clauses. Every call took longer than Supabase's
+// statement timeout and returned 500. Planner estimates are enough for a
+// "today / this week / this month" widget and never scan the table.
+
+const STATS_CACHE_MS = 60 * 1000;
+type JobStats = {
+  today: number;
+  thisWeek: number;
+  thisMonth: number;
+  total: number;
+  regionBreakdown: Record<string, number>;
+  date: string;
+  estimated: boolean;
+};
+let statsCache: { expiresAt: number; value: JobStats } | null = null;
+
+function startOfDay(date: Date): string {
+  return date.toISOString().split('T')[0];
+}
+
+async function countJobs(
+  client: ReturnType<typeof getSupabaseClient>,
+  options: { targetIndex: boolean; since?: string },
+): Promise<number> {
+  let query = client
+    .from('jobs')
+    .select('id', { count: 'planned', head: true })
+    .eq('is_active', true);
+  query = options.targetIndex
+    ? query.eq('matches_target_region', true)
+    : query.or(targetRegionPostgrestClauses().join(','));
+  if (options.since) query = query.gte('created_at', options.since);
+  const { count, error } = await query;
+  if (error) throw new Error(error.message || '统计岗位失败');
+  return count ?? 0;
+}
+
 export async function GET() {
   try {
+    if (statsCache && statsCache.expiresAt > Date.now()) {
+      return NextResponse.json(statsCache.value, {
+        headers: { 'Cache-Control': 'private, no-store, max-age=0' },
+      });
+    }
+
     const client = getSupabaseClient();
-    
-    // 获取今天的日期
+
     const today = new Date();
     today.setHours(0, 0, 0, 0);
-    const todayStr = today.toISOString().split('T')[0];
-    
-    // 获取本周开始日期
+    const todayStr = startOfDay(today);
+
     const weekStart = new Date(today);
     weekStart.setDate(today.getDate() - weekStart.getDay());
-    const weekStartStr = weekStart.toISOString().split('T')[0];
-    
-    // 获取本月开始日期
+    const weekStartStr = startOfDay(weekStart);
+
     const monthStart = new Date(today.getFullYear(), today.getMonth(), 1);
-    const monthStartStr = monthStart.toISOString().split('T')[0];
-    
-    // 统计今日更新且可投递的岗位数量
-    const { count: todayCount, error: todayError } = await client
-      .from('jobs')
-      .select('*', { count: 'exact', head: true })
-      .eq('is_active', true)
-      .or(targetRegionPostgrestClauses().join(','))
-      .gte('created_at', todayStr);
-    
-    if (todayError) {
-      throw new Error(`查询今日岗位失败: ${todayError.message}`);
-    }
-    
-    // 统计本周新增岗位数量
-    const { count: weekCount, error: weekError } = await client
-      .from('jobs')
-      .select('*', { count: 'exact', head: true })
-      .eq('is_active', true)
-      .or(targetRegionPostgrestClauses().join(','))
-      .gte('created_at', weekStartStr);
-    
-    if (weekError) {
-      throw new Error(`查询本周岗位失败: ${weekError.message}`);
-    }
-    
-    // 统计本月新增岗位数量
-    const { count: monthCount, error: monthError } = await client
-      .from('jobs')
-      .select('*', { count: 'exact', head: true })
-      .eq('is_active', true)
-      .or(targetRegionPostgrestClauses().join(','))
-      .gte('created_at', monthStartStr);
-    
-    if (monthError) {
-      throw new Error(`查询本月岗位失败: ${monthError.message}`);
-    }
-    
-    // 统计总可投递岗位数量
-    const { count: totalCount, error: totalError } = await client
-      .from('jobs')
-      .select('*', { count: 'exact', head: true })
-      .eq('is_active', true)
-      .or(targetRegionPostgrestClauses().join(','));
-    
-    if (totalError) {
-      throw new Error(`查询总岗位失败: ${totalError.message}`);
-    }
-    
-    // 按地区统计今日更新
-    const { data: regionStats } = await client
-      .from('jobs')
-      .select('region')
-      .eq('is_active', true)
-      .or(targetRegionPostgrestClauses().join(','))
-      .gte('created_at', todayStr);
-    
-    const regionCount: Record<string, number> = {};
-    regionStats?.forEach(job => {
-      if (job.region) {
-        regionCount[job.region] = (regionCount[job.region] || 0) + 1;
-      }
+    const monthStartStr = startOfDay(monthStart);
+
+    // Probe once: with migration 0127 applied this is an indexed boolean; the
+    // fallback keeps older deployments working during a rolling release.
+    let targetIndex = true;
+    const total = await countJobs(client, { targetIndex }).catch(async () => {
+      targetIndex = false;
+      return countJobs(client, { targetIndex });
     });
-    
-    return NextResponse.json({
-      today: todayCount || 0,
-      thisWeek: weekCount || 0,
-      thisMonth: monthCount || 0,
-      total: totalCount || 0,
-      regionBreakdown: regionCount,
+    const [todayCount, weekCount, monthCount] = await Promise.all([
+      countJobs(client, { targetIndex, since: todayStr }),
+      countJobs(client, { targetIndex, since: weekStartStr }),
+      countJobs(client, { targetIndex, since: monthStartStr }),
+    ]);
+
+    const value: JobStats = {
+      today: todayCount,
+      thisWeek: weekCount,
+      thisMonth: monthCount,
+      total,
+      regionBreakdown: {},
       date: todayStr,
+      estimated: true,
+    };
+    statsCache = { expiresAt: Date.now() + STATS_CACHE_MS, value };
+
+    return NextResponse.json(value, {
+      headers: { 'Cache-Control': 'private, no-store, max-age=0' },
     });
   } catch (error) {
     console.error('Error fetching job stats:', error);
     return NextResponse.json(
       { error: '获取岗位统计数据失败', today: 0, thisWeek: 0, thisMonth: 0, total: 0 },
-      { status: 500 }
+      { status: 503 }
     );
   }
 }

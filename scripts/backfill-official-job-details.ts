@@ -196,18 +196,22 @@ function previewValues(patch: Record<string, unknown>, fields: string[]): Record
   };
 }
 
-function candidateExperience(details: ReturnType<typeof extractOfficialJobDetails>): { min: number | null; max: number | null; text: string | null } {
+function candidateExperience(details: ReturnType<typeof extractOfficialJobDetails>, title?: string | null): { min: number | null; max: number | null; text: string | null } {
   if (!details) return { min: null, max: null, text: null };
-  const sources = [details.experience, details.requirements].filter(Boolean);
+  const sources = [title, details.experience, details.requirements].filter(Boolean);
   if (sources.length > 0) {
     const structured = parseExperience(sources);
     if (structured.min != null || structured.max != null || structured.text) return structured;
   }
-  const parsed = parseExperience([details.description]);
+  const parsed = parseExperience([title, details.description].filter(Boolean));
   const snippet = text(parsed.text);
   // A company introduction is not a candidate requirement, even when it
-  // contains a phrase such as "over 30 years of experience".
-  if (/\b(?:more than|over)\s+\d+(?:\.\d+)?\s+years?\s+of\s+(?:investing|investment|operating|industry|company|firm|business|financial)?\s*experience\b/i.test(snippet)) {
+  // contains a phrase such as "over 30 years of experience" or
+  // "innovating fearlessly for 40 years".
+  if (/\b(?:more than|over)\s+\d+(?:\.\d+)?\s+years?\s+of\s+(?:investing|investment|operating|industry|company|firm|business|financial)?\s*experience\b/i.test(snippet)
+    || /\bwe(?:['’]ve| have)\s+been\b/i.test(snippet) && /\bfor\s+\d+(?:\.\d+)?\s+years?\b/i.test(snippet)
+    || /\binnovating\b.{0,80}\bfor\s+\d+(?:\.\d+)?\s+years?\b/i.test(snippet)
+    || /\bfor\s+\d+(?:\.\d+)?\s+years?\s+to\s+(?:create|build|deliver|help|power)\b/i.test(snippet)) {
     return { min: null, max: null, text: null };
   }
   if (!snippet || !/\b(?:require|minimum|at least|qualif|candidate|you|professional|relevant|work(?:ing)?\s+experience|no\s+experience)\b/i.test(snippet)) {
@@ -268,7 +272,7 @@ function preparePatch(
     fieldSources.employment_category = standardSource;
   }
 
-  const experience = candidateExperience(details);
+  const experience = candidateExperience(details, job.title);
   if (canBackfill(job, 'experience', experience.min != null || experience.max != null || experience.text ? experience : null)) {
     patch.experience_min_years = experience.min;
     patch.experience_max_years = experience.max;

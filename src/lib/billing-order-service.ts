@@ -128,6 +128,24 @@ async function settlePaid(params: {
   });
 }
 
+async function queryRemoteStatus(attempt: AttemptRow): Promise<BillingPaymentStatus | null> {
+  if (attempt.provider === 'manual_beta') return null;
+  try {
+    const result = await getBillingAdapter(asProvider(attempt.provider)).queryPayment({
+      merchantOrderNo: attempt.merchant_order_no,
+      providerTradeNo: attempt.provider_trade_no || undefined,
+    });
+    return result.status;
+  } catch (error) {
+    // TRADE_NOT_EXIST means the channel never created a trade: treat it as not
+    // paid rather than an error, so a never-scanned QR still expires cleanly.
+    const message = error instanceof Error ? error.message : String(error);
+    if (/TRADE_NOT_EXIST/i.test(message)) return 'cancelled';
+    console.error('[Billing] expire-check query failed:', message);
+    return null;
+  }
+}
+
 async function closeRemoteThenQuery(attempt: AttemptRow): Promise<BillingPaymentStatus | null> {
   if (attempt.provider === 'manual_beta') return null;
   const provider = getBillingAdapter(asProvider(attempt.provider));
@@ -174,7 +192,10 @@ export async function reconcileOpenPayment(order: OrderRow, attempt: AttemptRow 
 
   const expired = attempt.expires_at && new Date(attempt.expires_at).getTime() <= Date.now();
   if (expired) {
-    const remoteStatus = await closeRemoteThenQuery(attempt);
+    // Never close an attempt the channel may already have captured: query
+    // first and settle when it reports paid, so an expired local timer can not
+    // swallow a real payment.
+    const remoteStatus = await queryRemoteStatus(attempt);
     if (remoteStatus === 'paid') {
       const amountMinor = Number(attempt.amount_minor || order.amount_minor || 0);
       if (amountMinor > 0) {
@@ -186,6 +207,11 @@ export async function reconcileOpenPayment(order: OrderRow, attempt: AttemptRow 
           source: 'expire-race',
         });
       }
+    } else if (remoteStatus === 'pending') {
+      // Channel still has an open, unpaid trade. Closing it remotely here is
+      // what tells the buyer "trade closed"; only then do we mark it expired.
+      await closeRemoteThenQuery(attempt).catch(() => undefined);
+      await markClosed(order.id, attempt.id, 'expired');
     } else {
       await markClosed(order.id, attempt.id, 'expired');
     }
@@ -208,6 +234,8 @@ export async function reconcileOpenPayment(order: OrderRow, attempt: AttemptRow 
             source: 'status-query',
           });
         }
+      } else if (result.status === 'refunded' || result.status === 'partially_refunded') {
+        // Already settled and then reversed: do not downgrade the order.
       } else if (result.status === 'cancelled' || result.status === 'expired' || result.status === 'failed') {
         await markClosed(order.id, attempt.id, result.status === 'failed' ? 'failed' : result.status === 'expired' ? 'expired' : 'cancelled');
       }

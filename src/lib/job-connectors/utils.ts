@@ -23,10 +23,26 @@ export function htmlToText(value: unknown): string {
   return jobHtmlToPlainText(value);
 }
 
+function uniqueLocationParts(parts: string[]): string[] {
+  const output: string[] = [];
+  for (const part of parts) {
+    const cleaned = part.replace(/\s+/g, ' ').trim();
+    if (!cleaned) continue;
+    const lower = cleaned.toLocaleLowerCase();
+    if (output.some((existing) => existing.toLocaleLowerCase() === lower)) continue;
+    if (output.some((existing) => existing.toLocaleLowerCase().includes(lower))) continue;
+    for (let index = output.length - 1; index >= 0; index -= 1) {
+      if (lower.includes(output[index].toLocaleLowerCase())) output.splice(index, 1);
+    }
+    output.push(cleaned);
+  }
+  return output;
+}
+
 function locationLabel(value: unknown, depth = 0): string {
   if (depth > 3 || value == null) return '';
   if (typeof value === 'string' || typeof value === 'number') return String(value).trim();
-  if (Array.isArray(value)) return value.map((item) => locationLabel(item, depth + 1)).filter(Boolean).join(', ');
+  if (Array.isArray(value)) return uniqueLocationParts(value.map((item) => locationLabel(item, depth + 1))).join(', ');
   const item = record(value);
   const preferred = [
     item.name,
@@ -40,26 +56,19 @@ function locationLabel(value: unknown, depth = 0): string {
     item.country,
     item.addressCountry,
   ].map((candidate) => locationLabel(candidate, depth + 1)).filter(Boolean);
-  return preferred.join(', ');
+  return uniqueLocationParts(preferred).join(', ');
 }
 
 export function normalizeLocations(values: unknown[]): string[] {
-  const output: string[] = [];
+  const parts: string[] = [];
   for (const value of values) {
-    const parts = (Array.isArray(value) ? value : [value])
-      .map((item) => locationLabel(item).replace(/\s+/g, ' ').trim())
-      .filter(Boolean);
-    for (const part of parts) {
-      const lower = part.toLocaleLowerCase();
-      if (output.some((existing) => existing.toLocaleLowerCase() === lower)) continue;
-      if (output.some((existing) => existing.toLocaleLowerCase().includes(lower))) continue;
-      for (let index = output.length - 1; index >= 0; index -= 1) {
-        if (lower.includes(output[index].toLocaleLowerCase())) output.splice(index, 1);
-      }
-      output.push(part);
+    const items = Array.isArray(value) ? value : [value];
+    for (const item of items) {
+      const label = locationLabel(item);
+      if (label) parts.push(label);
     }
   }
-  return output;
+  return uniqueLocationParts(parts);
 }
 
 export function normalizeWorkplace(values: unknown[]): { workplaceType: string | null; isRemote: boolean } {
@@ -133,24 +142,88 @@ function experienceLine(body: string, index: number): string {
   return body.slice(start, end).replace(/^[-•\s]+/, '').replace(/\s+/g, ' ').trim();
 }
 
+function experienceSentence(body: string, index: number): string {
+  const windowStart = Math.max(0, index - 180);
+  const windowEnd = Math.min(body.length, index + 180);
+  const slice = body.slice(windowStart, windowEnd);
+  const localIndex = index - windowStart;
+  const previousBreak = Math.max(
+    slice.lastIndexOf('.', localIndex),
+    slice.lastIndexOf('!', localIndex),
+    slice.lastIndexOf('?', localIndex),
+    slice.lastIndexOf('\n', localIndex),
+  );
+  const nextBreakCandidates = ['.', '!', '?', '\n']
+    .map((mark) => slice.indexOf(mark, localIndex))
+    .filter((value) => value >= 0);
+  const nextBreak = nextBreakCandidates.length > 0 ? Math.min(...nextBreakCandidates) : -1;
+  const start = previousBreak >= 0 ? previousBreak + 1 : 0;
+  const end = nextBreak >= 0 ? nextBreak + 1 : slice.length;
+  const sentence = slice.slice(start, end).replace(/\s+/g, ' ').trim();
+  if (sentence && sentence.length <= 280) return sentence;
+  const fallbackStart = Math.max(0, localIndex - 72);
+  const fallbackEnd = Math.min(slice.length, localIndex + 88);
+  return slice.slice(fallbackStart, fallbackEnd).replace(/\s+/g, ' ').trim();
+}
+
+function isCompanyHistoryExperienceContext(window: string): boolean {
+  const local = window.replace(/\s+/g, ' ');
+  if (/\bwe(?:['’]ve| have)\s+been\b/i.test(local)
+    && /\b(?:for|over|more\s+than)\s+\d+(?:\.\d+)?\s+years?\b/i.test(local)) {
+    return true;
+  }
+  if (/\binnovating\b.{0,80}\bfor\s+\d+(?:\.\d+)?\s+years?\b/i.test(local)) return true;
+  if (/\bfor\s+\d+(?:\.\d+)?\s+years?\s+to\s+(?:create|build|deliver|help|power|serve|bring|transform)\b/i.test(local)) return true;
+  if (/\b(?:more\s+than|over)\s+\d+(?:\.\d+)?\s+years?\s+of\s+(?:investing|investment|operating|industry|company|firm|business|financial|innovation|history)\s+(?:experience|excellence)?\b/i.test(local)) return true;
+  if (/\b(?:founded|celebrating|in\s+business|serving\s+customers)\b.{0,60}\d+(?:\.\d+)?\s+years?\b/i.test(local)) return true;
+  if (/\b\d+(?:\.\d+)?\s+years?\s+(?:of\s+)?(?:history|innovation|excellence|heritage)\b/i.test(local)) return true;
+  return false;
+}
+
+function hasCampusTitleSignal(values: unknown[]): boolean {
+  return values.some((value) => {
+    const label = text(value);
+    return label.length > 0 && label.length <= 180 && /\b(?:intern|internship|co-?op|new\s+grad(?:uate)?)\b/i.test(label);
+  });
+}
+
 function monthMatchHasExperienceContext(body: string, index: number): boolean {
-  return /experience|working|professional|relevant|prior\s+work/i.test(experienceLine(body, index));
+  return /experience|working|professional|relevant|prior\s+work/i.test(experienceSentence(body, index) || experienceLine(body, index));
 }
 
 function standaloneMatchHasExperienceContext(body: string, index: number): boolean {
-  const line = experienceLine(body, index);
+  const window = experienceSentence(body, index);
   // Company introductions frequently say things such as "more than 30 years
-  // of investing experience". That describes the employer, not an applicant
-  // requirement, and must never become a candidate-facing experience field.
-  if (/\b(?:more\s+than|over)\s+\d+(?:\.\d+)?\s+years?\s+of\s+(?:investing|investment|operating|industry|company|firm|business|financial)\s+experience\b/i.test(line)) {
+  // of investing experience" or "innovating fearlessly for 40 years". That
+  // describes the employer, not an applicant requirement.
+  if (isCompanyHistoryExperienceContext(window)) return false;
+  if (/\b(?:more\s+than|over)\s+\d+(?:\.\d+)?\s+years?\s+of\s+(?:investing|investment|operating|industry|company|firm|business|financial)\s+experience\b/i.test(window)) {
     return false;
   }
   // Compact ATS metadata can legitimately be just "3 years". Narrative
-  // descriptions need a requirement cue before an unqualified number is used.
-  if (/^\s*(?:minimum\s+of\s+|at\s+least\s+)?(?:\d+(?:\.\d+)?|one|two|three|four|five|six|seven|eight|nine|ten|eleven|twelve)\s*(?:years?|yrs?\.?|months?|mos?\.?|mths?\.?|个月|月)\s*$/i.test(line)) {
+  // descriptions need a requirement cue in the local sentence, not a
+  // flattened 2,000-character requirements blob.
+  if (/^\s*(?:minimum\s+of\s+|at\s+least\s+)?(?:\d+(?:\.\d+)?|one|two|three|four|five|six|seven|eight|nine|ten|eleven|twelve)\s*(?:years?|yrs?\.?|months?|mos?\.?|mths?\.?|个月|月)\s*$/i.test(window)) {
     return true;
   }
-  return /\b(?:require(?:s|d)?|minimum|at\s+least|must|need(?:ed)?|qualif(?:ication|ied)|candidate|you(?:'| a)re|we\s+want|professional|relevant|prior\s+work|work(?:ing)?\s+experience)\b/i.test(line);
+  return /\b(?:require(?:s|d)?|minimum|at\s+least|must|need(?:ed)?|qualif(?:ication|ied)|candidate|you(?:'| a)re|we\s+want|professional|relevant|prior\s+work|work(?:ing)?\s+experience|spanning|considered|equivalent)\b/i.test(window);
+}
+
+function experienceMatchAllowed(body: string, index: number | undefined, requireStandaloneContext = false): boolean {
+  if (index == null) return false;
+  if (isCompanyHistoryExperienceContext(experienceSentence(body, index))) return false;
+  return requireStandaloneContext ? standaloneMatchHasExperienceContext(body, index) : true;
+}
+
+function firstAllowedMatch(body: string, pattern: RegExp, allowed: (match: RegExpExecArray) => boolean): RegExpExecArray | null {
+  const flags = pattern.flags.includes('g') ? pattern.flags : `${pattern.flags}g`;
+  const global = new RegExp(pattern.source, flags);
+  for (const match of body.matchAll(global)) {
+    if (match.index == null) continue;
+    const exec = match as unknown as RegExpExecArray;
+    if (allowed(exec)) return exec;
+  }
+  return null;
 }
 
 function parseExperienceUnbounded(values: unknown[], explicitLevel?: unknown): ParsedExperience {
@@ -163,58 +236,130 @@ function parseExperienceUnbounded(values: unknown[], explicitLevel?: unknown): P
   const noExperience = /\b(?:no|without)\s+(?:prior\s+)?experience\b|无经验|无需经验/i.exec(body);
   if (noExperience) return { min: 0, max: 0, text: experienceSnippet(body, noExperience.index, noExperience[0]) || 'No experience required' };
 
-  const range = new RegExp(`(${EXPERIENCE_NUMBER})\\s*(?:(${EXPERIENCE_UNIT})\\s*)?(?:-|to|–|—)\\s*(${EXPERIENCE_NUMBER})\\s*(\\+)?\\s*(${EXPERIENCE_UNIT})`, 'i').exec(body);
+  const range = firstAllowedMatch(
+    body,
+    new RegExp(`(${EXPERIENCE_NUMBER})\\s*(?:(${EXPERIENCE_UNIT})\\s*)?(?:-|to|–|—)\\s*(${EXPERIENCE_NUMBER})\\s*(\\+)?\\s*(${EXPERIENCE_UNIT})`, 'i'),
+    (match) => {
+      if (/months?|mos?\\.?|mths?\\.?|个月|月/i.test(`${match[2] || ''} ${match[5]}`)
+        && !monthMatchHasExperienceContext(body, match.index)) {
+        return false;
+      }
+      return experienceMatchAllowed(body, match.index);
+    },
+  );
   if (range) {
-    if (/months?|mos?\\.?|mths?\\.?|个月|月/i.test(`${range[2] || ''} ${range[5]}`)
-      && !monthMatchHasExperienceContext(body, range.index)) {
-      // Do not mistake an internal-transfer or eligibility window such as
-      // "18-24 months before you may apply" for job experience.
-    } else {
-      const min = experienceYears(range[1], range[2] || range[5]);
-      const max = experienceYears(range[3], range[5]);
-      if (min != null && max != null) return { min, max: range[4] ? null : max, text: experienceSnippet(body, range.index, range[0]) };
-    }
+    const min = experienceYears(range[1], range[2] || range[5]);
+    const max = experienceYears(range[3], range[5]);
+    if (min != null && max != null) return { min, max: range[4] ? null : max, text: experienceSnippet(body, range.index, range[0]) };
   }
 
-  const plus = new RegExp(`(${EXPERIENCE_NUMBER})\\s*\\+\\s*(${EXPERIENCE_UNIT})`, 'i').exec(body);
+  const plus = firstAllowedMatch(
+    body,
+    new RegExp(`(${EXPERIENCE_NUMBER})\\s*\\+\\s*(${EXPERIENCE_UNIT})`, 'i'),
+    (match) => {
+      if (/months?|mos?\\.?|mths?\\.?|个月|月/i.test(match[2])
+        && !monthMatchHasExperienceContext(body, match.index)) {
+        return false;
+      }
+      return experienceMatchAllowed(body, match.index);
+    },
+  );
   if (plus) {
-    if (/months?|mos?\\.?|mths?\\.?|个月|月/i.test(plus[2])
-      && !monthMatchHasExperienceContext(body, plus.index)) {
-      // See the range guard above.
-    } else {
     const min = experienceYears(plus[1], plus[2]);
     if (min != null) return { min, max: null, text: experienceSnippet(body, plus.index, plus[0]) };
-    }
+  }
+  const degreePlusGap = firstAllowedMatch(
+    body,
+    new RegExp(`(?:bachelor'?s?|master'?s?|ph\\.?d\\.?)(?:\\s+degree)?[^+\\n.]{0,90}\\+\\s*(${EXPERIENCE_NUMBER})\\s*(${EXPERIENCE_UNIT})`, 'i'),
+    (match) => {
+      if (/months?|mos?\\.?|mths?\\.?|个月|月/i.test(match[2]) && !monthMatchHasExperienceContext(body, match.index)) {
+        return false;
+      }
+      return experienceMatchAllowed(body, match.index);
+    },
+  );
+  if (degreePlusGap) {
+    const min = experienceYears(degreePlusGap[1], degreePlusGap[2]);
+    if (min != null) return { min, max: null, text: experienceSnippet(body, degreePlusGap.index, degreePlusGap[0]) };
+  }
+  const degreePlus = firstAllowedMatch(
+    body,
+    new RegExp(`(?:(?:bachelor'?s?|master'?s?|m\\.s\\.?|ph\\.?d\\.?)(?:\\s+degree)?|degree)\\s*(?:\\+|plus)\\s*(${EXPERIENCE_NUMBER})\\s*(${EXPERIENCE_UNIT})`, 'i'),
+    (match) => {
+      if (/months?|mos?\\.?|mths?\\.?|个月|月/i.test(match[2]) && !monthMatchHasExperienceContext(body, match.index)) {
+        return false;
+      }
+      return experienceMatchAllowed(body, match.index);
+    },
+  );
+  if (degreePlus) {
+    const min = experienceYears(degreePlus[1], degreePlus[2]);
+    if (min != null) return { min, max: null, text: experienceSnippet(body, degreePlus.index, degreePlus[0]) };
   }
 
-  const minimum = new RegExp(`(?:at\\s+least|minimum(?:\\s+of)?|at\\s+minimum|至少)\\s*(${EXPERIENCE_NUMBER})\\s*(${EXPERIENCE_UNIT})`, 'i').exec(body);
+  const minimum = firstAllowedMatch(
+    body,
+    new RegExp(`(?:at\\s+least|minimum(?:\\s+of)?|at\\s+minimum|至少)\\s*(${EXPERIENCE_NUMBER})\\s*(${EXPERIENCE_UNIT})`, 'i'),
+    (match) => {
+      if (/months?|mos?\\.?|mths?\\.?|个月|月/i.test(match[2]) && !monthMatchHasExperienceContext(body, match.index)) {
+        return false;
+      }
+      return experienceMatchAllowed(body, match.index);
+    },
+  );
   if (minimum) {
-    if (!/months?|mos?\\.?|mths?\\.?|个月|月/i.test(minimum[2]) || monthMatchHasExperienceContext(body, minimum.index)) {
-      const min = experienceYears(minimum[1], minimum[2]);
-      if (min != null) return { min, max: null, text: experienceSnippet(body, minimum.index, minimum[0]) };
-    }
+    const min = experienceYears(minimum[1], minimum[2]);
+    if (min != null) return { min, max: null, text: experienceSnippet(body, minimum.index, minimum[0]) };
   }
 
-  const single = new RegExp(`(${EXPERIENCE_NUMBER})\\s*(${EXPERIENCE_UNIT})\\s*(?:of\\s+)?(?:relevant\\s+|professional\\s+|prior\\s+|work(?:ing)?\\s+)?experience\\b`, 'i').exec(body);
+  const single = firstAllowedMatch(
+    body,
+    new RegExp(`(${EXPERIENCE_NUMBER})\\s*(${EXPERIENCE_UNIT})\\s*(?:of\\s+)?(?:relevant\\s+|related\\s+|professional\\s+|prior\\s+|work(?:ing)?\\s+)?experience\\b`, 'i'),
+    (match) => experienceMatchAllowed(body, match.index),
+  );
   if (single) {
     const min = experienceYears(single[1], single[2]);
     if (min != null) return { min, max: null, text: experienceSnippet(body, single.index, single[0]) };
   }
-  const possessive = new RegExp(`(${EXPERIENCE_NUMBER})\\s*(${EXPERIENCE_UNIT})['’]\\s+experience\\b`, 'i').exec(body);
+  const possessive = firstAllowedMatch(
+    body,
+    new RegExp(`(${EXPERIENCE_NUMBER})\\s*(${EXPERIENCE_UNIT})['’]\\s+experience\\b`, 'i'),
+    (match) => experienceMatchAllowed(body, match.index),
+  );
   if (possessive) {
     const min = experienceYears(possessive[1], possessive[2]);
     if (min != null) return { min, max: null, text: experienceSnippet(body, possessive.index, possessive[0]) };
   }
+  const moreThan = firstAllowedMatch(
+    body,
+    new RegExp(`(?:more\\s+than|over|spanning(?:\\s+(?:more\\s+than|over))?)\\s*(${EXPERIENCE_NUMBER})\\s*(${EXPERIENCE_UNIT})`, 'i'),
+    (match) => {
+      if (/months?|mos?\\.?|mths?\\.?|个月|月/i.test(match[2]) && !monthMatchHasExperienceContext(body, match.index)) {
+        return false;
+      }
+      return experienceMatchAllowed(body, match.index, true);
+    },
+  );
+  if (moreThan) {
+    const min = experienceYears(moreThan[1], moreThan[2]);
+    if (min != null) return { min, max: null, text: experienceSnippet(body, moreThan.index, moreThan[0]) };
+  }
   // ATS payloads often expose a compact value such as "3 years" without
   // repeating the word "experience". Keep this deliberately narrow so a
   // phrase like "experience with Python" cannot become a numeric requirement.
-  const standalone = new RegExp(`(?:^|\\s)(${EXPERIENCE_NUMBER})\\s*(${EXPERIENCE_UNIT})(?=\\s|$)`, 'i').exec(body);
+  const standalone = firstAllowedMatch(
+    body,
+    new RegExp(`(?:^|\\s)(${EXPERIENCE_NUMBER})\\s*(${EXPERIENCE_UNIT})(?=\\s|$)`, 'i'),
+    (match) => {
+      if (/months?|mos?\\.?|mths?\\.?|个月|月/i.test(match[2]) && !monthMatchHasExperienceContext(body, match.index)) {
+        return false;
+      }
+      return experienceMatchAllowed(body, match.index, true);
+    },
+  );
   if (standalone) {
-    if ((!/months?|mos?\\.?|mths?\\.?|个月|月/i.test(standalone[2]) || monthMatchHasExperienceContext(body, standalone.index))
-      && standaloneMatchHasExperienceContext(body, standalone.index)) {
-      const min = experienceYears(standalone[1], standalone[2]);
-      if (min != null) return { min, max: null, text: experienceSnippet(body, standalone.index, standalone[0]) };
-    }
+    const min = experienceYears(standalone[1], standalone[2]);
+    if (min != null) return { min, max: null, text: experienceSnippet(body, standalone.index, standalone[0]) };
   }
   // Generic entry-level labels are a fallback only; explicit numeric years
   // above win when both signals appear in a description.
@@ -238,6 +383,12 @@ export function parseExperience(values: unknown[], explicitLevel?: unknown): Par
   const parsed = parseExperienceUnbounded(values, explicitLevel);
   const numbers = [parsed.min, parsed.max].filter((value): value is number => value != null);
   if (numbers.some((value) => !Number.isFinite(value) || value < 0 || value > MAX_STORED_EXPERIENCE_YEARS)) {
+    return { min: null, max: null, text: null };
+  }
+  // Intern/new-grad titles can mention intern programs in passing, but a
+  // short title that itself says Intern/Co-op/New Grad should never inherit
+  // an employer history number such as "40 years".
+  if (hasCampusTitleSignal(values) && numbers.some((value) => value >= 8)) {
     return { min: null, max: null, text: null };
   }
   return {
@@ -297,7 +448,7 @@ export function extractDeadline(values: unknown[]): string | null {
     if (parsed) return parsed;
   }
   const body = htmlToText(values.map(text).filter(Boolean).join(' '));
-  const match = body.match(/(?:application\s+(?:closing\s+)?deadline|closing\s+date|deadline(?:\s+to\s+apply)?|applications?\s+(?:will\s+)?close|apply\s+by|截止(?:日期|时间)?)[^\d]{0,60}((?:20\d{2}[\/.\-]\d{1,2}[\/.\-]\d{1,2})|(?:Jan(?:uary)?|Feb(?:ruary)?|Mar(?:ch)?|Apr(?:il)?|May|Jun(?:e)?|Jul(?:y)?|Aug(?:ust)?|Sep(?:t(?:ember)?)?|Oct(?:ober)?|Nov(?:ember)?|Dec(?:ember)?)\s+\d{1,2}(?:,?\s+20\d{2})?)/i);
+  const match = body.match(/(?:application\s+(?:closing\s+)?deadline|application\s+window(?:.{0,60}?)(?:close|closes|closing|closed)(?:\s+on)?|closing\s+date|deadline(?:\s+to\s+apply)?|applications?\s+(?:will\s+)?close|apply\s+by|截止(?:日期|时间)?)[^\d]{0,60}((?:20\d{2}[\/.\-]\d{1,2}[\/.\-]\d{1,2})|(?:\d{1,2}[\/.\-]\d{1,2}[\/.\-](?:20\d{2}|\d{2}))|(?:Jan(?:uary)?|Feb(?:ruary)?|Mar(?:ch)?|Apr(?:il)?|May|Jun(?:e)?|Jul(?:y)?|Aug(?:ust)?|Sep(?:t(?:ember)?)?|Oct(?:ober)?|Nov(?:ember)?|Dec(?:ember)?)\s+\d{1,2}(?:,?\s+20\d{2})?)/i);
   return match ? parseJobDeadline(match[1]) : null;
 }
 

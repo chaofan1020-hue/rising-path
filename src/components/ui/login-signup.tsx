@@ -106,7 +106,7 @@ interface LoginSignupProps {
   mode: AuthMode;
   onToggleMode: (mode: AuthMode) => void;
   onLogin: (email: string, password: string) => void | Promise<void>;
-  onRegister: (data: RegisterData, captchaToken?: string | null) => void | Promise<void>;
+  onRegister: (data: RegisterData, captchaToken?: string | null) => void | Promise<void | boolean>;
   onSendCode: (email: string, captchaToken?: string | null) => void | Promise<boolean>;
   onVerifyCode: (email: string, code: string) => void | Promise<void>;
   onVerifySignupCode: (email: string, code: string) => void | Promise<void>;
@@ -217,6 +217,7 @@ export default function LoginSignup({
   const [captchaReset, setCaptchaReset] = useState(0);
   const signupVerificationSent = mode === 'signup' && Boolean(verificationEmail && form.email === verificationEmail);
   const captchaBlocked = !captchaReady || (captchaEnabled && !captchaToken);
+  const showSignupCaptcha = !signupVerificationSent || (captchaEnabled && !captchaToken && signupResendSeconds === 0);
   const resetCaptcha = () => {
     setCaptchaToken(null);
     setCaptchaReset((value) => value + 1);
@@ -261,8 +262,10 @@ export default function LoginSignup({
       onVerifySignupCode(form.email, form.code);
       return;
     }
-    onRegister({ email: form.email, password: form.password, username: form.username, confirmPassword: form.confirmPassword, terms: form.terms }, captchaToken);
-    resetCaptcha();
+    void (async () => {
+      const consumed = await onRegister({ email: form.email, password: form.password, username: form.username, confirmPassword: form.confirmPassword, terms: form.terms }, captchaToken);
+      if (consumed !== false) resetCaptcha();
+    })();
   };
   const handleVerifyCode = (event: FormEvent) => { event.preventDefault(); onVerifyCode(form.email, form.code); };
   const resendSignupCode = async () => {
@@ -281,8 +284,10 @@ export default function LoginSignup({
   const handleReset = (event: FormEvent) => {
     event.preventDefault();
     if (captchaBlocked) return;
-    onResetPassword(form.email, captchaToken);
-    resetCaptcha();
+    void (async () => {
+      await onResetPassword(form.email, captchaToken);
+      resetCaptcha();
+    })();
   };
   const handleUpdatePassword = (event: FormEvent) => { event.preventDefault(); onUpdatePassword(form.password, form.confirmPassword); };
 
@@ -295,13 +300,13 @@ export default function LoginSignup({
           <form onSubmit={handleRegisterSubmit} noValidate>
           <CardContent className="space-y-5 px-8">
             <AuthMessages error={error} message={message} />
-            <div className="space-y-2"><Label htmlFor="username" className="text-sm font-medium">{copy.username}</Label><Input id="username" autoComplete="username" value={form.username} onChange={(event) => update('username', event.target.value)} placeholder={copy.usernamePlaceholder} className={INPUT_CLASS} required /></div>
-            <div className="space-y-2"><Label htmlFor="email" className="text-sm font-medium">{copy.email}</Label><Input id="email" type="email" autoComplete="email" value={form.email} onChange={(event) => update('email', event.target.value)} placeholder={copy.emailPlaceholder} className={INPUT_CLASS} required /></div>
-            <PasswordInput id="password" label={copy.password} value={form.password} onChange={(value) => update('password', value)} autoComplete="new-password" visible={showPassword} onToggle={() => setShowPassword((current) => !current)} />
-            <PasswordInput id="confirm-password" label={copy.confirmPassword} value={form.confirmPassword} onChange={(value) => update('confirmPassword', value)} autoComplete="new-password" visible={showConfirmPassword} onToggle={() => setShowConfirmPassword((current) => !current)} />
-            {signupVerificationSent && <div className="space-y-2 rounded-lg border border-primary/25 bg-primary/5 p-3 dark:bg-primary/15"><div className="flex flex-wrap items-center justify-between gap-x-3 gap-y-1"><Label htmlFor="signup-inline-code" className="text-sm font-medium">{copy.confirmationCode}</Label><Button type="button" variant="ghost" className="h-auto px-0 text-xs text-foreground underline underline-offset-4" onClick={() => void resendSignupCode()} disabled={loading || signupResendSeconds > 0 || captchaBlocked}>{signupResendSeconds > 0 ? copy.resendIn(signupResendSeconds) : copy.resendSignupCode}</Button></div><Input id="signup-inline-code" autoComplete="one-time-code" inputMode="numeric" value={form.code} onChange={(event) => update('code', event.target.value)} placeholder="123456" className={`${INPUT_CLASS} font-mono tracking-[0.18em]`} required /></div>}
-            <div className="flex items-center space-x-2"><Checkbox id="terms" checked={form.terms} onCheckedChange={(value) => update('terms', Boolean(value))} required /><label htmlFor="terms" className="text-sm text-foreground">{copy.agreePrefix} <Link href="#" className="text-foreground underline underline-offset-4">{copy.terms}</Link> {copy.and} <Link href="/privacy-policy" className="text-foreground underline underline-offset-4">{copy.conditions}</Link></label></div>
-            {captchaWidget}
+            <div key="signup-username" className="space-y-2"><Label htmlFor="username" className="text-sm font-medium">{copy.username}</Label><Input id="username" autoComplete="username" value={form.username} onChange={(event) => update('username', event.target.value)} placeholder={copy.usernamePlaceholder} className={INPUT_CLASS} required /></div>
+            <div key="signup-email" className="space-y-2"><Label htmlFor="email" className="text-sm font-medium">{copy.email}</Label><Input id="email" type="email" autoComplete="email" value={form.email} onChange={(event) => update('email', event.target.value)} placeholder={copy.emailPlaceholder} className={INPUT_CLASS} required /></div>
+            <PasswordInput key="signup-password" id="password" label={copy.password} value={form.password} onChange={(value) => update('password', value)} autoComplete="new-password" visible={showPassword} onToggle={() => setShowPassword((current) => !current)} />
+            <PasswordInput key="signup-confirm-password" id="confirm-password" label={copy.confirmPassword} value={form.confirmPassword} onChange={(value) => update('confirmPassword', value)} autoComplete="new-password" visible={showConfirmPassword} onToggle={() => setShowConfirmPassword((current) => !current)} />
+            {signupVerificationSent && <div key="signup-code" className="space-y-2 rounded-lg border border-primary/25 bg-primary/5 p-3 dark:bg-primary/15"><div className="flex flex-wrap items-center justify-between gap-x-3 gap-y-1"><Label htmlFor="signup-inline-code" className="text-sm font-medium">{copy.confirmationCode}</Label><Button type="button" variant="ghost" className="h-auto px-0 text-xs text-foreground underline underline-offset-4" onClick={() => void resendSignupCode()} disabled={loading || signupResendSeconds > 0 || captchaBlocked}>{signupResendSeconds > 0 ? copy.resendIn(signupResendSeconds) : copy.resendSignupCode}</Button></div><Input id="signup-inline-code" autoComplete="one-time-code" inputMode="numeric" value={form.code} onChange={(event) => update('code', event.target.value)} placeholder="123456" className={`${INPUT_CLASS} font-mono tracking-[0.18em]`} required /></div>}
+            <div key="signup-terms" className="flex items-center space-x-2"><Checkbox id="terms" checked={form.terms} onCheckedChange={(value) => update('terms', Boolean(value))} required /><label htmlFor="terms" className="text-sm text-foreground">{copy.agreePrefix} <Link href="#" className="text-foreground underline underline-offset-4">{copy.terms}</Link> {copy.and} <Link href="/privacy-policy" className="text-foreground underline underline-offset-4">{copy.conditions}</Link></label></div>
+            <div key="signup-captcha" className={showSignupCaptcha ? undefined : 'hidden'}>{captchaWidget}</div>
             <Button type="submit" className={PRIMARY_BUTTON_CLASS} disabled={loading || !form.terms || (signupVerificationSent ? !form.code : captchaBlocked)}>{loading ? <Loader2 className="h-4 w-4 animate-spin" /> : signupVerificationSent ? copy.completeRegistration : copy.sendSignupCode}</Button>
           </CardContent>
           </form>

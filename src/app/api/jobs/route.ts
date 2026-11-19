@@ -3,7 +3,7 @@ import { getSupabaseClient } from '@/storage/database/supabase-client';
 import { detectSponsorship } from '@/lib/utils';
 import { ADMIN_PERMISSIONS, requireAdminPermission } from '@/lib/admin-permissions';
 import { isDisplayableJobDescription, sanitizeJobContent } from '@/lib/job-content';
-import { TARGET_REGION_KEYWORDS } from '@/lib/job-region-scope';
+import { TARGET_REGION_KEYWORDS, configuredRegionListingFilter, targetRegionPostgrestClauses } from '@/lib/job-region-scope';
 import { recordAdminAuditEvent, recordAdminAuditFailure } from '@/lib/admin-audit';
 import { resolveDisplayLogoUrls } from '@/lib/company-logo';
 import { isVerifiedField } from '@/lib/job-field-provenance';
@@ -16,6 +16,18 @@ export const revalidate = 0;
 // entire company_logos table before every cold jobs request added an extra
 // round trip without improving the response for most pages.
 const localLogosCache: Record<string, string> = {};
+// Rolling deploys can briefly serve this code before/after the matching
+// migration. Remember when an indexed structure is unusable and retry it after
+// a short backoff. A permanent flag would keep the slow fallback forever after
+// a single transient PostgREST schema-cache miss during a reload.
+let listingViewRetryAt = 0;
+let regionListingRetryAt = 0;
+let targetRegionRetryAt = 0;
+const STRUCTURE_RETRY_MS = 10 * 60 * 1000;
+const SCHEMA_CACHE_RETRY_MS = 60 * 1000;
+
+const SUMMARY_COLUMNS = 'id,title,company,region,direction,audience,job_type,employment_category,experience_min_years,experience_max_years,experience_text,description,salary_range,employment_type,workplace_type,job_url,sponsorship,valid_through,deadline_time_zone,deadline_source,salary_source,location_source,field_evidence,is_active,is_closed,posted_at,created_at,updated_at';
+const DETAIL_COLUMNS = 'id,title,company,region,direction,audience,job_type,employment_category,experience_min_years,experience_max_years,experience_text,description,requirements,salary_range,employment_type,workplace_type,job_url,sponsorship,valid_through,deadline_time_zone,deadline_source,salary_source,location_source,field_evidence,is_active,is_closed,posted_at,created_at,updated_at';
 
 // 地区映射：将具体地区映射到所属大地区
 const regionMapping: Record<string, string> = {
@@ -91,7 +103,7 @@ const directionMapping: Record<string, string> = {
   'Frontend': 'SDE',
   'Backend': 'SDE',
   'Mobile': 'SDE',
-  
+
   // 方向映射
   'MLE': 'ML/AI',
   'Research': 'ML/AI',
@@ -167,11 +179,35 @@ function isEntryLevelJobCompatible(job: Record<string, unknown>): boolean {
   return !/(?:at\s+least|minimum(?:\s+of)?|requires?|must\s+have|\bof)\s*(?:\d+(?:\.\d+)?\s*\+?|\d+(?:\.\d+)?\s*(?:-|to|–|—)\s*\d+(?:\.\d+)?)\s*(?:years?|yrs?|年)\s*(?:of\s+)?(?:professional\s+)?experience\b/i.test(text);
 }
 
+type ListingQueryOptions = {
+  listingView: boolean;
+  regionIndex: boolean;
+  targetIndex: boolean;
+};
+
+function detectMissingStructure(error: { code?: string; message?: string }): 'view' | 'region' | 'target' | null {
+  const code = error.code || '';
+  const message = error.message || '';
+  // 42P01 undefined_table, 42703 undefined_column, PGRST204/205 schema cache.
+  if (code === '42P01' || code === 'PGRST205' || /jobs_listing|relation .* does not exist/i.test(message)) {
+    return 'view';
+  }
+  if (code === '42703' || code === 'PGRST204') {
+    if (/region_market|region_group/i.test(message)) return 'region';
+    if (/matches_target_region/i.test(message)) return 'target';
+  }
+  return null;
+}
+
+function isStatementTimeout(error: { code?: string; message?: string }): boolean {
+  return error.code === '57014' || /statement timeout|canceling statement/i.test(error.message || '');
+}
+
 export async function GET(request: NextRequest) {
   try {
     const client = getSupabaseClient();
     const searchParams = request.nextUrl.searchParams;
-    
+
     // 获取多选参数（地区和方向支持多选）
     const regions = searchParams.getAll('region');
     const directions = searchParams.getAll('direction');
@@ -191,111 +227,149 @@ export async function GET(request: NextRequest) {
     const requestedOffset = Number.parseInt(offsetParam || '0', 10);
     const offset = Number.isFinite(requestedOffset) ? Math.max(requestedOffset, 0) : 0;
 
-    // Supabase's generated select parser requires a literal column string;
-    // the route intentionally chooses one of two fixed projections here.
-    // Exact count stays accurate, but the default market scope must be an
-    // indexed boolean. A hundred region ILIKE clauses made that count scan
-    // the jobs table and took several seconds.
-    let query = summaryOnly
-      ? client.from('jobs').select('id,title,company,region,direction,audience,job_type,employment_category,experience_min_years,experience_max_years,experience_text,description,salary_range,employment_type,workplace_type,job_url,sponsorship,valid_through,deadline_time_zone,deadline_source,salary_source,location_source,field_evidence,is_active,is_closed,posted_at,created_at,updated_at', { count: 'exact' })
-      : client.from('jobs').select('id,title,company,region,direction,audience,job_type,employment_category,experience_min_years,experience_max_years,experience_text,description,requirements,salary_range,employment_type,workplace_type,job_url,sponsorship,valid_through,deadline_time_zone,deadline_source,salary_source,location_source,field_evidence,is_active,is_closed,posted_at,created_at,updated_at', { count: 'exact' });
-
-    if (diverseFeed) {
-      // updated_at reflects the active feed refresh and naturally mixes the
-      // latest jobs from different companies better than import-time created_at.
-      query = query
-        .order('updated_at', { ascending: false, nullsFirst: false })
-        .order('created_at', { ascending: false })
-        .order('id', { ascending: false });
-    } else {
-      // Jobs imported in one feed batch share a timestamp. A stable secondary
-      // key prevents pagination from duplicating or skipping those records.
-      query = query
-        .order('created_at', { ascending: false })
-        .order('id', { ascending: false });
-    }
-
-    // 默认只显示可投递岗位；管理员或筛选器可以显式请求全部/已关闭岗位。
-    if (status === 'closed') query = query.eq('is_active', false);
-    else if (status !== 'all') query = query.eq('is_active', true);
-
-    // A selected market already scopes the query to that market. Applying a
-    // second `.or()` here would create duplicate PostgREST `or` parameters
-    // and can silently replace the user's region filter, so only add the
-    // default target scope when no explicit region was selected.
-
-    // 受众单选筛选
-    if (audience && audience !== '全部') {
-      query = query.eq('audience', audience);
-    }
-
-    // 岗位类型筛选（实习/校招/社招）
-    if (jobType && jobType !== '全部') {
-      query = query.eq('job_type', jobType);
-    }
-
-    if (sponsorship && sponsorship !== '全部') {
-      query = query.eq('sponsorship', sponsorship);
-    }
-
-    if (exactCompanies.length > 0) {
-      query = query.in('company', exactCompanies);
-    }
-
     const company = searchParams.get('company')?.trim() || '';
-    if (company) {
-      query = query.ilike('company', `%${escapePostgrestSearchTerm(company)}%`);
-    }
-
-    if (search) {
-      const safeSearch = escapePostgrestSearchTerm(search);
-      query = query.or(`title.ilike.%${safeSearch}%,company.ilike.%${safeSearch}%`);
-    }
-
-    if (regions.length > 0) {
-      const regionClauses = new Set<string>();
-      for (const region of regions) {
-        const keywords = regionKeywords[region] || [];
-        for (const keyword of keywords) {
-          regionClauses.add(`region.ilike.%${escapePostgrestSearchTerm(keyword)}%`);
-        }
-        if (keywords.length === 0) {
-          for (const value of expandMappedValues([region], regionMapping)) {
-            regionClauses.add(`region.eq.${escapePostgrestSearchTerm(value)}`);
-          }
-        }
-      }
-      if (regionClauses.size > 0) query = query.or([...regionClauses].join(','));
-    } else if (regionScope !== 'all') {
-      query = query.eq('matches_target_region', true);
-    }
-
-    if (directions.length > 0) {
-      query = query.in('direction', expandMappedValues(directions, directionMapping));
-    }
-
-    // 不允许把完整岗位库一次传回浏览器。全量同步后岗位数据可达数万条，
-    // 因此前端按页请求，默认 100 条。
-    // Fetch one extra row so has_more stays correct even if a later
-    // compatibility filter drops a handful of rows from the page.
-    // Fetch a little extra for entry-level filters. Legacy rows may carry an
-    // incorrect category, so filtering after retrieval must not leave a page
-    // empty when a handful of rows are rejected.
+    const targetScopeRequested = regions.length === 0 && regionScope !== 'all';
     const entryLevelFilter = jobType === '实习' || jobType === '校招';
-    const queryOffset = entryLevelFilter ? 0 : offset;
-    const rangeEnd = entryLevelFilter
-      ? offset + (pageLimit * 3)
-      : offset + pageLimit;
-    query = query.range(queryOffset, rangeEnd);
+    const rangeEnd = entryLevelFilter ? offset + (pageLimit * 3) : offset + pageLimit;
+    const regionListingFilter = configuredRegionListingFilter(regions);
 
-    const { data, error, count } = await query;
+    // Keep the public listing usable while a deployment is applying the target
+    // region / listing view migration. The indexed path is fast; the fallback
+    // uses the older schema and is only triggered when the response proves the
+    // structure is missing.
+    const buildQuery = (options: ListingQueryOptions) => {
+      // Supabase's generated select parser requires a literal column string;
+      // the route intentionally chooses one of two fixed projections here.
+      // A planner count avoids scanning the whole jobs table on every filter
+      // change, which is what pushed filtered requests over Supabase's
+      // statement timeout. It is sufficient for pagination and is marked as
+      // estimated in the response. Widen the projection to `string` so the
+      // generated parser does not instantiate a union of both row shapes.
+      const columns: string = summaryOnly ? SUMMARY_COLUMNS : DETAIL_COLUMNS;
+      let query = client
+        .from(options.listingView ? 'jobs_listing' : 'jobs')
+        .select(columns, { count: 'planned' });
+
+      if (diverseFeed) {
+        query = query
+          .order('updated_at', { ascending: false, nullsFirst: false })
+          .order('created_at', { ascending: false })
+          .order('id', { ascending: false });
+      } else {
+        query = query
+          .order('created_at', { ascending: false })
+          .order('id', { ascending: false });
+      }
+
+      if (status === 'closed') query = query.eq('is_active', false);
+      else if (status !== 'all') query = query.eq('is_active', true);
+
+      if (audience && audience !== '全部') query = query.eq('audience', audience);
+      if (jobType && jobType !== '全部') query = query.eq('job_type', jobType);
+      if (sponsorship && sponsorship !== '全部') query = query.eq('sponsorship', sponsorship);
+      if (exactCompanies.length > 0) query = query.in('company', exactCompanies);
+      if (company) query = query.ilike('company', `%${escapePostgrestSearchTerm(company)}%`);
+
+      if (search) {
+        const safeSearch = escapePostgrestSearchTerm(search);
+        query = query.or(`title.ilike.%${safeSearch}%,company.ilike.%${safeSearch}%`);
+      }
+
+      if (regions.length > 0) {
+        if (regionListingFilter && options.regionIndex) {
+          query = query.eq(regionListingFilter.column, regionListingFilter.value);
+        } else {
+          const regionClauses = new Set<string>();
+          for (const region of regions) {
+            const keywords = regionKeywords[region] || [];
+            for (const keyword of keywords) {
+              regionClauses.add(`region.ilike.%${escapePostgrestSearchTerm(keyword)}%`);
+            }
+            if (keywords.length === 0) {
+              for (const value of expandMappedValues([region], regionMapping)) {
+                regionClauses.add(`region.eq.${escapePostgrestSearchTerm(value)}`);
+              }
+            }
+          }
+          if (regionClauses.size > 0) query = query.or([...regionClauses].join(','));
+        }
+      } else if (regionScope !== 'all') {
+        query = options.targetIndex
+          ? query.eq('matches_target_region', true)
+          : query.or(targetRegionPostgrestClauses().join(','));
+      }
+
+      if (directions.length > 0) query = query.in('direction', expandMappedValues(directions, directionMapping));
+
+      const queryOffset = entryLevelFilter ? 0 : offset;
+      return query.range(queryOffset, rangeEnd);
+    };
+
+    const options: ListingQueryOptions = {
+      listingView: Date.now() >= listingViewRetryAt,
+      regionIndex: Date.now() >= regionListingRetryAt,
+      targetIndex: Date.now() >= targetRegionRetryAt,
+    };
+    let result = await buildQuery(options);
+
+    // Downgrade one structure at a time when the matching migration has not
+    // landed yet, instead of failing the whole request. A schema-cache miss is
+    // retried against the same structure once, because PostgREST only needs a
+    // moment to reload after a migration's `notify pgrst`.
+    let schemaCacheRetried = false;
+    for (let attempt = 0; attempt < 4 && result.error; attempt += 1) {
+      const missing = detectMissingStructure(result.error);
+      if (!missing) break;
+      const isSchemaCache = result.error.code === 'PGRST204' || result.error.code === 'PGRST205';
+      if (isSchemaCache && !schemaCacheRetried) {
+        schemaCacheRetried = true;
+        result = await buildQuery(options);
+        continue;
+      }
+      const retryAt = Date.now() + (isSchemaCache ? SCHEMA_CACHE_RETRY_MS : STRUCTURE_RETRY_MS);
+      if (missing === 'view' && options.listingView) {
+        listingViewRetryAt = retryAt;
+        options.listingView = false;
+      } else if (missing === 'region' && options.regionIndex) {
+        regionListingRetryAt = retryAt;
+        options.regionIndex = false;
+      } else if (missing === 'target' && options.targetIndex) {
+        targetRegionRetryAt = retryAt;
+        options.targetIndex = false;
+      } else {
+        break;
+      }
+      result = await buildQuery(options);
+    }
+
+    if (!result.error) {
+      if (options.listingView) listingViewRetryAt = 0;
+      if (options.regionIndex && regionListingFilter) regionListingRetryAt = 0;
+      if (options.targetIndex && targetScopeRequested) targetRegionRetryAt = 0;
+    }
+
+    const { data, error, count } = result;
 
     if (error) {
+      console.error('Jobs listing query failed', {
+        code: error.code,
+        message: error.message,
+        filters: { regions, directions, jobType, sponsorship, status, hasSearch: Boolean(search), offset },
+        indexes: { listingView: options.listingView, regionIndex: options.regionIndex, targetIndex: options.targetIndex },
+      });
       if (error.message.includes('Requested range not satisfiable')) {
         return NextResponse.json({
           jobs: [],
-          pagination: { offset, limit: pageLimit, returned: 0, total: 0, has_more: false },
+          pagination: { offset, limit: pageLimit, returned: 0, total: 0, total_is_estimate: true, has_more: false },
         });
+      }
+      if (isStatementTimeout(error)) {
+        // Surface a retryable condition instead of a generic 500 so the client
+        // can offer "try again" rather than an empty result list.
+        return NextResponse.json(
+          { error: '岗位查询超时，请稍后重试', retryable: true },
+          { status: 503, headers: { 'Cache-Control': 'private, no-store, max-age=0' } },
+        );
       }
       throw new Error(`查询岗位失败: ${error.message}`);
     }
@@ -315,6 +389,12 @@ export async function GET(request: NextRequest) {
     const filteredJobs = entryLevelFilter
       ? filteredCandidates.slice(offset, offset + pageLimit)
       : filteredCandidates.slice(0, pageLimit);
+
+    // A short page proves the exact total without a COUNT(*) over the whole
+    // index. A full page keeps the planner estimate and is labelled as such.
+    const exactTotal = !entryLevelFilter && jobRows.length <= pageLimit
+      ? offset + jobRows.length
+      : null;
 
     // 为每个岗位添加分类信息和 logo
     const companies = [...new Set(filteredJobs.map((job) => String((job as { company?: unknown }).company || '')).filter(Boolean))];
@@ -364,8 +444,13 @@ export async function GET(request: NextRequest) {
         offset,
         limit: pageLimit,
         returned: jobsWithLogo.length,
-        total: count ?? 0,
-        total_is_estimate: false,
+        total: exactTotal ?? count ?? 0,
+        total_is_estimate: exactTotal === null,
+        // The planner has no statistics for the derived market column, so its
+        // estimate for a market filter is unreliable (it falls back to the
+        // default 0.5% selectivity). Tell the client to show only the page
+        // number instead of a misleading count.
+        total_is_unknown: exactTotal === null && regionListingFilter !== null,
         has_more: hasMore,
       },
     }, {

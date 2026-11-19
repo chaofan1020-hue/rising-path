@@ -2,6 +2,7 @@
 
 import React, { useState } from 'react';
 import Link from 'next/link';
+import { ContactTeamButton } from '@/components/contact-team-dialog';
 import { useLanguage } from '@/lib/language-context';
 import { TimelineAnimation } from '@/components/ui/product-packs-utils/timeline-animation';
 
@@ -121,12 +122,12 @@ export function LoopsPricingSlider() {
 
             <div className="absolute bottom-8 left-8 right-8 flex items-center justify-between text-sm text-neutral-500">
               <span>{t('slider.custom')}</span>
-              <a
-                href="mailto:support@liorvix.com?subject=Enterprise%20pricing"
-                className="flex items-center font-medium text-black"
+              <ContactTeamButton
+                topic="enterprise"
+                className="inline-flex appearance-none items-center border-0 bg-transparent p-0 font-medium text-black transition-opacity hover:opacity-70"
               >
                 {t('slider.contact')} <span className="ml-1">→</span>
-              </a>
+              </ContactTeamButton>
             </div>
           </div>
 
@@ -145,12 +146,21 @@ export function LoopsPricingSlider() {
                 ? t('slider.enterpriseDesc')
                 : t('slider.paidDesc')}
             </p>
-            <Link
-              href="/login"
-              className="mt-8 inline-block rounded-md bg-black px-6 py-3 text-sm font-semibold text-white"
-            >
-              {price === null ? t('slider.contact') : t('slider.getStarted')}
-            </Link>
+            {price === null ? (
+              <ContactTeamButton
+                topic="enterprise"
+                className="mt-8 inline-flex appearance-none border-0 rounded-md bg-black px-6 py-3 text-sm font-semibold text-white"
+              >
+                {t('slider.contact')}
+              </ContactTeamButton>
+            ) : (
+              <Link
+                href="/login"
+                className="mt-8 inline-block rounded-md bg-black px-6 py-3 text-sm font-semibold text-white"
+              >
+                {t('slider.getStarted')}
+              </Link>
+            )}
           </div>
         </div>
       </div>

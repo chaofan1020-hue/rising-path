@@ -1,6 +1,13 @@
 import { NextRequest, NextResponse } from 'next/server';
 import type { SupabaseClient, User } from '@supabase/supabase-js';
 import { getSupabaseClient } from '@/storage/database/supabase-client';
+import {
+  createLocalDevUser,
+  hasLocalDevAuthHeader,
+  isLocalDevAccessToken,
+  isLocalDevAuthEnabled,
+  resolveLocalDevUserId,
+} from '@/lib/dev-auth';
 
 export interface AuthContext {
   user: User;
@@ -17,6 +24,20 @@ export function getBearerToken(request: Request): string | null {
 
 export async function getAuthContext(request: NextRequest): Promise<AuthContext | null> {
   const accessToken = getBearerToken(request);
+  if (isLocalDevAuthEnabled() && (hasLocalDevAuthHeader(request) || isLocalDevAccessToken(accessToken) || !accessToken)) {
+    try {
+      const client = getSupabaseClient();
+      const userId = await resolveLocalDevUserId(client);
+      return {
+        user: createLocalDevUser(userId),
+        accessToken: accessToken || 'local-dev',
+        client,
+      };
+    } catch (error) {
+      console.error('[Auth] Local dev auth failed:', error);
+      return null;
+    }
+  }
   if (!accessToken) return null;
 
   try {

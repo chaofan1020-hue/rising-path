@@ -22,7 +22,8 @@ export function readBrowserBillingSurface(): BillingSurface {
 }
 
 export function channelsForSurface(surface: BillingSurface): BillingPaymentChannel[] {
-  return surface === 'mobile' ? ['wechat_h5', 'alipay_wap'] : ['wechat_native', 'alipay_qr'];
+  void surface;
+  return ['alipay_page'];
 }
 
 export function defaultChannelForSurface(
@@ -30,9 +31,7 @@ export function defaultChannelForSurface(
   availability: { wechat: boolean; alipay: boolean },
 ): BillingPaymentChannel {
   const channels = channelsForSurface(surface);
-  const wechat = channels.find((channel) => channel.startsWith('wechat_'));
-  const alipay = channels.find((channel) => channel.startsWith('alipay_'));
-  if (availability.wechat && wechat) return wechat;
+  const alipay = channels.find((channel) => channel === 'alipay_page');
   if (availability.alipay && alipay) return alipay;
   return channels[0];
 }

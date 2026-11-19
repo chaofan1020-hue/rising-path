@@ -1,6 +1,7 @@
 import { NextResponse } from 'next/server';
 import { getSupabaseClient } from '@/storage/database/supabase-client';
 import { resolveDisplayLogoUrls } from '@/lib/company-logo';
+import { targetRegionPostgrestClauses } from '@/lib/job-region-scope';
 
 interface CompanyOption {
   company_name: string;
@@ -9,25 +10,56 @@ interface CompanyOption {
   job_count: number;
 }
 
+// Company counts change slowly; the aggregate RPC still scans the target-region
+// slice, so keep it cached longer and refresh stale entries in the background
+// instead of making the filter dialog wait for it.
 let companiesCache: { expiresAt: number; companies: CompanyOption[] } | null = null;
-const COMPANIES_CACHE_MS = 5 * 60 * 1000;
+let companiesRefresh: Promise<CompanyOption[]> | null = null;
+const COMPANIES_CACHE_MS = 15 * 60 * 1000;
 
-async function loadCompanies(): Promise<CompanyOption[]> {
-  if (companiesCache && companiesCache.expiresAt > Date.now()) {
-    return companiesCache.companies;
-  }
-
+async function fetchCompanies(): Promise<CompanyOption[]> {
   const supabase = getSupabaseClient();
-  const { data, error } = await supabase.rpc('list_active_company_options');
-  if (error) throw new Error(`读取岗位品牌失败: ${error.message}`);
-
-  const rows = (data ?? []) as unknown as Array<{
+  // Prefer the aggregate RPC. During a rolling deploy the function or its
+  // target-region column may not exist yet, so fall back to the base jobs
+  // table instead of turning the filter dialog into a 500 response.
+  const rpcResult = await supabase.rpc('list_active_company_options');
+  let rows: Array<{
     company_name?: unknown;
     job_url?: unknown;
     job_count?: unknown;
     logo_url?: unknown;
   }>;
-  const companies: CompanyOption[] = rows
+  if (!rpcResult.error && Array.isArray(rpcResult.data) && rpcResult.data.length > 0) {
+    rows = (rpcResult.data ?? []) as unknown as typeof rows;
+  } else {
+    const fallbackResult = await supabase
+      .from('jobs')
+      .select('company,job_url')
+      .eq('is_active', true)
+      .or(targetRegionPostgrestClauses().join(','))
+      .order('company', { ascending: true })
+      .limit(10000);
+    if (fallbackResult.error) {
+      throw new Error(`读取岗位品牌失败: ${rpcResult.error?.message || 'RPC returned no rows'}; fallback: ${fallbackResult.error.message}`);
+    }
+
+    const counts = new Map<string, { jobUrl: string | null; count: number }>();
+    for (const row of (fallbackResult.data ?? []) as Array<{ company?: unknown; job_url?: unknown }>) {
+      const company = typeof row.company === 'string' ? row.company.trim() : '';
+      if (!company) continue;
+      const current = counts.get(company) || { jobUrl: null, count: 0 };
+      current.count += 1;
+      if (!current.jobUrl && typeof row.job_url === 'string') current.jobUrl = row.job_url;
+      counts.set(company, current);
+    }
+    rows = [...counts.entries()].map(([company_name, value]) => ({
+      company_name,
+      job_url: value.jobUrl,
+      job_count: value.count,
+    }));
+  }
+
+  return rows
     .map((row) => {
       const company = typeof row.company_name === 'string' ? row.company_name.trim() : '';
       const jobUrl = typeof row.job_url === 'string' ? row.job_url : null;
@@ -44,9 +76,36 @@ async function loadCompanies(): Promise<CompanyOption[]> {
       };
     })
     .filter((company) => company.company_name);
+}
 
-  companiesCache = { expiresAt: Date.now() + COMPANIES_CACHE_MS, companies };
-  return companies;
+function refreshCompaniesInBackground(): Promise<CompanyOption[]> {
+  if (!companiesRefresh) {
+    companiesRefresh = fetchCompanies()
+      .then((companies) => {
+        if (companies.length > 0) {
+          companiesCache = { expiresAt: Date.now() + COMPANIES_CACHE_MS, companies };
+        }
+        return companies;
+      })
+      .finally(() => {
+        companiesRefresh = null;
+      });
+  }
+  return companiesRefresh;
+}
+
+async function loadCompanies(): Promise<CompanyOption[]> {
+  if (companiesCache && companiesCache.expiresAt > Date.now()) {
+    return companiesCache.companies;
+  }
+  if (companiesCache) {
+    // Serve the previous list immediately and refresh in the background.
+    void refreshCompaniesInBackground().catch((error) => {
+      console.error('Failed to refresh job company options:', error);
+    });
+    return companiesCache.companies;
+  }
+  return refreshCompaniesInBackground();
 }
 
 export async function GET() {

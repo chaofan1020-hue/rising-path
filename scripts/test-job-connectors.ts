@@ -11,6 +11,7 @@ import {
   isOfficialHost,
   parseConnectorBoard,
   parseOracleHcmJob,
+  parsePhenomJob,
   validConnectorUrl,
 } from '../src/lib/job-connectors';
 import type { ConnectorJob, JobConnector } from '../src/lib/job-connectors/types';
@@ -153,6 +154,24 @@ async function testOracleHcmFixture(): Promise<void> {
   assert.equal(jobs[0]?.salary_range, '$110,000 - $130,000');
   assert.ok(jobs[0]?.valid_through?.startsWith('2026-09-09T23:00:00'));
   assert.equal(validConnectorUrl(jobs[0]!.source_url!, 'oracle_hcm', '6454'), true);
+
+  const uberJob = parseOracleHcmJob({
+    Id: '149940',
+    Title: 'Engineering Manager - Inventory Prediction & Availability',
+    PrimaryLocation: 'San Francisco, CA, United States',
+    JobSchedule: 'Full time',
+    PostedDate: '2026-09-15',
+    ExternalDescriptionStr: 'An Uber official Oracle description with more than three hundred characters of real role detail so the body is kept for the public catalog.',
+  }, {
+    companyName: 'Uber',
+    boardToken: 'UberCareers',
+    sourceUrl: 'https://iaziqy.fa.ocs.oraclecloud.com/hcmUI/CandidateExperience/en/sites/UberCareers/job/149940',
+  });
+  assert.equal(uberJob?.source_url, 'https://iaziqy.fa.ocs.oraclecloud.com/hcmUI/CandidateExperience/en/sites/UberCareers/job/149940');
+  assert.equal(validConnectorUrl(uberJob!.source_url!, 'oracle_hcm', '149940'), true);
+  assert.deepEqual(uberJob?.location, ['San Francisco, CA, United States']);
+  assert.equal(uberJob?.employment_type, 'Full time');
+  assert.equal(uberJob?.valid_through, null);
   console.log(`oracle_hcm: ${jobs.length}/${fixture.items.length} fixture jobs parsed`);
 }
 
@@ -193,6 +212,59 @@ function testExperienceVariations(): void {
   ]);
   assert.equal(companyHistory.min, null);
   assert.equal(companyHistory.max, null);
+
+  const ciscoCompanyHistory = parseExperience([
+    'Engineering Product Management Specialist I (Intern) – United States',
+    'Collaborate with engineering and design teams to define product strategy and requirements. Ideal for early-career candidates. Why Cisco? At Cisco, we’re revolutionizing how data and infrastructure connect and protect organizations in the AI era – and beyond. We’ve been innovating fearlessly for 40 years to create solutions that power how humans and technology work together across the physical and digital worlds.',
+  ]);
+  assert.equal(ciscoCompanyHistory.min, null);
+  assert.equal(ciscoCompanyHistory.max, null);
+
+  const flattenedRequirements = parseExperience([
+    'Minimum qualifications: currently enrolled student. Preferred: agile methodologies (Scrum, Kanban). Why Cisco? We’ve been innovating fearlessly for 40 years to create solutions. Add to that our worldwide team. Equal opportunity employer.',
+  ]);
+  assert.equal(flattenedRequirements.min, null);
+  assert.equal(flattenedRequirements.max, null);
+
+  const historyThenRealRequirement = parseExperience([
+    'We’ve been innovating fearlessly for 40 years to create solutions. Minimum 5 years of experience selling technical solutions.',
+  ]);
+  assert.equal(historyThenRealRequirement.min, 5);
+  assert.equal(historyThenRealRequirement.max, null);
+  assert.match(historyThenRealRequirement.text || '', /Minimum 5 years of experience/i);
+
+  const internTitleWithHistory = parseExperience([
+    'Software Engineer Intern',
+    'We’ve been innovating fearlessly for 40 years to create solutions that power how humans and technology work together.',
+  ]);
+  assert.equal(internTitleWithHistory.min, null);
+  assert.equal(internTitleWithHistory.max, null);
+
+  const ciscoDegreePlus = parseExperience([
+    'Software Engineering Technical Leader',
+    'Why Cisco? We’ve been innovating fearlessly for 40 years to create solutions. Minimum Qualifications • Bachelors + 12 years of related experience, or Masters + 8 years of related experience',
+  ]);
+  assert.equal(ciscoDegreePlus.min, 12);
+  assert.equal(ciscoDegreePlus.max, null);
+  assert.match(ciscoDegreePlus.text || '', /Bachelors \+ 12 years of related experience/i);
+
+  const ciscoDegreePlusWords = parseExperience([
+    "Bachelor's degree plus 12 years of related experience, Master's degree plus 8 years of related experience.",
+  ]);
+  assert.equal(ciscoDegreePlusWords.min, 12);
+  assert.equal(ciscoDegreePlusWords.max, null);
+
+  const spanningExperience = parseExperience([
+    'Extensive industry experience spanning more than 15 years will be considered to be equivalent.',
+  ]);
+  assert.equal(spanningExperience.min, 15);
+  assert.equal(spanningExperience.max, null);
+
+  const ciscoDegreeGap = parseExperience([
+    'Bachelors degree in Comp Science, Engineering (or related field /industry) + 8 years of DevOps experience, Masters + 5 years of related experience.',
+  ]);
+  assert.equal(ciscoDegreeGap.min, 8);
+  assert.equal(ciscoDegreeGap.max, null);
 }
 
 async function testGreenhouseCanonicalUrls(): Promise<void> {
@@ -215,6 +287,40 @@ async function testGreenhouseCanonicalUrls(): Promise<void> {
   assert.ok(structuredDeadline?.valid_through, 'structured application deadline should parse');
   const fields = structuredDeadline?.source_evidence?.structured_field_sources as Record<string, unknown>;
   assert.equal(fields.valid_through, 'official_payload');
+
+  const duplicatedOffice = parseGreenhouseJob({
+    ...greenhouse.items[0],
+    id: '8184174',
+    title: 'Account Manager',
+    absolute_url: 'https://careers.airbnb.com/positions/8184174?gh_jid=8184174',
+    location: { name: 'London, United Kingdom' },
+    offices: [{
+      name: 'London, United Kingdom',
+      location: 'London, United Kingdom',
+    }],
+    metadata: [{ name: 'Workplace Type', value: 'Hybrid' }],
+    content: greenhouse.items[0].content,
+  }, { companyName: 'Airbnb' });
+  assert.deepEqual(duplicatedOffice?.location, ['London, United Kingdom']);
+  assert.equal(duplicatedOffice?.workplace_type, 'Hybrid');
+
+  const lyftCanonical = parseGreenhouseJob({
+    ...greenhouse.items[0],
+    id: '8792050002',
+    title: 'Account Manager, Automotive Vertical',
+    absolute_url: 'https://app.careerpuck.com/job-board/lyft/job/8792050002?gh_jid=8792050002',
+    location: { name: 'New York, NY' },
+    offices: [{
+      name: 'San Francisco Office',
+      location: 'San Francisco, California, United States',
+    }],
+    metadata: [{ name: 'Career Site Category', value: 'Sales' }],
+    content: greenhouse.items[0].content,
+  }, { companyName: 'Lyft' });
+  assert.equal(lyftCanonical?.source_url, 'https://app.careerpuck.com/job-board/lyft/job/8792050002?gh_jid=8792050002');
+  assert.equal(validConnectorUrl(lyftCanonical!.source_url!, 'greenhouse', '8792050002'), true);
+  const lyftLocations = Array.isArray(lyftCanonical?.location) ? lyftCanonical.location : [];
+  assert.ok(lyftLocations.includes('New York, NY'));
 }
 
 async function testUrlHealthClassification(): Promise<void> {
@@ -345,6 +451,28 @@ async function testPhenomDetailPayloadWinsOverDormantExpiredComponent(): Promise
   assert.equal(isRegisteredPhenomJobUrl('Boston Consulting Group', `https://careers.bcg.com/global/en/job/${job.jobSeqNo}`), true);
   assert.equal(isRegisteredPhenomJobUrl('Boston Consulting Group', 'https://example.com/global/en/job/1'), false);
   assert.equal(isRegisteredPhenomJobUrl('Unregistered Company', `https://careers.bcg.com/global/en/job/${job.jobSeqNo}`), false);
+
+  const ciscoJob = parsePhenomJob({
+    jobSeqNo: 'CISCISGLOBAL2016926EXTERNALENGLOBAL',
+    title: 'Product Lifecycle Supply Chain Program Manager',
+    jobUrl: 'https://careers.cisco.com/global/en/job/CISCISGLOBAL2016926EXTERNALENGLOBAL',
+    location: 'San Jose, California, United States of America',
+    type: 'Full time',
+    RemoteType: 'Hybrid',
+    postedDate: '2026-09-01T00:00:00.000+0000',
+    description: 'A Cisco official Phenom description with more than three hundred characters of real role detail so the body is kept for the public catalog.',
+  }, {
+    companyName: 'Cisco',
+    boardToken: 'CISCISGLOBAL',
+    sourceUrl: 'https://careers.cisco.com/global/en/job/CISCISGLOBAL2016926EXTERNALENGLOBAL',
+  });
+  assert.equal(ciscoJob?.source_url, 'https://careers.cisco.com/global/en/job/CISCISGLOBAL2016926EXTERNALENGLOBAL');
+  assert.equal(validConnectorUrl(ciscoJob!.source_url!, 'phenom', 'CISCISGLOBAL2016926EXTERNALENGLOBAL'), true);
+  assert.equal(isRegisteredPhenomJobUrl('Cisco', ciscoJob!.source_url!), true);
+  assert.deepEqual(ciscoJob?.location, ['San Jose, California, United States of America']);
+  assert.equal(ciscoJob?.employment_type, 'Full time');
+  assert.equal(ciscoJob?.workplace_type, 'Hybrid');
+  assert.equal(ciscoJob?.valid_through, null);
 }
 
 async function main(): Promise<void> {

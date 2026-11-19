@@ -135,6 +135,7 @@ Anthropic、Cohere、Scale AI、Hugging Face、xAI、Mistral AI、Anduril、Ramp
 - [x] 复核 Cursor、Linear、Lazard 的官方源数量、链接和 `North America` 地点字段。
 - [x] 抽查 Citadel、TPG、Rothschild 链接并记录上游 403/超时边界。
 - [x] 将 `North America` 纳入地区识别器、公共岗位 API 和岗位筛选，并完成全量同步对账。
-- [ ] 按 Wave A 顺序逐家公司做源探测和小样本验收。
+- [x] 按 Wave A 顺序逐家公司做源探测和小样本验收。
+- [x] Wave B 开工：Pinterest Greenhouse `pinterest` 179 / 179、Box Greenhouse `boxinc` 128 / 128、Instacart Greenhouse `instacart` 117 / 117、Plaid Ashby `plaid` 121 / 121、Chime Greenhouse `chime` 66 / 66、Dropbox Greenhouse `dropbox` 32 / 32、GitHub Jibe `www.github.careers` 73 / 73、DocuSign Jibe `careers.docusign.com` 270 / 270、Snowflake Phenom `careers.snowflake.com` 364 / 364、Zoom Workday `zoom.wd5.myworkdayjobs.com/Zoom` 100 / 100、LinkedIn `public_feed` 416 / 416（2026-10-13，本机登录后官方 JobCards 快照）。HubSpot 官方 GraphQL 已探测、底层 REST 404，未登记。执行入口仍是 `docs/upstream-collector-steady-plan.md`。
 - [ ] 每新增 5 家公司生成一次来源覆盖率、详情完整率和失败原因报告。
 - [ ] 每周复核 Technology 公司清单，补齐关闭岗位同步和地区标签。

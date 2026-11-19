@@ -50,6 +50,7 @@ import { getJobDeadlineRemaining } from '@/lib/job-deadline';
 import { CompanyLogo } from '@/components/company-logo';
 import { pickEligibleResumeId } from '@/lib/resume-availability';
 import { useResumeAvailability } from '@/hooks/use-resume-availability';
+import { useCreditPrices } from '@/hooks/use-credit-prices';
 import { ResumeAvailabilityHint } from '@/components/resume-availability-hint';
 import { readActiveResumeId, writeActiveResumeId } from '@/lib/active-resume';
 
@@ -193,6 +194,7 @@ function JobDetailContent() {
   const params = useParams();
   const searchParams = useSearchParams();
   const { t, locale } = useLanguage();
+  const { actionLabel } = useCreditPrices();
   const [job, setJob] = useState<Job | null>(null);
   const [relatedJobs, setRelatedJobs] = useState<RelatedJob[]>([]);
   const [loading, setLoading] = useState(true);
@@ -641,7 +643,7 @@ function JobDetailContent() {
                   ) : (
                     <Sparkles className="mr-2 h-4 w-4" />
                   )}
-                  {match ? t('jobDetail.rerate') : t('jobDetail.generateScore')}
+                  {actionLabel(match ? t('jobDetail.rerate') : t('jobDetail.generateScore'), 'ai_match', t('credits.unit'))}
                 </Button>
               </div>
             )}

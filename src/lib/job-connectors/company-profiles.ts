@@ -16,6 +16,8 @@ const STANDARD_LAYERS: Record<ConnectorStandardField, ConnectorSourceLayer[]> = 
 
 const CAREERS_URLS: Record<string, string> = {
   Cloudflare: 'https://www.cloudflare.com/careers/jobs/',
+  Airbnb: 'https://careers.airbnb.com/',
+  Lyft: 'https://www.lyft.com/careers',
   Stripe: 'https://stripe.com/jobs',
   Datadog: 'https://careers.datadoghq.com/',
   Coinbase: 'https://www.coinbase.com/careers',
@@ -50,13 +52,20 @@ const CAREERS_URLS: Record<string, string> = {
   Palantir: 'https://www.palantir.com/careers/',
   'Boston Consulting Group': 'https://careers.bcg.com/global/en/search-results',
   'Oliver Wyman': 'https://careers.marsh.com/global/en/search-results',
+  Cisco: 'https://careers.cisco.com/global/en/search-results',
+  Qualcomm: 'https://careers.qualcomm.com/careers',
+  AMD: 'https://careers.amd.com/careers-home/',
   Lazard: 'https://icbpjb.fa.ocs.oraclecloud.com/hcmUI/CandidateExperience/en/sites/LazardProfessionalCareers',
   Jefferies: 'https://hdid.fa.us2.oraclecloud.com/hcmUI/CandidateExperience/en/sites/CX_1',
   'JPMorgan Chase': 'https://jpmc.fa.oraclecloud.com/hcmUI/CandidateExperience/en/sites/CX_1001',
+  Uber: 'https://jobs.uber.com/en/jobs/',
+  'Dell Technologies': 'https://jobs.dell.com/',
 };
 
 const OFFICIAL_HOSTS: Record<string, string[]> = {
   Cloudflare: ['boards.greenhouse.io', 'cloudflare.com'],
+  Airbnb: ['careers.airbnb.com', 'boards.greenhouse.io'],
+  Lyft: ['www.lyft.com', 'app.careerpuck.com', 'boards.greenhouse.io'],
   Stripe: ['stripe.com'],
   Datadog: ['datadoghq.com'],
   Coinbase: ['coinbase.com'],
@@ -91,9 +100,14 @@ const OFFICIAL_HOSTS: Record<string, string[]> = {
   Palantir: ['jobs.lever.co', 'palantir.com'],
   'Boston Consulting Group': ['careers.bcg.com'],
   'Oliver Wyman': ['careers.marsh.com'],
+  Cisco: ['careers.cisco.com'],
+  Qualcomm: ['careers.qualcomm.com'],
+  AMD: ['careers.amd.com'],
   Lazard: ['icbpjb.fa.ocs.oraclecloud.com', 'lazard.com'],
   Jefferies: ['hdid.fa.us2.oraclecloud.com', 'jefferies.com'],
   'JPMorgan Chase': ['jpmc.fa.oraclecloud.com', 'jpmorganchase.com', 'careers.jpmorgan.com'],
+  Uber: ['iaziqy.fa.ocs.oraclecloud.com', 'jobs.uber.com'],
+  'Dell Technologies': ['iawmqy.fa.ocs.oraclecloud.com', 'enterpriseplatform.dell.com', 'jobs.dell.com'],
 };
 
 /**
