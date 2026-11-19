@@ -2012,3 +2012,11 @@ Citadel 的详情页允许正常浏览器访问，但对采集服务器返回 HT
 - 修复：登记 LinkedIn 官方 host（`www.linkedin.com` / `linkedin.com`），允许 `official_payload`。地点字符串里的 Hybrid/Remote/On-site 作为官方 workplace。生产只补缺失证据，不改开关状态、不改 Feed 游标。
 - 生产库 `weqvdtdjdzmqflhwobec`：250 条在招全部写入 `location_source=official_payload`，workplace 250/250。公网 `/api/jobs?company=LinkedIn` 抽样 8 条地点均可见；详情 `123455` 为 `Montreal, QC (On-site)`。
 - 仍不猜部门、薪资、截止日期。印度/爱尔兰等非目标地区岗位继续只留在采集器，不进美国站目录。
+
+## 2026-11-19 Workday 429 与 Citadel 来源排查
+
+- 采集库最早在北京时间 2026-11-16 08:15 记录到这一轮 Workday 429，累计涉及 68 家。11 月 13 日新增了 52 条 Workday 来源配置。采集容器对 Capital One、RBC 各发一次单条请求，均收到 Cloudflare HTTP 429，响应没有 `Retry-After`。扩容与限流先后发生，Cloudflare 的具体触发阈值无法从现有响应确认。
+- 原调度由 4 个 worker 并行处理公司，Workday 列表每家公司默认并发 4 个分页请求，429 会在数秒内重试，失败公司约 30 分钟后重新入队。11 月 19 日北京时间 11:56 更新上游 worker 和 beat。Workday 列表和详情共享每秒最多一次请求的 Redis 限速，429 触发至少一小时冷却，较长的 `Retry-After` 优先。冷却时容许非 Workday 来源继续运行。
+- 模拟 200 和 429 验证了共享限速、冷却、`Retry-After` 以及 Workday 详情暂缓。上线后用生产 worker 确认 71 家纯 Workday 来源公司进入暂缓。Liorvix 主 Feed 在北京时间 11:56 成功完成增量，生产库和公网详情均确认 Capital One 样本 `211872` 在招，线上健康、列表和详情接口均返回 200。
+- 首次冷却预计北京时间约 12:56 到期，Workday 随既有调度按限速自动尝试恢复。采集器回滚文件在 `/opt/global-jobs/ops-backups/workday-cooldown-20261119T035630Z`，同时间戳的旧 worker 和 beat 镜像单独打了标签。
+- Citadel 登记的 `/career-sitemap.xml` 返回 404。官网 sitemap 索引列出 `/sitemap/career.xml`，该候选从生产采集容器访问返回 403，保留现有岗位，等待可读的官方列表。
