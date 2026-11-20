@@ -80,6 +80,35 @@ function cacheTtlMs(): number {
 const analyticsCache = new Map<string, { expiresAt: number; payload: AdminAnalyticsPayload }>();
 const inflight = new Map<string, Promise<AdminAnalyticsPayload>>();
 
+/**
+ * The production aggregate takes 2.5-6s (the `jobs` heap is ~390 MB and the
+ * database has little spare I/O, so it contends with the job-sync worker).
+ * After the first successful fetch, refresh it just before expiry so admins
+ * practically never wait for it. Disable with ADMIN_ANALYTICS_REFRESH=false.
+ */
+let refreshTimer: ReturnType<typeof setTimeout> | null = null;
+
+function scheduleSelfRefresh(): void {
+  if (process.env.ADMIN_ANALYTICS_REFRESH === 'false') return;
+  if (refreshTimer) return;
+
+  const delay = Math.max(60_000, cacheTtlMs() - 20_000);
+  refreshTimer = setTimeout(() => {
+    refreshTimer = null;
+    void startRefresh('7d')
+      .catch((error: unknown) => {
+        console.error(
+          '[Admin Analytics] self refresh failed:',
+          error instanceof Error ? error.message : error,
+        );
+      })
+      .finally(() => {
+        scheduleSelfRefresh();
+      });
+  }, delay);
+  refreshTimer.unref?.();
+}
+
 async function queryAdminAnalytics(range: AnalyticsRange): Promise<AdminAnalyticsPayload> {
   const { from, to } = getRangeBounds(range);
   const { data, error } = await getSupabaseClient().rpc('get_admin_analytics', {
@@ -113,6 +142,7 @@ function startRefresh(range: AnalyticsRange): Promise<AdminAnalyticsPayload> {
   const promise = queryAdminAnalytics(range)
     .then((payload) => {
       analyticsCache.set(range, { expiresAt: Date.now() + cacheTtlMs(), payload });
+      scheduleSelfRefresh();
       return payload;
     })
     .finally(() => {
