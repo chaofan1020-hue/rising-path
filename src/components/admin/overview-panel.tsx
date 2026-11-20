@@ -1,6 +1,6 @@
 'use client';
 
-import { useEffect, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import Link from 'next/link';
 import {
   Activity,
@@ -22,30 +22,7 @@ import { AdminPageShell } from '@/components/admin/page-shell';
 import { APPLICATION_STATUS_LABELS } from '@/components/admin/format';
 import { ADMIN_PERMISSIONS } from '@/lib/admin-permission-constants';
 import { studentDisplayName } from '@/lib/admin-student-identity';
-
-type AnalyticsData = {
-  overview: {
-    totalUsers: number;
-    recentUsers: number;
-    totalResumes: number;
-    recentResumes: number;
-    totalJobs: number;
-    recentJobs: number;
-    totalApplications: number;
-    recentApplications: number;
-    totalAiMatches: number;
-    recentAiMatches: number;
-    activeUsers: number;
-    averageActivityPerActiveUser: number;
-  };
-  charts: {
-    jobsByRegion: Record<string, number>;
-    jobsByDirection: Record<string, number>;
-    applicationsByStatus: Record<string, number>;
-    dailyStats: { date: string; resumes: number; applications: number; aiMatches: number }[];
-  };
-  userActivity: { userId: string; userName: string; resumes: number; applications: number; aiMatches: number }[];
-};
+import type { AdminAnalyticsData as AnalyticsData } from '@/lib/admin-analytics';
 
 const RANGE_LABELS = { '7d': '近 7 天', '30d': '近 30 天', '90d': '近 90 天', all: '全部' } as const;
 const SHORTCUTS = [
@@ -78,13 +55,19 @@ function BarList({ items, color }: { items: [string, number][]; color: string })
   );
 }
 
-export function AdminOverviewPanel() {
-  const [analytics, setAnalytics] = useState<AnalyticsData | null>(null);
-  const [loading, setLoading] = useState(true);
+export function AdminOverviewPanel({ initialAnalytics }: { initialAnalytics: AnalyticsData | null }) {
+  const [analytics, setAnalytics] = useState<AnalyticsData | null>(initialAnalytics);
+  const [loading, setLoading] = useState(initialAnalytics === null);
   const [error, setError] = useState('');
   const [range, setRange] = useState<keyof typeof RANGE_LABELS>('7d');
+  // The default range already arrived with the server-rendered HTML.
+  const skipInitialFetch = useRef(initialAnalytics !== null);
 
   useEffect(() => {
+    if (skipInitialFetch.current && range === '7d') {
+      skipInitialFetch.current = false;
+      return;
+    }
     let cancelled = false;
     setLoading(true);
     setError('');

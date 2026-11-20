@@ -127,17 +127,17 @@ export function AdminJobsPanel() {
   }, [jobSearch, jobsPage]);
 
   useEffect(() => {
+    // `/api/configs` already returns the full active config set grouped by type.
+    // The extra paginated `/api/admin/configs` call fetched the same rows again
+    // (and could silently truncate them at pageSize), so it is gone.
     void fetchJobOptions();
     if (!canWriteConfig) return;
-    void Promise.all([
-      fetch('/api/admin/configs?page=1&pageSize=100'),
-      fetch('/api/admin/company-config'),
-    ]).then(async ([configsRes, companiesRes]) => {
-      const configsData = await configsRes.json();
-      const companiesData = await companiesRes.json();
-      if (configsRes.ok) setConfigs(configsData.configs || {});
-      if (companiesRes.ok) setCompanies(companiesData.companies || []);
-    }).catch((error) => console.error('Failed to fetch job form catalogs:', error));
+    void fetch('/api/admin/company-config')
+      .then(async (response) => {
+        const data = await response.json();
+        if (response.ok) setCompanies(data.companies || []);
+      })
+      .catch((error) => console.error('Failed to fetch job form catalogs:', error));
   }, [canWriteConfig]);
 
   const handleCreateJob = async () => {

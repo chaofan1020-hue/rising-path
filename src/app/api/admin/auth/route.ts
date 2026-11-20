@@ -1,27 +1,35 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { getAuthContext } from '@/lib/auth-server';
 import {
-  getAdminSessionRole,
-  hasValidAdminSession,
   isAdminRole,
   isSharedAdminPasswordAllowed,
   issueAdminSession,
-  resolveAdminSession,
+  parseAdminSession,
+  resolveAdminSessionFromPayload,
 } from '@/lib/admin-auth';
 import { getSupabaseClient } from '@/storage/database/supabase-client';
 import { recordAdminAuditEvent, recordAdminAuditFailure } from '@/lib/admin-audit';
 import { getEffectiveAdminPermissions } from '@/lib/admin-permissions';
 
 export async function GET(request: NextRequest) {
-  const authenticated = await hasValidAdminSession(request);
-  const session = authenticated ? await resolveAdminSession(request) : null;
-  const role = authenticated ? await getAdminSessionRole(request) : null;
+  // Resolve the session once. This handler used to call hasValidAdminSession,
+  // resolveAdminSession and getAdminSessionRole, each of which re-ran the same
+  // `admin_sessions` lookup — three round trips to answer one question, before
+  // the admin UI could paint anything.
+  const session = await resolveAdminSessionFromPayload(await parseAdminSession(request));
+  const role = session?.role ?? null;
+
+  const [permissions, passwordLoginAllowed] = await Promise.all([
+    role ? getEffectiveAdminPermissions(role) : [],
+    isSharedAdminPasswordAllowed(),
+  ]);
+
   return NextResponse.json({
-    authenticated,
+    authenticated: Boolean(session),
     role,
     adminUserId: session?.adminUserId || null,
-    permissions: role ? await getEffectiveAdminPermissions(role) : [],
-    passwordLoginAllowed: await isSharedAdminPasswordAllowed(),
+    permissions,
+    passwordLoginAllowed,
   });
 }
 

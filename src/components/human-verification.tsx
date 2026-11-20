@@ -107,13 +107,22 @@ export function HumanVerification({
   onEnabled,
   resetSignal = 0,
   language,
+  enabledHint,
 }: {
   onToken: (token: string | null) => void;
   onEnabled?: (enabled: boolean) => void;
   resetSignal?: number;
   language?: string;
+  /**
+   * Server-rendered pages already know this flag. Passing it skips the
+   * `/api/auth/config` round trip that otherwise delays the widget from
+   * appearing (and, on a distant edge, delays the whole form).
+   */
+  enabledHint?: boolean;
 }) {
-  const [enabled, setEnabled] = useState<boolean | null>(null);
+  const [enabled, setEnabled] = useState<boolean | null>(
+    typeof enabledHint === 'boolean' ? enabledHint : null,
+  );
   const [error, setError] = useState('');
   const [reloadKey, setReloadKey] = useState(0);
   const onEnabledRef = useRef(onEnabled);
@@ -130,6 +139,12 @@ export function HumanVerification({
   }, [onEnabled, onToken]);
 
   useEffect(() => {
+    if (typeof enabledHint === 'boolean') {
+      onEnabledRef.current?.(enabledHint);
+      if (!enabledHint) onTokenRef.current(null);
+      return undefined;
+    }
+
     let cancelled = false;
     setError('');
     void fetch('/api/auth/config', { cache: 'no-store' })
@@ -151,7 +166,7 @@ export function HumanVerification({
     return () => {
       cancelled = true;
     };
-  }, [reloadKey]);
+  }, [enabledHint, reloadKey]);
 
   if (error) {
     return (

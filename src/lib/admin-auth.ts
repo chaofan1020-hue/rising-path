@@ -54,8 +54,16 @@ export async function getAdminSessionRole(request: Request): Promise<AdminRole> 
     : 'legacy_super_admin';
 }
 
-export async function resolveAdminSession(request: Request): Promise<AdminSessionPayload | null> {
-  const payload = await parseAdminSession(request);
+/**
+ * Second half of session resolution: verify that a cryptographically valid
+ * token still maps to a live, non-revoked admin session.
+ *
+ * Split out so one request can parse the cookie once and reuse the result,
+ * instead of hitting `admin_sessions` three times per call site.
+ */
+export async function resolveAdminSessionFromPayload(
+  payload: AdminSessionPayload | null,
+): Promise<AdminSessionPayload | null> {
   if (!payload) return null;
 
   if (!payload.sessionId || !payload.adminUserId) {
@@ -83,6 +91,17 @@ export async function resolveAdminSession(request: Request): Promise<AdminSessio
     console.error('[Admin Auth] session lookup failed:', error);
     return null;
   }
+}
+
+export async function resolveAdminSession(request: Request): Promise<AdminSessionPayload | null> {
+  return resolveAdminSessionFromPayload(await parseAdminSession(request));
+}
+
+/** Same check for server components, which already hold the cookie value. */
+export async function resolveAdminSessionToken(
+  token: string | null,
+): Promise<AdminSessionPayload | null> {
+  return resolveAdminSessionFromPayload(await verifyAdminSessionToken(token));
 }
 
 export async function issueAdminSession(options: {

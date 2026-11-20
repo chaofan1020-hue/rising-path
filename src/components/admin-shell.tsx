@@ -3,7 +3,7 @@
 import Link from 'next/link';
 import { usePathname, useSearchParams } from 'next/navigation';
 import { ExternalLink, LogOut, Menu, ShieldCheck, X } from 'lucide-react';
-import { createContext, Suspense, useContext, useEffect, useMemo, useState } from 'react';
+import { createContext, Suspense, useContext, useMemo, useState } from 'react';
 import { Button } from '@/components/ui/button';
 import { adminNavigation, isAdminNavActive } from '@/lib/admin-nav';
 import { type AdminPermission } from '@/lib/admin-permission-constants';
@@ -33,59 +33,47 @@ function roleLabel(role: string | null): string {
   return '管理员';
 }
 
-export function AdminShell({ children }: { children: React.ReactNode }) {
+export function AdminShell({
+  role,
+  permissions,
+  children,
+}: {
+  role: string | null;
+  permissions: AdminPermission[];
+  children: React.ReactNode;
+}) {
   return (
     <Suspense fallback={<div className="min-h-screen bg-zinc-50 dark:bg-zinc-950" />}>
-      <AdminShellInner>{children}</AdminShellInner>
+      <AdminShellInner role={role} permissions={permissions}>{children}</AdminShellInner>
     </Suspense>
   );
 }
 
-function AdminShellInner({ children }: { children: React.ReactNode }) {
+function AdminShellInner({
+  role,
+  permissions: permissionKeys,
+  children,
+}: {
+  role: string | null;
+  permissions: AdminPermission[];
+  children: React.ReactNode;
+}) {
   const pathname = usePathname();
   const searchParams = useSearchParams();
   const isLogin = pathname === '/admin/login';
   const [mobileOpen, setMobileOpen] = useState(false);
-  const [permissionLoading, setPermissionLoading] = useState(true);
-  const [role, setRole] = useState<string | null>(null);
-  const [permissionKeys, setPermissionKeys] = useState<AdminPermission[]>([]);
-
-  useEffect(() => {
-    if (isLogin) {
-      setPermissionLoading(false);
-      return;
-    }
-    let cancelled = false;
-    void fetch('/api/admin/auth', { cache: 'no-store' })
-      .then((response) => response.json())
-      .then((data) => {
-        if (cancelled) return;
-        setRole(typeof data.role === 'string' ? data.role : null);
-        setPermissionKeys(Array.isArray(data.permissions) ? data.permissions : []);
-      })
-      .catch(() => {
-        if (!cancelled) {
-          setRole(null);
-          setPermissionKeys([]);
-        }
-      })
-      .finally(() => {
-        if (!cancelled) setPermissionLoading(false);
-      });
-    return () => { cancelled = true; };
-  }, [isLogin]);
 
   const permissions = useMemo(() => new Set(permissionKeys), [permissionKeys]);
   const permissionContext = useMemo<AdminPermissionContextValue>(() => ({
     role,
     permissions,
-    loading: permissionLoading,
+    // Permissions arrive with the server-rendered HTML, so pages never need to
+    // wait for a second round trip before showing their data.
+    loading: false,
     hasPermission: (permission) => permissions.has(permission),
-  }), [permissionLoading, permissions, role]);
+  }), [permissions, role]);
 
-  const visibleItems = permissionLoading
-    ? []
-    : adminNavigation.filter((item) => permissions.has(item.permission));
+  const visibleItems = adminNavigation.filter((item) => permissions.has(item.permission));
 
   const signOut = async () => {
     await fetch('/api/admin/password', { method: 'DELETE' });

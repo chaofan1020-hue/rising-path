@@ -7,6 +7,13 @@ import { isLocalDevAuthEnabled } from '@/lib/dev-auth';
  * 暴露 Supabase 公共配置给浏览器端初始化客户端。
  * anon key 是公开凭证，允许前端调用 Auth / 公开表等接口。
  */
+const PUBLIC_CONFIG_CACHE = 'public, max-age=300, s-maxage=300, stale-while-revalidate=600';
+
+/**
+ * Values here are deployment constants (Supabase URL + publishable anon key,
+ * captcha + dev-auth flags), never user data. Letting the edge serve them keeps
+ * the login page's captcha from waiting on a cross-region origin round trip.
+ */
 export async function GET() {
   const devAuth = isLocalDevAuthEnabled();
   try {
@@ -18,13 +25,13 @@ export async function GET() {
         captchaEnabled: isCaptchaEnabled(),
         devAuth,
       },
-      { headers: { 'Cache-Control': 'private, max-age=60' } },
+      { headers: { 'Cache-Control': PUBLIC_CONFIG_CACHE } },
     );
   } catch (error) {
     if (devAuth) {
       return NextResponse.json(
         { url: '', anonKey: '', captchaEnabled: false, devAuth: true },
-        { headers: { 'Cache-Control': 'private, max-age=60' } },
+        { headers: { 'Cache-Control': PUBLIC_CONFIG_CACHE } },
       );
     }
     console.error('[Auth] Public Supabase config unavailable:', error);
