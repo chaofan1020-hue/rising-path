@@ -342,7 +342,8 @@ function BrandOptions({
   options,
   selected,
   search,
-  loading,
+  status,
+  onRetry,
   onSearchChange,
   onChange,
   t,
@@ -350,7 +351,8 @@ function BrandOptions({
   options: CompanyOption[];
   selected: string[];
   search: string;
-  loading: boolean;
+  status: 'loading' | 'ready' | 'error';
+  onRetry: () => void;
   onSearchChange: (value: string) => void;
   onChange: (values: string[]) => void;
   t: (key: string) => string;
@@ -366,7 +368,7 @@ function BrandOptions({
     !normalizedSearch || option.company_name.toLowerCase().includes(normalizedSearch),
   );
   const selectedOptions = options.filter((option) => selected.includes(option.company_name));
-  const visibleOptions = [...selectedOptions, ...matchingOptions.filter((option) => !selected.includes(option.company_name))].slice(0, 120);
+  const visibleOptions = [...selectedOptions, ...matchingOptions.filter((option) => !selected.includes(option.company_name))];
 
   return (
     <div className="space-y-3">
@@ -379,9 +381,14 @@ function BrandOptions({
           className="h-10 border-zinc-200 pl-9 dark:border-zinc-700"
         />
       </div>
-      {loading ? (
+      {status === 'loading' ? (
         <div className="flex items-center justify-center gap-2 py-8 text-sm text-zinc-400">
           <Loader2 className="h-4 w-4 animate-spin" />{t('jobs.companyLoading')}
+        </div>
+      ) : status === 'error' ? (
+        <div className="flex items-center justify-center gap-2 py-6 text-sm text-zinc-500">
+          {t('jobs.companyLoadFailed')}
+          <Button type="button" variant="outline" size="sm" onClick={onRetry}>{t('jobs.retry')}</Button>
         </div>
       ) : visibleOptions.length === 0 ? (
         <p className="py-6 text-center text-sm text-zinc-400">{t('jobs.companyNoMatch')}</p>
@@ -402,6 +409,7 @@ function BrandOptions({
                 }`}
               >
                 <CompanyLogo
+                  key={JSON.stringify([option.logo_url, option.fallback_logo_url])}
                   company={option.company_name}
                   logoUrl={option.logo_url || undefined}
                   fallbackLogoUrl={option.fallback_logo_url || undefined}
@@ -417,9 +425,6 @@ function BrandOptions({
             );
           })}
         </div>
-      )}
-      {matchingOptions.length > visibleOptions.length && (
-        <p className="text-xs text-zinc-400">{t('jobs.companySearchHint')}</p>
       )}
     </div>
   );
@@ -830,8 +835,8 @@ function JobsContent() {
   const [draftCompanies, setDraftCompanies] = useState<string[]>([]);
   const [brandSearch, setBrandSearch] = useState('');
   const [companyOptions, setCompanyOptions] = useState<CompanyOption[]>([]);
-  const [companyOptionsLoading, setCompanyOptionsLoading] = useState(true);
-  const [companyOptionsLoaded, setCompanyOptionsLoaded] = useState(false);
+  const [companyOptionsStatus, setCompanyOptionsStatus] = useState<'loading' | 'ready' | 'error'>('loading');
+  const companyOptionsRequestRef = useRef<AbortController | null>(null);
   const [applyingJobId, setApplyingJobId] = useState<number | null>(null);
   const [appliedJobIds, setAppliedJobIds] = useState<Set<number>>(new Set());
   const [favoriteJobIds, setFavoriteJobIds] = useState<Set<number>>(new Set());
@@ -1058,29 +1063,54 @@ function JobsContent() {
     };
   }, [fetchJobs]);
 
-  useEffect(() => {
-    if (companyOptionsLoaded) return;
-    let cancelled = false;
-    setCompanyOptionsLoading(true);
-    apiFetch('/api/jobs/companies')
-      .then((response) => response.json())
-      .then((data) => {
-        if (!cancelled) setCompanyOptions(data.companies || []);
-      })
-      .catch((error) => {
+  const refreshCompanyOptions = useCallback(async () => {
+    if (companyOptionsRequestRef.current) return;
+    const request = new AbortController();
+    companyOptionsRequestRef.current = request;
+    setCompanyOptionsStatus((status) => status === 'error' ? 'loading' : status);
+
+    try {
+      const response = await fetch('/api/jobs/companies', { cache: 'no-cache', signal: request.signal });
+      if (!response.ok) throw new Error(`Company options request failed (${response.status})`);
+      const data = await response.json();
+      if (!Array.isArray(data.companies)) throw new Error('Invalid company options response');
+      if (!request.signal.aborted) {
+        setCompanyOptions(data.companies);
+        setCompanyOptionsStatus('ready');
+      }
+    } catch (error) {
+      if (!request.signal.aborted) {
         console.error('Failed to fetch company options:', error);
-        if (!cancelled) setCompanyOptions([]);
-      })
-      .finally(() => {
-        if (!cancelled) {
-          setCompanyOptionsLoading(false);
-          setCompanyOptionsLoaded(true);
-        }
-      });
+        setCompanyOptionsStatus((status) => status === 'ready' ? status : 'error');
+      }
+    } finally {
+      if (companyOptionsRequestRef.current === request) companyOptionsRequestRef.current = null;
+    }
+  }, []);
+
+  useEffect(() => {
+    void refreshCompanyOptions();
     return () => {
-      cancelled = true;
+      companyOptionsRequestRef.current?.abort();
+      companyOptionsRequestRef.current = null;
     };
-  }, [companyOptionsLoaded]);
+  }, [refreshCompanyOptions]);
+
+  useEffect(() => {
+    if (!filterOpen) return;
+    const refresh = () => {
+      if (document.visibilityState === 'visible') void refreshCompanyOptions();
+    };
+    refresh();
+    const timer = window.setInterval(refresh, 30_000);
+    window.addEventListener('focus', refresh);
+    document.addEventListener('visibilitychange', refresh);
+    return () => {
+      window.clearInterval(timer);
+      window.removeEventListener('focus', refresh);
+      document.removeEventListener('visibilitychange', refresh);
+    };
+  }, [filterOpen, refreshCompanyOptions]);
 
   const handleFavorite = async (jobId: number) => {
     const isFavorite = favoriteJobIds.has(jobId);
@@ -1224,7 +1254,8 @@ function JobsContent() {
                           options={companyOptions}
                           selected={draftCompanies}
                           search={brandSearch}
-                          loading={companyOptionsLoading}
+                          status={companyOptionsStatus}
+                          onRetry={refreshCompanyOptions}
                           onSearchChange={setBrandSearch}
                           onChange={setDraftCompanies}
                           t={t}

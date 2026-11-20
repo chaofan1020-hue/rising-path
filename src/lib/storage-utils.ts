@@ -13,8 +13,8 @@ export async function uploadFile(file: File | Blob, fileName: string): Promise<s
       .from('risingpath-assets')
       .upload(fileName, buffer, {
         contentType: file.type || 'image/png',
-        cacheControl: '3600',
-        upsert: true,
+        cacheControl: '31536000',
+        upsert: false,
       });
     
     if (error) {

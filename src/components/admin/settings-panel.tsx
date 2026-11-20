@@ -99,13 +99,16 @@ export function AdminSettingsPanel() {
   const [companyLogos, setCompanyLogos] = useState<CompanyLogoCatalogEntry[]>([]);
   const [logoDialogOpen, setLogoDialogOpen] = useState(false);
   const [logoDialogCompanyName, setLogoDialogCompanyName] = useState('');
+  const [logoDialogPreview, setLogoDialogPreview] = useState<{ url: string | null; fallback: string | null }>();
   const [logosLoading, setLogosLoading] = useState(false);
   const [logosError, setLogosError] = useState('');
   const [logoSearch, setLogoSearch] = useState('');
   const [loading, setLoading] = useState(false);
 
-  const openLogoEditor = (companyName = '') => {
+  const openLogoEditor = (companyName = '', configuredUrl?: string) => {
+    const logo = companyLogos.find((item) => item.company_name === companyName);
     setLogoDialogCompanyName(companyName);
+    setLogoDialogPreview({ url: configuredUrl || logo?.logo_url || null, fallback: logo?.fallback_logo_url ?? null });
     setLogoDialogOpen(true);
   };
 
@@ -285,6 +288,8 @@ export function AdminSettingsPanel() {
   const importedLogoCount = companyLogos.filter((logo) => logo.source === 'imported').length;
   const configuredLogoCount = companyLogos.filter((logo) => logo.source === 'configured').length;
   const automaticLogoCount = companyLogos.filter((logo) => logo.source === 'automatic').length;
+  const activeCompanyCount = companyLogos.filter((logo) => logo.job_count > 0).length;
+  const logoOnlyCompanyCount = companyLogos.length - activeCompanyCount;
 
   useEffect(() => {
     void fetchData();
@@ -540,7 +545,7 @@ export function AdminSettingsPanel() {
                   <div className="flex flex-col gap-3 md:flex-row md:items-center md:justify-between">
                     <div>
                       <CardTitle className="text-base md:text-lg">企业图标库</CardTitle>
-                      <CardDescription className="text-xs md:text-sm">查看当前岗位使用的图标，并上传自定义图标覆盖自动图标</CardDescription>
+                      <CardDescription className="text-xs md:text-sm">在招企业与公开岗位筛选使用同一口径；无公开在招岗位的图标记录仍可维护。</CardDescription>
                     </div>
                     <div className="flex items-center gap-2">
                       <Button size="sm" variant="outline" className="h-8 text-xs md:text-sm" onClick={() => void fetchLogos()} disabled={logosLoading}>
@@ -563,7 +568,8 @@ export function AdminSettingsPanel() {
                       className="h-9 w-full sm:max-w-xs"
                     />
                     <div className="flex flex-wrap items-center gap-2 text-xs text-muted-foreground">
-                      <Badge variant="secondary">共 {companyLogos.length} 家</Badge>
+                      <Badge variant="secondary">在招企业 {activeCompanyCount} 家</Badge>
+                      {logoOnlyCompanyCount > 0 && <Badge variant="outline">仅图标记录 {logoOnlyCompanyCount} 家</Badge>}
                       <Badge variant="outline">自定义 {uploadedLogoCount}</Badge>
                       <Badge variant="outline">已导入 {importedLogoCount}</Badge>
                       <Badge variant="outline">企业配置 {configuredLogoCount}</Badge>
@@ -610,7 +616,7 @@ export function AdminSettingsPanel() {
                               <Badge variant="outline" className="h-5 px-1.5 text-[10px]">
                                 {logo.source === 'uploaded' ? '自定义' : logo.source === 'imported' ? '已导入' : logo.source === 'configured' ? '企业配置' : '自动'}
                               </Badge>
-                              {logo.job_count > 0 && <span className="text-[10px] text-muted-foreground">{logo.job_count} 岗位</span>}
+                              <span className="text-[10px] text-muted-foreground">{logo.job_count > 0 ? `${logo.job_count} 个公开岗位` : '暂无公开岗位'}</span>
                             </div>
                           </div>
                           {logo.source === 'uploaded' && (
@@ -800,7 +806,7 @@ export function AdminSettingsPanel() {
                     type="button"
                     variant="ghost"
                     size="sm"
-                    onClick={() => openLogoEditor(companyForm.company_name)}
+                    onClick={() => openLogoEditor(companyForm.company_name, companyForm.logo_url)}
                     className="px-2"
                   >
                     <Upload className="h-4 w-4" />
@@ -809,7 +815,7 @@ export function AdminSettingsPanel() {
               </div>
               {companyForm.logo_url && (
                 <div className="mt-2 flex items-center gap-2">
-                  <img src={companyForm.logo_url} alt="" className="h-8 w-8 rounded border bg-white" />
+                  <img src={companyForm.logo_url} alt="" className="h-8 w-8 shrink-0 rounded border bg-white object-contain" />
                   <Button
                     type="button"
                     variant="ghost"
@@ -836,6 +842,8 @@ export function AdminSettingsPanel() {
       <LogoUploadDialog
         open={logoDialogOpen}
         initialCompanyName={logoDialogCompanyName}
+        currentLogoUrl={logoDialogPreview?.url}
+        fallbackLogoUrl={logoDialogPreview?.fallback}
         onOpenChange={(open) => {
           setLogoDialogOpen(open);
           if (!open) setLogoDialogCompanyName('');

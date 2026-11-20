@@ -1,3 +1,4 @@
+import { randomUUID } from 'node:crypto';
 import { NextRequest, NextResponse } from 'next/server';
 import { getSupabaseClient } from '@/storage/database/supabase-client';
 import { loadStorageSkill } from '@/lib/storage-utils';
@@ -26,40 +27,23 @@ async function loadCompanyLogoCatalog(): Promise<CompanyLogoCatalogRow[]> {
   if (catalogCache && catalogCache.expiresAt > Date.now()) return catalogCache.logos;
 
   const supabase = getSupabaseClient();
-  const [{ data: uploadedLogos, error: uploadedError }, { data: configuredCompanies, error: configuredError }] = await Promise.all([
+  const [{ data: uploadedLogos, error: uploadedError }, { data: configuredCompanies, error: configuredError }, activeCompanies] = await Promise.all([
     supabase.from('company_logos').select('id, company_name, logo_url, updated_at').order('company_name'),
     supabase.from('company_config').select('id, company_name, logo_url, updated_at').order('company_name'),
+    supabase.rpc('list_active_company_options'),
   ]);
 
   if (uploadedError) throw new Error(`读取已上传 logo 失败: ${uploadedError.message}`);
   if (configuredError) throw new Error(`读取企业配置失败: ${configuredError.message}`);
 
-  const companyJobs = new Map<string, { jobUrl: string | null; jobCount: number }>();
-  const pageSize = 1000;
-  for (let offset = 0; offset < 50_000; offset += pageSize) {
-    const { data: jobs, error } = await supabase
-      .from('jobs')
-      .select('company, job_url')
-      .eq('is_active', true)
-      .range(offset, offset + pageSize - 1);
+  if (activeCompanies.error) throw new Error(`读取岗位公司失败: ${activeCompanies.error.message}`);
 
-    if (error) throw new Error(`读取岗位公司失败: ${error.message}`);
-    for (const job of jobs || []) {
-      const companyName = typeof job.company === 'string' ? job.company.trim() : '';
-      if (!companyName) continue;
-      const current = companyJobs.get(companyName);
-      if (current) {
-        current.jobCount += 1;
-        if (!current.jobUrl && typeof job.job_url === 'string') current.jobUrl = job.job_url;
-      } else {
-        companyJobs.set(companyName, {
-          jobUrl: typeof job.job_url === 'string' ? job.job_url : null,
-          jobCount: 1,
-        });
-      }
-    }
-    if (!jobs || jobs.length < pageSize) break;
-  }
+  const companyJobs = new Map<string, { jobUrl: string | null; jobCount: number }>(
+    (activeCompanies.data ?? []).map((job: { company_name: string; job_url: string | null; job_count: number }) => [
+      job.company_name.trim(),
+      { jobUrl: job.job_url, jobCount: Number(job.job_count) },
+    ] as const),
+  );
 
   const uploadedByCompany = new Map((uploadedLogos || []).map((logo) => [logo.company_name, logo]));
   const configuredByCompany = new Map((configuredCompanies || []).map((company) => [company.company_name, company]));
@@ -145,7 +129,7 @@ export async function POST(request: NextRequest) {
     
     // 上传到存储
     const storageUtils = await loadStorageSkill();
-    const fileName = `logos/${companyName.toLowerCase().replace(/\s+/g, '_')}_${Date.now()}.${logoFile.name.split('.').pop()}`;
+    const fileName = `logos/${companyName.toLowerCase().replace(/\s+/g, '_')}_${randomUUID()}.${logoFile.name.split('.').pop()}`;
     const logoUrl = await storageUtils.uploadFile(logoFile, fileName);
     
     if (!logoUrl) {

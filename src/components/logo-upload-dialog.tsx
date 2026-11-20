@@ -1,9 +1,10 @@
 "use client";
 
 import { useState, useRef, useCallback, useEffect } from "react";
-import ReactCrop, { Crop, centerCrop, makeAspectCrop } from "react-image-crop";
+import ReactCrop, { type PercentCrop } from "react-image-crop";
 import "react-image-crop/dist/ReactCrop.css";
-import { Upload, X, Loader2 } from "lucide-react";
+import { ImagePlus, Loader2 } from "lucide-react";
+import { CompanyLogo } from "@/components/company-logo";
 import { Button } from "@/components/ui/button";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription, DialogFooter } from "@/components/ui/dialog";
 import { Input } from "@/components/ui/input";
@@ -14,42 +15,36 @@ interface LogoUploadDialogProps {
   onOpenChange: (open: boolean) => void;
   onSuccess: () => void;
   initialCompanyName?: string;
+  currentLogoUrl?: string | null;
+  fallbackLogoUrl?: string | null;
 }
 
-function centerAspectCrop(mediaWidth: number, mediaHeight: number, aspect: number) {
-  return centerCrop(
-    makeAspectCrop(
-      {
-        unit: "%",
-        width: 90,
-      },
-      aspect,
-      mediaWidth,
-      mediaHeight
-    ),
-    mediaWidth,
-    mediaHeight
-  );
-}
+const fullImageCrop: PercentCrop = { unit: "%", x: 0, y: 0, width: 100, height: 100 };
+const supportedFileTypes = "image/jpeg,image/png,image/gif,image/webp,image/svg+xml";
 
-export function LogoUploadDialog({ open, onOpenChange, onSuccess, initialCompanyName = "" }: LogoUploadDialogProps) {
-  const [companyName, setCompanyName] = useState("");
-  const [src, setSrc] = useState<string | null>(null);
-  const [crop, setCrop] = useState<Crop>();
+export function LogoUploadDialog({ open, onOpenChange, onSuccess, initialCompanyName = "", currentLogoUrl, fallbackLogoUrl }: LogoUploadDialogProps) {
+  const [newCompanyName, setNewCompanyName] = useState("");
+  const [selection, setSelection] = useState<{ url: string; name: string } | null>(null);
+  const [crop, setCrop] = useState<PercentCrop>();
   const [uploading, setUploading] = useState(false);
+  const [error, setError] = useState("");
   const imgRef = useRef<HTMLImageElement>(null);
+  const inputRef = useRef<HTMLInputElement>(null);
+  const companyName = initialCompanyName || newCompanyName.trim();
 
   useEffect(() => {
-    if (open) setCompanyName(initialCompanyName);
-  }, [open, initialCompanyName]);
+    if (!selection) return;
+    return () => URL.revokeObjectURL(selection.url);
+  }, [selection]);
 
   // 监听 dialog 关闭，重置状态
   const handleOpenChange = (isOpen: boolean) => {
+    if (uploading) return;
     if (!isOpen) {
-      setSrc(null);
-      setCompanyName("");
+      setSelection(null);
+      setNewCompanyName("");
       setCrop(undefined);
-      setUploading(false);
+      setError("");
     }
     onOpenChange(isOpen);
   };
@@ -57,29 +52,18 @@ export function LogoUploadDialog({ open, onOpenChange, onSuccess, initialCompany
   const onSelectFile = (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
     if (!file) return;
-
-    const reader = new FileReader();
-    reader.onload = () => {
-      setSrc(reader.result as string);
-      setCrop(undefined);
-    };
-    reader.readAsDataURL(file);
+    e.target.value = "";
+    setError("");
+    setCrop(undefined);
+    setSelection({ url: URL.createObjectURL(file), name: file.name });
   };
 
-  const onImageLoad = useCallback((e: React.SyntheticEvent<HTMLImageElement>) => {
-    const { width, height } = e.currentTarget;
-    // 初始化为整个图片区域的 90%
-    setCrop({
-      unit: "%",
-      x: 5,
-      y: 5,
-      width: 90,
-      height: 90,
-    });
+  const onImageLoad = useCallback(() => {
+    setCrop(fullImageCrop);
   }, []);
 
   const getCroppedImage = async (): Promise<Blob | null> => {
-    if (!imgRef.current || !crop || !imgRef.current.src) return null;
+    if (!imgRef.current || !crop?.width || !crop.height || !imgRef.current.src) return null;
 
     const image = imgRef.current;
     const outputSize = 200; // 最终输出 200x200
@@ -121,26 +105,15 @@ export function LogoUploadDialog({ open, onOpenChange, onSuccess, initialCompany
   };
 
   const handleUpload = async () => {
-    if (!companyName.trim()) {
-      alert("请填写公司名称");
-      return;
-    }
-    if (!src || !crop) {
-      alert("请先选择图片");
-      return;
-    }
-
+    if (uploading || !companyName || !crop?.width || !crop.height) return;
     setUploading(true);
+    setError("");
     try {
       const blob = await getCroppedImage();
-      if (!blob) {
-        alert("裁剪失败，请重试");
-        setUploading(false);
-        return;
-      }
+      if (!blob) throw new Error("无法生成图标，请重新选择图片。");
 
       const formData = new FormData();
-      formData.append("company_name", companyName.trim());
+      formData.append("company_name", companyName);
       formData.append("logo", blob, `${companyName.toLowerCase().replace(/\s+/g, "_")}.png`);
 
       const response = await fetch("/api/admin/company-logos", {
@@ -149,117 +122,103 @@ export function LogoUploadDialog({ open, onOpenChange, onSuccess, initialCompany
       });
 
       const data = await response.json();
-      if (response.ok && data.success) {
-        setUploading(false);
-        handleClose();
-        onSuccess();
-      } else {
-        alert(data.error || "上传失败");
-        setUploading(false);
-      }
+      if (!response.ok || !data.success) throw new Error(data.error || "保存失败，请重试。");
+      setSelection(null);
+      setCrop(undefined);
+      setNewCompanyName("");
+      onOpenChange(false);
+      onSuccess();
     } catch (error) {
-      console.error("Upload error:", error);
-      alert("上传失败，请重试");
+      setError(error instanceof Error ? error.message : "保存失败，请重试。");
+    } finally {
       setUploading(false);
     }
   };
 
-  const handleClose = () => {
-    handleOpenChange(false);
-  };
-
-  const handleReset = () => {
-    setSrc(null);
-    setCrop(undefined);
-  };
-
   return (
     <Dialog open={open} onOpenChange={handleOpenChange}>
-      <DialogContent className="sm:max-w-md max-h-[90vh] overflow-y-auto">
-        <DialogHeader>
-          <DialogTitle>{initialCompanyName ? `替换 ${initialCompanyName} 的 Logo` : "上传企业 Logo"}</DialogTitle>
-        <DialogDescription>支持 JPG、PNG、GIF、WebP、SVG 格式，裁剪为 1:1 正方形</DialogDescription>
+      <DialogContent showCloseButton={!uploading} className="max-h-[calc(100dvh-1rem)] grid-cols-[minmax(0,1fr)] grid-rows-[auto_minmax(0,1fr)_auto] gap-0 overflow-hidden p-0 sm:max-w-[28rem]">
+        <DialogHeader className="gap-1.5 px-5 pt-5 pb-4 pr-12 text-left">
+          <DialogTitle className="leading-6">{initialCompanyName ? "编辑企业图标" : "添加企业图标"}</DialogTitle>
+          <DialogDescription>{initialCompanyName ? "选择新图片后，保存即可替换当前图标。" : "填写企业名称，再选择一张图片作为图标。"}</DialogDescription>
         </DialogHeader>
 
-        <div className="space-y-4 py-4">
-          {/* 步骤1: 填写信息 */}
-          <div className="space-y-3">
-            <div>
-              <Label htmlFor="company">公司名称</Label>
-              <Input
-                id="company"
-                value={companyName}
-                onChange={(e) => setCompanyName(e.target.value)}
-                placeholder="例如：Stripe"
-                disabled={Boolean(initialCompanyName)}
-                className="mt-1"
-              />
-            </div>
-            <div>
-              <Label htmlFor="logo-file">选择 Logo 图片</Label>
-              <Input
-                id="logo-file"
-                type="file"
-                accept="image/jpeg,image/png,image/gif,image/webp,image/svg+xml"
-                onChange={onSelectFile}
-                className="mt-1"
-              />
-            </div>
-          </div>
-
-          {/* 步骤2: 裁剪预览 */}
-          {src && (
-            <div className="space-y-3">
-              <div className="flex items-center justify-between">
-                <span className="text-sm font-medium">裁剪区域（可拖拽调整）</span>
-                <Button variant="ghost" size="sm" onClick={handleReset}>
-                  重新选择
-                </Button>
+        <div className="min-h-0 min-w-0 space-y-3 overflow-y-auto px-5 pb-4">
+          {initialCompanyName ? (
+            <div className="flex min-w-0 items-center gap-3 rounded-lg border px-3 py-2.5">
+              <CompanyLogo company={initialCompanyName} logoUrl={currentLogoUrl} fallbackLogoUrl={fallbackLogoUrl} size="sm" />
+              <div className="min-w-0">
+                <p className="wrap-anywhere text-sm font-medium">{initialCompanyName}</p>
+                <p className="text-xs text-muted-foreground">当前图标</p>
               </div>
-              
-              <div className="border rounded-lg overflow-hidden bg-muted/50 p-2">
+            </div>
+          ) : (
+            <div className="space-y-1.5">
+              <Label htmlFor="logo-company-name">企业名称</Label>
+              <Input
+                id="logo-company-name"
+                value={newCompanyName}
+                onChange={(event) => setNewCompanyName(event.target.value)}
+                placeholder="例如：AeroVironment"
+                disabled={uploading}
+              />
+            </div>
+          )}
+
+          <input ref={inputRef} type="file" accept={supportedFileTypes} onChange={onSelectFile} hidden />
+          {selection ? (
+            <div className="space-y-2.5">
+              <div className="flex min-w-0 items-center justify-between gap-2">
+                <div className="min-w-0">
+                  <p className="text-sm font-medium">新图标</p>
+                  <p className="truncate text-xs text-muted-foreground" title={selection.name}>{selection.name}</p>
+                </div>
+                <Button type="button" variant="outline" size="sm" onClick={() => inputRef.current?.click()} disabled={uploading}>更换图片</Button>
+              </div>
+              <div className="flex justify-center overflow-hidden rounded-lg border bg-muted/40 p-2.5">
                 <ReactCrop
+                  className="min-w-0 max-w-full"
                   crop={crop}
                   onChange={(_, percentCrop) => setCrop(percentCrop)}
+                  disabled={uploading}
                   keepSelection
                 >
                   <img
                     ref={imgRef}
-                    src={src}
-                    alt="Logo"
+                    src={selection.url}
+                    alt="新图标预览"
                     onLoad={onImageLoad}
-                    className="max-h-[250px] w-auto mx-auto"
+                    onError={() => {
+                      setSelection(null);
+                      setCrop(undefined);
+                      setError("无法读取这张图片，请重新选择。");
+                    }}
+                    className="h-auto max-h-52 w-auto max-w-full"
                   />
                 </ReactCrop>
               </div>
-              
-              <p className="text-xs text-muted-foreground text-center">
-                拖拽调整选择区域，选中内容会自动缩放填充为正方形（留白补齐）
-              </p>
+              <div className="flex flex-wrap items-center justify-between gap-x-2 gap-y-1">
+                <p className="text-xs text-muted-foreground">默认保留整张图片，可拖动边框裁剪。</p>
+                <button type="button" onClick={() => setCrop(fullImageCrop)} disabled={uploading || !crop || crop === fullImageCrop} className="text-xs font-medium text-primary hover:underline disabled:hidden">恢复整图</button>
+              </div>
             </div>
+          ) : (
+            <button type="button" onClick={() => inputRef.current?.click()} className="flex w-full flex-col items-center gap-1.5 rounded-lg border border-dashed bg-muted/25 px-3 py-5 text-center transition-colors hover:bg-muted/60 focus-visible:outline-2 focus-visible:outline-ring">
+              <ImagePlus className="mb-0.5 size-5 text-muted-foreground" aria-hidden="true" />
+              <span className="text-sm font-medium">选择图片</span>
+              <span className="text-xs text-muted-foreground">JPG、PNG、GIF、WebP、SVG</span>
+            </button>
           )}
+          {error && <p role="alert" className="text-sm text-destructive">{error}</p>}
         </div>
 
-        <DialogFooter className="flex-row gap-2 sm:gap-2">
-          <Button variant="outline" onClick={handleClose}>
+        <DialogFooter className="flex-row items-center justify-end border-t bg-muted/20 px-5 py-3">
+          <Button type="button" variant="outline" onClick={() => handleOpenChange(false)} disabled={uploading}>
             取消
           </Button>
-          <Button 
-            onClick={handleUpload} 
-            disabled={uploading || !companyName.trim() || !src}
-            className="w-full"
-          >
-            {uploading ? (
-              <>
-                <Loader2 className="h-4 w-4 animate-spin" />
-                <span className="ml-2">上传中...</span>
-              </>
-            ) : (
-              <>
-                <Upload className="h-4 w-4" />
-                <span className="ml-2">上传 Logo</span>
-              </>
-            )}
+          <Button type="button" onClick={handleUpload} disabled={uploading || !companyName || !crop?.width || !crop.height}>
+            {uploading && <Loader2 className="animate-spin" aria-hidden="true" />}
+            {uploading ? "保存中…" : "保存图标"}
           </Button>
         </DialogFooter>
       </DialogContent>
