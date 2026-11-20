@@ -139,38 +139,36 @@ Cache-Control: public, max-age=300, s-maxage=300, stale-while-revalidate=600
 
 ## 6. 上线步骤
 
-本次改动已提交并推送：
+### 6.1 生产方式（与假设不同，请注意）
 
-- 提交：`0f7d47b perf(admin): remove serial auth waterfall and server-render dashboard`
-- 分支：`origin/codex/ui-overlay-from-ui-change`
-- 只包含本次 17 个文件；仓库里其它未提交改动没有被带上。
+`/opt/liorvix` **不是 git 仓库**（没有 `.git`），生产源码是一棵上传的源码树。
+所以本项目的部署方式不是 `git pull`，而是：
 
-### 6.1 先确认生产跟踪的是哪个分支
+1. 上传改动文件；
+2. 在服务器上 `pnpm run build`；
+3. `sudo systemctl restart liorvix.service`。
 
-```bash
-ssh -i 正式发布服务器密钥.pem ubuntu@43.172.117.125
-cd /opt/liorvix                 # 以实际路径为准
-git rev-parse --abbrev-ref HEAD # 生产分支
-git rev-parse --short HEAD      # 回滚点，记下来
-git status --short              # 必须干净；有改动先停下，不要硬覆盖
-```
+仓库侧只需要保留源码版本（本次为提交 `0f7d47b`），生产并不消费 git。
 
-- **如果生产就在 `codex/ui-overlay-from-ui-change`**：直接 `git pull --ff-only`。
-- **如果生产在 `main` 或其它分支**：不要 merge 整条分支。只带一个提交过去：
+部署前做过一致性核对：生产上这批文件与仓库 `5949e29` 逐行一致（忽略 CRLF），
+确认没有未纳入版本库的生产改动后，才覆盖上传。
 
-```bash
-git fetch origin
-git cherry-pick 0f7d47b      # 只应用本次改动
-# 若冲突：git cherry-pick --abort 后告知负责人，不要手工硬改
-```
+改动清单：
 
-### 6.2 构建与重启
+- 新增：`src/lib/admin-analytics.ts`、`src/lib/admin-request-context.ts`、`src/components/admin/admin-login-form.tsx`
+- 修改：`src/app/admin/{layout,page,login/page}.tsx`、`src/app/api/admin/{auth,analytics}/route.ts`、
+  `src/app/api/auth/config/route.ts`、`src/components/admin-shell.tsx`、
+  `src/components/admin/{jobs-panel,overview-panel}.tsx`、`src/components/human-verification.tsx`、
+  `src/lib/admin-auth.ts`、`src/server.ts`
+- 删除：`src/components/admin-auth-guard.tsx`
+
+### 6.2 构建与重启（在实际服务器上执行）
 
 ```bash
-pnpm install                    # 本次未新增依赖，可跳过
-pnpm run build                  # next build + dist/server.js；必须构建，只重启不生效
+cd /opt/liorvix
+sudo /usr/bin/pnpm run build          # node 20.20.2 / pnpm 9.0.0；必须构建，只重启不生效
 sudo systemctl restart liorvix.service
-systemctl is-active liorvix.service
+sudo systemctl is-active liorvix.service
 ```
 
 ### 6.3 验收（部署前后有明确对照）
@@ -191,18 +189,59 @@ curl -sS -o /dev/null -w 'admin %{http_code} -> %{redirect_url}\n' https://liorv
 浏览器侧：打开 `/admin/login`，Network 里登录全过程只应出现 **1 条** `/api/admin/auth`（在登录成功之后），
 页面加载阶段不再有它；进入 `/admin` 后不再有 `/api/admin/analytics` 请求，数字直接在 HTML 里。
 
-### 6.4 回滚
+### 6.4 部署结果（2026-11-20 已上线）
+
+| 检查项 | 部署前 | 部署后（实测） |
+| --- | --- | --- |
+| `/admin/login` HTML 含「运营后台登录」 | 0（11.6 KB 空壳） | **1**（15.9 KB，含表单） |
+| `/api/auth/config` 的 `Cache-Control` | `private, max-age=60` | `public, max-age=300, s-maxage=300, …` |
+| 未登录 `/admin` | 307 | 307（不变） |
+| 未登录 `/api/admin/analytics`、`/api/admin/students` | — | **401**（鉴权未放宽） |
+| 服务状态 | active | active，重启后无未捕获异常 |
+
+注意：Cloudflare 默认不缓存 `/api/*`（实测 `cf-cache-status: DYNAMIC`），
+所以该 `s-maxage` 只对浏览器生效，边缘并没有缓存这个响应。
+
+### 6.5 生产实测：统计聚合确实慢
+
+在生产机上直接测量（只读）：
+
+| 测量 | 结果 |
+| --- | --- |
+| `get_admin_analytics('7d')`（应用链路） | 6.4–6.6 s |
+| 同一函数（pg 直连） | 2.49 s（第二轮 4.95 s） |
+| `select count(*) from jobs where is_active` | 1.7–2.3 s |
+| `jobs` 表体积 | 总计 **4,048 MB**，堆仅 390 MB（约 3.6 GB 为 TOAST） |
+| 执行计划 | `Buffers: shared hit=32081 read=18118, temp read=2133 written=711` |
+
+结论：慢在「扫 390 MB 堆 + 磁盘吞吐低 + 采集写入争用」，与网络无关（pg 与 REST 同为 2.5 s）。
+6.4 s 与 2.5 s 的差异来自采集 worker 同时在写库。
+
+已加的缓解：首次取数成功后，缓存模块会在过期前 20 秒自动后台刷新
+（`ADMIN_ANALYTICS_REFRESH=false` 可关闭），所以管理员除进程重启后的第一次外基本不再等待。
+
+### 6.6 建议的下一步（需批准后才动生产库）
+
+1. `VACUUM (ANALYZE) public.jobs;` —— 若可见性映射陈旧，索引扫描会被迫回表；
+2. 覆盖索引 `on jobs (region, direction, created_at) where is_active`，让 `active_jobs` 走 index-only scan；
+3. 若仍慢：由采集 worker 维护一张统计小表，后台直接读汇总，彻底不碰 `jobs`。
+
+### 6.7 回滚
+
+回滚材料：`/opt/liorvix/backups/admin-perf-20261120T063018Z/`
+（被覆盖的 16 个源文件 + 部署前的 `dist/` 与 `.next/`，共 98 MB）
 
 ```bash
 cd /opt/liorvix
-git reset --hard <部署前记录的 commit>
-pnpm run build
+BK=backups/admin-perf-20261120T063018Z
+sudo cp -a $BK/src/. src/
+sudo rm -rf dist .next
+sudo cp -a $BK/dist dist
+sudo cp -a $BK/.next .next
 sudo systemctl restart liorvix.service
 ```
 
-> 若生产是 cherry-pick 过去的，回滚用 `git reset --hard <部署前 commit>` 即可（该提交不在生产分支历史里）。
-
-### 6.5 可选：把采集 worker 拆成独立服务
+### 6.8 可选：把采集 worker 拆成独立服务
 
 ```ini
 # /etc/systemd/system/liorvix.service（Web）
@@ -220,16 +259,13 @@ ExecStart=/usr/bin/node /path/to/liorvix/dist/server.js
 
 1. **网络层（收益最大）**：请求现在从阿姆斯特丹绕到加州。后台换美国西部出口或启用 Cloudflare Argo
    （约 $5/月）可把每跳 0.45s 降到约 0.2s，比任何代码改动都值钱。
-2. **实测生产聚合耗时**，再决定是否加索引或做汇总表：
-   ```sql
-   explain (analyze, buffers)
-   select public.get_admin_analytics(now() - interval '7 days', now());
-   ```
-   若瓶颈在范围计数，候选索引是 `resumes(created_at)`、`applications(created_at)`
-   （现有的 `(user_id, created_at)` 复合索引无法支持单独的 `created_at` 范围过滤）。
-   若 `jobs` 扫描是瓶颈，考虑在 worker 里维护一张汇总表。**在没有实测前不要盲加索引。**
+2. **统计聚合的 SQL 层**（已测出结论，见 §6.5）：生产库 `jobs` 堆 390 MB、总 4 GB（TOAST 占 3.6 GB），
+   函数在库内 2.5 s、经应用链路 6.4 s。治本方案见 §6.6，需要批准后才动生产库。
+   已先落地的是“后台自动刷新”，让管理员基本不等待。
 3. **静态资源**：经 brotli 压缩后约 350–400 KB，优先级低；若仍想优化，可从后台路由剥离前台共享的重型依赖。
 4. **`/admin/credits`**：仍会把学员目录的所有分页全拉下来（每页 100 条）。学员数增长后改成服务端关键词搜索。
+5. **登录页多了一次库查询**：服务端要判断「是否允许启动密码」，实测使 HTML 首字节增加约 0.2 s；
+   换来的是省掉客户端两跳（鉴权 + 配置）。若要再省，可给该判断加 60 秒进程内缓存（它只影响按钮是否显示）。
 
 ## 8. 已知取舍
 
