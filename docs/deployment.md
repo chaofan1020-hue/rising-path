@@ -13,6 +13,17 @@ pnpm run deploy:prod -- --rollback <sha>  # 秒级回滚
 pnpm run deploy:prod -- --list            # 看可回滚的快照
 ```
 
+> **本机没装 pnpm 也能部署。** 当前这台开发机的 `pnpm` 不在 PATH 上
+> （`Get-Command pnpm` 返回空），实际验证时用的是等价写法：
+>
+> ```bash
+> node scripts/deploy-production.mjs                  # = pnpm run deploy:prod
+> node scripts/deploy-production.mjs -- --rollback <sha>
+> node scripts/deploy-production.mjs -- --list
+> ```
+>
+> 两种写法调用的是同一个脚本，参数完全相同。部署本身不依赖 pnpm 在这台机器上。
+
 你只需要记住第一条。下面解释为什么这样选，以及怎么一次性改造成这样。
 
 > **2026-11-20 状态：一次性改造已完成。** `/opt/liorvix` 已是 git 工作区，
@@ -244,6 +255,8 @@ PROD_SSH_KEY=D:\liorvix-archive-20261119\secrets\正式发布服务器密钥.pem
 然后：
 
 ```bash
+node scripts/deploy-production.mjs        # 本机没 pnpm 时用这条
+# 或（装了 pnpm 的机器上）
 pnpm run deploy:prod
 ```
 
@@ -289,17 +302,19 @@ REC=$(grep -m1 '\.env\.local$' "$BK"/manifest-*.sha256 | cut -c1-16)
 ## 4. 日常部署
 
 ```bash
+node scripts/deploy-production.mjs        # 本机没 pnpm 时用这条
+# 或（装了 pnpm 的机器上）
 pnpm run deploy:prod
 ```
 
 - 部署当前分支在远端的**最新提交**（会先 `git fetch`）；
-- 耗时：构建约 1–3 分钟，其余几秒；
+- 耗时：构建约 1–3 分钟，其余几秒（命中 Turbopack 缓存时实测 18–40 秒）；
 - 输出尾部会有 `OK <旧sha> -> <新sha>` 和回滚命令。
 
 只部署某个特定版本：
 
 ```bash
-pnpm run deploy:prod -- 0f7d47b
+node scripts/deploy-production.mjs -- <sha>
 ```
 
 > 只改文档不需要部署；只改 `.env.local` 也不需要构建，改完
