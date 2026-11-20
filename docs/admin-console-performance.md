@@ -139,18 +139,70 @@ Cache-Control: public, max-age=300, s-maxage=300, stale-while-revalidate=600
 
 ## 6. 上线步骤
 
+本次改动已提交并推送：
+
+- 提交：`0f7d47b perf(admin): remove serial auth waterfall and server-render dashboard`
+- 分支：`origin/codex/ui-overlay-from-ui-change`
+- 只包含本次 17 个文件；仓库里其它未提交改动没有被带上。
+
+### 6.1 先确认生产跟踪的是哪个分支
+
 ```bash
-cd /path/to/liorvix
-git pull
-pnpm install               # 本次未新增依赖，可跳过
-pnpm run build             # next build + dist/server.js
-systemctl restart liorvix.service
+ssh -i 正式发布服务器密钥.pem ubuntu@43.172.117.125
+cd /opt/liorvix                 # 以实际路径为准
+git rev-parse --abbrev-ref HEAD # 生产分支
+git rev-parse --short HEAD      # 回滚点，记下来
+git status --short              # 必须干净；有改动先停下，不要硬覆盖
 ```
 
-验收：打开 `/admin/login`，Network 里登录全过程只应出现 **1 条** `/api/admin/auth`（在登录成功之后）；
-进入 `/admin` 后不再有 `/api/admin/analytics` 请求，数字直接在 HTML 里。
+- **如果生产就在 `codex/ui-overlay-from-ui-change`**：直接 `git pull --ff-only`。
+- **如果生产在 `main` 或其它分支**：不要 merge 整条分支。只带一个提交过去：
 
-### 6.1 可选：把采集 worker 拆成独立服务
+```bash
+git fetch origin
+git cherry-pick 0f7d47b      # 只应用本次改动
+# 若冲突：git cherry-pick --abort 后告知负责人，不要手工硬改
+```
+
+### 6.2 构建与重启
+
+```bash
+pnpm install                    # 本次未新增依赖，可跳过
+pnpm run build                  # next build + dist/server.js；必须构建，只重启不生效
+sudo systemctl restart liorvix.service
+systemctl is-active liorvix.service
+```
+
+### 6.3 验收（部署前后有明确对照）
+
+```bash
+curl -sS -o /dev/null -w 'health %{http_code}\n' https://liorvix.com/api/health
+curl -sS https://liorvix.com/api/auth/config -D - -o /dev/null | grep -i cache-control
+curl -sS https://liorvix.com/admin/login | grep -c '运营后台登录'
+curl -sS -o /dev/null -w 'admin %{http_code} -> %{redirect_url}\n' https://liorvix.com/admin
+```
+
+| 检查项 | 部署前（实测） | 部署后应为 |
+| --- | --- | --- |
+| `/admin/login` HTML 含「运营后台登录」 | `0`（客户端渲染的空壳，11.6 KB） | `1` |
+| `/api/auth/config` 的 `Cache-Control` | `private, max-age=60` | `public, max-age=300, s-maxage=300, …` |
+| 未登录 `/admin` | 307 → `/admin/login` | 不变 |
+
+浏览器侧：打开 `/admin/login`，Network 里登录全过程只应出现 **1 条** `/api/admin/auth`（在登录成功之后），
+页面加载阶段不再有它；进入 `/admin` 后不再有 `/api/admin/analytics` 请求，数字直接在 HTML 里。
+
+### 6.4 回滚
+
+```bash
+cd /opt/liorvix
+git reset --hard <部署前记录的 commit>
+pnpm run build
+sudo systemctl restart liorvix.service
+```
+
+> 若生产是 cherry-pick 过去的，回滚用 `git reset --hard <部署前 commit>` 即可（该提交不在生产分支历史里）。
+
+### 6.5 可选：把采集 worker 拆成独立服务
 
 ```ini
 # /etc/systemd/system/liorvix.service（Web）
