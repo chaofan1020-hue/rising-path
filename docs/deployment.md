@@ -15,6 +15,10 @@ pnpm run deploy:prod -- --list            # 看可回滚的快照
 
 你只需要记住第一条。下面解释为什么这样选，以及怎么一次性改造成这样。
 
+> **2026-11-20 状态：一次性改造已完成。** `/opt/liorvix` 已是 git 工作区，
+> `liorvix-deploy` / `liorvix-rollback` 已安装，本机一条命令、自动验收、秒级回滚均已实测通过
+> （记录见 §3.4）。第 3 节保留下来，用于**换服务器、灾难恢复、或再次遇到非 git 目录**时照做。
+
 ---
 
 ## 1. 用哪种方式更好
@@ -75,11 +79,13 @@ pnpm run deploy:prod -- --list            # 看可回滚的快照
 ├── .env.local                    # 不进 git，升级不受影响（已验证被 ignore）
 ├── node_modules/                 # 不进 git
 ├── dist/  .next/                 # 构建产物，不进 git
+├── backups/                      # 历史手工备份，不进 git
 └── releases/
     ├── <sha-1>/                  # 最近 3 份构建快照（秒级回滚用）
     ├── <sha-2>/
     └── <sha-3>/
 
+/opt/liorvix-deploy-backups/      # 一次性改造前的整树备份 + 指纹清单
 /usr/local/bin/liorvix-deploy     # 来自 scripts/production/deploy.sh
 /usr/local/bin/liorvix-rollback   # 来自 scripts/production/rollback.sh
 /var/log/liorvix-deploy/*.log     # 每次部署的完整日志
@@ -103,76 +109,115 @@ pnpm run deploy:prod -- --list            # 看可回滚的快照
 
 > 这一步只做一次。做完之后才可以用 `pnpm run deploy:prod`。
 
-### 3.1 改造前必须核对的两件事（已核对，结论附后）
+### 3.1 改造前必须核对的两件事（2026-11-20 已实测，结论见下）
 
-2026-11-20 实测结论：
+核对方法本身是**只读**的：在 `/tmp` 建一个临时 git 目录，`git read-tree` 出目标提交
+的索引，再用 `git --work-tree=/opt/liorvix diff` 比对，全程不写生产工作区。
 
-- 生产 918 个被 git 跟踪的文件里：**531 个完全一致、352 个只差换行符（CRLF/LF）、21 个真实差异**；
-- 其中 20 个是当天刚部署的后台性能改动（已在 git 提交 `0f7d47b`）；
-- **7 个源码文件生产上有、git 上没有**——是之前改过但没提交的（公司 logo 相关）。
-  这 7 个必须先提交，否则 `git reset --hard` 会把它们回退掉：
+结果（基线 `2612264`，925 个跟踪文件）：
 
-```
-src/app/api/admin/company-logos/route.ts
-src/app/api/jobs/companies/route.ts
-src/app/jobs/page.tsx
-src/components/admin/settings-panel.tsx
-src/components/logo-upload-dialog.tsx
-src/lib/language-context.tsx
-src/lib/storage-utils.ts
-```
+| 类别 | 数量 | `checkout -f` 之后 |
+| --- | --- | --- |
+| 完全一致 | 552 | 不变 |
+| 只差换行符（CRLF↔LF） | 353 | 统一为仓库版本，无行为影响 |
+| 真实内容差异 | 4 | 全部是 HEAD 更新，见下表 |
+| HEAD 有、服务器缺 | 16 | 补上（文档 12、部署脚本 3、迁移 1） |
 
-- 另有 1 个文档 `docs/north-america-tech-company-capture-plan.md` 在服务器上比 git 多 3 行改动，
-  迁移前请先看一眼要不要保留（git 版本会覆盖它）。
-- `.env.local`、`node_modules/`、`dist/`、`.next/` 均未被 git 跟踪（已用 `git check-ignore` 验证），
-  `git reset --hard` 不会动生产密钥。
+4 个内容差异逐一核对后的处置：
+
+| 文件 | 差异 | 处置 |
+| --- | --- | --- |
+| `.gitignore` | HEAD 多 `*.pem`/`*.ppk` 等规则 | 保留 HEAD |
+| `package.json` | HEAD 多 `deploy:prod` 脚本；依赖项用 node 结构化比对为**零差异** | 保留 HEAD |
+| `docs/job-company-field-execution-log.md` | HEAD 比服务器多 709 行；服务器独有的 50 行经逐行集合比对**全部已在 HEAD 中** | 保留 HEAD |
+| `docs/north-america-tech-company-capture-plan.md` | 服务器只是同一行的旧状态（`- [ ]` vs `- [x]`） | 保留 HEAD |
+
+另一类必须先处理的：**只存在于服务器、或服务器版本比 git 新的源码**。
+`reset --hard` 会把它们回退，所以必须先提交再迁移。实际提交了 8 个文件：
+
+- 7 个公司 logo / 公司筛选相关（此前手工上传到服务器，从未进 git）；
+- `src/lib/admin-analytics.ts` 的自刷新逻辑——它随 11-20 的性能发布上线，**当时漏提交**，
+  属于最容易漏的一类，迁移前务必用同一套只读比对复核。
+
+`.env.local`、`node_modules/`、`dist/`、`.next/` 均未被跟踪（`git check-ignore` 验证），
+且迁移前后 `.env.local` 的 sha256 实测未变（`290760c7…`）。
 
 ### 3.2 步骤
 
-**第 1 步（本地）：把这 7 个已在线运行的文件提交并推送**
+**第 1 步（本地）：把线上已运行、但 git 里没有/落后的文件提交**
+
+先把「线上内容」拿下来和本地逐个比对，再决定提交哪一版。别直接 `git add .`：
+本地可能比线上更新（那是还没发布的改动）。
 
 ```bash
-git add src/app/api/admin/company-logos/route.ts \
-        src/app/api/jobs/companies/route.ts \
-        src/app/jobs/page.tsx \
-        src/components/admin/settings-panel.tsx \
-        src/components/logo-upload-dialog.tsx \
-        src/lib/language-context.tsx \
-        src/lib/storage-utils.ts
-git commit -m "chore: record company-logo changes already running in production"
+# 已在 2026-11-20 做过的提交（作为参照，不要重复执行）
+#   3c9a576  fix(admin): record company-logo changes already running in production
+#   09becf1  perf(admin): commit the analytics self-refresh that production already runs
+#   2612264  docs: record the 09-07/09-08 collector batches that only existed on the server
+#   c9f2e24  chore(git): ignore deploy artifacts and server-side backup dirs
 git push
 ```
 
-**第 2 步（服务器）：整树备份**
+**第 2 步（服务器）：整树备份 + 指纹清单**
 
 ```bash
-sudo tar czf /opt/liorvix-pre-git-20261120.tar.gz -C /opt \
-  --exclude='liorvix/node_modules' --exclude='liorvix/.next' --exclude='liorvix/dist' liorvix
-ls -lh /opt/liorvix-pre-git-20261120.tar.gz
+TS=$(date -u +%Y%m%dT%H%M%SZ)
+OUT=/opt/liorvix-deploy-backups
+sudo mkdir -p "$OUT" && sudo chown ubuntu:ubuntu "$OUT"
+
+sudo tar czf "$OUT/pre-git-$TS.tar.gz" -C /opt \
+  --exclude='liorvix/node_modules' --exclude='liorvix/.next' --exclude='liorvix/dist' \
+  --exclude='liorvix/backups/*/.next' --exclude='liorvix/backups/*/dist' liorvix
+sudo tar tzf "$OUT/pre-git-$TS.tar.gz" > /dev/null && echo "tar OK"
+
+# 记录指纹，迁移后用它证明 .env.local 没被碰
+cd /opt/liorvix
+sudo find . -path ./node_modules -prune -o -path ./.next -prune -o -path ./dist -prune \
+  -o -path ./backups -prune -o -type f -print0 | sort -z \
+  | xargs -0 sudo sha256sum > "$OUT/manifest-$TS.sha256"
+sudo grep -m1 '\.env\.local$' "$OUT/manifest-$TS.sha256"
 ```
+
+2026-11-20 实测产物：`pre-git-20261120T073953Z.tar.gz`（19 MB、1253 条目）、
+`manifest-20261120T073953Z.sha256`（928 行）。
 
 **第 3 步（服务器）：就地转成 git 工作区**
 
 ```bash
 cd /opt/liorvix
-BRANCH=codex/ui-overlay-from-ui-change      # 换成要跟踪的分支（见 7.1）
+BRANCH=codex/ui-overlay-from-ui-change      # 换成要跟踪的分支（见 7.2）
+
 sudo git init
 sudo git remote add origin https://github.com/chaofan1020-hue/rising-path.git
-sudo git fetch origin "$BRANCH"
-sudo git checkout -b "$BRANCH" "origin/$BRANCH"
+sudo git fetch --depth 50 --prune origin "$BRANCH"
+
+# 关键：必须带 -f
+sudo git checkout -f -B "$BRANCH" "origin/$BRANCH"
 sudo git branch --set-upstream-to="origin/$BRANCH" "$BRANCH"
-sudo git status --short                     # 应为空或只有未跟踪文件
+
+# 这两条是迁移成功的判据
+sudo git status --porcelain --untracked-files=no      # 必须为空
+sudo git rev-parse --short HEAD
 ```
 
-> `git checkout -b` 会把工作区同步成该提交的内容：换行符统一为 LF、缺失的文档补上。
-> 源码内容与生产一致（已核对），`.env.local` 不受影响。
+> **为什么必须 `-f`**：工作区里所有文件此刻都是“未跟踪”状态，`git checkout -b`
+> 会直接报 `error: The following untracked working tree files would be overwritten by checkout`
+> 并中止（已在 `/tmp` 用同样的命令模拟复现）。加 `-f` 才会覆盖同名文件；
+> `.env.local`（被 `.gitignore` 忽略）和无关的未跟踪文件仍然不受影响。
+>
+> `checkout -f` 会把 353 个 CRLF 文件统一成仓库版本、补上 16 个缺失文件，
+> 并把 4 个内容差异更新为 HEAD 版本——这些都已在上一步逐项核对过。
 
 **第 4 步（服务器）：安装部署脚本**
 
 ```bash
 sudo install -m 755 /opt/liorvix/scripts/production/deploy.sh   /usr/local/bin/liorvix-deploy
 sudo install -m 755 /opt/liorvix/scripts/production/rollback.sh /usr/local/bin/liorvix-rollback
+bash -n /usr/local/bin/liorvix-deploy && bash -n /usr/local/bin/liorvix-rollback && echo OK
 ```
+
+> 先确认 root 的 PATH 里有 pnpm/node（脚本以 root 运行）：
+> `sudo env PATH="$PATH" bash -c 'command -v pnpm node rsync'`，实测 `/usr/bin/pnpm`、`/usr/bin/node`。
 
 **第 5 步（服务器）：空跑一次验证链路**
 
@@ -180,16 +225,23 @@ sudo install -m 755 /opt/liorvix/scripts/production/rollback.sh /usr/local/bin/l
 sudo /usr/local/bin/liorvix-deploy
 ```
 
-预期：备份 → “lockfile unchanged” → 构建 → 重启 → 冒烟全部通过 → `OK <旧sha> -> <新sha>`。
+预期：快照 → `lockfile unchanged` → 构建 → 重启 → 冒烟 → `OK <旧sha> -> <新sha>`。
 
-**第 6 步（本地）：把私钥放到项目根目录或设环境变量**
+**第 6 步（本地）：配置私钥，让“一条命令”成立**
+
+任选一种（`scripts/deploy-production.mjs` 会按顺序找，并打印实际用的是哪个）：
 
 ```bash
-# 方式一：pem 放到项目根目录，文件名保持「正式发布服务器密钥.pem」
-# 方式二：设置 PROD_SSH_KEY 指向实际路径
+# 方式一（推荐）：项目根目录建 .deploy.env，已被 gitignore
+PROD_HOST=ubuntu@43.172.117.125
+PROD_SSH_KEY=D:\liorvix-archive-20261119\secrets\正式发布服务器密钥.pem
+
+# 方式二：把「正式发布服务器密钥.pem」放到项目根目录
+# 方式三：复制到 ~/.ssh/liorvix_prod
+# 方式四：临时 export PROD_SSH_KEY=<绝对路径>
 ```
 
-然后本机跑一次：
+然后：
 
 ```bash
 pnpm run deploy:prod
@@ -199,13 +251,38 @@ pnpm run deploy:prod
 
 ### 3.3 改造失败怎么办
 
+按备份包回退（把文件名换成你实际生成的）：
+
 ```bash
+BK=/opt/liorvix-deploy-backups
 sudo systemctl stop liorvix.service
-sudo rm -rf /opt/liorvix/.git            # 回到改造前的状态
-sudo tar xzf /opt/liorvix-pre-git-20261120.tar.gz -C /opt
+sudo rm -rf /opt/liorvix/.git                    # 只删 git 元数据，工作区文件保持现状
+sudo tar xzf "$BK/pre-git-20261120T073953Z.tar.gz" -C /opt
 sudo systemctl start liorvix.service
 curl -s -o /dev/null -w '%{http_code}\n' http://127.0.0.1:5000/api/health
 ```
+
+校验密钥没被破坏：
+
+```bash
+NOW=$(sudo sha256sum /opt/liorvix/.env.local | cut -c1-16)
+REC=$(grep -m1 '\.env\.local$' "$BK"/manifest-*.sha256 | cut -c1-16)
+[ "$NOW" = "$REC" ] && echo "env OK" || echo "env CHANGED"
+```
+
+### 3.4 2026-11-20 实际执行记录（已完成的改造）
+
+| 项 | 值 |
+| --- | --- |
+| 迁移基线 | `c9f2e24`（925 个跟踪文件） |
+| 备份 | `/opt/liorvix-deploy-backups/pre-git-20261120T073953Z.tar.gz`（19 MB / 1253 条目）+ `manifest-…sha256`（928 行） |
+| 迁移耗时 | 备份约 20 秒；`init`+`fetch`+`checkout -f` 约 25 秒 |
+| 迁移后判据 | `git status --untracked-files=no` 为空；`.env.local` sha256 与备份清单一致；`node_modules`/`.next`/`dist` 的 mtime 未变 |
+| 空跑部署 | 15:44:22 开始 → 15:44:47 冒烟通过（构建约 18–40 秒，命中 Turbopack 缓存） |
+| 冒烟结果 | `health=200 login_form=1 admin=307 analytics_unauth=401`，服务新 PID 2549269 |
+| 本机一条命令 | 15:48 跑通，`exit 0` |
+| 回滚实测 | 15:49:18 → 15:49:25 完成（7 秒，直接用 `releases/` 快照，无重建） |
+| 公网复查 | `https://liorvix.com/api/health` 200 / `/admin/login` 200 且含「运营后台登录」 / `/admin` 307 |
 
 ---
 
@@ -227,6 +304,9 @@ pnpm run deploy:prod -- 0f7d47b
 
 > 只改文档不需要部署；只改 `.env.local` 也不需要构建，改完
 > `sudo systemctl restart liorvix.service` 即可（重启会重新读环境变量）。
+
+本机会打印实际使用的私钥路径（配置方式见 §3.2 第 6 步）。
+`--list` / `--rollback` 见 §5.3。
 
 ### 4.1 不在这台机器上时
 
@@ -283,7 +363,10 @@ pnpm run deploy:prod -- --rollback <sha>     # 秒级回滚（用 releases 里�
 
 | 现象 | 原因 | 处理 |
 | --- | --- | --- |
-| `找不到生产私钥：...` | 本机没有 `正式发布服务器密钥.pem` | 放到项目根目录，或 `PROD_SSH_KEY=<路径>` |
+| `找不到生产私钥` | 本机没有密钥，或路径不在候选列表里 | 按提示做：放项目根目录、复制到 `~/.ssh/liorvix_prod`、或写 `.deploy.env`（见 §3.2 第 6 步） |
+| `git push` 报 `Connection was reset` / `schannel: server closed abruptly` | 本机到 GitHub 的 TLS 抖动（本项目实际遇到，与服务器无关） | `git -c http.version=HTTP/1.1 push origin <branch>`；实测一条命令即成功，不必改任何配置 |
+| `checkout` 报 `untracked working tree files would be overwritten` | 迁移时漏了 `-f` | `git checkout -f -B <branch> origin/<branch>`（见 §3.2 第 3 步） |
+| `git status` 一直显示 `releases/`、`backups/` 未跟踪 | 服务器上的 `.gitignore` 版本偏旧 | 已在 `c9f2e24` 补上 `/releases/`、`/backups/`、`.env.local.*`、`dist.rollback-*/` |
 | `git fetch 失败` | 服务器到 GitHub 网络抖动 | 重试；`git ls-remote https://github.com/chaofan1020-hue/rising-path.git` 自测 |
 | `工作区有未提交改动` | 有人在服务器上直接改了文件 | 先 `git status` 看改动；要保留就提交并推送，不要 `reset --hard` |
 | `构建失败，代码已回退` | 代码/依赖问题 | 看 `/var/log/liorvix-deploy/` 最后一个日志；服务仍是旧版本、未中断 |
@@ -304,33 +387,37 @@ pnpm run deploy:prod -- --rollback <sha>     # 秒级回滚（用 releases 里�
 | --- | --- |
 | 站点 | `https://liorvix.com`（Cloudflare 代理，实测落 AMS 节点） |
 | 服务器 | `43.172.117.125`（腾讯云，加州圣克拉拉） |
-| SSH | `ubuntu@43.172.117.125`，密钥 `正式发布服务器密钥.pem` |
-| 应用目录 | `/opt/liorvix`（**改造前不是 git 仓库**） |
-| 服务 | `liorvix.service`（systemd，`User=root`，`PORT=5000`，`JOBS_AUTO_WORKER=true`） |
-| 运行时 | Node `v20.20.2`，pnpm `9.0.0`，git `2.43.0` |
+| SSH | `ubuntu@43.172.117.125`，密钥 `正式发布服务器密钥.pem`（**不在仓库里**） |
+| 应用目录 | `/opt/liorvix` —— 2026-11-20 起是 **git 工作区**，跟踪 `codex/ui-overlay-from-ui-change`，925 个跟踪文件 |
+| 服务 | `liorvix.service`（systemd，`User=root`，`PORT=5000`，`JOBS_AUTO_WORKER=true`，开机自启） |
+| 运行时 | Node `v20.20.2`，pnpm `9.0.0`（`/usr/bin/pnpm`），rsync 已装，git `2.43.0` |
 | 数据库 | Supabase `weqvdtdjdzmqflhwobec`（us-west-1） |
-| 仓库 | `github.com/chaofan1020-hue/rising-path`（**公开**），默认分支 `main` |
-| 备份 | `/opt/liorvix/backups/admin-perf-20261120T063018Z/`（改造前的上一版） |
+| 仓库 | `github.com/chaofan1020-hue/rising-path`（**公开**，服务器无需凭证即可 fetch），默认分支 `main` |
+| 构建快照 | `/opt/liorvix/releases/<sha>/{.next,dist}`，脚本默认保留 3 份（每份约 100 MB） |
+| 部署日志 | `/var/log/liorvix-deploy/<UTC>.log` |
+| 迁移备份 | `/opt/liorvix-deploy-backups/pre-git-20261120T073953Z.tar.gz` + `manifest-…sha256` |
+| 历史手工备份 | `/opt/liorvix/backups/`（已 gitignore，不影响 `git status`） |
+| 本机部署配置 | 项目根 `.deploy.env`（已 gitignore，写 `PROD_HOST` / `PROD_SSH_KEY`） |
 
 ### 7.2 分支策略（建议）
 
-当前生产跟踪的是 `codex/ui-overlay-from-ui-change`，而 `main` 落后较多（`149adec9`）。
+生产现在跟踪 `codex/ui-overlay-from-ui-change`，而 `main` 落后较多（`149adec9`）。
 建议：
 
-1. 短期：`DEPLOY_BRANCH` 就指向当前分支，先跑通一键部署；
+1. 短期：保持现状，`DEPLOY_BRANCH` 指向当前分支（已生效）；
 2. 中期：把该分支合回 `main`，然后
-   `sudo DEPLOY_BRANCH=main /usr/local/bin/liorvix-deploy` 并把默认值改掉，
+   `sudo DEPLOY_BRANCH=main /usr/local/bin/liorvix-deploy` 并把脚本默认值改掉，
    让生产只跟 `main`，避免“生产跟某个 codex 分支”的长期风险。
 
-### 7.3 密钥管理（建议）
+### 7.3 密钥管理
 
-现在私钥在 `D:\liorvix-archive-20261119\secrets\正式发布服务器密钥.pem`（项目目录外）。
-建议：
+私钥现在在 `D:\liorvix-archive-20261119\secrets\正式发布服务器密钥.pem`（项目目录外），
+本机通过项目根 `.deploy.env` 引用它。推荐保持这个形态：
 
-- 复制一份到项目根目录 `正式发布服务器密钥.pem`（已在 `.gitignore` 之外，**注意不要提交**；
-  确认 `.gitignore` 里加上 `*.pem`）；
-- 或设置用户环境变量 `PROD_SSH_KEY`；
-- 不要把它写进任何脚本或文档里。
+- `.deploy.env` 已进 `.gitignore`，不会被提交；
+- 也可以复制到 `~/.ssh/liorvix_prod`，脚本会按 §3.2 第 6 步的顺序自动找到；
+- **不要把私钥、也不要把它的路径写进仓库里的任何文件**；
+- 服务器上不需要这份私钥；它只用于本机 → 服务器的 SSH。
 
 ### 7.4 将来想做到“push 即上线”
 
@@ -344,12 +431,12 @@ pnpm run deploy:prod -- --rollback <sha>     # 秒级回滚（用 releases 里�
 
 不需要改 `deploy.sh`。等真的需要“零人工”时再做。
 
-### 7.5 临时应急（改造尚未完成时）
+### 7.5 临时应急（已不适用）
 
-改造前若必须紧急上线，可以继续用手工方式（见
-[docs/admin-console-performance.md](admin-console-performance.md) §6：
-上传文件 → 服务器 `pnpm run build` → `systemctl restart`），
-但请优先完成第 3 节的一次性改造。
+一次性改造已于 2026-11-20 完成（见 §3.4），本节仅作历史参考。
+当年改造前的紧急上线方式是“手工上传 → 服务器 `pnpm run build` → `systemctl restart`”，
+它的问题（容易只重启不构建、无法回滚、源码与 git 分叉）正是本手册要消除的。
+如果将来又出现“不是 git 工作区”的机器，按 §3 重新改造，不要回到手工流程。
 
 ---
 
@@ -357,4 +444,6 @@ pnpm run deploy:prod -- --rollback <sha>     # 秒级回滚（用 releases 里�
 
 | 日期 | 变更 |
 | --- | --- |
-| 2026-11-20 | 生产上线后台性能改造（`0f7d47b`）；本手册建立；实测生产源码与 git 的差异并记录迁移前提 |
+| 2026-11-20 | 生产上线后台性能改造（`0f7d47b`）；本手册建立 |
+| 2026-11-20 | **完成一次性改造**：把 8 个线上未提交文件记入 git，`/opt/liorvix` 转为 git 工作区（`c9f2e24`），安装 `liorvix-deploy`/`liorvix-rollback`，本机一条命令与秒级回滚均实测通过（见 §3.4） |
+| 2026-11-20 | 修正 §3.2 第 3 步：`git checkout` 必须带 `-f`（原写法会报 untracked 冲突）；`.gitignore` 补 `/releases/`、`/backups/`、`.deploy.env` |

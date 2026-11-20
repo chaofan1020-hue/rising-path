@@ -141,8 +141,12 @@ Cache-Control: public, max-age=300, s-maxage=300, stale-while-revalidate=600
 
 ### 6.1 生产方式（与假设不同，请注意）
 
-`/opt/liorvix` **不是 git 仓库**（没有 `.git`），生产源码是一棵上传的源码树。
-所以本项目的部署方式不是 `git pull`，而是：
+> **已过时（2026-11-20 当天晚些时候变更）**：`/opt/liorvix` 现已是 git 工作区，
+> 部署改为一条命令 `pnpm run deploy:prod`，见 [docs/deployment.md](deployment.md)。
+> 下面这段保留，用于还原“当时是怎么上线的”。
+
+改动上线时，`/opt/liorvix` **不是 git 仓库**（没有 `.git`），生产源码是一棵上传的源码树。
+所以当时的部署方式不是 `git pull`，而是：
 
 1. 上传改动文件；
 2. 在服务器上 `pnpm run build`；
@@ -228,7 +232,12 @@ curl -sS -o /dev/null -w 'admin %{http_code} -> %{redirect_url}\n' https://liorv
 
 ### 6.7 回滚
 
-回滚材料：`/opt/liorvix/backups/admin-perf-20261120T063018Z/`
+> 2026-11-20 起生产已是 git 工作区，**回滚改用一条命令**，本节的手工步骤仅作历史参考：
+> `pnpm run deploy:prod -- --rollback <sha>`（服务器上 `sudo liorvix-rollback <sha>`，
+> 秒级、直接用 `releases/` 里的构建快照）。详见
+> [docs/deployment.md](deployment.md) §5.3。
+
+改动当天留下的手工回滚材料：`/opt/liorvix/backups/admin-perf-20261120T063018Z/`
 （被覆盖的 16 个源文件 + 部署前的 `dist/` 与 `.next/`，共 98 MB）
 
 ```bash
