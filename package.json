@@ -42,6 +42,7 @@
     "preinstall": "npx only-allow pnpm",
     "lint": "eslint",
     "start": "node -e \"process.env.NODE_ENV='production'; require('./dist/server.js')\"",
+    "deploy:prod": "node scripts/deploy-production.mjs",
     "ts-check": "tsc -p tsconfig.json",
     "test:phase2": "tsx scripts/test-phase2.ts",
     "test:phase3": "tsx scripts/test-phase3.ts",

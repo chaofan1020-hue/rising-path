@@ -25,6 +25,10 @@ coverage/
 .env.test.local
 .env.production.local
 
+# SSH keys / deploy secrets — never commit these
+*.pem
+*.ppk
+
 # Logs
 logs/
 *.log
