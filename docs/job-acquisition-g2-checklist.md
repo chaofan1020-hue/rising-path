@@ -55,6 +55,7 @@ from job_sync_state where source_system='collector_feed';
 | US stale | 正常 | 启用 TTL 后抽样，不能把“未同步”误判 stale |
 | 成本 | 可接受 | 以当月上游流量/容器成本估算，≤¥0.05/岗/月 |
 | 500 board 稳定 | 是 | 无连续失败、无停止线 |
+| source_key 覆盖 | 500/500 | 不能只看岗位总数；上游 global board 与 US target 过滤后的差额要能从 skip reason 解释 |
 
 任一项不通过：**不导入 P1**，保持 500 board，按失败项先修（U08/U09 或数据修复）。
 

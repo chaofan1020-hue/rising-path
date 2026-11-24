@@ -97,6 +97,7 @@ docker exec -e PYTHONPATH=/app global-jobs-bulk-worker-1 \
 - **不能用岗位 `last_seen_at` 直接算 P95**：U05 为了减少同日无变化写入，保留同日 `last_seen_at`，所以岗位字段会停在首次写入时间；board `last_ok_at` 才是轮询新鲜度。
 - Feed 侧以 `job_sync_runs.completed_at` / `job_sync_state.last_incremental_success_at` 为准，不以 `jobs.last_seen_at` 为准。
 - 12:29 UTC 美国站 `collector_feed` 最近成功 12:24 UTC，**feed lag 约 5 min**，低于 15 min；US source jobs 86,479，已接近上游全部 source jobs。
+- 12:59 UTC 复核：US 已覆盖 **全部 500 个 `source_key`，缺失 key = 0**；US 86,484 vs 上游 126,159，差 39,675。差额不是丢数据，而是 US `normalizeSkipReason` 对 `outside_target_region` 的主动过滤（上游是 global board，US 只收目标地区）。这解释了“上游 12 万、US 8.6 万”的差异，不能拿上游总数直接当 US 应到数。
 
 ### 美国站同步
 
