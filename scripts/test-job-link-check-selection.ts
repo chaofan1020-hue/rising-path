@@ -24,6 +24,19 @@ assert.ok(
 );
 
 /**
+ * A 404 closes only on its second observation. The priority queue must select
+ * active jobs whose last HTTP status was 404 and whose record is older than the
+ * retry interval, so confirmations do not wait for a full scan cycle.
+ */
+assert.match(maintenance, /\.eq\('last_link_http_status', 404\)/);
+assert.match(maintenance, /JOBS_LINK_CHECK_RETRY_MINUTES/);
+assert.match(maintenance, /JOBS_LINK_CHECK_RETRY_BATCH/);
+assert.ok(
+  maintenance.indexOf('.eq(\'last_link_http_status\', 404)') > maintenance.indexOf('.limit(batchSize)'),
+  'retry queue must be selected after the primary page',
+);
+
+/**
  * jobs.apple.com serves the same client-side shell for live and removed roles,
  * so the page HTML can never be used as a closed signal. The official
  * jobDetails API is the only authoritative answer and its 404/410 must reach

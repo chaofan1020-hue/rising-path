@@ -199,7 +199,32 @@ export async function maintainJobLifecycle(options: {
     .order('last_link_checked_at', { ascending: true, nullsFirst: true })
     .limit(batchSize);
   if (stateError) throw new Error(`读取待核验岗位链接失败: ${stateError.message}`);
-  const states = (stateRows || []) as LinkCheckState[];
+  // A bare 404 only closes a job on its second observation. At the current
+  // backlog a full scan cycle is measured in hours, so without a priority queue
+  // those confirmations would lag far behind the first hit. Re-check recent
+  // 404s first: genuinely removed postings disappear within the next cycles,
+  // while a transient ATS 404 still gets its second look before closing.
+  const retryMinutes = Math.min(Math.max(Number(process.env.JOBS_LINK_CHECK_RETRY_MINUTES) || 30, 5), 720);
+  const retryThreshold = new Date(Date.now() - retryMinutes * 60 * 1000).toISOString();
+  const retryBatch = Math.min(Math.max(Number(process.env.JOBS_LINK_CHECK_RETRY_BATCH) || 50, 1), 100);
+  const { data: retryRows, error: retryError } = await client
+    .from('job_sync_records')
+    .select('job_id,link_check_failures,availability_status,link_health,jobs!inner(id)')
+    .eq('source_system', JOBS_FEED_SOURCE)
+    .eq('jobs.is_active', true)
+    .eq('last_link_http_status', 404)
+    .or(`last_link_checked_at.is.null,last_link_checked_at.lt.${retryThreshold}`)
+    .order('last_link_checked_at', { ascending: true, nullsFirst: true })
+    .limit(retryBatch);
+  if (retryError) throw new Error(`读取待复核 404 岗位链接失败: ${retryError.message}`);
+  const pendingConfirmation = (retryRows || []) as LinkCheckState[];
+  const seenJobIds = new Set<number>();
+  const states: LinkCheckState[] = [];
+  for (const state of [...pendingConfirmation, ...((stateRows || []) as LinkCheckState[])]) {
+    if (seenJobIds.has(state.job_id)) continue;
+    seenJobIds.add(state.job_id);
+    states.push(state);
+  }
   const stateByJobId = new Map(states.map((state) => [state.job_id, state]));
   const jobIds = states.map((state) => state.job_id);
   const { data: jobs, error: jobsError } = jobIds.length === 0
