@@ -1,12 +1,11 @@
 'use client';
 
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useCallback, useRef } from 'react';
 import { useSearchParams } from 'next/navigation';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
 import { Progress } from '@/components/ui/progress';
-import { Input } from '@/components/ui/input';
 import {
   Select,
   SelectContent,
@@ -46,9 +45,7 @@ import {
   Pencil,
   Eye,
   Plus,
-  Search,
 } from 'lucide-react';
-import Link from 'next/link';
 import { Document, Packer, Paragraph, TextRun, HeadingLevel, AlignmentType } from 'docx';
 import { saveAs } from 'file-saver';
 import { AuthGuard } from '@/components/auth-guard';
@@ -65,6 +62,40 @@ import {
   applyOptimizationChangeReview,
 } from '@/lib/optimized-resume-review';
 import PageBackButton from '@/components/page-back-button';
+import { TargetJobPicker } from '@/components/optimize/target-job-picker';
+import { JdPanel, type JdOrigin } from '@/components/optimize/jd-panel';
+import { resolveRegionKey } from '@/lib/region-dna';
+
+/** 岗位 region 字段是自由文本（"United States" / "纽约"），映射到地区下拉的枚举值。 */
+const REGION_SELECT_VALUES = new Set(['us', 'uk', 'sg', 'hk', 'au', 'ca', 'eu', 'cn', 'jp']);
+
+function regionKeyFromJob(raw: string | null | undefined): string {
+  const key = resolveRegionKey(raw);
+  if (!key) return '';
+  const normalized = key === 'cn_t1' || key === 'cn_t2' ? 'cn' : key;
+  return REGION_SELECT_VALUES.has(normalized) ? normalized : '';
+}
+
+/**
+ * 安全读取 JSON。
+ * 线上曾出现「接口 405 但响应体为空」→ response.json() 抛 SyntaxError →
+ * 落进 catch 显示一句笼统的「获取失败」。这里把非 JSON 响应收敛成 null，
+ * 让调用方按 HTTP 状态给出准确提示。
+ */
+async function readJsonSafely(response: Response): Promise<Record<string, unknown> | null> {
+  try {
+    const parsed = await response.json();
+    return parsed && typeof parsed === 'object' ? (parsed as Record<string, unknown>) : null;
+  } catch {
+    return null;
+  }
+}
+
+function pickString(source: Record<string, unknown> | null, key: string): string {
+  const value = source?.[key];
+  return typeof value === 'string' ? value : '';
+}
+
 
 interface Resume {
   id: number;
@@ -84,12 +115,14 @@ interface JobOption {
   source: 'favorite' | 'application';
 }
 
-interface JobSearchResult {
+/** 已选中的目标岗位（站内岗位为单一真源）。 */
+interface TargetJob {
   id: number;
   title: string;
   company: string;
   region: string;
 }
+
 
 // 优化记录历史
 interface OptimizedRecord {
@@ -729,13 +762,12 @@ function OptimizeContent() {
   const [favoriteJobs, setFavoriteJobs] = useState<JobOption[]>([]);
   const [applicationJobs, setApplicationJobs] = useState<JobOption[]>([]);
   const [selectedResumeId, setSelectedResumeId] = useState<string>('');
-  const [jobQuery, setJobQuery] = useState('');
-  const [jobSearchResults, setJobSearchResults] = useState<JobSearchResult[]>([]);
-  const [searchingJobs, setSearchingJobs] = useState(false);
-  const [targetCompany, setTargetCompany] = useState('');
-  const [targetPosition, setTargetPosition] = useState('');
+  // 目标岗位：站内岗位(selectedJob) 是唯一真源；手动填写(manual*) 仅作兜底。
+  // 下游一律读派生出来的 targetCompany / targetPosition / targetJobId，不再双写。
+  const [selectedJob, setSelectedJob] = useState<TargetJob | null>(null);
+  const [manualCompany, setManualCompany] = useState('');
+  const [manualPosition, setManualPosition] = useState('');
   const [targetRegion, setTargetRegion] = useState('');
-  const [targetJobId, setTargetJobId] = useState<number | null>(null);
   const [suggestions, setSuggestions] = useState('');
   const [optimizing, setOptimizing] = useState(false);
   const [optimizeProgress, setOptimizeProgress] = useState(0);
@@ -759,6 +791,16 @@ function OptimizeContent() {
   const [isEditing, setIsEditing] = useState(false);
   const [showSavedToast, setShowSavedToast] = useState(false);
   const [optimizeError, setOptimizeError] = useState('');
+  // 岗位描述（JD）：全页只在折叠面板里展示一次，不再 textarea + 卡片重复渲染。
+  const [jdContent, setJdContent] = useState('');
+  const [jdOrigin, setJdOrigin] = useState<JdOrigin>(null);
+  const [jdFetching, setJdFetching] = useState(false);
+  const [jdError, setJdError] = useState('');
+  const [jdMatchNote, setJdMatchNote] = useState('');
+  // 防止连续切换岗位时旧请求覆盖新 JD
+  const jdRequestTokenRef = useRef(0);
+  // 页面级操作反馈（替代原生 alert）：保存/删除/变更等失败统一走这里。
+  const [actionError, setActionError] = useState('');
   const { t } = useLanguage();
   const { actionLabel } = useCreditPrices();
 
@@ -774,6 +816,20 @@ function OptimizeContent() {
     { value: 'cn', label: t('optimize.regionCn') },
     { value: 'jp', label: t('optimize.regionJp') },
   ];
+
+  // ---- 目标岗位的派生真源 ----
+  // selectedJob 存在时一切以岗位记录为准；否则用手动输入。下游只读这三个变量。
+  const targetJobId = selectedJob ? selectedJob.id : null;
+  const targetCompany = selectedJob ? selectedJob.company : manualCompany;
+  const targetPosition = selectedJob ? selectedJob.title : manualPosition;
+  const jdCharCount = jdContent.trim().length;
+  const canOptimize = Boolean(selectedResumeId) && Boolean(targetPosition) && !optimizing;
+  const optimizeBlockedReason = !selectedResumeId
+    ? t('optimize.needResume')
+    : !targetPosition
+      ? t('optimize.needTargetJob')
+      : '';
+
 
   const handleSave = async () => {
     if (!resumeData || !activeOptimizationId) return;
@@ -799,8 +855,9 @@ function OptimizeContent() {
       )));
       setShowSavedToast(true);
       setTimeout(() => setShowSavedToast(false), 2000);
+      setActionError('');
     } catch (error) {
-      alert(error instanceof Error ? error.message : t('optimize.alertSaveFailed'));
+      setActionError(error instanceof Error ? error.message : t('optimize.alertSaveFailed'));
     }
   };
 
@@ -883,70 +940,157 @@ function OptimizeContent() {
           : record
       )));
     } catch (error) {
-      alert(error instanceof Error ? error.message : '保存变更状态失败，请重试');
+      setActionError(error instanceof Error ? error.message : '保存变更状态失败，请重试');
     } finally {
       setChangeSavingId(null);
     }
   };
 
-  // JD搜索相关状态
-  const [searchingJD, setSearchingJD] = useState(false);
-  const [jdContent, setJdContent] = useState('');
-  const [jdResults, setJdResults] = useState<Array<{title: string; siteName: string; url: string; snippet: string}>>([]);
+  // ---- 岗位描述（JD）：只在折叠面板里展示一次 ----
+  const resetJd = () => {
+    setJdContent('');
+    setJdOrigin(null);
+    setJdError('');
+    setJdMatchNote('');
+  };
 
-  // 获取岗位描述
-  const handleSearchJD = async () => {
-    if (!targetCompany || !targetPosition) {
-      alert(t('optimize.alertFillFirst'));
-      return;
-    }
+  /** 用户手动编辑 JD：来源转为手动，并清掉上一次的抓取错误/模糊匹配提示。 */
+  const handleJdContentChange = (value: string) => {
+    setJdContent(value);
+    setJdOrigin('manual');
+    setJdError('');
+    setJdMatchNote('');
+  };
 
-    setSearchingJD(true);
+  /** 选中站内岗位后取该岗位自带的 JD。失败只在面板内提示，不阻塞主流程。 */
+  const loadJobJd = useCallback(async (jobId: number) => {
+    // 连续切换岗位时，只让最后一次请求落地，避免旧响应覆盖新岗位的 JD
+    const requestToken = jdRequestTokenRef.current + 1;
+    jdRequestTokenRef.current = requestToken;
+    const isStale = () => jdRequestTokenRef.current !== requestToken;
+
+    setJdFetching(true);
+    setJdError('');
+    setJdMatchNote('');
     try {
-      const regionName = regionList.find(r => r.value === targetRegion)?.label || t('optimize.regionUs');
       const response = await apiFetch('/api/jobs/search-jd', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          company: targetCompany,
-          position: targetPosition,
-          region: targetRegion,
-        }),
+        body: JSON.stringify({ jobId }),
       });
-      const data = await response.json();
-      
-      if (data.success) {
-        setJdContent(data.jdContent || '');
-        setJdResults(data.results || []);
-        setSuggestions(data.summary || '');
-      } else {
-        alert(data.error || t('optimize.alertJdFailed'));
+      if (isStale()) return;
+      const data = await readJsonSafely(response);
+      if (isStale()) return;
+      if (!response.ok) {
+        setJdError(pickString(data, 'error') || t('optimize.alertJdRetry'));
+        return;
+      }
+      setJdContent(pickString(data, 'jdContent'));
+      setJdOrigin('job');
+          if (data?.success !== true) {
+        setJdError(pickString(data, 'error') || t('optimize.jdNoContent'));
       }
     } catch (error) {
-      console.error('Search JD failed:', error);
-      alert(t('optimize.alertJdRetry'));
+      if (isStale()) return;
+      console.error('[optimize] load job jd failed:', error);
+      setJdError(t('optimize.alertJdRetry'));
     } finally {
-      setSearchingJD(false);
+      if (!isStale()) setJdFetching(false);
+    }
+  }, [t]);
+
+  /** 手动模式：按公司 + 岗位到站内岗位库检索最接近的 JD。 */
+  const handleFetchJd = async () => {
+    const company = manualCompany.trim();
+    const position = manualPosition.trim();
+    if (!company && !position) {
+      setJdError(t('optimize.alertFillFirst'));
+      return;
+    }
+    setJdFetching(true);
+    setJdError('');
+    setJdMatchNote('');
+    try {
+      const response = await apiFetch('/api/jobs/search-jd', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ company, position }),
+      });
+      const data = await readJsonSafely(response);
+      if (!response.ok) {
+        setJdError(pickString(data, 'error') || t('optimize.alertJdRetry'));
+        return;
+      }
+      if (data?.success === true) {
+        setJdContent(pickString(data, 'jdContent'));
+        setJdOrigin('fetched');
+                const quality = pickString(data, 'matchQuality');
+        setJdMatchNote(
+          quality === 'company'
+            ? t('optimize.jdMatchCompany')
+            : quality === 'position'
+              ? t('optimize.jdMatchPosition')
+              : '',
+        );
+      } else {
+        setJdError(pickString(data, 'error') || t('optimize.alertJdFailed'));
+      }
+    } catch (error) {
+      console.error('[optimize] fetch jd failed:', error);
+      setJdError(t('optimize.alertJdRetry'));
+    } finally {
+      setJdFetching(false);
     }
   };
 
-  const selectTargetJob = (job: JobSearchResult | JobOption) => {
-    setTargetJobId(job.id);
-    setTargetCompany(job.company || '');
-    setTargetPosition(job.title || '');
-    setTargetRegion(job.region || '');
-    setJobQuery('');
-    setJobSearchResults([]);
+  const selectTargetJob = (job: TargetJob) => {
+    setSelectedJob({
+      id: job.id,
+      title: job.title || '',
+      company: job.company || '',
+      region: job.region || '',
+    });
+    const nextRegion = regionKeyFromJob(job.region);
+    if (nextRegion) setTargetRegion(nextRegion);
+    setActionError('');
+    void loadJobJd(job.id);
+  };
+
+  const clearTargetJob = () => {
+    setSelectedJob(null);
+    resetJd();
+  };
+
+  /** 手动改公司/岗位即视为切到手动模式，解除已绑定的站内岗位。 */
+  const updateManualField = (patch: { company?: string; position?: string }) => {
+    if (patch.company !== undefined) setManualCompany(patch.company);
+    if (patch.position !== undefined) setManualPosition(patch.position);
+    if (selectedJob) {
+      setSelectedJob(null);
+      if (jdOrigin === 'job') resetJd();
+    }
   };
 
   // 加载历史记录
   const loadRecord = (record: OptimizedRecord) => {
     setSelectedResumeId(record.resumeId);
     setActiveOptimizationId(record.serverId || null);
-    setTargetCompany(record.targetCompany);
-    setTargetPosition(record.targetPosition);
     setTargetRegion(record.targetRegion || '');
-    setTargetJobId(record.jobId || null);
+    resetJd();
+    if (record.jobId) {
+      setSelectedJob({
+        id: record.jobId,
+        title: record.targetPosition || '',
+        company: record.targetCompany || '',
+        region: record.targetRegion || '',
+      });
+      setManualCompany('');
+      setManualPosition('');
+    } else {
+      setSelectedJob(null);
+      setManualCompany(record.targetCompany || '');
+      setManualPosition(record.targetPosition || '');
+    }
     setResumeData(record.resumeData);
     setGeneratedResumeData(record.generatedResumeData || record.resumeData);
     setIsEnglishVersion(record.isEnglish);
@@ -977,7 +1121,7 @@ function OptimizeContent() {
         if (!response.ok) throw new Error(data.error || '删除优化版本失败');
         setSavedRecords((records) => records.filter((item) => item.id !== id));
       } catch (error) {
-        alert(error instanceof Error ? error.message : '删除优化版本失败，请重试');
+        setActionError(error instanceof Error ? error.message : '删除优化版本失败，请重试');
       }
     })();
   };
@@ -1009,13 +1153,26 @@ function OptimizeContent() {
     const regionParam = searchParams.get('region');
     const resumeParam = searchParams.get('resumeId');
     
-    if (companyParam) setTargetCompany(companyParam);
-    if (positionParam) setTargetPosition(positionParam);
     if (suggestionsParam) setSuggestions(suggestionsParam);
-    if (jobIdParam && Number.isInteger(Number(jobIdParam)) && Number(jobIdParam) > 0) {
-      setTargetJobId(Number(jobIdParam));
-    }
     if (regionParam) setTargetRegion(regionParam);
+
+    const jobIdFromUrl = jobIdParam ? Number(jobIdParam) : NaN;
+    const hasJobId = Number.isInteger(jobIdFromUrl) && jobIdFromUrl > 0;
+    if (hasJobId) {
+      // 带 jobId 进来：直接锚定到该站内岗位，JD 由岗位记录自动带出
+      setSelectedJob({
+        id: jobIdFromUrl,
+        title: positionParam || '',
+        company: companyParam || '',
+        region: '',
+      });
+      setManualCompany('');
+      setManualPosition('');
+      void loadJobJd(jobIdFromUrl);
+    } else {
+      if (companyParam) setManualCompany(companyParam);
+      if (positionParam) setManualPosition(positionParam);
+    }
 
     if (suggestionsParam || !resumeParam || !jobIdParam) return;
     const jobId = Number(jobIdParam);
@@ -1034,44 +1191,8 @@ function OptimizeContent() {
     return () => {
       cancelled = true;
     };
-  }, [searchParams]);
+  }, [searchParams, loadJobJd]);
 
-  useEffect(() => {
-    const query = jobQuery.trim();
-    if (query.length < 2) {
-      setJobSearchResults([]);
-      setSearchingJobs(false);
-      return;
-    }
-
-    let cancelled = false;
-    const timer = window.setTimeout(() => {
-      setSearchingJobs(true);
-      apiFetch(`/api/jobs?search=${encodeURIComponent(query)}&limit=8&summary=1&region_scope=all`)
-        .then(async (response) => {
-          const data = await response.json();
-          if (!response.ok) throw new Error(data.error || '搜索岗位失败');
-          return data.jobs as JobSearchResult[];
-        })
-        .then((jobs) => {
-          if (!cancelled) setJobSearchResults(jobs || []);
-        })
-        .catch((error) => {
-          if (!cancelled) {
-            console.error('Failed to search jobs for optimization:', error);
-            setJobSearchResults([]);
-          }
-        })
-        .finally(() => {
-          if (!cancelled) setSearchingJobs(false);
-        });
-    }, 250);
-
-    return () => {
-      cancelled = true;
-      window.clearTimeout(timer);
-    };
-  }, [jobQuery]);
 
   const fetchJobOptions = async () => {
     try {
@@ -1495,7 +1616,7 @@ function OptimizeContent() {
       saveAs(blob, fileName);
     } catch (error) {
       console.error('Failed to generate Word document:', error);
-      alert(t('optimize.alertWordFailed'));
+      setActionError(t('optimize.alertWordFailed'));
     } finally {
       setDownloading(false);
     }
@@ -1620,62 +1741,57 @@ function OptimizeContent() {
               {t('optimize.settingsDesc')}
             </CardDescription>
           </CardHeader>
-          <CardContent className="space-y-3 md:space-y-4">
-            <div className="border-y border-zinc-200 py-4 dark:border-zinc-800">
-              <div className="mb-3 flex items-center justify-between gap-3">
-                <div>
-                  <p className="text-sm font-medium text-zinc-900 dark:text-zinc-100">选择目标岗位</p>
-                  <p className="mt-1 text-xs text-zinc-500 dark:text-zinc-400">优先从收藏或已添加岗位选择，也可搜索全部岗位。</p>
-                </div>
-                {targetJobId && <button type="button" onClick={() => { setTargetJobId(null); setTargetCompany(''); setTargetPosition(''); setTargetRegion(''); }} className="text-xs text-zinc-500 transition-colors hover:text-zinc-900 dark:hover:text-white">清除选择</button>}
+          <CardContent className="space-y-4">
+            {actionError && (
+              <div className="flex items-start gap-2 rounded-xl border border-red-200 bg-red-50 px-3 py-2.5 text-sm text-red-700 dark:border-red-900/60 dark:bg-red-950/40 dark:text-red-300">
+                <AlertCircle className="mt-0.5 h-4 w-4 shrink-0" />
+                <span className="flex-1">{actionError}</span>
+                <button
+                  type="button"
+                  onClick={() => setActionError('')}
+                  aria-label={t('optimize.dismiss')}
+                  className="shrink-0 text-red-400 transition-colors hover:text-red-600"
+                >
+                  <X className="h-4 w-4" />
+                </button>
               </div>
-              {favoriteJobs.length > 0 && (
-                <div className="mb-3">
-                  <p className="mb-2 text-xs font-medium text-zinc-500">我的收藏</p>
-                  <div className="flex flex-wrap gap-2">
-                    {favoriteJobs.slice(0, 6).map((job) => (
-                      <button key={job.id} type="button" onClick={() => selectTargetJob(job)} className={`max-w-full rounded-md border px-3 py-2 text-left text-xs transition-colors ${targetJobId === job.id ? 'border-zinc-900 bg-zinc-900 text-white dark:border-white dark:bg-white dark:text-zinc-900' : 'border-zinc-200 text-zinc-700 hover:border-zinc-400 hover:bg-zinc-50 dark:border-zinc-700 dark:text-zinc-200 dark:hover:bg-zinc-800'}`}>
-                        <span className="block truncate font-medium">{job.title}</span>
-                        <span className="mt-0.5 block truncate opacity-70">{job.company}</span>
-                      </button>
-                    ))}
-                  </div>
-                </div>
-              )}
-              {applicationJobs.length > 0 && (
-                <div className="mb-3">
-                  <p className="mb-2 text-xs font-medium text-zinc-500">已添加岗位</p>
-                  <div className="flex flex-wrap gap-2">
-                    {applicationJobs.slice(0, 6).map((job) => (
-                      <button key={job.id} type="button" onClick={() => selectTargetJob(job)} className={`max-w-full rounded-md border px-3 py-2 text-left text-xs transition-colors ${targetJobId === job.id ? 'border-zinc-900 bg-zinc-900 text-white dark:border-white dark:bg-white dark:text-zinc-900' : 'border-zinc-200 text-zinc-700 hover:border-zinc-400 hover:bg-zinc-50 dark:border-zinc-700 dark:text-zinc-200 dark:hover:bg-zinc-800'}`}>
-                        <span className="block truncate font-medium">{job.title}</span>
-                        <span className="mt-0.5 block truncate opacity-70">{job.company}</span>
-                      </button>
-                    ))}
-                  </div>
-                </div>
-              )}
-              <div className="relative">
-                <Search className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-zinc-400" />
-                <Input value={jobQuery} onChange={(event) => setJobQuery(event.target.value)} className="h-10 pl-9" placeholder="搜索岗位或公司，例如 Product Manager / Google" />
-                {(searchingJobs || jobSearchResults.length > 0) && (
-                  <div className="absolute z-20 mt-2 max-h-72 w-full overflow-y-auto rounded-md border border-zinc-200 bg-white p-1 shadow-lg dark:border-zinc-700 dark:bg-zinc-950">
-                    {searchingJobs && <p className="px-3 py-2 text-xs text-zinc-500">正在搜索岗位...</p>}
-                    {!searchingJobs && jobSearchResults.length === 0 && <p className="px-3 py-2 text-xs text-zinc-500">未找到匹配岗位</p>}
-                    {!searchingJobs && jobSearchResults.map((job) => (
-                      <button key={job.id} type="button" onClick={() => selectTargetJob(job)} className="flex w-full items-center justify-between gap-3 rounded px-3 py-2.5 text-left transition-colors hover:bg-zinc-100 dark:hover:bg-zinc-800">
-                        <span className="min-w-0"><span className="block truncate text-sm font-medium text-zinc-900 dark:text-zinc-100">{job.title}</span><span className="mt-0.5 block truncate text-xs text-zinc-500">{job.company} · {job.region}</span></span>
-                        <Plus className="h-4 w-4 shrink-0 text-zinc-400" />
-                      </button>
-                    ))}
-                  </div>
-                )}
+            )}
+
+            {/* ① 目标岗位：收藏 / 已添加 / 全库搜索 / 手动填写，统一到这一个入口 */}
+            <TargetJobPicker
+              favorites={favoriteJobs}
+              applications={applicationJobs}
+              selectedJob={selectedJob}
+              jdFetching={jdFetching}
+              jdCharCount={jdCharCount}
+              manualCompany={manualCompany}
+              manualPosition={manualPosition}
+              fetchJdDisabled={jdFetching}
+              onSelect={selectTargetJob}
+              onClear={clearTargetJob}
+              onManualChange={updateManualField}
+              onFetchJd={() => void handleFetchJd()}
+            />
+
+            <div className="h-px bg-zinc-200 dark:bg-zinc-800" />
+
+            {/* ② 简历 */}
+            <section>
+              <div className="mb-2 flex items-center gap-2">
+                <span className="flex h-5 w-5 shrink-0 items-center justify-center rounded-md bg-zinc-100 text-[11px] font-semibold text-zinc-500 dark:bg-zinc-800 dark:text-zinc-400">
+                  2
+                </span>
+                <span className="text-xs font-medium text-zinc-900 md:text-sm dark:text-zinc-100">
+                  {t('optimize.selectResume')}
+                </span>
+                <span className="text-xs text-red-500" aria-hidden="true">*</span>
               </div>
-            </div>
-            <div className="grid grid-cols-1 gap-3 md:grid-cols-3 md:gap-4">
-              <div>
-                <label className="text-xs md:text-sm font-medium mb-1.5 md:mb-2 block">{t('optimize.selectResume')}</label>
-                <Select value={selectedResumeId} onValueChange={(value) => { setSelectedResumeId(value); writeActiveResumeId(Number(value)); }} disabled={resumesLoading || resumes.length === 0}>
+              <div className="max-w-md">
+                <Select
+                  value={selectedResumeId}
+                  onValueChange={(value) => { setSelectedResumeId(value); writeActiveResumeId(Number(value)); }}
+                  disabled={resumesLoading || resumes.length === 0}
+                >
                   <SelectTrigger className="h-9 md:h-10">
                     <SelectValue placeholder={t('optimize.selectResumePlaceholder')} />
                   </SelectTrigger>
@@ -1687,62 +1803,61 @@ function OptimizeContent() {
                     ))}
                   </SelectContent>
                 </Select>
-                <ResumeAvailabilityHint
-                  status={availability.status}
-                  loading={resumesLoading}
-                  error={resumesError ? t('resume.listLoadFailed') : ''}
-                  onRetry={() => void fetchResumes(true)}
-                  className="mt-2"
-                />
               </div>
-              <div className="md:col-span-2">
-                <label className="text-xs md:text-sm font-medium mb-1.5 md:mb-2 block">{t('optimize.targetCompany')}</label>
-                <div className="flex gap-2">
-                  <Input
-                    placeholder={t('optimize.targetCompanyPlaceholder')}
-                    value={targetCompany}
-                    onChange={(e) => {
-                      setTargetCompany(e.target.value);
-                      setTargetJobId(null);
-                    }}
-                    className="h-9 md:h-10 flex-1"
-                  />
-                  <Button
-                    variant="outline"
-                    size="sm"
-                    onClick={handleSearchJD}
-                    disabled={!targetCompany || !targetPosition || searchingJD}
-                    className="h-9 md:h-10 px-3 border-zinc-200 dark:border-zinc-700 text-zinc-600 dark:text-zinc-300 hover:bg-zinc-100 hover:text-zinc-900 dark:hover:bg-zinc-800 dark:hover:text-zinc-100"
-                    title={t('optimize.searchJdTitle')}
-                  >
-                    {searchingJD ? (
-                      <Loader2 className="h-4 w-4 animate-spin" />
-                    ) : (
-                      <Target className="h-4 w-4" />
-                    )}
-                  </Button>
+              <ResumeAvailabilityHint
+                status={availability.status}
+                loading={resumesLoading}
+                error={resumesError ? t('resume.listLoadFailed') : ''}
+                onRetry={() => void fetchResumes(true)}
+                className="mt-2"
+              />
+            </section>
+
+            <div className="h-px bg-zinc-200 dark:bg-zinc-800" />
+
+            {/* ③ 岗位描述：全页只在这里展示一次，默认折叠 */}
+            <JdPanel
+              content={jdContent}
+              origin={jdOrigin}
+              fetching={jdFetching}
+              error={jdError}
+              matchNote={jdMatchNote}
+              onChange={handleJdContentChange}
+              onDismissError={() => setJdError('')}
+              onClear={resetJd}
+            />
+
+            {optimizeError && (
+              <div className="flex items-start gap-2 rounded-xl border border-primary/25 bg-primary/5 px-3 py-2.5 text-sm text-foreground dark:bg-primary/15">
+                <AlertCircle className="mt-0.5 h-4 w-4 flex-shrink-0" />
+                <span>{optimizeError}</span>
+              </div>
+            )}
+
+            {/* AI匹配优化建议 */}
+            {suggestions && (
+              <div className="rounded-xl border border-zinc-200 bg-zinc-50 p-3 md:p-4 dark:border-zinc-800 dark:bg-zinc-900/60">
+                <div className="flex items-start gap-2 md:gap-3">
+                  <span className="mt-0.5 flex h-6 w-6 flex-shrink-0 items-center justify-center rounded-lg bg-zinc-900 dark:bg-white">
+                    <Sparkles className="h-3.5 w-3.5 text-white dark:text-zinc-900" />
+                  </span>
+                  <div className="flex-1">
+                    <h4 className="mb-1.5 text-sm font-medium tracking-tight text-zinc-900 md:mb-2 md:text-base dark:text-zinc-100">
+                      {t('optimize.suggestionsTitle')}
+                    </h4>
+                    <p className="whitespace-pre-wrap text-xs text-zinc-600 md:text-sm dark:text-zinc-300">
+                      {suggestions}
+                    </p>
+                  </div>
                 </div>
               </div>
-              <div className="md:col-span-2">
-                <label className="text-xs md:text-sm font-medium mb-1.5 md:mb-2 block">{t('optimize.targetPosition')}</label>
-                <Input
-                  placeholder={t('optimize.targetPositionPlaceholder')}
-                  value={targetPosition}
-                  onChange={(e) => {
-                    setTargetPosition(e.target.value);
-                    setTargetJobId(null);
-                  }}
-                  className="h-9 md:h-10"
-                />
-              </div>
-            </div>
+            )}
 
-            <div className="flex flex-col gap-3 sm:flex-row sm:flex-wrap sm:items-end md:gap-4">
+            {/* 底部操作条 */}
+            <div className="flex flex-col gap-3 border-t border-zinc-200 pt-4 sm:flex-row sm:items-end dark:border-zinc-800">
               <div className="w-full sm:w-40">
-                <Select value={targetRegion} onValueChange={(value) => {
-                  setTargetRegion(value);
-                  setTargetJobId(null);
-                }}>
+                <label className="mb-1 block text-[11px] font-medium text-zinc-500">{t('optimize.targetRegion')}</label>
+                <Select value={targetRegion} onValueChange={setTargetRegion}>
                   <SelectTrigger className="h-9 md:h-10">
                     <SelectValue placeholder={t('optimize.targetRegion')} />
                   </SelectTrigger>
@@ -1755,111 +1870,41 @@ function OptimizeContent() {
                   </SelectContent>
                 </Select>
               </div>
-              <Button
-                onClick={handleOptimize}
-                disabled={!selectedResumeId || !targetPosition || optimizing}
-                className="h-9 w-full md:h-10 sm:w-auto bg-zinc-900 text-white hover:bg-zinc-800 dark:bg-white dark:text-zinc-900 dark:hover:bg-zinc-200"
-              >
-                {optimizing ? (
-                  <>
-                    <Loader2 className="mr-2 h-4 w-4 animate-spin" />
-                    {t('optimize.optimizing')}
-                  </>
-                ) : (
-                  <>
-                    <Sparkles className="mr-2 h-4 w-4" />
-                    {actionLabel(t('optimize.startOptimize'), 'resume_optimize', t('credits.unit'))}
-                  </>
+              <div className="flex flex-1 flex-col items-stretch gap-2 sm:flex-row sm:items-center sm:justify-end">
+                {optimizeBlockedReason && (
+                  <span className="text-[11px] text-zinc-400 sm:mr-1">{optimizeBlockedReason}</span>
                 )}
-              </Button>
-              {jdContent && (
                 <Button
-                  variant="outline"
-                  size="sm"
-                  onClick={() => {
-                    setJdContent('');
-                    setJdResults([]);
-                    setSuggestions('');
-                  }}
-                  className="h-9 w-full md:h-10 sm:w-auto border-zinc-200 dark:border-zinc-700 text-zinc-600 dark:text-zinc-300 hover:bg-zinc-100 hover:text-zinc-900 dark:hover:bg-zinc-800 dark:hover:text-zinc-100"
+                  onClick={handleOptimize}
+                  disabled={!canOptimize}
+                  className="h-9 w-full bg-zinc-900 text-white hover:bg-zinc-800 md:h-10 sm:w-auto dark:bg-white dark:text-zinc-900 dark:hover:bg-zinc-200"
                 >
-                  {t('optimize.clearJd')}
+                  {optimizing ? (
+                    <>
+                      <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                      {t('optimize.optimizing')}
+                    </>
+                  ) : (
+                    <>
+                      <Sparkles className="mr-2 h-4 w-4" />
+                      {actionLabel(t('optimize.startOptimize'), 'resume_optimize', t('credits.unit'))}
+                    </>
+                  )}
                 </Button>
-              )}
+              </div>
             </div>
-
-            {optimizeError && (
-              <div className="flex items-start gap-2 rounded-xl border border-primary/25 bg-primary/5 px-3 py-2.5 text-sm text-foreground dark:bg-primary/15">
-                <AlertCircle className="mt-0.5 h-4 w-4 flex-shrink-0" />
-                <span>{optimizeError}</span>
-              </div>
-            )}
-
-            {/* 手动输入JD */}
-            <div className="mt-3 md:mt-4">
-              <div className="flex items-center justify-between mb-1.5 md:mb-2">
-                <label className="text-xs md:text-sm font-medium">{t('optimize.jdLabel')}</label>
-                <span className="text-[10px] md:text-xs text-zinc-400 dark:text-zinc-500">{t('optimize.jdHint')}</span>
-              </div>
-              <textarea
-                placeholder={t('optimize.jdPlaceholder')}
-                value={jdContent}
-                onChange={(e) => setJdContent(e.target.value)}
-                className="w-full min-h-[100px] md:min-h-[120px] p-3 text-xs md:text-sm rounded-lg border border-zinc-200 dark:border-zinc-700 bg-white dark:bg-zinc-900 resize-y focus:outline-none focus:ring-2 focus:ring-zinc-300 dark:focus:ring-zinc-600 placeholder:text-zinc-400/70"
-              />
-            </div>
-
-            {/* JD搜索结果 */}
-            {jdContent && (
-              <div className="mt-3 md:mt-4 p-3 md:p-4 rounded-xl bg-zinc-50 dark:bg-zinc-900/60 border border-zinc-200 dark:border-zinc-800">
-                <div className="flex items-center gap-2 mb-2">
-                  <span className="w-6 h-6 rounded-lg bg-zinc-900 dark:bg-white flex items-center justify-center">
-                    <Target className="h-3.5 w-3.5 text-white dark:text-zinc-900" />
-                  </span>
-                  <span className="text-xs md:text-sm font-medium text-zinc-900 dark:text-zinc-100">
-                    {t('optimize.jdSet')}
-                  </span>
-                </div>
-                <p className="text-xs md:text-sm text-zinc-500 dark:text-zinc-400 mb-2">
-                  {t('optimize.jdSetDesc')}
-                </p>
-                <div className="max-h-32 md:max-h-40 overflow-y-auto">
-                  <p className="text-xs md:text-sm text-zinc-600 dark:text-zinc-300 whitespace-pre-wrap">
-                    {jdContent}
-                  </p>
-                </div>
-              </div>
-            )}
-
-            {/* AI匹配优化建议 */}
-            {suggestions && (
-              <div className="mt-3 md:mt-4 p-3 md:p-4 rounded-xl bg-zinc-50 dark:bg-zinc-900/60 border border-zinc-200 dark:border-zinc-800">
-                <div className="flex items-start gap-2 md:gap-3">
-                  <span className="w-6 h-6 rounded-lg bg-zinc-900 dark:bg-white flex items-center justify-center mt-0.5 flex-shrink-0">
-                    <Sparkles className="h-3.5 w-3.5 text-white dark:text-zinc-900" />
-                  </span>
-                  <div className="flex-1">
-                    <h4 className="font-medium text-zinc-900 dark:text-zinc-100 mb-1.5 md:mb-2 text-sm md:text-base tracking-tight">
-                      {t('optimize.suggestionsTitle')}
-                    </h4>
-                    <p className="text-xs md:text-sm text-zinc-600 dark:text-zinc-300 whitespace-pre-wrap">
-                      {suggestions}
-                    </p>
-                  </div>
-                </div>
-              </div>
-            )}
 
             {optimizing && (
-              <div className="mt-3 md:mt-4">
-                <div className="flex items-center justify-between mb-2">
-                  <span className="text-xs md:text-sm text-zinc-400 dark:text-zinc-500">{t('optimize.optimizingProgress')}</span>
-                  <span className="text-xs md:text-sm font-medium">{optimizeProgress}%</span>
+              <div>
+                <div className="mb-2 flex items-center justify-between">
+                  <span className="text-xs text-zinc-400 md:text-sm dark:text-zinc-500">{t('optimize.optimizingProgress')}</span>
+                  <span className="text-xs font-medium md:text-sm">{optimizeProgress}%</span>
                 </div>
                 <Progress value={optimizeProgress} className="h-1.5 md:h-2" />
               </div>
             )}
           </CardContent>
+
         </Card>
 
         {/* Features */}
