@@ -142,7 +142,7 @@ order_no: businessOrderNo,  // 写入 billing_orders
 
 ### 2.3 本地过期/取消后，迟到的支付无法入账
 
-迁移 [0133](../supabase/migrations/0133_billing_settle_after_expiry.sql)：`complete_billing_order` 允许 `expired / cancelled / failed` 的订单在**渠道确认已收款**后补入账（金额仍需完全一致），并在积分流水 metadata 里记录 `recovered_from_status`。已退款订单依然禁止重新入账。
+迁移 [0133](../supabase/migrations/0133_billing_settle_ambiguous_column.sql)：`complete_billing_order` 允许 `expired / cancelled / failed` 的订单在**渠道确认已收款**后补入账（金额仍需完全一致），并在积分流水 metadata 里记录 `recovered_from_status`。已退款订单依然禁止重新入账。
 
 ### 2.4 回调失败被当成「永久失败」
 
