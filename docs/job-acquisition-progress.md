@@ -80,10 +80,8 @@
 | U04 | done | beeedec | 2026-11-24 18:29 | 50 board / 540s / 0 failed；jobs 45,005；closed 0；tier 排序和锁释放 bug 已修 |
 | U05 | done | beeedec | 2026-11-24 18:32 | 同日心跳不增；昨日 last_seen 更新、updated_at 保留；missing_streak=1、仍 OPEN |
 | U06 | done | f964cfc | 2026-11-24 18:40 | Feed v2 20 条 canary；source_key 过滤；v1 回退；迁移 0018 |
-| U07 | done | pending-commit | 2026-11-24 19:00 | 生产 50 board / 50 runs / 0 bulk jobs；health 50；0018 |
-| U06 | pending | — | — | — |
-| U07 | pending | — | — | — |
-| S01 | pending | — | — | — |
+| U07 | done | 7440d6b | 2026-11-24 19:00 | 生产 50 board / 50 runs / 0 bulk jobs；health 50；0018 |
+| S01 | done | pending-commit | 2026-11-24 19:16 | US 0140 上线；active 114,380 不变、closed 119,444 不变；last_seen 全部回填；enriched 113,642 |
 | S02 | pending | — | — | — |
 | S03 | pending | — | — | — |
 | S04 | pending | — | — | — |
@@ -141,6 +139,13 @@
 | — | — | — | — | — | — |
 
 ## 日志（倒序）
+
+### 2026-11-24 · S01 US 0140
+
+- 首次 dry-run 在 `UPDATE` 114,380 行时触发 DB `statement_timeout`；事务回滚，列未落库。迁移 SQL 顶部加 `set statement_timeout = 0;` 后重跑。
+- 生产 jobs 备份：`/opt/liorvix-backups/jobs-pre-0140-20261124T...dump`。
+- 结果：active 114,380 不变，closed 119,444 不变；7 列 + 3 索引；last_seen 回填 114,380；enriched 113,642、listed 738。
+- 未改 `is_active/is_closed`；down 可在事务内 `drop column` 回滚。
 
 ### 2026-11-24 · U07 生产部署
 
