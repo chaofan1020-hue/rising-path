@@ -72,10 +72,10 @@
 | D02 | done | 611512d | 2026-11-24 16:38 | 1,500 候选（GH 931/Ashby 296/Lever 273）；331 engineering 优先；上游交集 0 |
 | D03 | done | a8991f1 | 2026-11-24 16:47 | robots/三家解析/限速/断点；单测 10 项；Stripe/OpenAI/Palantir 均 active |
 | D04 | done | 3dcb4fe | 2026-11-24 17:06 | 1,000 探测：902 active/70 隔离/28 404；错误率 2.8% |
-| D05 | done | pending-commit | 2026-11-24 17:34 | 902：842 名称（93.3%）/290 域名（32.1%）；60 token 兜底；无证据不猜 domain |
-| D06 | done | pending-commit | 2026-11-24 17:37 | 冻结 500（GH 400/Lever 100）；S98/A270/B132；50 抽 0 名称错/0 域名错 |
+| D05 | done | 165719c | 2026-11-24 17:34 | 902：842 名称（93.3%）/290 域名（32.1%）；60 token 兜底；无证据不猜 domain |
+| D06 | done | 165719c | 2026-11-24 17:37 | 冻结 500（GH 400/Lever 100）；S98/A270/B132；50 抽 0 名称错/0 域名错 |
 | U01 | done | no-git/upstream | 2026-11-24 17:00 | shadow up/down/up 通过；3 新列+2 表；生产代码已换，迁移未执行 |
-| U02 | pending | — | — | — |
+| U02 | done | pending-commit | 2026-11-24 17:44 | staging 500 dry-run；apply 50：boards 50/bulk 公司 50/active 169 不变；重复 0 新增 |
 | U03 | pending | — | — | — |
 | U04 | pending | — | — | — |
 | U05 | pending | — | — | — |
@@ -139,6 +139,15 @@
 | — | — | — | — | — | — |
 
 ## 日志（倒序）
+
+### 2026-11-24 · U02 完成
+
+- staging `jobs_u02_staging` 迁移到 `0017_ats_boards`，保留 169 家现有公司。
+- `app/bulk_boards.py` 导入 500：首次 dry-run 全部新建；apply 50 后 boards 50、companies 219（+50 `Bulk ATS`），active 仍 169（`crawl_all` 不变），`jobs` 0。
+- 幂等重复 apply：0 新增；42 按名、8 按 domain 命中。Airbnb/Asana 合成 board 验证 domain 匹配后已删除。
+- domain 解析修正：CSV 裸域名（`airbnb.com`）需补 scheme 再取 hostname；修前所有 domain 被当空。
+- robots 非 allow 一律 `quarantined`；P0 500 全 allow，故 50 条均 active。
+- 生产库未写入、未重启；U02 仅 staging。
 
 ### 2026-11-24 · D05/D06 完成
 

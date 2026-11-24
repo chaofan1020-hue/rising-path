@@ -384,6 +384,13 @@ docker compose exec -T api python -m app.bulk_boards import --csv /tmp/p0-boards
 
 **验收**：dry-run 500 条、0 错误、新建公司数 ≤500；重复执行 0 新增；`--apply` 先只写 50 条到 staging；`crawl_all` 待抓公司数不变；50 家新公司全部 `is_active=false`。
 
+**2026-11-24 staging 实测**：
+- 首次 dry-run 500：500 个新公司、500 个新 board；`--apply --limit 50` 后 `ats_boards=50`、`companies=219`（原 169 + 50 个 `Bulk ATS`）。
+- `companies.is_active=169` 不变，`crawl_all` 待抓公司数不变；`bulk_active=0`；`jobs=0`；50 个 board 全部挂到 `company_id`。
+- 重复 apply 50：0 新增（`board_existing=50`、`matched_name=42`、`matched_domain=8`）。
+- 匹配用 Airbnb/Asana 合成 board 验证：按 domain 命中已有公司，未新建。
+- 代码 `/opt/global-jobs/app/bulk_boards.py`，命令 `python -m app.bulk_boards --csv /tmp/p0-boards.csv [--apply --limit 50]`。
+
 **回滚**：按 batch id 删除新行；不影响现有公司。
 
 ### U03 · 单 board 抓取
