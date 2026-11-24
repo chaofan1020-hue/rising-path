@@ -48,9 +48,21 @@ async function main() {
     supabaseSource.match(/postgres(?:ql)?:\/\/[^\s"']+/iu)?.[0],
     'Supabase PostgreSQL connection string',
   );
-  const poolerMatch = databaseUrl.match(/@(?<host>[^/:?]+):(?<port>\d+)\//u);
-  if (!poolerMatch?.groups?.host.endsWith('.pooler.supabase.com') || poolerMatch.groups.port !== '6543') {
-    throw new Error('SUPABASE_DB_URL must be the Supabase Transaction Pooler URI on port 6543.');
+  // Managed Supabase is reachable through the transaction pooler on 6543. A
+  // self-hosted stack has no pooler in this deployment, so a direct local
+  // connection on 5432 (or a unix socket path) is the expected shape there.
+  const connectionMatch = databaseUrl.match(/@(?<host>[^/:?]+):(?<port>\d+)\//u);
+  const connectionHost = connectionMatch?.groups?.host ?? '';
+  const connectionPort = connectionMatch?.groups?.port ?? '';
+  const managedPooler = connectionHost.endsWith('.pooler.supabase.com') && connectionPort === '6543';
+  const selfHostedLocal = connectionHost
+    ? ['127.0.0.1', 'localhost', 'db'].includes(connectionHost) && connectionPort === '5432'
+    : /^postgres(?:ql)?:\/\/[^@]*@?\/[^?]+/u.test(databaseUrl);
+  if (!managedPooler && !selfHostedLocal) {
+    throw new Error(
+      'SUPABASE_DB_URL must be either the Supabase Transaction Pooler URI on port 6543 '
+      + 'or a self-hosted direct connection on port 5432 (127.0.0.1 / localhost / db).',
+    );
   }
   env.SUPABASE_DB_URL = databaseUrl;
   env.INTERVIEW_DEBUG_LOGGING = 'false';

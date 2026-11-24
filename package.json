@@ -65,6 +65,7 @@
     "test:admin-session-token": "tsx scripts/test-admin-session-token.ts",
     "test:admin-origin": "tsx scripts/test-admin-origin.ts",
     "test:auth-email-otp": "tsx scripts/test-auth-email-otp.ts",
+    "test:auth-session-migration": "tsx scripts/test-auth-session-migration.ts",
     "test:altcha": "tsx scripts/test-altcha.ts",
     "test:safe-external-fetch": "tsx scripts/test-safe-external-fetch.ts",
     "test:google-official-detail": "tsx scripts/test-google-official-detail.ts",

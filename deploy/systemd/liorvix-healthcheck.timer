@@ -1,0 +1,11 @@
+[Unit]
+Description=Run Liorvix health check every 5 minutes
+
+[Timer]
+OnBootSec=3min
+OnUnitActiveSec=5min
+AccuracySec=30s
+Unit=liorvix-healthcheck.service
+
+[Install]
+WantedBy=timers.target

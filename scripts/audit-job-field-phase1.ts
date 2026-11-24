@@ -359,9 +359,14 @@ async function loadCompletedBaselineCompanies(): Promise<Set<string>> {
 async function main(): Promise<void> {
   const envFile = process.env.ENV_FILE || '.env.production.local';
   loadDotenv({ path: envFile, override: false });
-  const expectedProject = process.env.EXPECTED_SUPABASE_PROJECT_REF || 'weqvdtdjdzmqflhwobec';
-  const actualProject = (() => { try { return new URL(process.env.SUPABASE_URL || '').hostname.split('.')[0] || null; } catch { return null; } })();
-  if (actualProject !== expectedProject) throw new Error(`生产环境核验失败: expected ${expectedProject}, got ${actualProject || 'unknown'}`);
+  // Guard against auditing the wrong database. Managed Supabase projects are
+  // identified by `<ref>.supabase.co`; a self-hosted deployment is identified by
+  // its own host, which must then be stated explicitly so a stale .env cannot
+  // silently redirect this audit at an unexpected database.
+  const expectedRef = process.env.EXPECTED_SUPABASE_PROJECT_REF || 'weqvdtdjdzmqflhwobec';
+  const expectedHost = process.env.EXPECTED_SUPABASE_HOST || `${expectedRef}.supabase.co`;
+  const actualHost = (() => { try { return new URL(process.env.SUPABASE_URL || '').hostname || null; } catch { return null; } })();
+  if (actualHost !== expectedHost) throw new Error(`生产环境核验失败: expected host ${expectedHost}, got ${actualHost || 'unknown'} (set EXPECTED_SUPABASE_HOST when pointing at a self-hosted instance)`);
   const rows = await loadActiveJobs();
   const completedBaselineCompanies = await loadCompletedBaselineCompanies();
   const report = {

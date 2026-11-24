@@ -1,0 +1,33 @@
+[Unit]
+Description=Liorvix background worker (job sync / resume parsing / profile fill)
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=simple
+User=__APP_USER__
+Group=__APP_USER__
+WorkingDirectory=/opt/liorvix
+EnvironmentFile=/opt/liorvix/.env.local
+Environment=NODE_ENV=production
+# 关键：worker 服务必须显式覆盖 .env.local 里的 JOBS_AUTO_WORKER=false
+# （EnvironmentFile 先读，后面的 Environment= 覆盖）
+Environment=JOBS_AUTO_WORKER=true
+Environment=WORKER_ONLY=true
+ExecStart=/usr/bin/node /opt/liorvix/dist/server.js
+Restart=always
+RestartSec=5
+TimeoutStopSec=30
+KillSignal=SIGTERM
+NoNewPrivileges=true
+PrivateTmp=true
+ProtectHome=true
+ReadWritePaths=/opt/liorvix
+LimitNOFILE=65536
+# 与 Web 争抢 CPU 时要让位于请求处理
+CPUQuota=200%
+MemoryMax=2G
+Nice=10
+
+[Install]
+WantedBy=multi-user.target

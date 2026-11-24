@@ -5,7 +5,12 @@ set -Eeuo pipefail
 # files and a production-only .env.local have been placed there.
 APP_DIR="${APP_DIR:-/opt/liorvix}"
 SERVICE_NAME="${SERVICE_NAME:-liorvix}"
+# A managed Supabase project is identified by `<ref>.supabase.co`. A self-hosted
+# instance has no such hostname, so EXPECTED_SUPABASE_HOST must be set explicitly
+# once the database lives on our own domain; without it the guard would reject
+# every self-hosted release.
 EXPECTED_SUPABASE_PROJECT_REF="${EXPECTED_SUPABASE_PROJECT_REF:-weqvdtdjdzmqflhwobec}"
+EXPECTED_SUPABASE_HOST="${EXPECTED_SUPABASE_HOST:-${EXPECTED_SUPABASE_PROJECT_REF}.supabase.co}"
 
 if [[ "${EUID}" -ne 0 ]]; then
   echo "Run this script with sudo so it can install and restart the systemd service." >&2
@@ -44,11 +49,25 @@ for name in "${required_vars[@]}"; do
   fi
 done
 
-configured_project_ref="$(sed -n 's#^SUPABASE_URL=https://\([^.]*\)\.supabase\.co.*#\1#p' .env.local | head -n 1)"
-if [[ -z "$configured_project_ref" || "$configured_project_ref" != "$EXPECTED_SUPABASE_PROJECT_REF" ]]; then
-  echo "Refusing deployment: SUPABASE_URL project ref is '${configured_project_ref:-missing}', expected '${EXPECTED_SUPABASE_PROJECT_REF}'." >&2
+supabase_url_line="$(grep -m1 '^SUPABASE_URL=' .env.local || true)"
+supabase_url="${supabase_url_line#SUPABASE_URL=}"
+supabase_url="${supabase_url%\"}"
+supabase_url="${supabase_url#\"}"
+supabase_url="${supabase_url%\'}"
+supabase_url="${supabase_url#\'}"
+if [[ "$supabase_url" != http://* && "$supabase_url" != https://* ]]; then
+  echo "Refusing deployment: SUPABASE_URL in .env.local is missing or not a plain http(s) URL." >&2
   exit 1
 fi
+configured_supabase_host="${supabase_url#*://}"
+configured_supabase_host="${configured_supabase_host%%/*}"
+configured_supabase_host="${configured_supabase_host%%:*}"
+if [[ -z "$configured_supabase_host" || "$configured_supabase_host" != "$EXPECTED_SUPABASE_HOST" ]]; then
+  echo "Refusing deployment: SUPABASE_URL host is '${configured_supabase_host:-missing}', expected '${EXPECTED_SUPABASE_HOST}'." >&2
+  echo "For a managed project set EXPECTED_SUPABASE_PROJECT_REF; for self-hosting set EXPECTED_SUPABASE_HOST." >&2
+  exit 1
+fi
+echo "Deploying against Supabase host: ${configured_supabase_host}"
 
 PNPM_VERSION="${PNPM_VERSION:-9.0.0}"
 corepack enable

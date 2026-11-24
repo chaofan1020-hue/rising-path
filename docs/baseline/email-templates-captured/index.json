@@ -1,0 +1,22 @@
+{
+  "mailbox": "lrxmworqon1aw9f@euploading.com",
+  "capturedAt": "2026-11-20T09:23:32.552Z",
+  "templates": [
+    {
+      "label": "confirm-signup",
+      "subject": "Confirm your email address",
+      "from": {
+        "address": "noreply@liorvix.com",
+        "name": "Liorvix"
+      }
+    },
+    {
+      "label": "recovery",
+      "subject": "Reset your password",
+      "from": {
+        "address": "noreply@liorvix.com",
+        "name": "Liorvix"
+      }
+    }
+  ]
+}

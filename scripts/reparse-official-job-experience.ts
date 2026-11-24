@@ -23,20 +23,16 @@ type JobRow = {
 
 const PAGE_SIZE = 200;
 const WRITE_BATCH = 20;
-const EXPECTED_PRODUCTION_REF = 'weqvdtdjdzmqflhwobec';
+const EXPECTED_PRODUCTION_REF = process.env.EXPECTED_SUPABASE_PROJECT_REF || 'weqvdtdjdzmqflhwobec';
+// Self-hosted instances have no `<ref>.supabase.co` hostname, so writes must
+// state their expected host explicitly instead of relying on the managed ref.
+const EXPECTED_PRODUCTION_HOST = process.env.EXPECTED_SUPABASE_HOST
+  || `${EXPECTED_PRODUCTION_REF}.supabase.co`;
 
 function argument(name: string): string | null {
   const prefix = `--${name}=`;
   const value = process.argv.find((item) => item.startsWith(prefix));
   return value ? value.slice(prefix.length).trim() || null : null;
-}
-
-function projectRef(url: string): string {
-  try {
-    return new URL(url).hostname.split('.')[0] || 'unknown';
-  } catch {
-    return 'unknown';
-  }
 }
 
 function sameNumber(left: number | null, right: number | null): boolean {
@@ -125,9 +121,9 @@ async function main(): Promise<void> {
 
   const company = argument('company') || 'Cisco';
   const supabaseUrl = process.env.SUPABASE_URL || '';
-  const ref = projectRef(supabaseUrl);
-  if (write && ref !== EXPECTED_PRODUCTION_REF) {
-    throw new Error(`refusing write to non-production ref: ${ref}`);
+  const host = (() => { try { return new URL(supabaseUrl).hostname || 'unknown'; } catch { return 'unknown'; } })();
+  if (write && host !== EXPECTED_PRODUCTION_HOST) {
+    throw new Error(`refusing write to non-production host: ${host} (expected ${EXPECTED_PRODUCTION_HOST})`);
   }
 
   const limit = Number.parseInt(argument('limit') || '', 10);
@@ -183,7 +179,7 @@ async function main(): Promise<void> {
 
   const result = {
     env_file: envFile,
-    supabase_ref: ref,
+    supabase_host: host,
     company,
     scanned: rows.length,
     candidates: candidates.length,

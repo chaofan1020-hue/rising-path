@@ -1,0 +1,18 @@
+[Unit]
+Description=Liorvix self-hosted stack health check
+After=docker.service
+Requires=docker.service
+
+[Service]
+Type=oneshot
+User=root
+WorkingDirectory=/opt/liorvix
+Environment=SUPABASE_DIR=/opt/supabase
+Environment=BACKUP_DIR=/opt/liorvix-backups
+Environment=APP_HEALTH_URL=http://127.0.0.1:5000/api/health
+# 想接告警就填：Telegram Bot API（https://api.telegram.org/bot<token>/sendMessage?chat_id=<id>）
+# 或任意接受 {"text": "..."} 的 webhook。留空则只写 journal。
+Environment=ALERT_WEBHOOK_URL=
+ExecStart=/usr/bin/env bash /opt/liorvix/scripts/migrate/healthcheck.sh --quiet
+Nice=15
+IOSchedulingClass=idle

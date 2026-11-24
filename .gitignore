@@ -126,3 +126,6 @@ Supabase正式环境配置.txt
 正式发布服务器密钥.pem
 [{]console.error(e.message)
 [{]console.error(e)
+
+# 本地探针与临时脚本（迁移/排障用，不进仓库）
+tmp/

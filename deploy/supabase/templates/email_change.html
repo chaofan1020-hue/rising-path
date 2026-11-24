@@ -1,0 +1,56 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width,initial-scale=1">
+  <title>确认 Liorvix 邮箱变更</title>
+</head>
+<body style="margin:0;padding:0;background:#f5f5f4;font-family:-apple-system,BlinkMacSystemFont,'Segoe UI','PingFang SC','Hiragino Sans GB','Microsoft YaHei',sans-serif;color:#1c1917;">
+  <table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="background:#f5f5f4;padding:32px 12px;">
+    <tr>
+      <td align="center">
+        <table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="max-width:560px;background:#ffffff;border-radius:16px;overflow:hidden;box-shadow:0 1px 3px rgba(0,0,0,.06);">
+          <tr>
+            <td style="padding:28px 32px 8px 32px;">
+              <div style="font-size:18px;font-weight:700;letter-spacing:.02em;">Liorvix</div>
+              <div style="font-size:12px;color:#78716c;margin-top:4px;">海外留学生一站式求职平台</div>
+            </td>
+          </tr>
+          <tr>
+            <td style="padding:16px 32px 0 32px;">
+              <h1 style="margin:0 0 12px 0;font-size:20px;line-height:1.4;">确认邮箱变更</h1>
+              <p style="margin:0 0 18px 0;font-size:14px;line-height:1.7;color:#44403c;">
+                有人请求把 Liorvix 账号的邮箱改到 <strong>{{ .Email }}</strong>。确认是你本人操作，请输入下面的验证码：
+              </p>
+            </td>
+          </tr>
+          <tr>
+            <td align="center" style="padding:0 32px;">
+              <div style="display:inline-block;padding:16px 28px;background:#f5f5f4;border:1px dashed #d6d3d1;border-radius:12px;font-size:30px;font-weight:700;letter-spacing:.32em;color:#1c1917;">
+                {{ .Token }}
+              </div>
+            </td>
+          </tr>
+          <tr>
+            <td style="padding:20px 32px 0 32px;">
+              <p style="margin:0 0 20px 0;font-size:12px;line-height:1.6;color:#78716c;word-break:break-all;">
+                或点击链接确认：<a href="{{ .ConfirmationURL }}" style="color:#2563eb;">{{ .ConfirmationURL }}</a>
+              </p>
+            </td>
+          </tr>
+          <tr>
+            <td style="padding:0 32px 28px 32px;">
+              <div style="border-top:1px solid #e7e5e4;padding-top:16px;font-size:12px;line-height:1.7;color:#a8a29e;">
+                如果这不是你本人的操作，请立刻修改密码并联系支持，不要点击上面的链接。
+              </div>
+            </td>
+          </tr>
+        </table>
+        <div style="max-width:560px;margin:16px auto 0 auto;font-size:11px;color:#a8a29e;text-align:center;">
+          © Liorvix · liorvix.com
+        </div>
+      </td>
+    </tr>
+  </table>
+</body>
+</html>

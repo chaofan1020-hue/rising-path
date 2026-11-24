@@ -1,0 +1,329 @@
+# Liorvix 自托管 Supabase 栈（P2）
+#
+# 与官方 supabase/docker 的差异（都是有意为之，见 docs/supabase-selfhost-migration-plan.md §2/§5）：
+#   1. 不部署 Envoy(api-gw) / Kong：`/auth/v1`、`/rest/v1`、`/storage/v1` 由宿主 nginx 按路径
+#      转发（deploy/nginx/supabase.conf），少一层、少一个配置文件、故障点更少。
+#   2. 不部署 supavisor：应用与脚本都直连 127.0.0.1:5432（本机 socket，零 RTT）。
+#   3. 不部署 realtime / functions / edge-runtime：本项目未使用。
+#   4. JWT 使用 HS256 对称密钥（GOTRUE_JWT_SECRET = PGRST_JWT_SECRET）：
+#      自托管后不需要兼容 Cloud 的 ES256 公钥；迁移过来的 refresh token 会换出新签名的
+#      access token（见计划 §6.1）。因此 anon / service_role 也是自签的 JWT。
+#   5. studio / meta 放在 `studio` profile 里，默认不启动；切到 `--profile studio` 才拉起。
+#
+# 所有端口都只绑 127.0.0.1：容器只经由 nginx 暴露给公网。
+name: liorvix-supabase
+
+x-postgres-tuning: &postgres-tuning
+  - postgres
+  # 必须显式给：数据目录里 postgresql.conf 的 listen_addresses 是注释状态（默认 localhost），
+  # 镜像的 POSTGRES_HOST 不会改它。缺了这行，同网络的 auth/rest/storage 连 db:5432 全是
+  # ECONNREFUSED（VPS 实测踩过，容器 own IP 172.18.0.2 拒绝连接）。
+  - -c
+  - listen_addresses=*
+  - -c
+  - shared_buffers=4GB
+  - -c
+  - effective_cache_size=10GB
+  - -c
+  - work_mem=32MB
+  - -c
+  - maintenance_work_mem=512MB
+  - -c
+  - max_connections=100
+  - -c
+  - random_page_cost=1.1
+  - -c
+  - effective_io_concurrency=200
+  - -c
+  - wal_compression=on
+  - -c
+  - checkpoint_completion_target=0.9
+  - -c
+  - max_wal_size=2GB
+  - -c
+  - log_min_duration_statement=500ms
+  - -c
+  - log_temp_files=0
+  - -c
+  - shared_preload_libraries=pg_stat_statements
+  - -c
+  - autovacuum_naptime=30s
+  - -c
+  - autovacuum_vacuum_scale_factor=0.05
+  - -c
+  - autovacuum_analyze_scale_factor=0.02
+  - -c
+  - statement_timeout=60s
+
+services:
+  db:
+    image: supabase/postgres:${POSTGRES_VERSION:-17.6.1.136}
+    container_name: liorvix-supabase-db
+    restart: unless-stopped
+    shm_size: 1gb
+    command: *postgres-tuning
+    environment:
+      # 必须是 0.0.0.0：supabase/postgres 镜像用它设置 listen_addresses，
+      # 设成 /var/run/postgresql 时只监听 unix socket + 127.0.0.1，同网络里的
+      # auth/rest/storage 连 db:5432 会直接 ECONNREFUSED（VPS 实测踩过）。
+      POSTGRES_HOST: 0.0.0.0
+      POSTGRES_PORT: 5432
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?POSTGRES_PASSWORD is required}
+      POSTGRES_DB: postgres
+      JWT_SECRET: ${JWT_SECRET:?JWT_SECRET is required}
+    volumes:
+      - db-data:/var/lib/postgresql/data
+      # 注意：**不要**挂到 /docker-entrypoint-initdb.d —— 那会把镜像自带的初始化脚本
+      # （schema/角色/pgsodium 等）整目录盖掉。我们的脚本改为显式执行一次（见 README 第 4 步），
+      # 既保留镜像默认初始化，又能在"已有数据目录"时重复执行。
+      - ./bootstrap:/opt/liorvix/bootstrap:ro
+    ports:
+      - 127.0.0.1:5432:5432
+    healthcheck:
+      test: ['CMD-SHELL', 'pg_isready -U postgres -h 127.0.0.1 -p 5432']
+      interval: 5s
+      timeout: 5s
+      retries: 30
+      start_period: 30s
+    networks:
+      - supabase
+
+  auth:
+    image: supabase/gotrue:${GOTRUE_VERSION:-v2.197.0}
+    container_name: liorvix-supabase-auth
+    restart: unless-stopped
+    depends_on:
+      db:
+        condition: service_healthy
+    environment:
+      GOTRUE_API_HOST: 0.0.0.0
+      GOTRUE_API_PORT: 9999
+      # GoTrue v2.197 读的是**无前缀**的 API_EXTERNAL_URL（官方 compose 也是这么写的）；
+      # 只给 GOTRUE_API_EXTERNAL_URL 会直接 fatal: required key API_EXTERNAL_URL missing。
+      API_EXTERNAL_URL: ${API_EXTERNAL_URL:?API_EXTERNAL_URL is required}
+      GOTRUE_DB_DRIVER: postgres
+      GOTRUE_DB_DATABASE_URL: postgres://supabase_auth_admin:${POSTGRES_PASSWORD:?POSTGRES_PASSWORD is required}@db:5432/postgres
+      GOTRUE_DB_NAMESPACE: auth
+      GOTRUE_DB_MAX_POOL_SIZE: ${GOTRUE_DB_MAX_POOL_SIZE:-10}
+      GOTRUE_SITE_URL: ${SITE_URL:?SITE_URL is required}
+      GOTRUE_URI_ALLOW_LIST: ${URI_ALLOW_LIST:-}
+      GOTRUE_DISABLE_SIGNUP: ${DISABLE_SIGNUP:-false}
+      GOTRUE_JWT_SECRET: ${JWT_SECRET:?JWT_SECRET is required}
+      GOTRUE_JWT_EXP: ${JWT_EXP:-3600}
+      GOTRUE_JWT_AUD: authenticated
+      GOTRUE_JWT_DEFAULT_GROUP_NAME: authenticated
+      GOTRUE_JWT_ADMIN_ROLES: service_role
+      # 让 iss 与对外地址一致（Cloud 也是这么发的；PostgREST 默认不校验 iss，但保持一致更安全）
+      GOTRUE_JWT_ISSUER: ${API_EXTERNAL_URL:?API_EXTERNAL_URL is required}
+      GOTRUE_EXTERNAL_EMAIL_ENABLED: 'true'
+      GOTRUE_MAILER_AUTOCONFIRM: 'false'
+      GOTRUE_MAILER_SECURE_EMAIL_CHANGE_ENABLED: 'true'
+      # 邮件里的链接必须落在 nginx 已路由的 /auth/v1 前缀下（GoTrue 默认是 /verify，
+      # 自托管没有 Cloud 的 API_EXTERNAL_URL 带 /auth/v1 的约定，所以显式指定）
+      GOTRUE_MAILER_URLPATHS_CONFIRMATION: ${MAILER_URLPATHS_CONFIRMATION:-/auth/v1/verify}
+      GOTRUE_MAILER_URLPATHS_INVITE: ${MAILER_URLPATHS_INVITE:-/auth/v1/verify}
+      GOTRUE_MAILER_URLPATHS_RECOVERY: ${MAILER_URLPATHS_RECOVERY:-/auth/v1/verify}
+      GOTRUE_MAILER_URLPATHS_EMAIL_CHANGE: ${MAILER_URLPATHS_EMAIL_CHANGE:-/auth/v1/verify}
+      GOTRUE_SMTP_HOST: ${SMTP_HOST:?SMTP_HOST is required}
+      GOTRUE_SMTP_PORT: ${SMTP_PORT:-587}
+      GOTRUE_SMTP_USER: ${SMTP_USER:?SMTP_USER is required}
+      GOTRUE_SMTP_PASS: ${SMTP_PASS:?SMTP_PASS is required}
+      GOTRUE_SMTP_ADMIN_EMAIL: ${SMTP_ADMIN_EMAIL:-noreply@liorvix.com}
+      GOTRUE_SMTP_SENDER_NAME: ${SMTP_SENDER_NAME:-Liorvix}
+      GOTRUE_RATE_LIMIT_EMAIL_SENT: ${RATE_LIMIT_EMAIL_SENT:-100}
+      # 邮件模板与标题：自托管镜像默认是英文、且带 Supabase 品牌，直接上线会让用户收到
+      # "Confirm your signup" 这种邮件。模板正文在 ./templates，由 nginx 的
+      # `location /auth-templates/` 只读暴露成 https://<域名>/auth-templates/*.html。
+      # ⚠️ GoTrue v2.197 的 MAILER_TEMPLATES_* 要的是 **URL**，传本地文件路径时它会把
+      #    路径拼到 SiteURL 后面（https://liorvix.com/etc/...）→ 发信 500（VPS 实测）。
+      #    应用侧 /api/auth/otp 依赖 magic_link 模板里的 {{ .Token }}，改模板必须保留该变量。
+      GOTRUE_MAILER_TEMPLATES_CONFIRMATION: ${MAILER_TPL_CONFIRMATION:-https://supabase.liorvix.com/auth-templates/confirmation.html}
+      GOTRUE_MAILER_TEMPLATES_RECOVERY: ${MAILER_TPL_RECOVERY:-https://supabase.liorvix.com/auth-templates/recovery.html}
+      GOTRUE_MAILER_TEMPLATES_MAGIC_LINK: ${MAILER_TPL_MAGIC_LINK:-https://supabase.liorvix.com/auth-templates/magic_link.html}
+      GOTRUE_MAILER_TEMPLATES_EMAIL_CHANGE: ${MAILER_TPL_EMAIL_CHANGE:-https://supabase.liorvix.com/auth-templates/email_change.html}
+      GOTRUE_MAILER_TEMPLATES_INVITE: ${MAILER_TPL_INVITE:-https://supabase.liorvix.com/auth-templates/invite.html}
+      GOTRUE_MAILER_SUBJECTS_CONFIRMATION: ${MAILER_SUBJECT_CONFIRMATION:-验证你的 Liorvix 邮箱}
+      GOTRUE_MAILER_SUBJECTS_RECOVERY: ${MAILER_SUBJECT_RECOVERY:-重置你的 Liorvix 密码}
+      GOTRUE_MAILER_SUBJECTS_MAGIC_LINK: ${MAILER_SUBJECT_MAGIC_LINK:-你的 Liorvix 登录验证码}
+      GOTRUE_MAILER_SUBJECTS_EMAIL_CHANGE: ${MAILER_SUBJECT_EMAIL_CHANGE:-确认 Liorvix 邮箱变更}
+      GOTRUE_MAILER_SUBJECTS_INVITE: ${MAILER_SUBJECT_INVITE:-邀请你加入 Liorvix}
+      # 不配这个，GoTrue 每次请求都刷一条 "Request received external host in
+      # X-Forwarded-Host ... will not be used" 警告（2 小时 14 条），且生成链接时
+      # 不认 nginx 传来的 Host —— 显式声明我们真正对外的域名。
+      GOTRUE_MAILER_EXTERNAL_HOSTS: ${MAILER_EXTERNAL_HOSTS:-supabase.liorvix.com,liorvix.com}
+      GOTRUE_EXTERNAL_GITHUB_ENABLED: ${GITHUB_ENABLED:-false}
+      GOTRUE_EXTERNAL_GITHUB_CLIENT_ID: ${GITHUB_CLIENT_ID:-}
+      GOTRUE_EXTERNAL_GITHUB_SECRET: ${GITHUB_CLIENT_SECRET:-}
+      GOTRUE_EXTERNAL_GITHUB_REDIRECT_URI: ${API_EXTERNAL_URL:?API_EXTERNAL_URL is required}/auth/v1/callback
+      GOTRUE_API_EXTERNAL_URL: ${API_EXTERNAL_URL:?API_EXTERNAL_URL is required}
+      GOTRUE_LOG_LEVEL: ${GOTRUE_LOG_LEVEL:-info}
+    ports:
+      - 127.0.0.1:9999:9999
+    healthcheck:
+      # 用 127.0.0.1 而不是 localhost：容器里 localhost 会先解析成 ::1，
+      # GoTrue/storage 只监听 IPv4，healthcheck 会一直 "Connection refused"（VPS 实测）。
+      test: ['CMD', 'wget', '--no-verbose', '--tries=1', '--spider', 'http://127.0.0.1:9999/health']
+      interval: 5s
+      timeout: 5s
+      retries: 5
+      start_period: 10s
+    volumes:
+      # 只读挂模板：改文案不用重建镜像，改完 restart auth 即可
+      - ./templates:/etc/gotrue/templates:ro
+    networks:
+      - supabase
+
+  rest:
+    image: postgrest/postgrest:${POSTGREST_VERSION:-v14.18}
+    container_name: liorvix-supabase-rest
+    restart: unless-stopped
+    depends_on:
+      db:
+        condition: service_healthy
+    environment:
+      PGRST_DB_URI: postgres://authenticator:${POSTGRES_PASSWORD:?POSTGRES_PASSWORD is required}@db:5432/postgres
+      PGRST_DB_SCHEMAS: ${PGRST_DB_SCHEMAS:-public}
+      PGRST_DB_ANON_ROLE: anon
+      # RLS 策略里大量 auth.uid()；扩展函数在 extensions。显式声明避免依赖角色默认 search_path。
+      PGRST_DB_EXTRA_SEARCH_PATH: public,extensions
+      PGRST_JWT_SECRET: ${JWT_SECRET:?JWT_SECRET is required}
+      PGRST_DB_USE_LEGACY_GUCS: 'false'
+      PGRST_DB_MAX_ROWS: ${PGRST_DB_MAX_ROWS:-1000}
+      PGRST_DB_POOL: ${PGRST_DB_POOL:-20}
+      PGRST_SERVER_PORT: 3000
+      PGRST_SERVER_HOST: 0.0.0.0
+      PGRST_LOG_LEVEL: ${PGRST_LOG_LEVEL:-error}
+      PGRST_OPENAPI_SERVER_PROXY_URI: ${API_EXTERNAL_URL:?API_EXTERNAL_URL is required}/rest/v1
+      PGRST_ADMIN_SERVER_PORT: 3001
+      PGRST_ADMIN_SERVER_HOST: 127.0.0.1
+    ports:
+      - 127.0.0.1:3000:3000
+    healthcheck:
+      test: ['CMD', 'postgrest', '--ready']
+      interval: 5s
+      timeout: 5s
+      retries: 5
+      start_period: 10s
+    networks:
+      - supabase
+
+  storage:
+    image: supabase/storage-api:${STORAGE_VERSION:-v1.89.12}
+    container_name: liorvix-supabase-storage
+    restart: unless-stopped
+    depends_on:
+      db:
+        condition: service_healthy
+      rest:
+        condition: service_started
+    environment:
+      ANON_KEY: ${ANON_KEY:?ANON_KEY is required}
+      SERVICE_KEY: ${SERVICE_ROLE_KEY:?SERVICE_ROLE_KEY is required}
+      POSTGREST_URL: http://rest:3000
+      # v1.89 用 AUTH_JWT_SECRET（PGRST_JWT_SECRET 是更早的别名）；两个都给，版本内升级也不炸
+      AUTH_JWT_SECRET: ${JWT_SECRET:?JWT_SECRET is required}
+      PGRST_JWT_SECRET: ${JWT_SECRET:?JWT_SECRET is required}
+      # 对外 URL：决定上传后返回的 publicUrl 用哪个域名（必须是 nginx 上那个域名）
+      STORAGE_PUBLIC_URL: ${API_EXTERNAL_URL:?API_EXTERNAL_URL is required}
+      REQUEST_ALLOW_X_FORWARDED_PATH: 'true'
+      DATABASE_URL: postgres://supabase_storage_admin:${POSTGRES_PASSWORD:?POSTGRES_PASSWORD is required}@db:5432/postgres
+      FILE_SIZE_LIMIT: ${FILE_SIZE_LIMIT:-52428800}
+      STORAGE_BACKEND: file
+      FILE_STORAGE_BACKEND_PATH: /var/lib/storage
+      TENANT_ID: ${STORAGE_TENANT_ID:-liorvix}
+      REGION: ${STORAGE_REGION:-us-west-1}
+      GLOBAL_S3_BUCKET: ${STORAGE_S3_BUCKET:-liorvix-storage}
+      ENABLE_IMAGE_TRANSFORMATION: 'true'
+      IMGPROXY_URL: http://imgproxy:5101
+      IMGPROXY_REQUEST_TIMEOUT: 15
+      DB_INSTALL_ROLES: 'false'
+      LOG_LEVEL: ${STORAGE_LOG_LEVEL:-info}
+    volumes:
+      - storage-data:/var/lib/storage
+    ports:
+      - 127.0.0.1:5100:5000
+    healthcheck:
+      test: ['CMD', 'wget', '--no-verbose', '--tries=1', '--spider', 'http://127.0.0.1:5000/status']
+      interval: 5s
+      timeout: 5s
+      retries: 6
+      start_period: 20s
+    networks:
+      - supabase
+
+  imgproxy:
+    image: darthsim/imgproxy:${IMGPROXY_VERSION:-v4.0.21}
+    container_name: liorvix-supabase-imgproxy
+    restart: unless-stopped
+    environment:
+      IMGPROXY_BIND: :5101
+      IMGPROXY_LOCAL_FILESYSTEM_ROOT: /
+      IMGPROXY_USE_ETAG: 'true'
+      IMGPROXY_ENABLE_WEBP_DETECTION: 'true'
+      IMGPROXY_MAX_SRC_RESOLUTION: '50'
+      IMGPROXY_KEY: ${IMGPROXY_KEY:?IMGPROXY_KEY is required}
+      IMGPROXY_SALT: ${IMGPROXY_SALT:?IMGPROXY_SALT is required}
+    volumes:
+      - storage-data:/var/lib/storage:ro
+    ports:
+      - 127.0.0.1:5101:5101
+    healthcheck:
+      test: ['CMD', 'imgproxy', 'health']
+      interval: 5s
+      timeout: 5s
+      retries: 5
+    networks:
+      - supabase
+
+  # 可选：管理台（默认不启动；`docker compose --profile studio up -d`）
+  meta:
+    image: supabase/postgres-meta:${META_VERSION:-v0.100.0}
+    container_name: liorvix-supabase-meta
+    restart: unless-stopped
+    profiles: ['studio']
+    environment:
+      PG_META_PORT: 8080
+      PG_META_DB_HOST: db
+      PG_META_DB_PORT: 5432
+      PG_META_DB_NAME: postgres
+      PG_META_DB_USER: postgres
+      PG_META_DB_PASSWORD: ${POSTGRES_PASSWORD:?POSTGRES_PASSWORD is required}
+    ports:
+      - 127.0.0.1:5103:8080
+    networks:
+      - supabase
+
+  studio:
+    image: supabase/studio:${STUDIO_VERSION:-2026.11.02-sha-a05e7ec}
+    container_name: liorvix-supabase-studio
+    restart: unless-stopped
+    profiles: ['studio']
+    depends_on:
+      meta:
+        condition: service_started
+    environment:
+      STUDIO_PG_META_URL: http://meta:8080
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?POSTGRES_PASSWORD is required}
+      SUPABASE_URL: ${API_EXTERNAL_URL:?API_EXTERNAL_URL is required}
+      SUPABASE_PUBLIC_URL: ${API_EXTERNAL_URL:?API_EXTERNAL_URL is required}
+      SUPABASE_ANON_KEY: ${ANON_KEY:?ANON_KEY is required}
+      SUPABASE_SERVICE_KEY: ${SERVICE_ROLE_KEY:?SERVICE_ROLE_KEY is required}
+      SUPABASE_DB_PASSWORD: ${POSTGRES_PASSWORD:?POSTGRES_PASSWORD is required}
+      AUTH_JWT_SECRET: ${JWT_SECRET:?JWT_SECRET is required}
+      DEFAULT_ORGANIZATION_NAME: Liorvix
+      DEFAULT_PROJECT_NAME: liorvix
+    ports:
+      - 127.0.0.1:5102:3000
+    networks:
+      - supabase
+
+volumes:
+  db-data:
+    name: liorvix-supabase-db-data
+  storage-data:
+    name: liorvix-supabase-storage-data
+
+networks:
+  supabase:
+    name: liorvix-supabase
+    driver: bridge

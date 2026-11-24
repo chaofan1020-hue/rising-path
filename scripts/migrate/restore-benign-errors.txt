@@ -1,0 +1,18 @@
+# pg_restore 恢复 Cloud dump 时的"可接受错误"白名单。
+# 任何不匹配这里的 `pg_restore: error` 都会让 restore-into-selfhost.sh 失败。
+#
+# 匹配方式是 `grep -vFf`（固定字符串子串匹配，不区分正则）。
+#
+# 现状（2026-11-20 本机 PG17 演练实测）：
+#   * 空库首次恢复：0 error / 0 unexpected（public schema 条目与 DEFAULT ACL 已由
+#     restore 脚本用 pg_restore -L 过滤，pg_trgm 由 bootstrap 预装进 public）；
+#   * 同一 dump 重复恢复（演练场景）：同样 0 error。
+# 下面这些条目留着做安全网：换 dump 版本、删掉过滤逻辑、或有人手工往库里预置对象时，
+# 这几类"本来就在/本来就没有"的语句仍然不该让整次恢复失败。
+already exists
+does not exist, skipping
+extension "pg_trgm"
+schema "public" already exists
+schema "auth" already exists
+schema "storage" already exists
+function public.handle_new_user() does not exist

@@ -1,0 +1,18 @@
+[Unit]
+Description=Liorvix database backup (public + auth custom dump)
+After=docker.service
+Requires=docker.service
+# 说明：supabase/postgres 镜像里的 `postgres` **不是超级用户**，而 auth.* 表的属主是
+# supabase_auth_admin —— 用 postgres 导 auth schema 会 permission denied（VPS 实测）。
+# 因此备份用超级用户 supabase_admin，密码放 /root/.pgpass（600），不进 URL、不进 unit。
+[Service]
+Type=oneshot
+User=root
+WorkingDirectory=/opt/liorvix
+Environment=BACKUP_DB_URL=postgresql://supabase_admin@127.0.0.1:5432/postgres
+Environment=OUT_DIR=/opt/liorvix-backups
+Environment=RETENTION_DAYS=7
+ExecStart=/usr/bin/env bash /opt/liorvix/scripts/migrate/db-backup.sh
+Nice=10
+IOSchedulingClass=best-effort
+IOSchedulingPriority=7
