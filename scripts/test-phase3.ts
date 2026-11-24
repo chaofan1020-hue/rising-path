@@ -349,7 +349,6 @@ function testImproveThenApplyCopyDoesNotReject() {
   assert.doesNotMatch(`${aligned.match_reason}${aligned.suggestions}${aligned.key_gaps.join('')}`, /不建议/);
 
   const blocked = finalizeMatch(validMatch(13), {
-    id: 13,
     title: 'Senior Software Engineer',
     region: 'United States',
     job_type: '社招',

@@ -157,7 +157,13 @@ export function parseLinkedInJobCardsPayload(payload: unknown): { total: number 
     const title = typeof card.jobPostingTitle === 'string' ? decode(card.jobPostingTitle) : viewModelText(card.title);
     const company = viewModelText(card.primaryDescription) || 'LinkedIn';
     const location = viewModelText(card.secondaryDescription);
-    pushCard(cards, seen, { id, title, company, location, url: id ? `https://www.linkedin.com/jobs/view/${id}` : null });
+    pushCard(cards, seen, {
+      id,
+      title: title || undefined,
+      company: company || undefined,
+      location: location || undefined,
+      url: id ? `https://www.linkedin.com/jobs/view/${id}` : undefined,
+    });
   }
   return { total, cards };
 }
@@ -201,7 +207,7 @@ export function parseLinkedInJobDescriptionPayload(payload: unknown): LinkedInDe
 function pushCard(
   cards: LinkedInListCard[],
   seen: Set<string>,
-  card: Partial<LinkedInListCard> & { id?: string | null },
+  card: Omit<Partial<LinkedInListCard>, 'id'> & { id?: string | null },
 ): void {
   const id = card.id;
   if (!id || seen.has(id)) return;
@@ -240,7 +246,13 @@ export function parseLinkedInListHtml(html: string): LinkedInListCard[] {
       || textBetween(block, /artdeco-entity-lockup__subtitle[^>]*>([\s\S]*?)<\//i);
     const location = textBetween(block, /job-search-card__location[^>]*>([\s\S]*?)<\//i)
       || textBetween(block, /job-card-container__metadata-item[^>]*>([\s\S]*?)<\//i);
-    pushCard(cards, seen, { id, title, company, location, url: href || `https://www.linkedin.com/jobs/view/${id}` });
+    pushCard(cards, seen, {
+      id,
+      title: title || undefined,
+      company: company || undefined,
+      location: location || undefined,
+      url: href || `https://www.linkedin.com/jobs/view/${id}`,
+    });
   }
   return cards;
 }
