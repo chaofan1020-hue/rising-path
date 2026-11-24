@@ -20,7 +20,7 @@ loadDotenv({ path: '.env.local' });
 async function main() {
   const maxRuns = Math.min(Math.max(Number(process.env.DRAIN_MAX_RUNS) || 500, 1), 5000);
   const batch = Math.min(Math.max(Number(process.env.DRAIN_BATCH) || 500, 1), 500);
-  const concurrency = Math.min(Math.max(Number(process.env.DRAIN_CONCURRENCY) || 20, 1), 20);
+  const concurrency = Math.min(Math.max(Number(process.env.DRAIN_CONCURRENCY) || 20, 1), 40);
   const stopAfterIdle = Math.min(Math.max(Number(process.env.DRAIN_IDLE_ROUNDS) || 3, 1), 20);
   let total: JobMaintenanceResult = { expired: 0, deadlines_found: 0, links_checked: 0, links_healthy: 0, links_not_found: 0, links_closed: 0, links_inconclusive: 0 };
   let idleRounds = 0;

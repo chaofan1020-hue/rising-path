@@ -182,7 +182,11 @@ export async function maintainJobLifecycle(options: {
   const checkIntervalHours = Math.min(Math.max(Number(process.env.JOBS_LINK_CHECK_INTERVAL_HOURS) || 6, 1), 168);
   const threshold = new Date(Date.now() - checkIntervalHours * 60 * 60 * 1000).toISOString();
   const batchSize = Math.min(Math.max(options.linkBatchSize ?? (Number(process.env.JOBS_LINK_CHECK_BATCH) || 300), 1), 500);
-  const concurrency = Math.min(Math.max(options.concurrency ?? (Number(process.env.JOBS_LINK_CHECK_CONCURRENCY) || 10), 1), 20);
+  // Worker cycles stay at the conservative default (10); the ceiling exists so
+  // a backlog drain can raise parallelism without changing the classification
+  // rules. Blocked/rate-limited responses stay inconclusive and never close a
+  // job, so a faster drain cannot turn throttling into takedowns.
+  const concurrency = Math.min(Math.max(options.concurrency ?? (Number(process.env.JOBS_LINK_CHECK_CONCURRENCY) || 10), 1), 40);
   // Only active jobs may occupy the check page. `job_sync_records` keeps one
   // row per retired job too, and those rows often have a NULL
   // `last_link_checked_at`. Ordering the whole ledger put the same closed rows
