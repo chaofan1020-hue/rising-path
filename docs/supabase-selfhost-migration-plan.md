@@ -1301,7 +1301,7 @@ DUMP_FILE=/opt/liorvix-backups/liorvix-<stamp>.dump \
 | 鉴权 | 访客：岗位 4 个接口 401 英文；真实 token：`/api/jobs`、`/api/jobs/[id]`、`/api/jobs/companies`、`/api/jobs/stats` 全 200 |
 | 数据 | `auth.users=50 / profiles=50 / resumes=20 / ai_matches=152 / jobs≈232,953（活跃 114,483）`，切流后新增 2 位真实用户 |
 | 同步 | `job_sync_runs` 每 1~3 分钟一条、`failed=0`；岗位写入新鲜度 <2 分钟；官方源里 Meta / 部分 Workday 公司为**切流前就存在的**外部源问题（`last_inc` 停在 11-13，`fails` 55+），与自托管无关，另案处理 |
-| 监控 | `liorvix-monitor.timer` 每 3 分钟，`state.json` = `status: ok`、0 失败 0 提醒；邮件通道经 Brevo 实测可送达 |
+| 监控 | `liorvix-monitor.timer` 每 3 分钟，`state.json` = `status: ok`、0 失败 0 提醒；告警收件人已显式设为 `support@liorvix.com`（此前留空回退到 `noreply@liorvix.com`，导致"发送成功但收不到"，已修正）；邮件通道经 Brevo 实测中继接受（250）|
 | 备份 | 每日 03:26 dump（424 MB）+ 月度恢复演练；11-24 10:03 首次实跑 **PASS**（rc=0、0 错误、226 s，逐表差异仅来自 dump 时间差），临时库已自动删除 |
 | 异常 | 部署后新 5xx **0**；`bad_jwt` 近 12 h **0**；磁盘 65%、内存 5.7/15 GiB、load 0.5 |
 
@@ -1310,6 +1310,9 @@ DUMP_FILE=/opt/liorvix-backups/liorvix-<stamp>.dump \
 1. **三层监控上线**：本机 3 分钟巡检（`liorvix-monitor.timer`）+ 邮件告警 + GitHub 外部拨测，
    详见 [monitoring-and-drills.md](./monitoring-and-drills.md)。旧的 `liorvix-healthcheck.timer` 已停用，
    其检查被 monitor 的第 1 项完整覆盖。
+   - 告警收件人首次留空时回退到了 GoTrue 的发件人 `noreply@liorvix.com`，导致"脚本报发送成功、
+     人却收不到"；已显式设置 `ALERT_EMAIL_TO=support@liorvix.com` 并实测中继接受（250），
+     该坑写进配置模板与监控文档。
 2. **月度恢复演练自动化**：`liorvix-restore-drill.timer`（每月 1 日 04:30），首次实跑 10:03 PASS。
    演练全程走容器内 `psql`/`pg_restore`——首次尝试用宿主机客户端时，因 `pg_hba` 只对 `postgres`
    库免密而卡在 `Password for user supabase_admin:`，该坑已修复并记录。

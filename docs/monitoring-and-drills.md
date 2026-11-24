@@ -14,7 +14,7 @@
 
 | 层 | 在哪跑 | 频率 | 覆盖 | 挂了谁会发现 |
 | --- | --- | --- | --- | --- |
-| **本机巡检 + 邮件告警** | VPS（`liorvix-monitor.timer`） | 每 3 分钟 | 容器、端口、磁盘、数据库连接数、备份新鲜度、公网可达、岗位同步是否在动、写入新鲜度、5xx 比例、证书天数、演练报告是否过期 | 发邮件给 `ALERT_EMAIL_TO`（默认 `SMTP_ADMIN_EMAIL`） |
+| **本机巡检 + 邮件告警** | VPS（`liorvix-monitor.timer`） | 每 3 分钟 | 容器、端口、磁盘、数据库连接数、备份新鲜度、公网可达、岗位同步是否在动、写入新鲜度、5xx 比例、证书天数、演练报告是否过期 | 发邮件给 `ALERT_EMAIL_TO`（线上当前 `support@liorvix.com`；未设置才会回退到 `SMTP_ADMIN_EMAIL`） |
 | **外部拨测** | GitHub Actions（`uptime-probe.yml`） | 每 15 分钟 | `https://liorvix.com/api/health`、首页、`https://supabase.liorvix.com/auth/v1/health` | Actions 失败 → GitHub 给仓库 owner 发失败通知 |
 | **月度恢复演练** | VPS（`liorvix-restore-drill.timer`） | 每月 1 日 04:30 | dump 能否真的恢复、数据量是否对得上、RLS/函数/属主是否还在 | 演练报告邮件（通过/失败）+ 报告文件 |
 
@@ -85,6 +85,11 @@ sudo bash /opt/liorvix/scripts/monitor/health-alert.sh --force-mail
 
 `monitor.env` 每次发信都会重新读取，改完不用重启服务（unit 的 EnvironmentFile 只影响进程环境，
 脚本自己会读这个文件）。
+
+> **⚠️ 收件人必须显式写**：本机 `SMTP_ADMIN_EMAIL=noreply@liorvix.com` 是 GoTrue 的发件人，
+> 不是一个会有人看的信箱。`ALERT_EMAIL_TO` 留空时邮件会回退到它——看起来"发送成功"，
+> 但 `support@liorvix.com` 永远收不到（2026-11-24 实际踩过）。当前线上已设为
+> `ALERT_EMAIL_TO=support@liorvix.com`。
 
 ### 2.5 手工运维命令
 
@@ -230,6 +235,27 @@ cat /opt/liorvix-backups/drills/restore-drill-<最新>.md
 3. **改完验证**：`health-alert.sh --force-mail` 应看到"已恢复"或全部 ok；
    收到恢复邮件后把 `state.json` 里的 `first_fail_epoch` 对照一下，确认持续时长。
 4. **需要回滚应用环境**（切回 Cloud Supabase）时走迁移计划 §13，不要临时改 `.env`。
+
+### 5.1 收不到告警邮件，按这个顺序查
+
+1. **先看收件人到底是谁**（最常见原因）：
+
+   ```bash
+   grep ALERT_EMAIL_TO /etc/liorvix/monitor.env
+   sudo bash /opt/liorvix/scripts/monitor/health-alert.sh --force-mail   # 输出里带 [mail] 已发送 … 收件人
+   ```
+
+   没设置时脚本会回退到 `SMTP_ADMIN_EMAIL=noreply@liorvix.com`——那是**发件人**，不是值班信箱，
+   日志照样写"已发送"，人却永远收不到（2026-11-24 踩过）。
+2. **翻垃圾邮件/拦截记录**：`liorvix.com → liorvix.com` 经过外部中继（Brevo）属于"外站假冒本域"
+   的典型可疑形态，容易被企业邮箱判垃圾。把 `noreply@liorvix.com` 加白名单即可。
+3. **看 Brevo 侧状态**：Brevo 后台 → Transactional → Logs，能看到每封是 `delivered` / `bounced` /
+   `blocked`（被 Brevo 抑制列表拦下的收件人不会投递）。
+4. **想要更稳的同域投递**：把 `monitor.env` 的 SMTP 通道换成阿里云企业邮箱
+   （`SMTP_HOST=smtp.qiye.aliyun.com`、`SMTP_PORT=465`、`SMTP_USER=support@liorvix.com`、
+   `SMTP_PASS=该邮箱的 SMTP 授权码`），脚本支持 `SMTP_SSL`；这样发信和收信都在同一套邮件系统里。
+5. **认证 DNS 现状**：SPF 已含 `spf.brevo.com`（`~all`），DMARC 为 `p=none`；如需进一步降垃圾率，
+   可在 Brevo 完成 domain authentication 补 DKIM 记录。
 
 ---
 
