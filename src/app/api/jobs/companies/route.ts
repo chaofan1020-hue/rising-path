@@ -3,6 +3,7 @@ import { NextResponse } from 'next/server';
 import { getSupabaseClient } from '@/storage/database/supabase-client';
 import { resolveDisplayLogoUrls } from '@/lib/company-logo';
 import { targetRegionPostgrestClauses } from '@/lib/job-region-scope';
+import { requireJobAccess } from '@/lib/job-access';
 
 interface ActiveCompany {
   companyName: string;
@@ -116,6 +117,9 @@ async function loadCompanies(): Promise<ActiveCompany[]> {
 
 export async function GET(request: Request) {
   try {
+    // 公司清单带岗位数量，同属岗位数据，未登录访客不返回
+    const denied = await requireJobAccess(request);
+    if (denied) return denied;
     const [activeCompanies, uploadedLogos, configuredLogos] = await Promise.all([
       loadCompanies(),
       fetchLogoUrls('company_logos'),

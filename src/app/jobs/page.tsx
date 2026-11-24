@@ -86,12 +86,16 @@ function formatDeadlineRemaining(value: string | null | undefined, now: number, 
   return t('jobs.daysLeft', { days: remaining.days });
 }
 
-function formatExperienceLabel(job: Pick<Job, 'experience_min_years' | 'experience_max_years' | 'experience_text'>): string | null {
+// 岗龄文案必须跟随界面语言：英文界面里出现“4+ 年经验”是明显的串台。
+function formatExperienceLabel(
+  job: Pick<Job, 'experience_min_years' | 'experience_max_years' | 'experience_text'>,
+  t: (key: string, params?: Record<string, string | number>) => string,
+): string | null {
   if (job.experience_min_years != null && job.experience_max_years != null) {
-    return `${job.experience_min_years}-${job.experience_max_years} 年经验`;
+    return t('jobs.expRange', { min: job.experience_min_years, max: job.experience_max_years });
   }
-  if (job.experience_min_years != null) return `${job.experience_min_years}+ 年经验`;
-  if (job.experience_max_years != null) return `不超过 ${job.experience_max_years} 年经验`;
+  if (job.experience_min_years != null) return t('jobs.expMin', { min: job.experience_min_years });
+  if (job.experience_max_years != null) return t('jobs.expMax', { max: job.experience_max_years });
   const text = job.experience_text?.replace(/\s+/g, ' ').trim();
   if (!text) return null;
   return text.length > 96 ? `${text.slice(0, 96).trim()}…` : text;
@@ -265,10 +269,12 @@ function CheckboxOptions({
   options,
   selected,
   onChange,
+  t,
 }: {
   options: JobConfig[];
   selected: string[];
   onChange: (values: string[]) => void;
+  t: (key: string) => string;
 }) {
   const toggle = (value: string) => {
     onChange(selected.includes(value)
@@ -277,7 +283,7 @@ function CheckboxOptions({
   };
 
   if (options.length === 0) {
-    return <p className="text-sm text-zinc-400">暂无可用选项</p>;
+    return <p className="text-sm text-zinc-400">{t('jobs.noOptions')}</p>;
   }
 
   return (
@@ -292,7 +298,7 @@ function CheckboxOptions({
             checked={selected.includes(option.config_value)}
             onCheckedChange={() => toggle(option.config_value)}
           />
-          <span className="truncate">{getRegionDisplayText(option.config_value)}</span>
+          <span className="truncate">{localizeJobEnum(getRegionDisplayText(option.config_value), t)}</span>
         </label>
       ))}
     </div>
@@ -453,9 +459,9 @@ function JobBadges({ job, t }: { job: Job; t: (key: string, params?: Record<stri
           {localizeJobEnum(job.employment_category, t)}
         </Badge>
       )}
-      {formatExperienceLabel(job) && (
+      {formatExperienceLabel(job, t) && (
         <Badge variant="outline" className="rounded-md text-xs border-zinc-200 dark:border-zinc-700 text-zinc-600 dark:text-zinc-300">
-          {formatExperienceLabel(job)}
+          {formatExperienceLabel(job, t)}
         </Badge>
       )}
       {job.sponsorship && job.sponsorship !== 'unknown' && (
@@ -690,7 +696,7 @@ function JobListRow({
           <h3 className="truncate text-sm font-semibold text-zinc-900 dark:text-zinc-50">{job.title}</h3>
           <p className="truncate text-xs text-zinc-500 dark:text-zinc-400" translate="no">{job.company}</p>
           <JobListMeta
-            experience={formatExperienceLabel(job)}
+            experience={formatExperienceLabel(job, t)}
             direction={localizeJobEnum(job.direction, t)}
             jobType={localizeJobEnum(job.job_type, t)}
             postedLabel={postedLabel}
@@ -939,7 +945,7 @@ function JobsContent() {
       const response = await apiFetch(`/api/jobs?${params.toString()}`, { cache: 'no-store' });
       const data = await response.json();
       if (!response.ok) {
-        throw new Error(typeof data?.error === 'string' ? data.error : `岗位接口请求失败 (${response.status})`);
+        throw new Error(typeof data?.error === 'string' ? data.error : `Job request failed (${response.status})`);
       }
       if (requestId !== jobsRequestIdRef.current) return;
       setJobs(data.jobs || []);
@@ -1070,7 +1076,8 @@ function JobsContent() {
     setCompanyOptionsStatus((status) => status === 'error' ? 'loading' : status);
 
     try {
-      const response = await fetch('/api/jobs/companies', { cache: 'no-cache', signal: request.signal });
+      // 岗位数据接口现在要求登录态，必须走 apiFetch 带上 Bearer token
+      const response = await apiFetch('/api/jobs/companies', { cache: 'no-cache', signal: request.signal });
       if (!response.ok) throw new Error(`Company options request failed (${response.status})`);
       const data = await response.json();
       if (!Array.isArray(data.companies)) throw new Error('Invalid company options response');
@@ -1244,10 +1251,10 @@ function JobsContent() {
                     </SheetHeader>
                     <div className="flex-1 space-y-6 overflow-y-auto px-5 py-5">
                       <FilterSection label={t('jobs.region')} icon={MapPin}>
-                        <CheckboxOptions options={configs.region || []} selected={draftRegions} onChange={setDraftRegions} />
+                        <CheckboxOptions options={configs.region || []} selected={draftRegions} onChange={setDraftRegions} t={t} />
                       </FilterSection>
                       <FilterSection label={t('jobs.direction')} icon={Briefcase}>
-                        <CheckboxOptions options={configs.direction || []} selected={draftDirections} onChange={setDraftDirections} />
+                        <CheckboxOptions options={configs.direction || []} selected={draftDirections} onChange={setDraftDirections} t={t} />
                       </FilterSection>
                       <FilterSection label={t('jobs.company')} icon={Building2}>
                         <BrandOptions
@@ -1262,7 +1269,7 @@ function JobsContent() {
                         />
                       </FilterSection>
                       <FilterSection label={t('jobs.jobType')} icon={Briefcase}>
-                        <RadioOptions value={draftJobType} options={jobTypeOptions} allLabel={t('jobs.any')} onChange={setDraftJobType} />
+                        <RadioOptions value={draftJobType} options={jobTypeOptions} allLabel={t('jobs.any')} onChange={setDraftJobType} formatValue={(value) => localizeJobEnum(value, t)} />
                       </FilterSection>
                       <FilterSection label={t('jobs.sponsorship')} icon={Users}>
                         <RadioOptions value={draftSponsorship} options={sponsorshipOptions} allLabel={t('jobs.any')} onChange={setDraftSponsorship} formatValue={(value) => value === 'yes' ? t('jobs.sponsorshipYes') : value === 'no' ? t('jobs.sponsorshipNo') : t('jobs.sponsorshipUnknown')} />

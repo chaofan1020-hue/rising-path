@@ -1,6 +1,7 @@
 import { NextResponse } from 'next/server';
 import { getSupabaseClient } from '@/storage/database/supabase-client';
 import { targetRegionPostgrestClauses } from '@/lib/job-region-scope';
+import { requireJobAccess } from '@/lib/job-access';
 
 // GET /api/jobs/stats - 获取岗位统计数据
 //
@@ -42,7 +43,11 @@ async function countJobs(
   return count ?? 0;
 }
 
-export async function GET() {
+export async function GET(request: Request) {
+  // 岗位总量/新增量也是岗位库信息，未登录访客不应拿到；管理员会话仍然放行。
+  const denied = await requireJobAccess(request);
+  if (denied) return denied;
+
   try {
     if (statsCache && statsCache.expiresAt > Date.now()) {
       return NextResponse.json(statsCache.value, {

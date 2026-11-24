@@ -12,6 +12,7 @@ import { isDisplayableJobDeadline } from '@/lib/job-deadline';
 import { extractOfficialJobDetails, isJobContentShell, officialEvercoreDetailUrl } from '@/lib/job-official-detail';
 import { parseFeedPostedAt } from '@/lib/jobs-feed';
 import { hasMatchingPhenomDetailPayload, isRegisteredPhenomJobUrl } from '@/lib/job-connectors';
+import { requireJobAccess } from '@/lib/job-access';
 
 // 本地 logo 缓存
 let localLogosCache: Record<string, string> = {};
@@ -63,6 +64,9 @@ export async function GET(
   { params }: { params: Promise<{ id: string }> }
 ) {
   try {
+    // 岗位详情同样是登录后权益，接口层必须挡住未登录访客
+    const denied = await requireJobAccess(request);
+    if (denied) return denied;
     const client = getSupabaseClient();
     const { id } = await params;
     if (!/^\d+$/.test(id)) {

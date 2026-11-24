@@ -51,8 +51,10 @@ export async function getAuthContext(request: NextRequest): Promise<AuthContext 
   }
 }
 
-export function unauthorizedResponse(message = '请先登录'): NextResponse {
-  return NextResponse.json({ error: message }, { status: 401 });
+// 默认文案用英文：未登录访客看到的界面默认就是英文，中文提示会在英文 UI 里非常突兀。
+// 同时带上稳定的 code，前端可以按 code 做本地化，不必依赖服务端文案。
+export function unauthorizedResponse(message = 'Sign in required'): NextResponse {
+  return NextResponse.json({ error: message, code: 'AUTH_REQUIRED' }, { status: 401 });
 }
 
 export function getClientIp(request: Request): string {

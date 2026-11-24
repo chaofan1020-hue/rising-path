@@ -8,6 +8,7 @@ import { recordAdminAuditEvent, recordAdminAuditFailure } from '@/lib/admin-audi
 import { resolveDisplayLogoUrls } from '@/lib/company-logo';
 import { isVerifiedField } from '@/lib/job-field-provenance';
 import { isDisplayableJobDeadline } from '@/lib/job-deadline';
+import { requireJobAccess } from '@/lib/job-access';
 
 export const dynamic = 'force-dynamic';
 export const revalidate = 0;
@@ -205,6 +206,9 @@ function isStatementTimeout(error: { code?: string; message?: string }): boolean
 
 export async function GET(request: NextRequest) {
   try {
+    // 未登录访客不返回岗位数据（页面已跳登录页，接口也必须一致）
+    const denied = await requireJobAccess(request);
+    if (denied) return denied;
     const client = getSupabaseClient();
     const searchParams = request.nextUrl.searchParams;
 

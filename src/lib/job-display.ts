@@ -22,6 +22,17 @@ const CN_ENUM_KEYS: Record<string, string> = {
   '社招': 'jobs.enum.experienced',
   '留学生': 'jobs.enum.intlStudents',
   '未注明': 'jobs.enum.notSpecified',
+  // 采集源把缺字段的岗位写成“未知”，英文界面下必须显示成 Unknown/Not specified
+  '未知': 'jobs.enum.notSpecified',
+  // 地区筛选项同样以中文存储（/api/configs 返回的就是这些值），英文界面下不能直接展示
+  '北美': 'jobs.region.northAmerica',
+  '美国': 'jobs.region.us',
+  '英国': 'jobs.region.uk',
+  '加拿大': 'jobs.region.canada',
+  '澳大利亚': 'jobs.region.australia',
+  '澳洲': 'jobs.region.australia',
+  '香港': 'jobs.region.hongKong',
+  '新加坡': 'jobs.region.singapore',
 };
 
 export function localizeJobEnum(

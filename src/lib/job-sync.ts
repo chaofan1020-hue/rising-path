@@ -662,8 +662,38 @@ export async function syncJobRecords(
     updates.push({ id: found.id, job, contentHash, existing: found });
   }
 
+  // 同一批里两条记录可能解析到同一个既有岗位（URL 轮换 / external id 变体），
+  // 一次 upsert 内出现重复 id 会让 PostgREST 报 21000 整批失败（每天可见若干次 5xx），
+  // 这里按 id 去重，后出现的记录覆盖先出现的。
+  const dedupedUpdates: PendingJobWrite[] = [];
+  const updateIndexById = new Map<number, number>();
+  for (const pending of updates) {
+    const existingIndex = updateIndexById.get(pending.id);
+    if (existingIndex === undefined) {
+      updateIndexById.set(pending.id, dedupedUpdates.length);
+      dedupedUpdates.push(pending);
+    } else {
+      dedupedUpdates[existingIndex] = pending;
+    }
+  }
+
+  // 新岗位同样可能在同一批里重复（相同 job_url / external id），批量 insert 会撞唯一索引。
+  // 按与查找阶段一致的 identity 去重，保留第一条。
+  const dedupedInserts: Array<{ job: JobSyncRecord; contentHash: string }> = [];
+  const seenInsertIdentities = new Set<string>();
+  for (const item of inserts) {
+    const identity = (item.job.source_system && item.job.external_job_id
+      ? externalIdentity(item.job.source_system, item.job.company, item.job.external_job_id)
+      : '')
+      || key(item.job.job_url)
+      || `${item.job.title}|${item.job.company}`;
+    if (seenInsertIdentities.has(identity)) continue;
+    seenInsertIdentities.add(identity);
+    dedupedInserts.push(item);
+  }
+
   const savedSyncRecords: PendingSyncRecord[] = [...unchanged];
-  for (const batch of chunks(inserts, writePolicy.batchSize)) {
+  for (const batch of chunks(dedupedInserts, writePolicy.batchSize)) {
     writeMetrics.batches += 1;
     const { data, error } = await retryDatabaseOperation(
       () => client
@@ -722,7 +752,7 @@ export async function syncJobRecords(
     }
   }
 
-  for (const batch of chunks(updates, writePolicy.batchSize)) {
+  for (const batch of chunks(dedupedUpdates, writePolicy.batchSize)) {
     writeMetrics.batches += 1;
     const { error } = await retryDatabaseOperation(
       () => client.from('jobs').upsert(
