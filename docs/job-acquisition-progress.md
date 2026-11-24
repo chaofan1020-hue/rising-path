@@ -1,7 +1,7 @@
 # 岗位采集规模化 · 执行账本
 
 > 这是 AI 唯一允许改状态的地方。`tasks.yaml` 只读；本文件每完成一个任务必须更新。
-> 最后更新：2026-11-24（B01-B03 完成，进入发现阶段）
+> 最后更新：2026-11-24（V01 通过，V02 进入 48h 观察）
 
 ## 状态规则
 
@@ -17,21 +17,21 @@
 
 | 项 | 值 |
 |---|---|
-| 美国站 commit | `03d8eebe0ca70cffe8f02946fc95c62adc0e2440`（2026-11-24 16:17 +08） |
+| 美国站 commit | `c5b979b`（S02-S04；2026-11-24 19:41 +08 部署） |
 | 美国站生产目录 | `/opt/liorvix`（git repo；systemd `liorvix.service` 跑 `node dist/server.js`） |
-| 美国站服务重启点 | 2026-11-24 16:21:37 +08；上一版 `dist.bak-20261124-101147` |
-| 上游 commit | 无 git；版本证据 = 文件哈希 + 镜像 `global-jobs-api:latest` ID `342cc0aa7c26` |
+| 美国站服务重启点 | 2026-11-24 19:41:12 +08；部署前 release `924ae747a3cc8d819bf6a812ebea5a6ee277e09e` |
+| 上游 commit | 无 git；版本证据 = 文件哈希 + 镜像 `global-jobs-api:latest` ID `fc66e4c34...`（pre-u07 `342cc0aa7c26`） |
 | 上游目录 | `/opt/global-jobs` |
-| 上游镜像 tag（回滚点） | `global-jobs-api/worker/beat:latest` = `342cc0aa7c26`（4 天前构建） |
-| 上游迁移机制 | Alembic（`alembic.ini` + `migrations/versions`，当前 head `0016_reclassify_amazon_runs.py`） |
+| 上游镜像 tag（回滚点） | `global-jobs-api/worker/beat:pre-u07` = `342cc0aa7c26` |
+| 上游迁移机制 | Alembic（`alembic.ini` + `migrations/versions`，当前 head `0018_feed_v2.py`） |
 | 上游关键文件哈希 | connectors `856561c3…`、tasks `06e27ebd…`、models `e0a9b947…`、services `48eab560…` |
-| 上游代码备份 | `/opt/global-jobs/ops-backups/b01-20261124T082138Z/`（含 sha256） |
+| 上游代码备份 | `/opt/global-jobs/ops-backups/u07-20261124T104555Z/`（含 sha256） |
 | 上游 DB 备份 | `/opt/global-jobs/ops-backups/b01-db-20261124T082748Z.dump`（1.5G，sha256 `165a0b5c…`；DB 7.3G） |
-| 美国站最新迁移 | `0139_ai_match_retrieval_bounded.sql`；下一条 `0140_job_board_ingestion.sql` |
+| 美国站最新迁移 | `0141_job_feed_v2_columns.sql`（含 `jobs_listing` 重建、display 索引） |
 | 基线文件 | `tmp/baseline-20261124.json` |
 | Supabase 备份时间点 | `/opt/liorvix-backups/liorvix-20261124-032117.dump`（444MB；DB 容器 2026-11-23 03:15 UTC 起） |
 | Feed worker 实际配置 | `JOBS_AUTO_WORKER=true`、`JOBS_SYNC_INTERVAL_MINUTES=5`；**systemd jobs timers 全部 disabled**，不要按 timer 文档推断 |
-| 当前生产事实 | US 233,525 行（active 114,142 / closed 119,383）；上游 407,909（OPEN 180,034 / CLOSED 227,875）；上游 169 家公司 |
+| 当前生产事实 | US active 145,032（其中 v2 `source_key` 27,697）；上游 500 active board、`source_key` 岗位 89,144（OPEN 89,144 / CLOSED 0） |
 
 ## 执行约定（B03）
 
@@ -48,7 +48,7 @@
 |---|---|---|---|
 | 上游 | `BULK_BOARDS_ENABLED` | `false` | 批量 board 调度总开关 |
 | 上游 | `BULK_BOARD_WRITE` | `false` | 是否写岗位；false 只记录 run |
-| 上游 | `BULK_MAX_ACTIVE_BOARDS` | `50` | 放行 board 数上限 |
+| 上游 | `BULK_MAX_ACTIVE_BOARDS` | 未实现 | 当前只用 500 board；观察期不再导入，靠流程约束而非代码上限 |
 | 美国站 | `JOBS_FEED_V2_ENABLED` | `false` | v2 字段/行为 |
 | 美国站 | `JOB_TTL_ENABLED` | `false` | stale 计算 |
 
@@ -56,8 +56,8 @@
 
 | Gate | 状态 | 开启时间 | 依据 |
 |---|---|---|---|
-| G1（500 board 生产） | closed | — | V01 |
-| G2（1,500 + Feed v2） | closed | — | V02 |
+| G1（500 board 生产） | open | 2026-11-24 19:56 | V01：50 board 44,234 岗位；V02：500 board 89,144 岗位、0 失败、0 误关、US 27,697 v2 |
+| G2（1,500 + Feed v2） | closed | — | V02 48h 观察中；未到 1,500 |
 | G3（3,000 + 适配器） | closed | — | V03 |
 | G4（6,000） | closed | — | V04 |
 
@@ -81,13 +81,13 @@
 | U05 | done | beeedec | 2026-11-24 18:32 | 同日心跳不增；昨日 last_seen 更新、updated_at 保留；missing_streak=1、仍 OPEN |
 | U06 | done | f964cfc | 2026-11-24 18:40 | Feed v2 20 条 canary；source_key 过滤；v1 回退；迁移 0018 |
 | U07 | done | 7440d6b | 2026-11-24 19:00 | 生产 50 board / 50 runs / 0 bulk jobs；health 50；0018 |
-| S01 | done | pending-commit | 2026-11-24 19:16 | US 0140 上线；active 114,380 不变、closed 119,444 不变；last_seen 全部回填；enriched 113,642 |
-| S02 | pending | — | — | — |
-| S03 | pending | — | — | — |
-| S04 | pending | — | — | — |
+| S01 | done | c3784e1 | 2026-11-24 19:16 | US 0140 上线；active 114,380 不变、closed 119,444 不变；last_seen 全部回填；enriched 113,642 |
+| S02 | done | c5b979b | 2026-11-24 19:41 | US feed v2 客户端 + 0141；27,697 条真实 v2；20 抽样 8 字段 0 空；tsc/单测通过 |
+| S03 | done | c5b979b | 2026-11-24 19:41 | TTL worker + 单测：S/A 24h、B/C 7d、manual_hold/valid_through 豁免；display-only |
+| S04 | done | c5b979b | 2026-11-24 19:41 | `/api/jobs` 默认 `display_status in (listed,enriched)`；closed/all 保留；jobs_listing 重建 |
 | S05 | pending | — | — | — |
-| V01 | pending | — | — | — |
-| V02 | pending | — | — | — |
+| V01 | done | c5b979b | 2026-11-24 19:50 | 50 board 44,234 岗位；US 27,697 v2；20/20 官方 URL；0 误关；G1 |
+| V02 | in_progress | c5b979b | — | 500 board 89,144 岗位、0 失败、0 误关；48h 观察至 2026-11-26 11:50 UTC |
 | D07 | pending | — | — | — |
 | U08 | pending | — | — | — |
 | U09 | pending | — | — | — |
@@ -116,8 +116,8 @@
 | 日期 | active board | 活跃岗位 | 新增 P95 | 成功率 | 误关率 | 重复率 | stale 比例 | 单岗成本 |
 |---|---:|---:|---:|---:|---:|---:|---:|---:|
 | 基线（B02） | 0（bulk） | 114,142 | — | — | — | 0.012% | — | — |
-| G1（V01） | — | — | — | — | — | — | — | — |
-| G2（V02） | — | — | — | — | — | — | — | — |
+| G1（V01） | 50 | 44,234 | — | 100% | 0 | 0% | — | — |
+| G2（V02） | 500 | 89,144 | — | 100%（528/528） | 0 | 0% | — | — |
 | G3（V03） | — | — | — | — | — | — | — | — |
 | G4（V04） | — | — | — | — | — | — | — | — |
 | 最终（V05） | — | — | — | — | — | — | — | — |
@@ -139,6 +139,15 @@
 | — | — | — | — | — | — |
 
 ## 日志（倒序）
+
+### 2026-11-24 · V01/V02 500 board 放量
+
+- V01：`BULK_BOARD_WRITE=true`，50 board 首轮 44,234 岗位；`source_key` OPEN 44,234 / CLOSED 0；150 runs 全成功。
+- 美国站部署 `c5b979b`（S02-S04），真实 feed 抽样 20 条 v2 字段 0 空；示例 Accenture Federal Services 官方 GH URL。
+- 第一次 US 增量同步仍是旧进程，写入的 ATS 岗位 `source_key` 为空；回退 `job_sync_state.cursor` 到 11:30 UTC，停服务后手动回填 27,697 条，服务恢复。
+- V02：500 board 导入（450 新增 board、449 新 `Bulk ATS` 公司；active 公司 169 不变）；528 runs / 0 失败；`source_key` 89,144（373/500 有岗位）；重复 0；误关 0。
+- 48h 观察从 2026-11-24 11:50 UTC 开始；观察期内不继续放量、不启用 `JOB_TTL_ENABLED`。
+- 报告：`docs/job-acquisition-v01-v02-report.md`；G1 开、G2 仍关。
 
 ### 2026-11-24 · S01 US 0140
 
