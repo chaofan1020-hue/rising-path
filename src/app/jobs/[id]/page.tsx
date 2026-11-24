@@ -74,6 +74,7 @@ interface Job {
   posted_at?: string | null;
   created_at: string;
   valid_through?: string | null;
+  display_status?: 'listed' | 'enriched' | 'stale' | 'closed' | null;
   deadline_time_zone?: string | null;
   application_deadline?: string | null;
   job_type?: string;
@@ -474,7 +475,13 @@ function JobDetailContent() {
               </div>
             </div>
 
-            {/* 关键信息标签 */}
+            {job.display_status === 'stale' && (
+              <div className="mb-4 rounded-xl border border-amber-200 bg-amber-50 px-3 py-2.5 text-sm text-amber-800 dark:border-amber-900/60 dark:bg-amber-950/40 dark:text-amber-200">
+                {locale === 'en'
+                  ? 'This posting has not been refreshed recently. It may no longer be open; confirm on the official site before applying.'
+                  : '该岗位近期未刷新，可能已停止招聘；申请前请以官方页面为准。'}
+              </div>
+            )}
             <div className="flex flex-wrap gap-2 mb-4">
               <InfoBadge icon={MapPin}>{job.region}</InfoBadge>
               <InfoBadge icon={GraduationCap}>{job.audience || job.job_type || 'Entry-level'}</InfoBadge>

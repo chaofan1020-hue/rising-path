@@ -85,6 +85,15 @@ const reportPath = path.resolve(arg('report', 'tmp/boards/p0-freeze-report.json'
 const limit = Number.parseInt(arg('limit', '500'), 10);
 const ghQuota = Number.parseInt(arg('gh', '400'), 10);
 const leverQuota = Number.parseInt(arg('lever', '100'), 10);
+const ashbyQuota = Number.parseInt(arg('ashby', '0'), 10);
+const existingPath = arg('existing', '');
+
+const existingCompanies = new Set<string>();
+if (existingPath && fs.existsSync(path.resolve(existingPath))) {
+  for (const row of parseCsv(fs.readFileSync(path.resolve(existingPath), 'utf8'))) {
+    existingCompanies.add(companyKey(row));
+  }
+}
 
 const activeByKey = new Map(parseCsv(fs.readFileSync(activePath, 'utf8')).map((row) => [`${row.vendor}:${row.token}`, row]));
 const all = parseCsv(fs.readFileSync(companiesPath, 'utf8'))
@@ -106,6 +115,10 @@ for (const row of all) {
     continue;
   }
   const key = companyKey(row);
+  if (existingCompanies.has(key)) {
+    rejected.duplicate_existing_company = (rejected.duplicate_existing_company ?? 0) + 1;
+    continue;
+  }
   if (seenCompanies.has(key)) {
     rejected.duplicate_company = (rejected.duplicate_company ?? 0) + 1;
     continue;
@@ -121,7 +134,7 @@ function pick(vendor: string, quota: number): Row[] {
     .slice(0, quota);
 }
 
-let selected = [...pick('greenhouse', ghQuota), ...pick('lever', leverQuota)];
+let selected = [...pick('greenhouse', ghQuota), ...pick('ashby', ashbyQuota), ...pick('lever', leverQuota)];
 if (selected.length < limit) {
   const used = new Set(selected.map((row) => `${row.vendor}:${row.token}`));
   const rest = eligible
