@@ -75,8 +75,8 @@
 | D05 | done | 165719c | 2026-11-24 17:34 | 902：842 名称（93.3%）/290 域名（32.1%）；60 token 兜底；无证据不猜 domain |
 | D06 | done | 165719c | 2026-11-24 17:37 | 冻结 500（GH 400/Lever 100）；S98/A270/B132；50 抽 0 名称错/0 域名错 |
 | U01 | done | no-git/upstream | 2026-11-24 17:00 | shadow up/down/up 通过；3 新列+2 表；生产代码已换，迁移未执行 |
-| U02 | done | pending-commit | 2026-11-24 17:44 | staging 500 dry-run；apply 50：boards 50/bulk 公司 50/active 169 不变；重复 0 新增 |
-| U03 | pending | — | — | — |
+| U02 | done | 7fa41d8 | 2026-11-24 17:44 | staging 500 dry-run；apply 50：boards 50/bulk 公司 50/active 169 不变；重复 0 新增 |
+| U03 | done | pending-commit | 2026-11-24 17:50 | Stripe 771；首跑 new 771，二次 new/changed 0；坏 token jobs 不变；source_key 771/closed 0 |
 | U04 | pending | — | — | — |
 | U05 | pending | — | — | — |
 | U06 | pending | — | — | — |
@@ -139,6 +139,14 @@
 | — | — | — | — | — | — |
 
 ## 日志（倒序）
+
+### 2026-11-24 · U03 完成
+
+- `app/bulk_poll.py` 单 board 抓取：复用 `get_connector`，`upsert_job`，只 upsert/reopen，不关闭。
+- Stripe staging：771 岗位，10s；二次轮询 `jobs_new=0`、`jobs_changed=0`（加了前后字段对比，避免把每条 existing 都算 changed）。
+- 坏 token `stripe-missing-fixture` 404：`jobs` 仍 771，`board_poll_runs` 记 failed/404，board 退避并累计 failure。
+- `source_key=greenhouse:stripe` 771、`status=OPEN` 771、`CLOSED=0`；`first_seen_at`/`last_snapshot_id` 全有值。
+- 注意：`JobStatus` 在 PostgreSQL 枚举是 `OPEN/CLOSED`，不是模型里的 `open/closed` 字面量，查询要 `status::text`。
 
 ### 2026-11-24 · U02 完成
 

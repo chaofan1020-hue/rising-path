@@ -407,6 +407,8 @@ docker compose exec -T api python -m app.bulk_boards import --csv /tmp/p0-boards
 
 **验收**：Stripe board 抓取 500+ 岗位；改坏 JSON fixture 时岗位数不变；重复跑幂等；`source_key` 全部写入。
 
+**2026-11-24 staging 实测**：Stripe 771 岗位，首跑 `jobs_new=771`、`jobs_changed=0`；第二次 `jobs_new=0`、`jobs_changed=0`；坏 token 404 时 `jobs` 仍 771；771 条 `source_key=greenhouse:stripe`、`OPEN=771`、`CLOSED=0`，`first_seen_at`/`last_snapshot_id` 全有值。`board_poll_runs` 记录 success/failed 与 http_status。
+
 **回滚**：删任务与代码；岗位按 `source_key` 批次删除（先导出）。
 
 ### U04 · 批量调度器
