@@ -183,10 +183,18 @@ export async function maintainJobLifecycle(options: {
   const threshold = new Date(Date.now() - checkIntervalHours * 60 * 60 * 1000).toISOString();
   const batchSize = Math.min(Math.max(options.linkBatchSize ?? (Number(process.env.JOBS_LINK_CHECK_BATCH) || 300), 1), 500);
   const concurrency = Math.min(Math.max(options.concurrency ?? (Number(process.env.JOBS_LINK_CHECK_CONCURRENCY) || 10), 1), 20);
+  // Only active jobs may occupy the check page. `job_sync_records` keeps one
+  // row per retired job too, and those rows often have a NULL
+  // `last_link_checked_at`. Ordering the whole ledger put the same closed rows
+  // at the front of every page, so the link join below them always came up
+  // empty: the routine silently checked 0–4 links per cycle instead of the
+  // configured batch, and dead listings were never taken down. The inner join
+  // makes the retirement filter part of the SQL selection.
   const { data: stateRows, error: stateError } = await client
-      .from('job_sync_records')
-    .select('job_id,link_check_failures,availability_status,link_health')
+    .from('job_sync_records')
+    .select('job_id,link_check_failures,availability_status,link_health,jobs!inner(id)')
     .eq('source_system', JOBS_FEED_SOURCE)
+    .eq('jobs.is_active', true)
     .or(`last_link_checked_at.is.null,last_link_checked_at.lt.${threshold}`)
     .order('last_link_checked_at', { ascending: true, nullsFirst: true })
     .limit(batchSize);

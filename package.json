@@ -102,6 +102,7 @@
     "sync:linkedin-browser-jobs": "tsx scripts/capture-linkedin-browser-jobs.ts --write",
     "test:linkedin-official": "tsx scripts/test-linkedin-official.ts",
     "test:job-maintenance-content": "tsx scripts/test-job-maintenance-content.ts",
+    "test:job-link-check-selection": "tsx scripts/test-job-link-check-selection.ts",
     "test:job-content": "tsx scripts/test-job-content.ts",
     "test:jobs-feed-location": "tsx scripts/test-jobs-feed-location.ts",
     "test:citadel-official": "tsx scripts/test-citadel-official.ts",

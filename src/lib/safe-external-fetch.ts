@@ -439,6 +439,14 @@ async function fetchAppleStructuredData(
       ...(csrfToken ? { 'x-apple-csrf-token': csrfToken } : {}),
     },
   );
+  if (response.statusCode === 404 || response.statusCode === 410) {
+    // jobs.apple.com renders every posting — open or removed — as the same
+    // client-side shell, so the HTML cannot distinguish a live role from a
+    // closed one. The official jobDetails API answers 404/410 only when the
+    // requisition is gone; surface that as the definitive closed signal instead
+    // of falling back to the healthy-looking shell.
+    throw new ExternalFetchError('Apple 官方岗位接口确认岗位已下架', 422, 410);
+  }
   if (response.statusCode < 200 || response.statusCode >= 300) return null;
   let payload: unknown;
   try {
@@ -571,8 +579,12 @@ export async function fetchSafeExternalPage(rawUrl: string): Promise<ExternalPag
       try {
         const appleStructuredData = await fetchAppleStructuredData(resolved.url, resolved.addresses[0]);
         if (appleStructuredData) metadata.structured_data = [appleStructuredData];
-      } catch {
-        // Keep the public HTML response when the optional Apple API is unavailable.
+      } catch (error) {
+        // Keep the public HTML response when the optional Apple API is
+        // temporarily unavailable, but never hide a definitive removal answer
+        // from the official API: without it a removed Apple role looks healthy
+        // forever because its shell page keeps returning 200.
+        if (error instanceof ExternalFetchError && error.upstreamStatus === 410) throw error;
       }
     }
     if (workdayStructuredData) metadata.structured_data = [workdayStructuredData];
