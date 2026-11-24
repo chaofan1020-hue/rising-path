@@ -70,7 +70,7 @@ from job_sync_state where source_system='collector_feed';
 3. 美国站增量同步一次，确认只新增、`status=CLOSED` 仍 0；
 4. **第二批 500**：同命令 `--limit 500`（导入脚本跳过已有 token，实际新增 500）；
 5. 连续观察 24h；无停止线再进入 V03/U08。
-6. 86 个 `name_source=token_fallback` 的 board 先不导入，或先补公司名；不要把 token 直接当公司名批量上线。
+6. 1,000 个 P1 board 全部有页面标题名；215 个有公司域名，785 个只靠 board 标题/ATS 域名，先按“列表展示可用、官网字段留空”处理，不要回填猜测域名。
 
 ## 4. 停止线（任一即停）
 

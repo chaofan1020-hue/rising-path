@@ -88,7 +88,7 @@
 | S05 | done | c5b979b | 2026-11-24 20:06 | 只读审计：`ats:*` 0、跨来源重复 0；53 组通用 URL 14,597 额外行，不按 URL 去重 |
 | V01 | done | c5b979b | 2026-11-24 19:50 | 50 board 44,234 岗位；US 27,697 v2；20/20 官方 URL；0 误关；G1 |
 | V02 | in_progress | c5b979b | — | 500 board 89,144 岗位、0 失败、0 误关；48h 观察至 2026-11-26 11:50 UTC |
-| D07 | done | 543ced4 | 2026-11-24 20:44 | 探测 1,201：active 1,042、隔离 121（10.1%）；总 active 1,944；冻结 1,000（GH610/Ashby236/Lever154），86 个 token fallback 待补名 |
+| D07 | done | a1cd627 | 2026-11-24 21:06 | 探测 1,440：active 1,245、隔离 153（10.6%）；总 active 2,147；重冻结 1,000（GH630/Ashby252/Lever118），token fallback 0 |
 | U08 | pending | — | — | — |
 | U09 | pending | — | — | — |
 | U10 | pending | — | — | — |
@@ -142,11 +142,11 @@
 
 ### 2026-11-24 · D07 P1 扩量探测与冻结
 
-- 候选 1,500（排除 P0 500、D02 1,500、active 902）；实际探测 1,201：active 1,042、隔离 121、错误 38。
-- 累计 active 902+1,042=**1,944**；隔离率 10.1%，低于 20%；active 率 86.8%。
+- 候选 1,500（排除 P0 500、D02 1,500、active 902）；实际探测 1,440（60 个 Lever 未探）：active 1,245、隔离 153、错误 42。
+- 累计 active 902+1,245=**2,147**；隔离率 10.6%，低于 20%；active 率 86.5%。
 - 50-2,000 优先池已被 D02 吃掉，P1 只剩长尾；招标仍以官方 API 200 + 目标地区样本 + robots allow 为准。
-- 冻结 `data/p1-boards.csv` 1,000 个：GH 610 / Ashby 236 / Lever 154；A21/B895/C84；sha256 `C77E...B6B7`。
-- 86 个 board 只有 token 名（`name_source=token_fallback`），已标 `confidence=low`，G2 后导入前补名；801 个无可验证公司域名，不阻断抓取、阻断官网展示。
+- 冻结 `data/p1-boards.csv` 1,000 个：GH 630 / Ashby 252 / Lever 118；A21/B904/C75；sha256 `A9B982A5...4FFE`。
+- 1,000 个全部 `name_source=page_title`（token fallback 0）；215 个有公司域名，785 个无，标 `confidence=low`，不阻断抓取、阻断官网展示。
 - 生产导入仍等 G2；本轮不新增 upstream board。
 
 ### 2026-11-24 · S05 旧来源重复审计
