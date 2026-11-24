@@ -65,9 +65,9 @@
 
 | ID | 状态 | commit | 完成时间 | 验收摘要 |
 |---|---|---|---|---|
-| B01 | done | docs-pending | 2026-11-24 16:31 | 两端版本、迁移机制、代码/DB 备份已记录；DB dump 1.5G |
-| B02 | done | docs-pending | 2026-11-24 16:31 | 基线：US 114,142 active；上游 180,034 OPEN；重复 14；Feed lag 3m16s |
-| B03 | done | docs-pending | 2026-11-24 16:31 | 开关/分支/回滚/账本约定已写入本节 |
+| B01 | done | 6d9ef85 | 2026-11-24 16:31 | 两端版本、迁移机制、代码/DB 备份已记录；DB dump 1.5G |
+| B02 | done | 6d9ef85 | 2026-11-24 16:31 | 基线：US 114,142 active；上游 180,034 OPEN；重复 14；Feed lag 3m16s |
+| B03 | done | 6d9ef85 | 2026-11-24 16:31 | 开关/分支/回滚/账本约定已写入本节 |
 | D01 | pending | — | — | — |
 | D02 | pending | — | — | — |
 | D03 | pending | — | — | — |
