@@ -70,5 +70,11 @@ assert.match(route, /region_market/);
 assert.match(route, /configuredRegionListingFilter/);
 assert.match(route, /detectMissingStructure/);
 assert.match(route, /retryable: true/);
+assert.match(route, /display_status/);
+assert.match(route, /\['listed', 'enriched'\]/);
+assert.match(
+  fs.readFileSync(path.join(process.cwd(), 'supabase/migrations/0141_job_feed_v2_columns.sql'), 'utf8'),
+  /jobs_active_display_status_idx/,
+);
 
 console.log(`jobs listing count contract ok (${patterns.length} target-region patterns)`);

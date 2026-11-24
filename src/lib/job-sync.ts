@@ -49,6 +49,15 @@ export interface JobSyncRecord {
   is_closed: boolean;
   source_system?: string | null;
   external_job_id?: string | null;
+  source_key?: string | null;
+  apply_url?: string | null;
+  source_updated_at?: string | null;
+  first_seen_at?: string | null;
+  last_seen_at?: string | null;
+  snapshot_id?: string | null;
+  source_tier?: string | null;
+  is_list_only?: boolean | null;
+  display_status?: string | null;
   valid_through?: string | null;
   posted_at?: string | null;
   feed_has_date_posted?: boolean;
@@ -126,6 +135,15 @@ interface ExistingJob {
   company: string | null;
   source_system: string | null;
   external_job_id: string | null;
+  source_key?: string | null;
+  apply_url?: string | null;
+  source_updated_at?: string | null;
+  first_seen_at?: string | null;
+  last_seen_at?: string | null;
+  snapshot_id?: string | null;
+  source_tier?: string | null;
+  display_status?: string | null;
+  is_list_only?: boolean | null;
   region?: string | null;
   salary_range?: string | null;
   employment_type?: string | null;
@@ -354,6 +372,13 @@ export function jobContentHash(job: JobSyncRecord): string {
     job.is_closed,
     job.source_system,
     job.external_job_id,
+    job.source_key,
+    job.apply_url,
+    timestampForHash(job.source_updated_at),
+    timestampForHash(job.first_seen_at),
+    job.source_tier,
+    job.is_list_only,
+    job.display_status,
     timestampForHash(job.valid_through),
     job.deadline_source,
     job.salary_source,
@@ -447,6 +472,25 @@ function toJobPayload(job: JobSyncRecord, existing?: ExistingJob): Omit<JobSyncR
       payload.region = existing.region as string;
       if (existing.location_source) payload.location_source = existing.location_source;
     }
+  }
+  // Keep the earliest first observation and the latest observation. The feed
+  // refreshes these on every poll; a retry or an older cursor must never move
+  // first_seen_at forward or last_seen_at backward.
+  const firstSeen = payload.first_seen_at ? new Date(payload.first_seen_at) : null;
+  const previousFirstSeen = existing?.first_seen_at ? new Date(existing.first_seen_at) : null;
+  if (payload.first_seen_at && Number.isNaN(firstSeen?.getTime())) payload.first_seen_at = existing?.first_seen_at ?? null;
+  else if (previousFirstSeen && (!firstSeen || previousFirstSeen.getTime() < firstSeen.getTime())) {
+    payload.first_seen_at = existing?.first_seen_at ?? null;
+  } else if (!payload.first_seen_at && existing?.first_seen_at) {
+    payload.first_seen_at = existing.first_seen_at;
+  }
+  const lastSeen = payload.last_seen_at ? new Date(payload.last_seen_at) : null;
+  const previousLastSeen = existing?.last_seen_at ? new Date(existing.last_seen_at) : null;
+  if (payload.last_seen_at && Number.isNaN(lastSeen?.getTime())) payload.last_seen_at = existing?.last_seen_at ?? null;
+  else if (previousLastSeen && (!lastSeen || previousLastSeen.getTime() > lastSeen.getTime())) {
+    payload.last_seen_at = existing?.last_seen_at ?? null;
+  } else if (!payload.last_seen_at && existing?.last_seen_at) {
+    payload.last_seen_at = existing.last_seen_at;
   }
   if ((!payload.field_evidence || Object.keys(payload.field_evidence).length === 0) && existing?.field_evidence) {
     payload.field_evidence = existing.field_evidence;
@@ -573,7 +617,7 @@ export async function syncJobRecords(
   // that record before inserting so the unique source/id index remains useful.
   for (const batch of chunks(externalIds, EXISTING_EXTERNAL_ID_LOOKUP_BATCH_SIZE)) {
     const { data, error } = await retryDatabaseOperation(
-      () => client.from('jobs').select('id, job_url, company, source_system, external_job_id, region, description, overview, responsibilities, requirements, nice_to_have, salary_range, employment_type, employment_category, experience_min_years, experience_max_years, experience_text, workplace_type, valid_through, posted_at, deadline_source, salary_source, location_source, field_evidence, is_active, is_closed').in('external_job_id', batch),
+      () => client.from('jobs').select('id, job_url, company, source_system, external_job_id, source_key, apply_url, source_updated_at, first_seen_at, last_seen_at, snapshot_id, source_tier, display_status, is_list_only, region, description, overview, responsibilities, requirements, nice_to_have, salary_range, employment_type, employment_category, experience_min_years, experience_max_years, experience_text, workplace_type, valid_through, posted_at, deadline_source, salary_source, location_source, field_evidence, is_active, is_closed').in('external_job_id', batch),
       '查询岗位外部 ID',
     );
     if (error) throw new Error(`查询岗位外部 ID 失败: ${error.message}`);
@@ -600,7 +644,7 @@ export async function syncJobRecords(
   // oversized URL that surfaces as a generic fetch failure.
   for (const batch of chunks(urls, EXISTING_JOB_LOOKUP_BATCH_SIZE)) {
     const { data, error } = await retryDatabaseOperation(
-      () => client.from('jobs').select('id, job_url, company, source_system, external_job_id, region, description, overview, responsibilities, requirements, nice_to_have, salary_range, employment_type, employment_category, experience_min_years, experience_max_years, experience_text, workplace_type, valid_through, posted_at, deadline_source, salary_source, location_source, field_evidence, is_active, is_closed').in('job_url', batch),
+      () => client.from('jobs').select('id, job_url, company, source_system, external_job_id, source_key, apply_url, source_updated_at, first_seen_at, last_seen_at, snapshot_id, source_tier, display_status, is_list_only, region, description, overview, responsibilities, requirements, nice_to_have, salary_range, employment_type, employment_category, experience_min_years, experience_max_years, experience_text, workplace_type, valid_through, posted_at, deadline_source, salary_source, location_source, field_evidence, is_active, is_closed').in('job_url', batch),
       '查询岗位',
     );
     if (error) throw new Error(`查询岗位失败: ${error.message}`);
@@ -646,10 +690,37 @@ export async function syncJobRecords(
     // External IDs are stable across ATS URL rotations. Prefer that identity
     // before the URL so a refreshed link updates the existing row instead of
     // colliding with its unique source/external-id index.
-    const found = (job.source_system && job.external_job_id
+    const externalMatch = job.source_system && job.external_job_id
       ? existingByExternalId.get(externalIdentity(job.source_system, job.company, job.external_job_id) || '')
-      : undefined)
-      || existingByUrl.get(key(job.job_url) || '');
+      : undefined;
+    const urlMatch = existingByUrl.get(key(job.job_url) || '');
+    const found = externalMatch || urlMatch;
+    if (found && !externalMatch && urlMatch) {
+      // A URL can be shared by a legacy collector row and a newly onboarded
+      // board. Preserve the established identity instead of rewriting it;
+      // fill only the additive source fields and keep an audit note.
+      const existingSource = found.source_system || null;
+      const incomingSource = job.source_system || null;
+      const existingExternal = found.external_job_id || null;
+      const incomingExternal = job.external_job_id || null;
+      if (existingSource && (existingSource !== incomingSource
+        || (existingExternal && incomingExternal && existingExternal !== incomingExternal))) {
+        job.source_system = existingSource;
+        job.external_job_id = existingExternal;
+        if (found.job_url) job.job_url = found.job_url;
+        job.field_evidence = {
+          ...(job.field_evidence || {}),
+          identity_conflict: {
+            reason: 'url_match_identity_preserved',
+            existing_source_system: existingSource,
+            existing_external_job_id: existingExternal,
+            incoming_source_system: incomingSource,
+            incoming_external_job_id: incomingExternal,
+            observed_at: timestamp,
+          },
+        };
+      }
+    }
     if (!found) {
       inserts.push({ job, contentHash });
       continue;

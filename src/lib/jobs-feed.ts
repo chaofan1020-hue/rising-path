@@ -21,12 +21,21 @@ import { enrichAshbyLocations } from '@/lib/ashby-location-enrichment';
 
 const DEFAULT_FEED_URL = 'https://hfscareer.com/collector-api/integrations/v1/jobs';
 export const JOBS_FEED_SOURCE = 'collector_feed';
+export const JOBS_FEED_V2_CLIENT_ENABLED = process.env.JOBS_FEED_V2_ENABLED !== 'false';
 const DEFAULT_PAGE_SIZE = 500;
 const MAX_PAGES_PER_RUN = 1000;
 
 export interface JobsFeedItem {
   id: string;
   external_job_id?: string | null;
+  source_key?: string | null;
+  apply_url?: string | null;
+  source_updated_at?: string | null;
+  snapshot_id?: string | null;
+  source_tier?: string | null;
+  is_list_only?: boolean | null;
+  first_seen_at?: string | null;
+  last_seen_at?: string | null;
   company_name?: string | null;
   title?: string | null;
   description?: string | null;
@@ -133,6 +142,18 @@ function getFeedConfig() {
 
 function text(value: unknown): string {
   return typeof value === 'string' ? value.trim() : value == null ? '' : String(value).trim();
+}
+
+function feedTimestamp(value: unknown): string | null {
+  const raw = text(value);
+  if (!raw) return null;
+  const parsed = new Date(raw);
+  return Number.isNaN(parsed.getTime()) ? null : parsed.toISOString();
+}
+
+function feedTier(value: unknown): string | null {
+  const tier = text(value).toUpperCase();
+  return ['S', 'A', 'B', 'C'].includes(tier) ? tier : null;
 }
 
 const POSTED_MONTHS: Record<string, number> = {
@@ -592,6 +613,19 @@ export function normalizeFeedItem(item: JobsFeedItem): JobSyncRecord | null {
     ? (text(item.workplace_type) || inferredWorkplace.workplaceType || '').slice(0, 50) || null
     : null;
   const now = new Date().toISOString();
+  const v2Fields = JOBS_FEED_V2_CLIENT_ENABLED
+    ? {
+      source_key: text(item.source_key) || null,
+      apply_url: text(item.apply_url) || null,
+      source_updated_at: feedTimestamp(item.source_updated_at),
+      first_seen_at: feedTimestamp(item.first_seen_at) || now,
+      last_seen_at: feedTimestamp(item.last_seen_at) || now,
+      snapshot_id: text(item.snapshot_id) || null,
+      source_tier: feedTier(item.source_tier),
+      is_list_only: item.is_list_only === true,
+      display_status: 'listed',
+    }
+    : {};
   const fieldEvidence = {
     version: 1,
     source_type: typeof item.source_evidence?.source_type === 'string' ? item.source_evidence.source_type : null,
@@ -608,6 +642,7 @@ export function normalizeFeedItem(item: JobsFeedItem): JobSyncRecord | null {
   };
 
   return {
+    ...v2Fields,
     title: title.substring(0, 255),
     company: company.substring(0, 255),
     region: location.substring(0, 100),

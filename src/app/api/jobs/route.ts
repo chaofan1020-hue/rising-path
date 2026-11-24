@@ -267,6 +267,9 @@ export async function GET(request: NextRequest) {
 
       if (status === 'closed') query = query.eq('is_active', false);
       else if (status !== 'all') query = query.eq('is_active', true);
+      // Stale is a display state, not a lifecycle state. Hide it from the
+      // default catalog while keeping the row (and detail page) reachable.
+      if (status !== 'all') query = query.in('display_status', ['listed', 'enriched']);
 
       if (audience && audience !== '全部') query = query.eq('audience', audience);
       if (jobType && jobType !== '全部') query = query.eq('job_type', jobType);

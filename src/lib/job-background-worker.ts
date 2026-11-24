@@ -6,10 +6,12 @@ import { refreshUpstreamCompanySnapshots } from '@/lib/job-source-telemetry';
 import { runHistoricalFieldReviewCycle } from '@/lib/job-historical-field-review-worker';
 import { getSupabaseClient } from '@/storage/database/supabase-client';
 import { recoverStaleJobSyncRuns } from '@/lib/job-sync-dashboard';
+import { runJobTtlCycle } from '@/lib/job-ttl-worker';
 
 const DEFAULT_SYNC_INTERVAL_MINUTES = 10;
 const DEFAULT_OFFICIAL_DETAILS_INTERVAL_MINUTES = 2;
 const DEFAULT_START_DELAY_SECONDS = 15;
+const DEFAULT_TTL_INTERVAL_HOURS = 6;
 const MAX_INCREMENTAL_CATCHUP_CYCLES = 8;
 
 let started = false;
@@ -19,6 +21,8 @@ let timer: NodeJS.Timeout | null = null;
 let officialTimer: NodeJS.Timeout | null = null;
 let historicalRunning = false;
 let historicalTimer: NodeJS.Timeout | null = null;
+let ttlRunning = false;
+let ttlTimer: NodeJS.Timeout | null = null;
 
 function positiveNumber(value: string | undefined, fallback: number): number {
   const parsed = Number(value);
@@ -160,6 +164,21 @@ async function runHistoricalFieldReviewCycleInBackground(): Promise<void> {
   }
 }
 
+async function runTtlCycleInBackground(): Promise<void> {
+  if (ttlRunning) return;
+  ttlRunning = true;
+  try {
+    const result = await runJobTtlCycle(getSupabaseClient(), { apply: true });
+    if (result.enabled && (result.scanned > 0 || result.written > 0)) {
+      console.info('[Job Worker] TTL cycle completed', result);
+    }
+  } catch (error) {
+    console.error('[Job Worker] TTL cycle failed:', error instanceof Error ? error.message : error);
+  } finally {
+    ttlRunning = false;
+  }
+}
+
 /**
  * Starts one bounded background loop for the custom Node server. The database
  * lease still prevents concurrent feed syncs when more than one app instance
@@ -185,6 +204,10 @@ export function startJobBackgroundWorker(): void {
     process.env.JOBS_WORKER_START_DELAY_SECONDS,
     DEFAULT_START_DELAY_SECONDS,
   ) * 1_000;
+  const ttlIntervalMs = positiveNumber(
+    process.env.JOBS_TTL_INTERVAL_HOURS,
+    DEFAULT_TTL_INTERVAL_HOURS,
+  ) * 60 * 60_000;
 
   const schedule = () => {
     timer = setInterval(() => {
@@ -207,6 +230,13 @@ export function startJobBackgroundWorker(): void {
     historicalTimer.unref?.();
   };
 
+  const scheduleTtl = () => {
+    ttlTimer = setInterval(() => {
+      void runTtlCycleInBackground();
+    }, ttlIntervalMs);
+    ttlTimer.unref?.();
+  };
+
   setTimeout(() => {
     void runCycle().finally(schedule);
   }, delayMs).unref?.();
@@ -216,4 +246,7 @@ export function startJobBackgroundWorker(): void {
   setTimeout(() => {
     void runHistoricalFieldReviewCycleInBackground().finally(scheduleHistoricalReview);
   }, delayMs + 10_000).unref?.();
+  setTimeout(() => {
+    void runTtlCycleInBackground().finally(scheduleTtl);
+  }, delayMs + 15_000).unref?.();
 }
