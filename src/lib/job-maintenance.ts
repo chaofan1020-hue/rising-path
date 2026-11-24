@@ -3,7 +3,7 @@ import { ExternalFetchError, fetchSafeExternalPage } from '@/lib/safe-external-f
 import { JOBS_FEED_SOURCE } from '@/lib/jobs-feed';
 import { isJobDeadlineExpired, resolveJobDeadline } from '@/lib/job-deadline';
 import { parseExperience } from '@/lib/job-connectors/utils';
-import { nextLinkFailureCount, shouldCloseAfterLinkFailure, type JobAvailabilityStatus, type JobLinkHealth } from '@/lib/job-link-health';
+import { isAshbyJobUrl, nextLinkFailureCount, shouldCloseAfterLinkFailure, type JobAvailabilityStatus, type JobLinkHealth } from '@/lib/job-link-health';
 import { getSupabaseClient } from '@/storage/database/supabase-client';
 import { extractOfficialJobDetails, isJobContentShell, officialEvercoreDetailUrl } from '@/lib/job-official-detail';
 import { hasMatchingPhenomDetailPayload } from '@/lib/job-connectors/fetch';
@@ -372,24 +372,33 @@ export async function maintainJobLifecycle(options: {
         const upstreamStatus = requestError instanceof ExternalFetchError ? requestError.upstreamStatus : undefined;
         const classification = classifyFetchFailure(requestError);
         const isNotFound = upstreamStatus === 404 || upstreamStatus === 410;
-        const failures = nextLinkFailureCount(upstreamStatus, job.link_check_failures);
+        // Ashby private boards serve 404 for every posting HTML URL while the
+        // official posting API still lists the job (verified 2026-11-24:
+        // Saronic/Cursor). Their lifecycle must follow upstream official close
+        // events, so a 404/410 from jobs.ashbyhq.com is unverifiable here.
+        const ashbyHtmlUnverifiable = isNotFound && isAshbyJobUrl(job.job_url);
+        const failures = ashbyHtmlUnverifiable ? 0 : nextLinkFailureCount(upstreamStatus, job.link_check_failures);
         // 410 and a page-level "closed" signal are definitive. A bare 404 is
         // retried once to avoid closing jobs during a transient ATS outage.
-        const shouldClose = shouldCloseAfterLinkFailure({
+        const shouldClose = ashbyHtmlUnverifiable ? false : shouldCloseAfterLinkFailure({
           httpStatus: upstreamStatus,
           previousFailures: job.link_check_failures,
         });
-        const persistedClassification = isNotFound && !shouldClose
+        const persistedClassification = ashbyHtmlUnverifiable
           ? { availabilityStatus: 'unknown' as const, linkHealth: 'unknown' as const }
-          : classification;
+          : isNotFound && !shouldClose
+            ? { availabilityStatus: 'unknown' as const, linkHealth: 'unknown' as const }
+            : classification;
         const { error: updateError } = await client
           .from('job_sync_records')
           .update({
             last_link_checked_at: new Date().toISOString(),
-            last_link_status: upstreamStatus || null,
-            last_link_http_status: upstreamStatus || null,
+            last_link_status: ashbyHtmlUnverifiable ? null : upstreamStatus || null,
+            last_link_http_status: ashbyHtmlUnverifiable ? null : upstreamStatus || null,
             link_check_failures: failures,
-            last_link_error: requestError instanceof Error ? requestError.message.slice(0, 2_000) : String(requestError).slice(0, 2_000),
+            last_link_error: ashbyHtmlUnverifiable
+              ? 'Ashby 私有板：HTML 岗位页返回 404 不构成下架证据，改以上游官方关闭事件为准'
+              : requestError instanceof Error ? requestError.message.slice(0, 2_000) : String(requestError).slice(0, 2_000),
             availability_status: persistedClassification.availabilityStatus,
             link_health: persistedClassification.linkHealth,
             availability_checked_at: new Date().toISOString(),
@@ -404,7 +413,7 @@ export async function maintainJobLifecycle(options: {
             .eq('is_active', true);
           if (closeError) throw closeError;
         }
-        if (isNotFound) result.links_not_found += 1;
+        if (isNotFound && !ashbyHtmlUnverifiable) result.links_not_found += 1;
         else result.links_inconclusive += 1;
         if (shouldClose) result.links_closed += 1;
       }

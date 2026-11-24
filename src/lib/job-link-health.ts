@@ -82,6 +82,25 @@ export function isDefinitivelyClosed(observation: JobLinkHealthObservation): boo
 }
 
 /**
+ * Ashby hosts some company job boards in "private/unlisted" mode: the public
+ * HTML board (`jobs.ashbyhq.com/<slug>`) and every individual posting URL
+ * return 404, while the official posting API
+ * (`https://api.ashbyhq.com/posting-api/job-board/<slug>`) still lists the live
+ * jobs. A 404 from the HTML page therefore proves nothing for these URLs; their
+ * lifecycle is driven by upstream official close events instead.
+ */
+const ASHBY_HTML_HOST = 'jobs.ashbyhq.com';
+
+export function isAshbyJobUrl(jobUrl: string | null | undefined): boolean {
+  if (!jobUrl) return false;
+  try {
+    return new URL(jobUrl).hostname.toLowerCase() === ASHBY_HTML_HOST;
+  } catch {
+    return false;
+  }
+}
+
+/**
  * A single 404 is not enough evidence to remove a job. ATS providers
  * intermittently return 404 while deploying, rate limiting, or rotating a
  * requisition URL. HTTP 410 and an explicit closed-page signal are definitive;
