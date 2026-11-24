@@ -1,0 +1,155 @@
+# 岗位采集规模化 · 执行账本
+
+> 这是 AI 唯一允许改状态的地方。`tasks.yaml` 只读；本文件每完成一个任务必须更新。
+> 最后更新：2026-11-24（B01-B03 完成，进入发现阶段）
+
+## 状态规则
+
+- `pending`：未开始
+- `in_progress`：正在做（同一时间只允许 1 个）
+- `done`：验收命令全部通过 + 已提交 + 已记录 commit
+- `blocked`：同一验收失败 2 次，必须写原始报错与已尝试方案
+- `skipped`：仅人类可标，需写原因
+
+更新格式：`| 任务 | 状态 | commit | 完成时间 | 验收摘要 |`，并按时间倒序追加“日志”。
+
+## 环境
+
+| 项 | 值 |
+|---|---|
+| 美国站 commit | `03d8eebe0ca70cffe8f02946fc95c62adc0e2440`（2026-11-24 16:17 +08） |
+| 美国站生产目录 | `/opt/liorvix`（git repo；systemd `liorvix.service` 跑 `node dist/server.js`） |
+| 美国站服务重启点 | 2026-11-24 16:21:37 +08；上一版 `dist.bak-20261124-101147` |
+| 上游 commit | 无 git；版本证据 = 文件哈希 + 镜像 `global-jobs-api:latest` ID `342cc0aa7c26` |
+| 上游目录 | `/opt/global-jobs` |
+| 上游镜像 tag（回滚点） | `global-jobs-api/worker/beat:latest` = `342cc0aa7c26`（4 天前构建） |
+| 上游迁移机制 | Alembic（`alembic.ini` + `migrations/versions`，当前 head `0016_reclassify_amazon_runs.py`） |
+| 上游关键文件哈希 | connectors `856561c3…`、tasks `06e27ebd…`、models `e0a9b947…`、services `48eab560…` |
+| 上游代码备份 | `/opt/global-jobs/ops-backups/b01-20261124T082138Z/`（含 sha256） |
+| 上游 DB 备份 | `/opt/global-jobs/ops-backups/b01-db-20261124T082748Z.dump`（1.5G，sha256 `165a0b5c…`；DB 7.3G） |
+| 美国站最新迁移 | `0139_ai_match_retrieval_bounded.sql`；下一条 `0140_job_board_ingestion.sql` |
+| 基线文件 | `tmp/baseline-20261124.json` |
+| Supabase 备份时间点 | `/opt/liorvix-backups/liorvix-20261124-032117.dump`（444MB；DB 容器 2026-11-23 03:15 UTC 起） |
+| Feed worker 实际配置 | `JOBS_AUTO_WORKER=true`、`JOBS_SYNC_INTERVAL_MINUTES=5`；**systemd jobs timers 全部 disabled**，不要按 timer 文档推断 |
+| 当前生产事实 | US 233,525 行（active 114,142 / closed 119,383）；上游 407,909（OPEN 180,034 / CLOSED 227,875）；上游 169 家公司 |
+
+## 执行约定（B03）
+
+- 分支：`feat/bulk-<task-id>`；一个任务一个 commit，消息 `feat(jobs): <task-id> <摘要>`。
+- 计划文档本身：`docs(jobs): ...`，不计入任务；不把 `tmp/`、`secrets/`、`.env*` 提交。
+- **工作区已有他人改动，不得纳入本计划提交**：`src/app/api/admin/ai-usage/route.ts`、`src/app/api/admin/students/route.ts`、`src/app/login/page.tsx`、`src/components/RegistrationSuccess.tsx`；每次提交只 `git add` 任务文件。
+- 回滚点：美国站 `dist.bak-20261124-101147` + `systemctl restart liorvix`；上游镜像 `342cc0aa7c26` + 代码/DB 备份（见上）。
+- 迁移约定：上游 Alembic `upgrade head/downgrade -1`；美国站 SQL 迁移必须可 down，先在 staging/影子库跑。
+- Gate 前禁止写生产；所有写操作先 `--dry-run`。
+
+## 开关（默认全关）
+
+| 端 | 变量 | 默认 | 作用 |
+|---|---|---|---|
+| 上游 | `BULK_BOARDS_ENABLED` | `false` | 批量 board 调度总开关 |
+| 上游 | `BULK_BOARD_WRITE` | `false` | 是否写岗位；false 只记录 run |
+| 上游 | `BULK_MAX_ACTIVE_BOARDS` | `50` | 放行 board 数上限 |
+| 美国站 | `JOBS_FEED_V2_ENABLED` | `false` | v2 字段/行为 |
+| 美国站 | `JOB_TTL_ENABLED` | `false` | stale 计算 |
+
+## Gate 状态
+
+| Gate | 状态 | 开启时间 | 依据 |
+|---|---|---|---|
+| G1（500 board 生产） | closed | — | V01 |
+| G2（1,500 + Feed v2） | closed | — | V02 |
+| G3（3,000 + 适配器） | closed | — | V03 |
+| G4（6,000） | closed | — | V04 |
+
+## 任务状态
+
+| ID | 状态 | commit | 完成时间 | 验收摘要 |
+|---|---|---|---|---|
+| B01 | done | docs-pending | 2026-11-24 16:31 | 两端版本、迁移机制、代码/DB 备份已记录；DB dump 1.5G |
+| B02 | done | docs-pending | 2026-11-24 16:31 | 基线：US 114,142 active；上游 180,034 OPEN；重复 14；Feed lag 3m16s |
+| B03 | done | docs-pending | 2026-11-24 16:31 | 开关/分支/回滚/账本约定已写入本节 |
+| D01 | pending | — | — | — |
+| D02 | pending | — | — | — |
+| D03 | pending | — | — | — |
+| D04 | pending | — | — | — |
+| D05 | pending | — | — | — |
+| D06 | pending | — | — | — |
+| U01 | pending | — | — | — |
+| U02 | pending | — | — | — |
+| U03 | pending | — | — | — |
+| U04 | pending | — | — | — |
+| U05 | pending | — | — | — |
+| U06 | pending | — | — | — |
+| U07 | pending | — | — | — |
+| S01 | pending | — | — | — |
+| S02 | pending | — | — | — |
+| S03 | pending | — | — | — |
+| S04 | pending | — | — | — |
+| S05 | pending | — | — | — |
+| V01 | pending | — | — | — |
+| V02 | pending | — | — | — |
+| D07 | pending | — | — | — |
+| U08 | pending | — | — | — |
+| U09 | pending | — | — | — |
+| U10 | pending | — | — | — |
+| S06 | pending | — | — | — |
+| S07 | pending | — | — | — |
+| V03 | pending | — | — | — |
+| U11 | pending | — | — | — |
+| U12 | pending | — | — | — |
+| U13 | pending | — | — | — |
+| U14 | pending | — | — | — |
+| S08 | pending | — | — | — |
+| S09 | pending | — | — | — |
+| V04 | pending | — | — | — |
+| D08 | pending | — | — | — |
+| U15 | pending | — | — | — |
+| U16 | pending | — | — | — |
+| S10 | pending | — | — | — |
+| V05 | pending | — | — | — |
+| O01 | pending | — | — | — |
+| O02 | pending | — | — | — |
+| O03 | pending | — | — | — |
+
+## 关键指标快照
+
+| 日期 | active board | 活跃岗位 | 新增 P95 | 成功率 | 误关率 | 重复率 | stale 比例 | 单岗成本 |
+|---|---:|---:|---:|---:|---:|---:|---:|---:|
+| 基线（B02） | 0（bulk） | 114,142 | — | — | — | 0.012% | — | — |
+| G1（V01） | — | — | — | — | — | — | — | — |
+| G2（V02） | — | — | — | — | — | — | — | — |
+| G3（V03） | — | — | — | — | — | — | — | — |
+| G4（V04） | — | — | — | — | — | — | — | — |
+| 最终（V05） | — | — | — | — | — | — | — | — |
+
+## 风险与偏差（不阻塞，但必须带着走）
+
+| 项 | 证据 | 影响 | 应对 |
+|---|---|---|---|
+| 上游无 git 仓 | `git rev-parse` = not a repository | 无法用 commit 回滚 | 用文件哈希 + 镜像 ID + `ops-backups`；每次改前再备份 |
+| 上游 `crawl_all` 6h + 大量 Workday 官方同步连续失败（48-60 次） | `job_sync_state` / `crawl_runs` | Workday 字段证据不可靠，不能当 P0 主源 | P0 主源只算 GH/Ashby/Lever；Workday 不纳入 500 |
+| US 与上游 open 岗位差 65,892 | US 114,142 vs 上游 180,034 | 差的是非目标地区/未同步，不是丢数据 | 不做全量对账；按 target region 抽样 |
+| systemd jobs timers 全 disabled | `systemctl list-unit-files` | 文档若按 timer 推断会误判新鲜度 | 以 `JOBS_SYNC_INTERVAL_MINUTES=5` 的进程内 worker 为准 |
+| 工作区有他人未提交改动 | 4 个 src 文件 | 误提交会混入无关变更 | 只 add 任务文件；提交前逐项核对 |
+
+## 阻塞项
+
+| 任务 | 首次失败 | 原始报错 | 已尝试 | 解除条件 | 状态 |
+|---|---|---|---|---|---|
+| — | — | — | — | — | — |
+
+## 日志（倒序）
+
+### 2026-11-24 · B01-B03 完成
+
+- B01：美国站 `03d8eebe`（与本地一致），systemd `liorvix.service`，`/opt/liorvix` 为 git 仓；上游无 git，记录文件哈希 + 镜像 `342cc0aa7c26`；上游 Alembic head `0016`；已备份 connectors/tasks/models 与 1.5G DB dump。
+- B02：US 233,525 行（active 114,142 / closed 119,383），唯一来源 `collector_feed`，`ats:*` active 0，重复 URL 14；Feed 最近成功 08:21:54 UTC（lag 3m16s），24h 新增 2,975 / 关闭 3,416。上游 169 公司、407,909 行（OPEN 180,034 / CLOSED 227,875），最近成功 crawl 08:17 UTC，6h 节奏。
+- B03：确认 `JOBS_AUTO_WORKER=true`、`JOBS_SYNC_INTERVAL_MINUTES=5`；jobs timers 全 disabled；回滚点与“不提交他人改动”规则写入本节。
+- 结论：当前端到端瓶颈确实是上游 6h 轮换；US 侧 Feed 延迟健康（分钟级）。P0 只需把上游 board 调度 + Feed v2 做出来，不需要重做 US Feed。
+- 下一步：D01 下载 open-ats-feed 语料，D02 生成候选池。
+
+### 2026-11-24 · 初始化
+
+- 生成执行计划、任务图、本账本。
+- 未执行任何生产操作；所有开关默认关闭。
+- 下一步：B01（读取两端 commit、备份、确认迁移机制）。

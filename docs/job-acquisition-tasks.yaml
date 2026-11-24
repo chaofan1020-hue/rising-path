@@ -1,0 +1,480 @@
+version: 1
+updated: "2026-11-24"
+plan_doc: docs/job-acquisition-execution-plan.md
+status_source: docs/job-acquisition-progress.md
+notes: >
+  AI 从本文件取任务；状态只写 progress.md，不要在这里改 status。
+  依赖全部 done 且 gate 已开才可执行。详细步骤、命令、验收以 plan_doc 对应章节为准。
+
+gates:
+  G1:
+    after: V01
+    allows: "生产写 500 board"
+    criteria: "50 board canary：0 误关、P95≤60min、20 条 URL 0 错"
+  G2:
+    after: V02
+    allows: "1,500 board + Feed v2 生产"
+    criteria: "48h 成功率≥98%、重复<0.5%、stale 正常、Feed 延迟<15min"
+  G3:
+    after: V03
+    allows: "3,000 board + 长尾适配器"
+    criteria: "1,500 board：P95≤30min、成功率≥99%、误关<0.2%"
+  G4:
+    after: V04
+    allows: "6,000 board"
+    criteria: "3,000 board：成功率≥99%、误关<0.2%、三家长尾各≥100 board"
+
+tasks:
+  - id: B01
+    phase: P0
+    track: ops
+    title: "冻结环境与访问"
+    depends_on: []
+    est_hours: 2
+    location: both
+    files: ["docs/job-acquisition-progress.md"]
+    acceptance: "两端 commit/镜像 tag/备份路径/迁移机制已记录"
+
+  - id: B02
+    phase: P0
+    track: ops
+    title: "生产基线"
+    depends_on: [B01]
+    est_hours: 3
+    location: both
+    files: ["tmp/baseline-<date>.json", "docs/job-acquisition-progress.md"]
+    acceptance: "活跃岗位/来源分布/重复 URL/Feed 延迟/24h 新增关闭/公司数已记录"
+
+  - id: B03
+    phase: P0
+    track: ops
+    title: "开关、分支与账本"
+    depends_on: [B01]
+    est_hours: 2
+    location: both
+    files: ["docs/job-acquisition-progress.md"]
+    acceptance: "四个开关名/分支名/回滚命令已写入 progress"
+
+  - id: D01
+    phase: P0
+    track: discovery
+    title: "下载候选语料"
+    depends_on: [B03]
+    est_hours: 1
+    location: repo
+    files: ["tmp/boards/all.csv", "tmp/boards/engineering.csv", "tmp/boards/data-quality.csv", "tmp/boards/board-roles.csv"]
+    acceptance: "all.csv 18,164 行；engineering.csv 500 行；sha256 已记录"
+
+  - id: D02
+    phase: P0
+    track: discovery
+    title: "生成候选池"
+    depends_on: [D01]
+    est_hours: 2
+    location: repo
+    files: ["tmp/boards/candidates.csv", "scripts/ats-discovery/build-candidates.ts"]
+    acceptance: "1,200-1,500 候选；500 engineering 全含；现有 169 token 已排除"
+
+  - id: D03
+    phase: P0
+    track: discovery
+    title: "探测工具"
+    depends_on: [D02]
+    est_hours: 8
+    location: repo
+    files:
+      - "src/lib/ats-discovery/robots.ts"
+      - "src/lib/ats-discovery/providers.ts"
+      - "scripts/ats-discovery/probe.ts"
+      - "scripts/test-ats-discovery.ts"
+    acceptance: "robots/三家 fixture/空 board/429 测试通过；Stripe/OpenAI/Palantir 探测成功"
+
+  - id: D04
+    phase: P0
+    track: discovery
+    title: "跑 1,000 个候选"
+    depends_on: [D03]
+    est_hours: 4
+    location: repo
+    files: ["tmp/boards/probe-results.jsonl", "tmp/boards/active.csv", "tmp/boards/quarantine.csv"]
+    acceptance: "active≥500；错误<10%；每个 active 有 robots 证据；断点续跑有效"
+
+  - id: D05
+    phase: P0
+    track: discovery
+    title: "公司名与域名解析"
+    depends_on: [D04]
+    est_hours: 4
+    location: repo
+    files: ["scripts/ats-discovery/resolve-companies.ts", "data/board-company-overrides.csv"]
+    acceptance: "active 中≥95% 有 company_name+domain；20 条人工核对错误≤2"
+
+  - id: D06
+    phase: P0
+    track: discovery
+    title: "抽样复核并冻结 500"
+    depends_on: [D05]
+    est_hours: 3
+    location: repo
+    files: ["data/p0-boards.csv"]
+    acceptance: "500 行无重复；错误率≤15%；字段齐全"
+
+  - id: U01
+    phase: P0
+    track: upstream
+    title: "ats_boards 模型与迁移"
+    depends_on: [B01]
+    est_hours: 6
+    location: upstream
+    files: ["app/models.py", "迁移文件"]
+    acceptance: "staging up/down 成功；ats_boards 唯一索引；jobs 新增 5 列与索引；crawl_all 查询不变"
+
+  - id: U02
+    phase: P0
+    track: upstream
+    title: "CSV 导入器"
+    depends_on: [U01, D06]
+    est_hours: 5
+    location: upstream
+    files: ["app/bulk_boards.py"]
+    acceptance: "dry-run 500/0 错误；重复执行 0 新增；新公司 is_active=false；crawl_all 队列不变"
+
+  - id: U03
+    phase: P0
+    track: upstream
+    title: "单 board 抓取"
+    depends_on: [U02]
+    est_hours: 8
+    location: upstream
+    files: ["app/bulk_boards.py"]
+    acceptance: "Stripe 500+ 岗位；坏 JSON 不改岗位；重复跑幂等；source_key 写入"
+
+  - id: U04
+    phase: P0
+    track: upstream
+    title: "批量调度器"
+    depends_on: [U03]
+    est_hours: 8
+    location: upstream
+    files: ["app/tasks.py", "app/bulk_boards.py"]
+    acceptance: "50 board 10min 内调度；无重入；429 不拖停；crawl_all 未变"
+
+  - id: U05
+    phase: P0
+    track: upstream
+    title: "心跳与 TTL 数据"
+    depends_on: [U03]
+    est_hours: 4
+    location: upstream
+    files: ["app/models.py", "app/bulk_boards.py"]
+    acceptance: "心跳按天去重；is_closed 无变化；snapshot_id 可用"
+
+  - id: U06
+    phase: P0
+    track: upstream
+    title: "Feed v2 序列化"
+    depends_on: [U03, U05]
+    est_hours: 6
+    location: upstream
+    files: ["Feed 序列化模块", "app/tasks.py"]
+    acceptance: "20 条 canary 合规；source_key 过滤有效；v1 开关可回退"
+
+  - id: U07
+    phase: P0
+    track: upstream
+    title: "部署、健康接口与 50 board dry-run"
+    depends_on: [U04, U06]
+    est_hours: 5
+    location: upstream
+    files: ["board-health 路由", "docker compose"]
+    acceptance: "50 board 有 run；health 50 行；write=false 不新增岗位；回滚镜像可用"
+
+  - id: S01
+    phase: P0
+    track: site
+    title: "迁移 0140 + 回填"
+    depends_on: [B01]
+    est_hours: 4
+    location: repo
+    files: ["supabase/migrations/0140_job_board_ingestion.sql", "scripts/backfill-job-board-fields.ts"]
+    acceptance: "staging up/down；is_active 计数不变；last_seen_at 全量置 now()；TTL 首次同步后才开"
+
+  - id: S02
+    phase: P0
+    track: site
+    title: "Feed v2 客户端"
+    depends_on: [S01]
+    est_hours: 6
+    location: repo
+    files: ["src/lib/jobs-feed.ts", "src/lib/job-sync.ts", "scripts/test-jobs-feed-v2.ts"]
+    acceptance: "20 条 canary；test:jobs-feed-v2 通过；旧测试通过；开关关闭行为不变"
+
+  - id: S03
+    phase: P0
+    track: site
+    title: "TTL / stale worker"
+    depends_on: [S02, U05]
+    est_hours: 4
+    location: repo
+    files: ["src/lib/job-ttl-worker.ts", "scripts/maintain-job-ttl.ts"]
+    acceptance: "23h/25h/8d 分别 listed/stale/stale；is_closed 不变；dry-run 不写"
+
+  - id: S04
+    phase: P0
+    track: site
+    title: "列表与详情展示过滤"
+    depends_on: [S03]
+    est_hours: 3
+    location: repo
+    files: ["src/app/api/jobs/route.ts", "src/app/jobs/[id]/page.tsx"]
+    acceptance: "stale 默认不可见；详情 200；test:jobs-listing-counts 通过"
+
+  - id: S05
+    phase: P0
+    track: site
+    title: "旧来源重复审计"
+    depends_on: [B02]
+    est_hours: 3
+    location: repo
+    files: ["scripts/audit-job-source-duplicates.ts"]
+    acceptance: "重复数/比例/样例已出；结论入 progress；未改展示"
+
+  - id: V01
+    phase: P0
+    track: verify
+    title: "50 board canary"
+    depends_on: [U07, S04, D06]
+    est_hours: 4
+    location: both
+    files: ["docs/job-acquisition-progress.md"]
+    acceptance: "50 board/≥2,000 岗位/0 误关/P95≤60min/20 条抽样 0 错"
+
+  - id: V02
+    phase: P0
+    track: verify
+    title: "500 board 观察 48h"
+    depends_on: [V01]
+    est_hours: 16
+    location: both
+    files: ["docs/job-acquisition-progress.md"]
+    acceptance: "成功率≥98%/重复<0.5%/stale 正常/Feed<15min；G1/G2 报告"
+
+  - id: D07
+    phase: P1
+    track: discovery
+    title: "扩量探测到 2,000 active"
+    depends_on: [V02]
+    est_hours: 6
+    location: repo
+    files: ["data/p1-boards.csv"]
+    acceptance: "新增 active≥1,000；证据齐全；隔离率<20%"
+
+  - id: U08
+    phase: P1
+    track: upstream
+    title: "自适应退避 + ETag"
+    depends_on: [U07]
+    est_hours: 8
+    location: upstream
+    files: ["app/bulk_boards.py"]
+    acceptance: "ETag 304 生效；请求数降≥30%；无变化间隔拉长"
+
+  - id: U09
+    phase: P1
+    track: upstream
+    title: "GH 浅轮询 + 变化拉正文"
+    depends_on: [U08]
+    est_hours: 6
+    location: upstream
+    files: ["app/connectors.py", "app/bulk_boards.py"]
+    acceptance: "Stripe 体积<1MB；新岗有正文；无漏岗"
+
+  - id: U10
+    phase: P1
+    track: upstream
+    title: "详情补全队列"
+    depends_on: [U09]
+    est_hours: 6
+    location: upstream
+    files: ["app/tasks.py", "app/services.py"]
+    acceptance: "正文覆盖≥95%；失败只记 health；无关闭副作用"
+
+  - id: S06
+    phase: P1
+    track: site
+    title: "方向分类抽检"
+    depends_on: [V02]
+    est_hours: 4
+    location: repo
+    files: ["scripts/audit-job-direction.ts", "src/lib/jobs-feed.ts"]
+    acceptance: "错分率≤5%；默认 Finance 比例已量化"
+
+  - id: S07
+    phase: P1
+    track: site
+    title: "Feed 吞吐调优"
+    depends_on: [S02]
+    est_hours: 3
+    location: repo
+    files: ["src/lib/job-feed-orchestrator.ts"]
+    acceptance: "10 万变更≤30min；0 丢行；生产延迟<15min"
+
+  - id: V03
+    phase: P1
+    track: verify
+    title: "1,500 验收"
+    depends_on: [D07, U10, S07]
+    est_hours: 4
+    location: both
+    files: ["docs/job-acquisition-progress.md"]
+    acceptance: "1,500 board/8 万岗/P95≤30min/成功率≥99%/误关<0.2%"
+
+  - id: U11
+    phase: P2
+    track: upstream
+    title: "Breezy 适配器"
+    depends_on: [U07]
+    est_hours: 6
+    location: upstream
+    files: ["app/connectors.py"]
+    acceptance: "100 条 canary 字段可解释；空 board 不报错；无关闭"
+
+  - id: U12
+    phase: P2
+    track: upstream
+    title: "Recruitee 适配器"
+    depends_on: [U07]
+    est_hours: 6
+    location: upstream
+    files: ["app/connectors.py"]
+    acceptance: "100 条 canary；updated_at 驱动增量"
+
+  - id: U13
+    phase: P2
+    track: upstream
+    title: "Teamtailor 适配器"
+    depends_on: [U07]
+    est_hours: 6
+    location: upstream
+    files: ["app/connectors.py"]
+    acceptance: "100 条 canary；分页/总数一致"
+
+  - id: U14
+    phase: P2
+    track: upstream
+    title: "多 board 去重"
+    depends_on: [U11, U12, U13]
+    est_hours: 4
+    location: upstream
+    files: ["app/bulk_boards.py", "app/models.py"]
+    acceptance: "重复组可查；主岗规则稳定；不影响单 board"
+
+  - id: S08
+    phase: P2
+    track: site
+    title: "展示合并与索引"
+    depends_on: [U14]
+    est_hours: 5
+    location: repo
+    files: ["src/app/api/jobs/route.ts", "supabase/migrations/"]
+    acceptance: "重复组只展示 1 条；列表 P95 不退化；AI 候选不重复"
+
+  - id: S09
+    phase: P2
+    track: site
+    title: "管理端 board 健康页"
+    depends_on: [U07]
+    est_hours: 5
+    location: repo
+    files: ["src/app/admin/job-boards/page.tsx", "src/app/api/admin/job-boards/route.ts"]
+    acceptance: "6,000 行可分页；失败可筛；不暴露上游 key"
+
+  - id: V04
+    phase: P2
+    track: verify
+    title: "3,000 验收"
+    depends_on: [U14, S08, S09]
+    est_hours: 4
+    location: both
+    files: ["docs/job-acquisition-progress.md"]
+    acceptance: "3,000 board/18 万岗/成功率≥99%/误关<0.2%/三家长尾各≥100"
+
+  - id: D08
+    phase: P3
+    track: discovery
+    title: "Common Crawl 增量发现"
+    depends_on: [U02]
+    est_hours: 10
+    location: repo
+    files: ["scripts/ats-discovery/harvest-commoncrawl.ts"]
+    acceptance: "单次≥500 新 token；新 board≥100；耗时/流量可接受"
+
+  - id: U15
+    phase: P3
+    track: upstream
+    title: "请求预算与压测"
+    depends_on: [U04, D08]
+    est_hours: 6
+    location: upstream
+    files: ["app/bulk_boards.py", "docs/"]
+    acceptance: "6k 模拟 429<2%；峰值 20-40；可回退参数"
+
+  - id: U16
+    phase: P3
+    track: upstream
+    title: "存储与成本"
+    depends_on: [U07]
+    est_hours: 4
+    location: upstream
+    files: ["app/", "ops-backups/"]
+    acceptance: "成本≤¥0.05/岗/月；S3 无无限增长"
+
+  - id: S10
+    phase: P3
+    track: site
+    title: "25 万行查询/AI 检索压测"
+    depends_on: [S08]
+    est_hours: 6
+    location: repo
+    files: ["supabase/migrations/", "scripts/", "src/lib/"]
+    acceptance: "列表 P95<500ms；AI 候选<2s；EXPLAIN 无全表扫描"
+
+  - id: V05
+    phase: P3
+    track: verify
+    title: "6,000 最终验收"
+    depends_on: [U15, U16, S10]
+    est_hours: 4
+    location: both
+    files: ["docs/job-acquisition-progress.md"]
+    acceptance: "6,000 board/25 万岗/成功率≥99.5%/误关<0.1%/P95≤30min/成本达标"
+
+  - id: O01
+    phase: P4
+    track: steady
+    title: "每周发现"
+    depends_on: [V05]
+    est_hours: 2
+    location: repo
+    files: ["docs/"]
+    acceptance: "每周新 board 进 canary；失败隔离；周报更新"
+
+  - id: O02
+    phase: P4
+    track: steady
+    title: "每月一个新 ATS"
+    depends_on: [V05]
+    est_hours: 8
+    location: upstream
+    files: ["app/connectors.py"]
+    acceptance: "评估/许可/只读 canary 有记录；不接拒绝名单"
+
+  - id: O03
+    phase: P4
+    track: steady
+    title: "季度合规审计"
+    depends_on: [V05]
+    est_hours: 4
+    location: both
+    files: ["docs/"]
+    acceptance: "robots 重查/删除演练/误关抽样/成本复盘完成"
