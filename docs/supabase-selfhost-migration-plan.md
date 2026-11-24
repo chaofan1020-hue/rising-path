@@ -1321,6 +1321,9 @@ DUMP_FILE=/opt/liorvix-backups/liorvix-<stamp>.dump \
    部署后 5xx=0、访客 401 不变、公网页面 200、浏览器冒烟无 console 错误。
 4. **Git 历史整理**：47 个未提交改动按主题拆成 7 个提交（迁移资产 / AI 选岗与源抓取 / 登录鉴权与
    i18n / 监控与演练 / Workday 429 文档 / 演练修复 / gitignore），`secrets/` 私钥目录已加入忽略。
+5. **已推送 GitHub（2026-11-24 11:06）**：功能分支 `codex/ui-overlay-from-ui-change` 推到
+   `4f3ddb8`（10 个提交）；另外把 `uptime-probe.yml` 单独补到默认分支 `main`（`27d97f3`）——
+   GitHub 只对默认分支的 `schedule` 生效，只放功能分支时"每 15 分钟"永远不会触发。
 
 ### 遗留待办（不阻塞线上）
 

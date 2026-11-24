@@ -125,8 +125,11 @@ systemctl list-timers liorvix-monitor.timer
 启用步骤（一次性）：
 
 1. 把该文件提交并推到 GitHub（见 §5 的提交说明）；
-2. 打开仓库 → **Actions** → `uptime-probe` → **Run workflow** 手动跑一次，确认绿；
-3. 仓库头像 → **Settings → Notifications**，确认 `Actions` 的失败邮件是开的（默认开）。
+2. **必须让这个文件出现在默认分支 `main` 上**——GitHub 只对默认分支的 `schedule` 生效，
+   只推到功能分支时"定时"永远不会触发（2026-11-24 就是这样：文件在
+   `codex/ui-overlay-from-ui-change`，跑到 `main` 后 schedule 才真正启动）；
+3. 打开仓库 → **Actions** → `uptime-probe` → **Run workflow** 手动跑一次，确认绿；
+4. 仓库头像 → **Settings → Notifications**，确认 `Actions` 的失败邮件是开的（默认开）。
 
 限制与取舍：
 
