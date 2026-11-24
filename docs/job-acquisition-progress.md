@@ -1,7 +1,7 @@
 # 岗位采集规模化 · 执行账本
 
 > 这是 AI 唯一允许改状态的地方。`tasks.yaml` 只读；本文件每完成一个任务必须更新。
-> 最后更新：2026-11-24（V01 通过，V02 进入 48h 观察）
+> 最后更新：2026-11-24（D07 冻结完成；V02 48h 观察中）
 
 ## 状态规则
 
@@ -17,7 +17,7 @@
 
 | 项 | 值 |
 |---|---|
-| 美国站 commit | `c5b979b`（S02-S04；2026-11-24 19:41 +08 部署） |
+| 美国站生产 commit | `c5b979b`（S02-S04；2026-11-24 19:41 +08 部署）；仓库最新 `d4b8aa7` |
 | 美国站生产目录 | `/opt/liorvix`（git repo；systemd `liorvix.service` 跑 `node dist/server.js`） |
 | 美国站服务重启点 | 2026-11-24 19:41:12 +08；部署前 release `924ae747a3cc8d819bf6a812ebea5a6ee277e09e` |
 | 上游 commit | 无 git；版本证据 = 文件哈希 + 镜像 `global-jobs-api:latest` ID `fc66e4c34...`（pre-u07 `342cc0aa7c26`） |
@@ -31,7 +31,7 @@
 | 基线文件 | `tmp/baseline-20261124.json` |
 | Supabase 备份时间点 | `/opt/liorvix-backups/liorvix-20261124-032117.dump`（444MB；DB 容器 2026-11-23 03:15 UTC 起） |
 | Feed worker 实际配置 | `JOBS_AUTO_WORKER=true`、`JOBS_SYNC_INTERVAL_MINUTES=5`；**systemd jobs timers 全部 disabled**，不要按 timer 文档推断 |
-| 当前生产事实 | US active 145,032（其中 v2 `source_key` 27,697）；上游 500 active board、`source_key` 岗位 89,144（OPEN 89,144 / CLOSED 0） |
+| 当前生产事实 | US active 200,449（其中 v2 `source_key` 86,479）；上游 500 active board、`source_key` 岗位 126,144（OPEN 126,144 / CLOSED 0）；board P95 17.4min |
 
 ## 执行约定（B03）
 
