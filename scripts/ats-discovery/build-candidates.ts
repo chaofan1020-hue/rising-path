@@ -150,7 +150,12 @@ for (const row of engineering) {
 
 const allCandidates = all
   .filter((row) => VENDORS.has(row.provider.toLowerCase()) && row.token)
-  .map((row) => ({ ...row, vendor: row.provider.toLowerCase(), posted: Number.parseInt(row.open_postings || '0', 10) }))
+  .map((row) => ({
+    vendor: row.provider.toLowerCase(),
+    token: row.token,
+    posted: Number.parseInt(row.open_postings || '0', 10),
+    openPostings: row.open_postings,
+  }))
   .sort((a, b) => b.posted - a.posted);
 
 for (const row of allCandidates) {
@@ -173,7 +178,7 @@ for (const row of allCandidates) {
     vendor: row.vendor,
     token: row.token,
     posted: row.posted,
-    note: `open_postings=${row.open_postings};quality=${qualityByKey.get(k)?.not_jobs_share ?? 'n/a'}`,
+    note: `open_postings=${row.openPostings};quality=${qualityByKey.get(k)?.not_jobs_share ?? 'n/a'}`,
     source: 'all',
   });
 }
