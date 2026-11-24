@@ -85,7 +85,7 @@
 | S02 | done | c5b979b | 2026-11-24 19:41 | US feed v2 客户端 + 0141；27,697 条真实 v2；20 抽样 8 字段 0 空；tsc/单测通过 |
 | S03 | done | c5b979b | 2026-11-24 19:41 | TTL worker + 单测：S/A 24h、B/C 7d、manual_hold/valid_through 豁免；display-only |
 | S04 | done | c5b979b | 2026-11-24 19:41 | `/api/jobs` 默认 `display_status in (listed,enriched)`；closed/all 保留；jobs_listing 重建 |
-| S05 | pending | — | — | — |
+| S05 | done | c5b979b | 2026-11-24 20:06 | 只读审计：`ats:*` 0、跨来源重复 0；53 组通用 URL 14,597 额外行，不按 URL 去重 |
 | V01 | done | c5b979b | 2026-11-24 19:50 | 50 board 44,234 岗位；US 27,697 v2；20/20 官方 URL；0 误关；G1 |
 | V02 | in_progress | c5b979b | — | 500 board 89,144 岗位、0 失败、0 误关；48h 观察至 2026-11-26 11:50 UTC |
 | D07 | pending | — | — | — |
@@ -139,6 +139,13 @@
 | — | — | — | — | — | — |
 
 ## 日志（倒序）
+
+### 2026-11-24 · S05 旧来源重复审计
+
+- US active 189,146；`source_system='collector_feed'` 186,467；`source_system like 'ats:%'` **0**。
+- 跨来源重复 0；`(company,title,region)` 重复组 8,766 / 25,035 行，多为同标题多 req，不能自动判重。
+- canonical URL 重复 53 组 / 14,650 行；样例 Carvana `careers/apply` 1,563 行、IBM `jobdetail` 811 行，是通用申请入口，不是重复岗位。
+- 决策：不排除 `ats:*`、不启用 `dedupe_group_id`、不按 URL 去重；报告 `docs/job-acquisition-s05-duplicate-audit.md`。
 
 ### 2026-11-24 · V01/V02 500 board 放量
 

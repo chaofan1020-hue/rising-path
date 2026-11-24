@@ -91,6 +91,12 @@ const qualityPath = path.resolve(arg('quality', 'tmp/boards/data-quality.csv'));
 const excludePath = path.resolve(arg('exclude', 'tmp/boards/upstream-tokens.csv'));
 const outPath = path.resolve(arg('out', 'tmp/boards/candidates.csv'));
 const max = Number.parseInt(arg('max', '1500'), 10);
+const minPosted = Number.parseInt(arg('min-posted', '0'), 10);
+const maxPosted = Number.parseInt(arg('max-posted', '0'), 10);
+
+function postedInRange(value: number): boolean {
+  return value >= minPosted && (maxPosted === 0 || value <= maxPosted);
+}
 
 const all = parseCsv(fs.readFileSync(allPath, 'utf8'));
 const engineering = parseCsv(fs.readFileSync(engineeringPath, 'utf8'));
@@ -124,6 +130,7 @@ for (const row of engineering) {
   }
   stats.engineeringAvailable += 1;
   if (Number.parseInt(row.engineering || '0', 10) <= 0) continue;
+  if (!postedInRange(Number.parseInt(row.titles_read || '0', 10))) continue;
   const k = key(vendor, token);
   if (excluded.has(k)) {
     stats.excludedUpstream += 1;
@@ -160,6 +167,7 @@ const allCandidates = all
 
 for (const row of allCandidates) {
   if (chosen.size >= max) break;
+  if (!postedInRange(row.posted)) continue;
   const k = key(row.vendor, row.token);
   if (excluded.has(k)) {
     if (!chosen.has(k)) stats.excludedUpstream += 1;
