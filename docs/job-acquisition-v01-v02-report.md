@@ -89,6 +89,15 @@ docker exec -e PYTHONPATH=/app global-jobs-bulk-worker-1 \
 - 48 小时观察从 **2026-11-24 11:50 UTC** 开始；观察项：成功率、P95 新鲜度、误关、重复、stale 比例、单岗成本。
 - 观察期内不再提高 active board 数；不启用美国站 `JOB_TTL_ENABLED`，避免把“尚未同步”误判为 stale。
 
+### V02 新鲜度口径
+
+- **board 级 P95 = 16.0 分钟**（500 个 active board 的 `now()-last_ok_at`，UTC 12:06 快照），满足 G1 的 ≤60 min，也满足目标 ≤30 min。
+- 观察 1 小时后复测：**P95 17.4 min，max 37.8 min**；1,546 次 run 中 1 次 502（Lever `simonmed`），成功率 **99.94%**，无 CLOSED、无重复。
+- 那次 502 没有触发关闭：失败只增加 `consecutive_failures` 并按退避重试，`source_closed` 仍为 0。
+- **不能用岗位 `last_seen_at` 直接算 P95**：U05 为了减少同日无变化写入，保留同日 `last_seen_at`，所以岗位字段会停在首次写入时间；board `last_ok_at` 才是轮询新鲜度。
+- Feed 侧以 `job_sync_runs.completed_at` / `job_sync_state.last_incremental_success_at` 为准，不以 `jobs.last_seen_at` 为准。
+- 12:29 UTC 美国站 `collector_feed` 最近成功 12:24 UTC，**feed lag 约 5 min**，低于 15 min；US source jobs 86,479，已接近上游全部 source jobs。
+
 ### 美国站同步
 
 - 手动 increment 已回填 27,697 条 v2 岗位（77 页，38,500 收到，27,177 upsert，0 失败）。
