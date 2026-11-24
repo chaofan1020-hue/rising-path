@@ -77,9 +77,10 @@
 | U01 | done | no-git/upstream | 2026-11-24 17:00 | shadow up/down/up 通过；3 新列+2 表；生产代码已换，迁移未执行 |
 | U02 | done | 7fa41d8 | 2026-11-24 17:44 | staging 500 dry-run；apply 50：boards 50/bulk 公司 50/active 169 不变；重复 0 新增 |
 | U03 | done | 95b5628 | 2026-11-24 17:50 | Stripe 771；首跑 new 771，二次 new/changed 0；坏 token jobs 不变；source_key 771/closed 0 |
-| U04 | done | pending-commit | 2026-11-24 18:29 | 50 board / 540s / 0 failed；jobs 45,005；closed 0；tier 排序和锁释放 bug 已修 |
+| U04 | done | beeedec | 2026-11-24 18:29 | 50 board / 540s / 0 failed；jobs 45,005；closed 0；tier 排序和锁释放 bug 已修 |
 | U05 | done | beeedec | 2026-11-24 18:32 | 同日心跳不增；昨日 last_seen 更新、updated_at 保留；missing_streak=1、仍 OPEN |
-| U06 | done | pending-commit | 2026-11-24 18:40 | Feed v2 20 条 canary；source_key 过滤；v1 回退；迁移 0018 |
+| U06 | done | f964cfc | 2026-11-24 18:40 | Feed v2 20 条 canary；source_key 过滤；v1 回退；迁移 0018 |
+| U07 | done | pending-commit | 2026-11-24 19:00 | 生产 50 board / 50 runs / 0 bulk jobs；health 50；0018 |
 | U06 | pending | — | — | — |
 | U07 | pending | — | — | — |
 | S01 | pending | — | — | — |
@@ -140,6 +141,15 @@
 | — | — | — | — | — | — |
 
 ## 日志（倒序）
+
+### 2026-11-24 · U07 生产部署
+
+- 旧镜像 `342cc0aa7c26` 打 `pre-u07` tag；备份 `ops-backups/u07-20261124T104555Z/`（代码 + 1.5G DB dump）。
+- 坑：`docker compose build api worker beat` 不重建 `migrate`，旧 migrate 0016 造成 0017 半应用（表在、jobs 列缺、version 未动）。清空空表后补建 migrate 镜像再迁移，最终 `0018_feed_v2`。
+- 生产 50 board 导入：50 家公司新建（`Bulk ATS`，inactive），active 公司仍 169；board 50 active。
+- 坑：默认 Celery 队列有 38 个 crawl 任务，poll 任务排不上。新增 `bulk` 队列和 `bulk-worker`（concurrency 2），beat `poll-ats-boards` 路由到 `bulk`。
+- 50 board dry-run：50 runs / 50 success / 44,230 jobs seen / `jobs_new=0` / `jobs_changed=0` / 带 `source_key` 岗位 0；`/dashboard/board-health?limit=60` 返回 50 行。
+- 总 jobs 408,439→408,517（+78 来自 `crawl_all`，非 bulk）；生产开关 `BULK_BOARDS_ENABLED=true`、`BULK_BOARD_WRITE=false`、`FEED_V2_ENABLED=true`。
 
 ### 2026-11-24 · U06 完成
 

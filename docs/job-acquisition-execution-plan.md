@@ -487,6 +487,8 @@ docker compose exec -T api python -m app.bulk_boards import --csv /tmp/p0-boards
 
 **验收**：50 board 全部有 run 记录；health 接口返回 50 行；`BULK_BOARD_WRITE=false` 时 `jobs` 无新增；回滚镜像可用。
 
+**2026-11-24 production 实测**：旧镜像打 `pre-u07` tag，备份 `ops-backups/u07-20261124T104555Z/`（DB dump 1.5G）。首次 `docker compose build api worker beat` 未重建 `migrate`，导致 0017 半应用（`ats_boards` 已建、jobs 新列缺失、version 仍 0016）；清理空表后补建 migrate 镜像并 `alembic upgrade head`，最终 `0018_feed_v2`，jobs 5 个新列齐全。生产导入 50 board，beat 起初把 poll 任务排在 38 个 crawl 任务后面；新增独立 `bulk` 队列 + `bulk-worker`（concurrency 2），50 board 在约 1 分钟内全部成功（44,230 jobs seen），`jobs_new=0`、`jobs_changed=0`、`source_key` 岗位 0；health 返回 50 行。总岗位 408,439→408,517（+78 来自原有 `crawl_all`，不是 bulk lane）。开关：`BULK_BOARDS_ENABLED=true`、`BULK_BOARD_WRITE=false`、`FEED_V2_ENABLED=true`。
+
 **回滚**：`docker compose` 切回上一 tag；关开关。
 
 ---
