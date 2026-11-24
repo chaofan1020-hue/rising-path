@@ -1292,16 +1292,32 @@ DUMP_FILE=/opt/liorvix-backups/liorvix-<stamp>.dump \
 - 修正：与其余岗位接口同一把锁（`requireJobAccess`）。访客 401；登录用户 200（实测 `total=76666`）。
   `/jobs` 页面的统计 widget 当前无任何引用方，不受影响。
 
-### 当前线上状态（2026-11-24 09:30 复核）
+### 当前线上状态（2026-11-24 10:15 复核）
 
 | 项目 | 结果 |
 | --- | --- |
-| 应用 | `liorvix.service` active（11-23 18:33 起，`NRestarts=0`），健康检查 0.06 s |
-| 前端 | `BUILD_ID` 与 `/opt/liorvix` 源码一致；改动 chunk 已在线上命中 |
+| 应用 | `liorvix.service` active（10:11:47 重启，`NRestarts=0`），健康检查 0.08 s |
+| 前端 | `BUILD_ID=7D1ckQjhCo9HtwKJsQwtD`（10:11 部署）；`ai/match` 兜底检索新代码已在 `.next/server` 命中；客户端 auth 栈标记 2 个 chunk 命中 |
 | 鉴权 | 访客：岗位 4 个接口 401 英文；真实 token：`/api/jobs`、`/api/jobs/[id]`、`/api/jobs/companies`、`/api/jobs/stats` 全 200 |
-| 数据 | `auth.users=50 / profiles=50 / resumes=20 / ai_matches=152 / jobs≈232,917（活跃 114,516）`，切流后新增 2 位真实用户 |
-| 同步 | `collector_feed.last_incremental_success_at` 持续推进，`failures=0`；官方源里 Meta / 部分 Workday 公司为**切流前就存在的**外部源问题（`last_inc` 停在 11-13，`fails` 55+），与自托管无关，另案处理 |
-| 异常 | 部署后新 5xx **0**；`bad_jwt` 近 12 h **0**；磁盘 67%、内存 5.7/15 GiB、load 0.5 |
+| 数据 | `auth.users=50 / profiles=50 / resumes=20 / ai_matches=152 / jobs≈232,953（活跃 114,483）`，切流后新增 2 位真实用户 |
+| 同步 | `job_sync_runs` 每 1~3 分钟一条、`failed=0`；岗位写入新鲜度 <2 分钟；官方源里 Meta / 部分 Workday 公司为**切流前就存在的**外部源问题（`last_inc` 停在 11-13，`fails` 55+），与自托管无关，另案处理 |
+| 监控 | `liorvix-monitor.timer` 每 3 分钟，`state.json` = `status: ok`、0 失败 0 提醒；邮件通道经 Brevo 实测可送达 |
+| 备份 | 每日 03:26 dump（424 MB）+ 月度恢复演练；11-24 10:03 首次实跑 **PASS**（rc=0、0 错误、226 s，逐表差异仅来自 dump 时间差），临时库已自动删除 |
+| 异常 | 部署后新 5xx **0**；`bad_jwt` 近 12 h **0**；磁盘 65%、内存 5.7/15 GiB、load 0.5 |
+
+### 2026-11-24 增量交付（可观测性、恢复演练、一次回归部署）
+
+1. **三层监控上线**：本机 3 分钟巡检（`liorvix-monitor.timer`）+ 邮件告警 + GitHub 外部拨测，
+   详见 [monitoring-and-drills.md](./monitoring-and-drills.md)。旧的 `liorvix-healthcheck.timer` 已停用，
+   其检查被 monitor 的第 1 项完整覆盖。
+2. **月度恢复演练自动化**：`liorvix-restore-drill.timer`（每月 1 日 04:30），首次实跑 10:03 PASS。
+   演练全程走容器内 `psql`/`pg_restore`——首次尝试用宿主机客户端时，因 `pg_hba` 只对 `postgres`
+   库免密而卡在 `Password for user supabase_admin:`，该坑已修复并记录。
+3. **回归部署**：把已提交但未上线的 `ai/match` 兜底检索加固（`job_ai_match_scopes` 陈旧表 →
+   按地区规则过滤）随新构建上线，`BUILD_ID` 由 `wHRZVN5c…` 升到 `7D1ckQjhCo9HtwKJsQwtD`；
+   部署后 5xx=0、访客 401 不变、公网页面 200、浏览器冒烟无 console 错误。
+4. **Git 历史整理**：47 个未提交改动按主题拆成 7 个提交（迁移资产 / AI 选岗与源抓取 / 登录鉴权与
+   i18n / 监控与演练 / Workday 429 文档 / 演练修复 / gitignore），`secrets/` 私钥目录已加入忽略。
 
 ### 遗留待办（不阻塞线上）
 

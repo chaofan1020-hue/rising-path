@@ -194,6 +194,18 @@ cat /opt/liorvix-backups/drills/restore-drill-<最新>.md
 - 脚本会用 `DROP DATABASE ... WITH (FORCE)` 清掉同名遗留库（只匹配 `liorvix_drill_*`
   和历史的 `liorvix_restore_drill`，不碰其它库）。
 
+### 4.5 首次实跑结果（2026-11-24 10:00–10:03）
+
+| 项目 | 结果 |
+| --- | --- |
+| dump | `liorvix-20261124-032117.dump`（424 MB，03:21 生成） |
+| pg_restore | 退出码 **0**，耗时 223 s，错误行 **0**（白名单外 0） |
+| 数据对照 | users 49/50、profiles 49/50、resumes 20/20、ai_matches 152/152、applications 21/21、interview_sessions 18/18；jobs 231,354/232,953、jobs_active 113,960/114,483（差值 = dump 后 6.7 小时的正常增长） |
+| 保真性 | `pg_trgm@public` ✓、`jobs` RLS ✓、≥1 条 `jobs` 策略 ✓、`search_ai_match_candidates_v7` ✓、`auth.users` 属主 `supabase_auth_admin` ✓ |
+| 收尾 | 临时库已自动删除，报告 + 邮件（`[Liorvix] 备份恢复演练：通过`）已产出 |
+
+结论：备份**确实可恢复**，恢复后的权限/RLS/函数与生产一致；下次自动演练 12-01 04:31。
+
 ---
 
 ## 5. 收到告警之后怎么做（处置清单）
