@@ -127,7 +127,7 @@ tasks:
     est_hours: 6
     location: upstream
     files: ["app/models.py", "迁移文件"]
-    acceptance: "staging up/down 成功；ats_boards 唯一索引；jobs 新增 5 列与索引；crawl_all 查询不变"
+    acceptance: "staging up/down/up 成功；ats_boards 唯一索引；jobs 新增 3 列与索引（first/last_seen 已存在）；crawl_all 查询不变"
 
   - id: U02
     phase: P0

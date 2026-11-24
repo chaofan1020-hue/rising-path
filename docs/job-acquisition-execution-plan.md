@@ -352,9 +352,10 @@ pnpm tsx scripts/ats-discovery/probe.ts --input=tmp/boards/candidates.csv --outp
 
 - `ats_boards`：`id, vendor, token, site, company_id(nullable), company_name, company_domain, careers_url, region_scope, robots_verdict, robots_evidence_url, robots_checked_at, status(candidate/active/paused/quarantined), confidence, posting_count, tier(S/A/B/C), poll_interval_seconds, next_poll_at, consecutive_failures, last_ok_at, last_error, created_at, updated_at`；唯一索引 `(vendor, token)`。
 - `board_poll_runs`：`id, board_id, started_at, finished_at, status, http_status, jobs_seen, jobs_new, jobs_changed, error, duration_ms`。
-- 给现有 `jobs` 加列（P0 需要）：`source_key varchar(120)`、`first_seen_at timestamptz`、`last_seen_at timestamptz`、`last_snapshot_id text`、`missing_streak int not null default 0`；索引 `(source_key, updated_at)`、`(last_seen_at)`。
+- 给现有 `jobs` 加列（P0 需要）：`source_key varchar(120)`、`last_snapshot_id text`、`missing_streak int not null default 0`；索引 `(source_key, updated_at)`、`(source_key)`、`(last_seen_at)`。
+  - **实测修正**：`jobs.first_seen_at` 与 `last_seen_at` 已存在（`models.py` 第 90-91 行），不要重复加列；迁移只加上述 3 列。
 
-**验收**：staging 上迁移 up/down 成功；`\d ats_boards`、`\d jobs` 字段齐全；现有表数据无改动；`crawl_all` 的查询仍只选 `Company.is_active=true`。
+**验收**：staging 上迁移 up/down/up 成功；`ats_boards`、`board_poll_runs` 与 `jobs` 新列齐全；现有表数据无改动；`crawl_all` 的查询仍只选 `Company.is_active=true`。
 
 **回滚**：迁移 down；生产未执行。
 

@@ -74,7 +74,7 @@
 | D04 | pending | — | — | — |
 | D05 | pending | — | — | — |
 | D06 | pending | — | — | — |
-| U01 | pending | — | — | — |
+| U01 | done | no-git/upstream | 2026-11-24 17:00 | shadow up/down/up 通过；3 新列+2 表；生产代码已换，迁移未执行 |
 | U02 | pending | — | — | — |
 | U03 | pending | — | — | — |
 | U04 | pending | — | — | — |
@@ -139,6 +139,15 @@
 | — | — | — | — | — | — |
 
 ## 日志（倒序）
+
+### 2026-11-24 · U01 完成
+
+- 新增 `AtsBoard`（`ats_boards`，唯一 `(vendor,token)`，due/tier 索引）与 `BoardPollRun`（`board_poll_runs`，board_id 级联）。
+- `jobs` 实测已有 `first_seen_at`/`last_seen_at`，只加 `source_key`、`last_snapshot_id`、`missing_streak`；索引 3 个。计划里“5 列”已修正为“3 列”。
+- 影子库 `jobs_migration_test`（schema-only 复制 + 手工钉 `alembic_version=0016`）：`upgrade head` → `0017_ats_boards`；`downgrade 0016` 后新列/新表计数为 0；再 `upgrade head` 成功；`jobs` 0 行（未动数据）。
+- `alembic check` 只报告历史遗留 drift（旧表 nullable/索引），没有本次 3 列/2 表的差异。
+- 代码已上传 `/opt/global-jobs`（备份 `ops-backups/u01-20261124T090002Z/`）；运行中容器仍用旧镜像，**生产迁移未执行**，等 U02/V01 前再跑。
+- 下一步：U02 导入器依赖 D06 冻结名单；先等 D04/D05/D06。
 
 ### 2026-11-24 · D03 完成，D04 启动
 
