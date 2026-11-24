@@ -58,6 +58,12 @@ ALERT_REMINDER_SEC="${ALERT_REMINDER_SEC:-3600}"
 APP_ACCESS_LOG="${APP_ACCESS_LOG:-/var/log/nginx/access.log}"
 SUPABASE_ACCESS_LOG="${SUPABASE_ACCESS_LOG:-/var/log/nginx/supabase.access.log}"
 
+# 外部拨测（cron-job.org）新鲜度：它的探测会出现在 nginx 访问日志里，UA 含 "cron-job.org"。
+# 若哪天它的作业被禁用/删除，站点本身还是好的，但"整机失联"这一层就静默失效了——这里兜住。
+EXTERNAL_PROBE_UA="${EXTERNAL_PROBE_UA:-cron-job.org}"
+EXTERNAL_PROBE_WARN_MIN="${EXTERNAL_PROBE_WARN_MIN:-25}"
+EXTERNAL_PROBE_FAIL_MIN="${EXTERNAL_PROBE_FAIL_MIN:-50}"
+
 FAILS=()
 WARNS=()
 NOTES=()
@@ -110,6 +116,36 @@ count_window_status() {
       }
     }
     END { printf "%d %d", err + 0, total + 0 }'
+}
+
+external_probe_age_min() {
+  # 最近一次外部拨测（cron-job.org）命中访问日志距今多少分钟；一条都没有输出 -1
+  local newest=-1 file ts y mon d h mi s epoch months
+  months="Jan:01 Feb:02 Mar:03 Apr:04 May:05 Jun:06 Jul:07 Aug:08 Sep:09 Oct:10 Nov:11 Dec:12"
+  for file in "$APP_ACCESS_LOG" "$SUPABASE_ACCESS_LOG"; do
+    [ -r "$file" ] || continue
+    ts=$(tail -n 4000 "$file" 2>/dev/null | grep -F "$EXTERNAL_PROBE_UA" | tail -n 1 | awk '{print $4}')
+    [ -n "$ts" ] || continue
+    ts=${ts#\[}
+    ts=${ts%% *}                       # 24/Nov/2026:14:09:46
+    local datepart=${ts%%:*} timepart=${ts#*:}
+    d=${datepart%%/*}                  # 24
+    mon=${datepart#*/}; mon=${mon%%/*} # Nov
+    y=${datepart##*/}                  # 2026
+    h=${timepart%%:*}                  # 14
+    mi=${timepart#*:}; mi=${mi%%:*}    # 09
+    s=${timepart##*:}                  # 46
+    for pair in $months; do
+      [ "${pair%%:*}" = "$mon" ] && mon=${pair##*:}
+    done
+    epoch=$(date -d "${y}-${mon}-${d} ${h}:${mi}:${s}" +%s 2>/dev/null) || continue
+    [ "$epoch" -gt "$newest" ] && newest=$epoch
+  done
+  if [ "$newest" -lt 0 ]; then
+    printf -- '-1'
+  else
+    printf '%s' $(( ( $(date +%s) - newest ) / 60 ))
+  fi
 }
 
 cert_days() {
@@ -228,6 +264,17 @@ else
   fi
 fi
 
+section "[8] 外部拨测新鲜度（cron-job.org）"
+PROBE_AGE=$(external_probe_age_min)
+if [ "$PROBE_AGE" -lt 0 ]; then
+  fail "访问日志里找不到任何 cron-job.org 探测记录（外部拨测可能已被禁用/删除）"
+elif [ "$PROBE_AGE" -gt "$EXTERNAL_PROBE_FAIL_MIN" ]; then
+  fail "外部拨测已 ${PROBE_AGE} 分钟没有新记录（阈值 ${EXTERNAL_PROBE_FAIL_MIN} 分钟），去 cron-job.org 控制台看两条作业是否被禁用"
+elif [ "$PROBE_AGE" -gt "$EXTERNAL_PROBE_WARN_MIN" ]; then
+  warn "外部拨测 ${PROBE_AGE} 分钟没有新记录（阈值 ${EXTERNAL_PROBE_WARN_MIN} 分钟）"
+else
+  note "外部拨测 ${PROBE_AGE} 分钟前还在打（cron-job.org，10 分钟一次）"
+fi
 # ---- 状态机与发信 ----
 STATUS="ok"
 [ "${#FAILS[@]}" -gt 0 ] && STATUS="fail"
@@ -259,7 +306,8 @@ elif [ "$STATUS" = "ok" ] && [ "$PREV_STATUS" = "fail" ]; then
   MAIL_KIND="recovery"
 fi
 
-section "[8] 结论"
+
+section "[9] 结论"
 if [ "$STATUS" = "ok" ]; then
   printf '  OK：0 项失败，%d 项提醒\n' "${#WARNS[@]}"
 else
@@ -287,6 +335,7 @@ if [ -n "$MAIL_KIND" ]; then
     printf '  - 同步进程最后运行：%s 分钟前（近 1h 失败 %s 次 / 共 %s 次）\n' "$RUN_AGE" "$FAILED_1H" "$TOTAL_1H"
     printf '  - 岗位数据最后更新：%s 分钟前\n' "$WRITE_AGE"
     printf '  - 近 10 分钟 5xx：应用 %s/%s，Supabase 网关 %s/%s\n' "$APP_ERR" "$APP_TOTAL" "$SUPA_ERR" "$SUPA_TOTAL"
+    printf '  - 外部拨测（cron-job.org）：%s\n' "$([ "${PROBE_AGE:-0}" -lt 0 ] && printf '日志中无记录' || printf '%s 分钟前' "$PROBE_AGE")"
     printf '\n【排查入口】\n'
     printf '  - 人读巡检：bash %s\n' "$0"
     printf '  - 应用状态：systemctl status liorvix；日志：journalctl -u liorvix -n 200\n'
@@ -337,10 +386,12 @@ jq -n \
   --argjson failed_1h "$FAILED_1H" \
   --argjson app_5xx "$APP_ERR" \
   --argjson supa_5xx "$SUPA_ERR" \
+  --argjson probe_age "$PROBE_AGE" \
   --arg checked_at "$(date -Iseconds)" \
   '{status:$status, failing:$fails, warning:$warns, first_fail_epoch:$first_fail,
     last_alert_epoch:$last_alert, metrics:{worker_age_min:$run_age, write_age_min:$write_age,
-    failed_runs_1h:$failed_1h, app_5xx_10m:$app_5xx, supabase_5xx_10m:$supa_5xx},
+    failed_runs_1h:$failed_1h, app_5xx_10m:$app_5xx, supabase_5xx_10m:$supa_5xx,
+    external_probe_age_min:$probe_age},
     checked_at:$checked_at}' > "${STATE_FILE}.tmp" 2>/dev/null \
   && mv -f "${STATE_FILE}.tmp" "$STATE_FILE"
 

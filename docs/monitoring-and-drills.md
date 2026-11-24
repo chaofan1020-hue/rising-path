@@ -55,6 +55,12 @@
 | Supabase 网关 5xx | 近 10 分钟 supabase.access | ≥ 30 条 | ≥ 5 条 |
 | TLS 证书 | 剩余天数 | < 14 天 | < 30 天 |
 | 演练报告 | 最近 `restore-drill-*.json` | > 120 天 | 缺报告或 > 60 天 |
+| 外部拨测新鲜度 | nginx 访问日志里 `cron-job.org` 探测的最新记录年龄 | 无记录，或 > 50 分钟 | > 25 分钟 |
+
+最后一项（2026-11-24 加入）是"监控的监控"：cron-job.org 的作业如果被禁用/删除，站点本身还活着，
+但"整机失联"这一层就静默失效了；本机巡检每 3 分钟扫一次访问日志确认它的探测还在按 10 分钟节奏出现。
+对应变量：`EXTERNAL_PROBE_UA`、`EXTERNAL_PROBE_WARN_MIN`（默认 25）、`EXTERNAL_PROBE_FAIL_MIN`（默认 50），
+巡检应答里会写进 `metrics.external_probe_age_min`。
 
 阈值都能用环境变量覆盖（见 `deploy/monitor.env.example`），改完下一次巡检生效。
 
@@ -153,6 +159,8 @@ grep -h 'cron-job.org' /var/log/nginx/access.log /var/log/nginx/supabase.access.
 
 注意点：
 
+- 本机巡检（§2）已加入"外部拨测新鲜度"这项：如果访问日志里 25 分钟没有 `cron-job.org` 记录会提醒、
+  50 分钟没有或完全找不到会告警——这样即使 cron-job.org 的作业被禁用，你也会收到邮件；
 - cron-job.org 的请求走 Cloudflare 到源站，所以日志里看到的是 Cloudflare 边缘 IP，靠 UA 里的
   `cron-job.org` 识别，不是靠 IP；
 - 如果以后换域名/换源站 IP，记得同步改 cron-job.org 里两条作业的 URL；
