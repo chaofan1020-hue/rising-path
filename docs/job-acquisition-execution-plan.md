@@ -309,7 +309,9 @@ pnpm tsx scripts/ats-discovery/probe.ts --input=tmp/boards/candidates.csv --outp
 
 跑 D03；目标：≥500 个 active（有 ≥1 个目标地区岗位），错误率 <10%，每个 active 有 robots 证据。
 
-输出 `active.csv`、`quarantine.csv`（含原因分布）。
+**2026-11-24 实跑**：GH+Lever 1,000（避开 Ashby 单请求 13s+ 的长尾），902 active（90.2%）、70 quarantine（16 空 board / 54 无目标地区）、28 error（全 404）；错误率 2.8%。Ashby 296 个留下轮补跑。
+
+输出 `active.csv`、`quarantine.csv`（含原因分布）`probe-errors.csv`。
 
 **验收**：active ≥500；`quarantine` 原因可解释（空 board/404/robots/无目标地区/非 JSON）；断点续跑不重复请求已成功项。
 

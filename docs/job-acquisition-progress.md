@@ -71,7 +71,7 @@
 | D01 | done | pending-commit | 2026-11-24 16:35 | all 18,164；engineering 500；sha256 已记 |
 | D02 | done | pending-commit | 2026-11-24 16:38 | 1,500 候选（GH 931/Ashby 296/Lever 273）；331 engineering 优先；上游交集 0 |
 | D03 | done | pending-commit | 2026-11-24 16:47 | robots/三家解析/限速/断点；单测 10 项；Stripe/OpenAI/Palantir 均 active |
-| D04 | pending | — | — | — |
+| D04 | done | pending-commit | 2026-11-24 17:06 | 1,000 探测：902 active/70 隔离/28 404；错误率 2.8% |
 | D05 | pending | — | — | — |
 | D06 | pending | — | — | — |
 | U01 | done | no-git/upstream | 2026-11-24 17:00 | shadow up/down/up 通过；3 新列+2 表；生产代码已换，迁移未执行 |
@@ -139,6 +139,13 @@
 | — | — | — | — | — | — |
 
 ## 日志（倒序）
+
+### 2026-11-24 · D04 完成
+
+- 1,000 个 GH+Lever 探测：902 active（90.2%），70 隔离（16 空 board、54 样本内无目标地区），28 error（全部 404）；错误率 2.8%。
+- 输出 `active.csv`（902 行）、`quarantine.csv`、`probe-errors.csv`；断点续跑测试：已成功的 3 个 smoke board 重跑时 `skippedResume=3`，没有重复请求。
+- 偏差：D04 原计划混合三家；Ashby 296 个单请求 13s+ 且部分超大，先跑 GH+Lever 覆盖 1,000，Ashby 作为 D05 后的补跑，不阻塞 500。
+- 下一步：D05 解析公司名/域名；先测 ATS 页面标题与官方外链覆盖率，不伪造 domain。
 
 ### 2026-11-24 · U01 完成
 

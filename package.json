@@ -8,6 +8,7 @@
     "test:agent": "tsx scripts/test-apply-agent.ts",
     "test:ats-discovery": "tsx scripts/test-ats-discovery.ts",
     "probe:ats": "tsx scripts/ats-discovery/probe.ts",
+    "summarize:ats": "tsx scripts/ats-discovery/summarize-probe.ts",
     "sanitize:job-content": "tsx scripts/sanitize-job-content.ts",
     "sync:jobs": "tsx scripts/sync-jobs-feed.ts --mode=incremental",
     "retry:job-sync-failures": "tsx scripts/retry-job-sync-failures.ts",
