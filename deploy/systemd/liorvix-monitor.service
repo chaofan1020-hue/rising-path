@@ -1,0 +1,17 @@
+[Unit]
+Description=Liorvix monitor (infra + user-facing checks, email alerts)
+Documentation=file:///opt/liorvix/docs/monitoring-and-drills.md
+After=network-online.target liorvix.service
+Wants=network-online.target
+
+[Service]
+Type=oneshot
+User=root
+Nice=10
+IOSchedulingClass=best-effort
+IOSchedulingPriority=7
+EnvironmentFile=-/etc/liorvix/monitor.env
+ExecStart=/usr/bin/env bash /opt/liorvix/scripts/monitor/health-alert.sh --quiet
+# 异常时脚本退出 1；systemd 会把它记成 failed，便于 `systemctl --failed` 一眼看到。
+# 邮件是否真的发出去由脚本自己保证（失败会写 journal），这里不做重试。
+TimeoutStartSec=120

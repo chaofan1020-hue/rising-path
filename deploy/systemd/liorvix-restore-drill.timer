@@ -1,0 +1,13 @@
+[Unit]
+Description=Monthly Liorvix backup restore drill
+Documentation=file:///opt/liorvix/docs/monitoring-and-drills.md
+
+[Timer]
+# 每月 1 日 04:30（备份 03:2x 跑完后），错开 5 分钟随机延迟避免和其它任务撞车
+OnCalendar=*-*-01 04:30:00
+RandomizedDelaySec=300
+Persistent=true
+Unit=liorvix-restore-drill.service
+
+[Install]
+WantedBy=timers.target

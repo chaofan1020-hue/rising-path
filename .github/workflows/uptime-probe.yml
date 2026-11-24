@@ -1,0 +1,55 @@
+name: uptime-probe
+
+# 外部拨测：从 GitHub 的机器（不是你的 VPS）访问公网站点。
+#
+# 为什么需要它：VPS 上的 liorvix-monitor.timer 只能发现"服务坏了"，
+# 发现不了"整台机器/机房/运营商挂了"——那时它自己也发不出邮件。
+# 这个 workflow 每 15 分钟从外部打一次关键端点，失败时 GitHub 会给仓库 owner 发失败通知。
+#
+# 注意：GitHub 的 schedule 在高峰期可能延迟几分钟，它不是秒级 SLA 监控；
+# 秒级需求请另接 UptimeRobot/BetterStack（见 docs/monitoring-and-drills.md）。
+
+on:
+  schedule:
+    - cron: '*/15 * * * *'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: uptime-probe
+  cancel-in-progress: false
+
+jobs:
+  probe:
+    name: probe public endpoints
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - name: Check https://liorvix.com and self-hosted Supabase
+        run: |
+          set -uo pipefail
+          fail=0
+          check() {
+            url="$1"; expect="$2"; name="$3"
+            for attempt in 1 2 3; do
+              code=$(curl -sS -o /dev/null -m 20 -w '%{http_code}' "$url" 2>/dev/null || echo 000)
+              if [ "$code" = "$expect" ]; then
+                echo "OK   $name -> $code ($url)"
+                return 0
+              fi
+              echo "retry $attempt: $name -> $code ($url)"
+              sleep 10
+            done
+            echo "::error::外部拨测失败：$name（$url）期望 $expect，实际 $code"
+            fail=1
+          }
+          check https://liorvix.com/api/health 200 "app health"
+          check https://liorvix.com/ 200 "app home"
+          check https://supabase.liorvix.com/auth/v1/health 200 "supabase auth"
+          exit "$fail"
+
+      - name: Summary
+        if: always()
+        run: echo "外部拨测完成（$(date -u '+%F %T UTC')）；失败会出现在 Actions 的失败通知里。"

@@ -1,0 +1,15 @@
+[Unit]
+Description=Liorvix backup restore drill (restore latest dump into a scratch DB, verify, drop)
+Documentation=file:///opt/liorvix/docs/monitoring-and-drills.md
+After=network-online.target docker.service
+Wants=network-online.target
+
+[Service]
+Type=oneshot
+User=root
+Nice=15
+IOSchedulingClass=best-effort
+IOSchedulingPriority=7
+EnvironmentFile=-/etc/liorvix/monitor.env
+ExecStart=/usr/bin/env bash /opt/liorvix/scripts/migrate/restore-drill.sh
+TimeoutStartSec=1800

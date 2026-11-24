@@ -1,0 +1,13 @@
+[Unit]
+Description=Run Liorvix monitor every 3 minutes
+Documentation=file:///opt/liorvix/docs/monitoring-and-drills.md
+
+[Timer]
+OnBootSec=4min
+OnUnitActiveSec=3min
+AccuracySec=30s
+Persistent=true
+Unit=liorvix-monitor.service
+
+[Install]
+WantedBy=timers.target
