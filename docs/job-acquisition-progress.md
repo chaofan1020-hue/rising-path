@@ -78,7 +78,8 @@
 | U02 | done | 7fa41d8 | 2026-11-24 17:44 | staging 500 dry-run；apply 50：boards 50/bulk 公司 50/active 169 不变；重复 0 新增 |
 | U03 | done | 95b5628 | 2026-11-24 17:50 | Stripe 771；首跑 new 771，二次 new/changed 0；坏 token jobs 不变；source_key 771/closed 0 |
 | U04 | done | pending-commit | 2026-11-24 18:29 | 50 board / 540s / 0 failed；jobs 45,005；closed 0；tier 排序和锁释放 bug 已修 |
-| U05 | done | pending-commit | 2026-11-24 18:32 | 同日心跳不增；昨日 last_seen 更新、updated_at 保留；missing_streak=1、仍 OPEN |
+| U05 | done | beeedec | 2026-11-24 18:32 | 同日心跳不增；昨日 last_seen 更新、updated_at 保留；missing_streak=1、仍 OPEN |
+| U06 | done | pending-commit | 2026-11-24 18:40 | Feed v2 20 条 canary；source_key 过滤；v1 回退；迁移 0018 |
 | U06 | pending | — | — | — |
 | U07 | pending | — | — | — |
 | S01 | pending | — | — | — |
@@ -139,6 +140,13 @@
 | — | — | — | — | — | — |
 
 ## 日志（倒序）
+
+### 2026-11-24 · U06 完成
+
+- 迁移 `0018_feed_v2`：`jobs.source_tier char(1)`、`jobs.is_list_only bool default false`；staging 已 ALTER 并按 `source_key` 回填 `source_tier`。
+- `serialize_job` v2：`contract_version=jobs.v2`；`external_job_id` 只在输出加 `source_key:` 前缀；`apply_url/source_updated_at/snapshot_id/source_tier/is_list_only` 输出；`last_seen_at` 老数据也发送。
+- `integration_jobs` 新增可重复 `source_key` 查询参数；`since` 文档明确为 `feed_updated_at > since`。
+- 20 条 Stripe canary 通过；`source_key` 过滤 20 条、不存在的 board 返回空；`FEED_V2_ENABLED=false` 回退 jobs.v1 且新字段置空。
 
 ### 2026-11-24 · U04/U05 完成
 

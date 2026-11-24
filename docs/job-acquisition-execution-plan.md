@@ -472,6 +472,8 @@ docker compose exec -T api python -m app.bulk_boards import --csv /tmp/p0-boards
 
 **验收**：20 条 canary 符合 schema；`source_key` 过滤只返回该 board；美国站 dry-run 能解析；现有 feed 测试全过。
 
+**2026-11-24 staging 实测**：`jobs` 加 `source_tier/is_list_only`（迁移 `0018_feed_v2`）；`serialize_job` 输出 `contract_version=jobs.v2`，20 条 Stripe canary 全部含 `source_key=greenhouse:stripe`、`external_job_id=greenhouse:stripe:<raw>`、`apply_url`、`source_updated_at`、`snapshot_id`、`source_tier=S`、`is_list_only=false`；`/integrations/v1/jobs?source_key=greenhouse:stripe&limit=20` 返回 20 条 v2；不存在的 `source_key` 返回空。`FEED_V2_ENABLED=false` 时 `contract_version=jobs.v1`，新字段置空。上游仓库只有 `tests/test_services.py`，没有 feed 单测；已跑 canary + v1 回退。
+
 **回滚**：保留 v1 序列化开关 `FEED_V2_ENABLED=false`。
 
 ### U07 · 部署、健康接口与 50 board dry-run
