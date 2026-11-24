@@ -1,0 +1,31 @@
+vendor,token,company_name,company_domain,note
+greenhouse,carvana,Carvana,carvana.com,403 page; known brand
+greenhouse,coupang,Coupang,coupang.com,403 page; known brand
+greenhouse,coupanginternal,Coupang,coupang.com,403 page; internal board
+greenhouse,wundermanthompson,Wunderman Thompson,wundermanthompson.com,403 page; known agency
+greenhouse,accenturefederalservices,Accenture Federal Services,accenturefederal.com,generic title; known brand
+greenhouse,luminishealth,Luminis Health,luminishealth.org,fetch failed; known health system
+greenhouse,aloyoga,Alo Yoga,aloyoga.com,title fallback; known brand
+greenhouse,esri,Esri,esri.com,generic title; known brand
+greenhouse,jdsportsfr,JD Sports France,jdplc.com,title is region-specific
+greenhouse,relativity,Relativity Space,relativityspace.com,ambiguous token; final URL evidence
+greenhouse,ecpcareers,EyeCare Partners,eyecare-partners.com,title has prefix
+greenhouse,asm,ASM,asm.com,generic title; sample URL evidence
+greenhouse,prolificacademicltd,Prolific Academic,prolific.com,title has suffix
+greenhouse,veterinaryemergencygroupst,Veterinary Emergency Group,veg.com,title is brand acronym
+greenhouse,urpt,Upstream Rehabilitation,urpt.com,title includes brand
+greenhouse,housebuyersofamerica,House Buyers of America,housebuyersofamerica.com,plain token
+greenhouse,skilledwoundcare,Skilled Wound Care,skilledwoundcare.com,plain token
+greenhouse,centriaautism,Centria Autism,centriaautism.com,plain token
+greenhouse,bestversionmedia,Best Version Media,bestversionmedia.com,plain token
+greenhouse,ouihelp,Ouihelp,ouihelp.fr,plain token
+greenhouse,capco,Capco,capco.com,plain token
+greenhouse,feverup,Fever,feverup.com,plain token
+greenhouse,rocketlab,Rocket Lab,rocketlabusa.com,title has Corporation
+greenhouse,eosfitness,EoS Fitness,eosfitness.com,title had encoding issue
+greenhouse,liquidpersonnel,Liquid Personnel,liquidpersonnel.com,title has category
+greenhouse,speechify,Speechify,speechify.com,plain token
+greenhouse,anthropic,Anthropic,anthropic.com,plain token
+greenhouse,equipmentsharecom,EquipmentShare,equipmentshare.com,plain token
+greenhouse,svetness,Svetness Personal Training,svetness.com,page resolved
+greenhouse,langanengineeringandenvironmentalservicesllc,Langan,langan.com,long legal name

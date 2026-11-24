@@ -321,10 +321,13 @@ pnpm tsx scripts/ats-discovery/probe.ts --input=tmp/boards/candidates.csv --outp
 
 **位置** 本仓库 · **依赖** D04 · **估时** 4h · **Gate** —
 
-1. 从 board URL 取域名；抓 careers 页 `<title>`、`meta og:site_name`、JSON-LD `hiringOrganization.name`。抓 HTML 前也要检查该路径的 robots；disallow 就不抓，只用 token 兜底并标 `low`。
-2. 规范化：去掉 `Careers`、`Jobs`、`Hiring`、`|` 后缀；token 转可读名只作兜底，置信度标 `low`。
-3. 人工覆盖表 `data/board-company-overrides.csv`（token, company_name, domain, note），优先于自动结果。
+1. **不能从 board URL 取公司域名**：`boards.greenhouse.io/{token}`、`jobs.lever.co/{token}`、`jobs.ashbyhq.com/{token}` 的 host 是 ATS，不是公司官网。实际只用四类证据：岗位 sample 的官方 URL host、页面 `og:url`、JSON-LD `hiringOrganization.url`、页面里明确 `Website/Company/Home` 且与公司名匹配的外链；没有证据就留空并标 `low`，**不猜**。
+   - 公司名从 board 页 `<title>` / `og:title` 规范化；`meta og:site_name` 在实测三家页面均为空，不能依赖。
+   - 抓 HTML 前检查该路径 robots；disallow 就不抓，只用 token 兜底并标 `low`。
+2. 规范化：去掉 `Careers`、`Jobs`、`Hiring`、`|` 后缀；`Jobs at X`、`Careers at X`、`Find Your Future at X` 取 X；token 转可读名只作兜底，置信度标 `low`。
+3. 人工覆盖表 `data/board-company-overrides.csv`（vendor,token,company_name,company_domain,note），优先于自动结果；只收录已知品牌，domain 不确定就留空。
 4. 拒绝：`Careers`、`Jobs`、`Apply` 等泛词；staffing/recruiting 关键词默认 quarantine，除非人工确认。
+5. **实测限速**：5 并发无间隔抓 GH board 页，约 200 个后被 Cloudflare 连续 403（711/902）；按 host 串行 + GH 900ms/Lever 500ms 间隔后恢复 200。board 页抓取必须限速，不能沿用 API 探测的并发。
 
 **验收**：active 中 ≥95% 有 company_name + domain；随机 20 条人工核对，错误 ≤2 条。
 
