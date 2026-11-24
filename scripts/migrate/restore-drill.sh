@@ -11,6 +11,11 @@
 #   * 结束/失败/被打断都会 DROP 掉临时库（trap EXIT），并顺手清理历史遗留的演练库；
 #   * 只读生产库做"数量对照"，不写生产。
 #
+# 为什么全程走 `docker exec`（而不是宿主机的 psql/pg_restore）：
+#   * 宿主机连 127.0.0.1:5432 时，只有 postgres 库在 pg_hba 里配了免密；连其它库会弹
+#     "Password for user ..."，在无人值守脚本里就是永久挂起（2026-11-24 首次实跑就卡在这）；
+#   * 容器内的 psql/pg_restore 与服务端同版本、走容器内回环，任何库都能免密连。
+#
 # 用法：
 #   bash scripts/migrate/restore-drill.sh                 # 跑一次完整演练
 #   DUMP_FILE=/path/to/x.dump bash scripts/migrate/restore-drill.sh   # 指定 dump
@@ -24,8 +29,7 @@ DRILL_DIR="${DRILL_DIR:-${BACKUP_DIR}/drills}"
 MAILER="${MAILER:-${REPO_ROOT}/scripts/monitor/send-mail.py}"
 BENIGN="${BENIGN:-${REPO_ROOT}/scripts/migrate/restore-benign-errors.txt}"
 
-DB_HOST="${DB_HOST:-127.0.0.1}"
-DB_PORT="${DB_PORT:-5432}"
+DB_CONTAINER="${DB_CONTAINER:-liorvix-supabase-db}"
 ADMIN_USER="${ADMIN_USER:-supabase_admin}"
 LIVE_DB="${LIVE_DB:-postgres}"
 KEEP_REPORTS="${KEEP_REPORTS:-12}"
@@ -35,24 +39,28 @@ DUMP_FILE="${DUMP_FILE:-}"
 
 TS=$(date +%Y%m%d-%H%M%S)
 DRILL_DB="liorvix_drill_${TS}"
+CONTAINER_DIR="/tmp/liorvix-drill-${TS}"
+CONTAINER_DUMP="${CONTAINER_DIR}/restore.dump"
+CONTAINER_LIST="${CONTAINER_DIR}/restore.list"
 WORK_DIR=$(mktemp -d "/tmp/liorvix-drill-${TS}.XXXXXX")
 LOG="${WORK_DIR}/drill.log"
 RESTORE_ERR="${WORK_DIR}/restore-errors.txt"
 START_EPOCH=$(date +%s)
 VERDICT="FAIL"
-MAIL_SENT=0
 
 log() { printf '[drill %s] %s\n' "$(date +%H:%M:%S)" "$*" | tee -a "$LOG"; }
 die() { printf '[drill %s] ERROR: %s\n' "$(date +%H:%M:%S)" "$*" | tee -a "$LOG" >&2; exit 1; }
 
+dexec() { docker exec "$DB_CONTAINER" "$@"; }
+
 psql_db() {  # $1=database  $2=sql
-  psql -X -q -h "$DB_HOST" -p "$DB_PORT" -U "$ADMIN_USER" -d "$1" -tAc "$2" 2>>"$LOG"
+  docker exec "$DB_CONTAINER" psql -U "$ADMIN_USER" -h 127.0.0.1 -d "$1" -X -q -tAc "$2" 2>>"$LOG" | tr -d '\r'
 }
 
 drop_drill_db() {
   local db="$1"
   [ -n "$db" ] || return 0
-  psql -X -q -h "$DB_HOST" -p "$DB_PORT" -U "$ADMIN_USER" -d "$LIVE_DB" \
+  docker exec "$DB_CONTAINER" psql -U "$ADMIN_USER" -h 127.0.0.1 -d "$LIVE_DB" -X -q \
     -c "drop database if exists \"${db}\" with (force)" >>"$LOG" 2>&1 || true
 }
 
@@ -115,20 +123,22 @@ write_report() {
 
 cleanup() {
   local rc=$?
-  [ "$VERDICT" = "FAIL" ] && [ "$KEEP_DRILL_DB" = "1" ] && log "按要求保留临时库：${DRILL_DB}"
   if [ "$VERDICT" = "FAIL" ] && [ -f "$LOG" ] && [ -d "$DRILL_DIR" ]; then
     cp -f "$LOG" "${DRILL_DIR}/failure-${TS}.log" 2>/dev/null || true
   fi
-  if [ "$VERDICT" = "FAIL" ] || [ "$KEEP_DRILL_DB" != "1" ]; then
+  if [ "$VERDICT" = "FAIL" ] && [ "$KEEP_DRILL_DB" = "1" ]; then
+    log "按要求保留临时库：${DRILL_DB}"
+  else
     drop_drill_db "$DRILL_DB"
   fi
-  rm -rf "$WORK_DIR" 2>/dev/null || true
+  dexec rm -rf "$CONTAINER_DIR" >/dev/null 2>&1 || true
+  rm -rf "$WORK_DIR" >/dev/null 2>&1 || true
   exit "$rc"
 }
 trap cleanup EXIT
 
-command -v psql >/dev/null 2>&1 || die "psql 不存在"
-command -v pg_restore >/dev/null 2>&1 || die "pg_restore 不存在"
+command -v docker >/dev/null 2>&1 || die "docker 不存在"
+docker inspect "$DB_CONTAINER" >/dev/null 2>&1 || die "找不到容器 ${DB_CONTAINER}"
 mkdir -p "$DRILL_DIR"
 
 if [ -z "$DUMP_FILE" ]; then
@@ -141,34 +151,39 @@ log "dump: ${DUMP_FILE}（$(du -h "$DUMP_FILE" | cut -f1)）"
 # 先清掉历史遗留的演练库（例如上次中断留下的 3 GB+ 临时库），再开始本次演练
 cleanup_leftovers
 
-TOC_COUNT=$(pg_restore -l "$DUMP_FILE" 2>/dev/null | grep -cE '^[0-9]+;' || true)
+log "把 dump 拷进容器（${DB_CONTAINER}）"
+dexec mkdir -p "$CONTAINER_DIR" >/dev/null 2>&1 || die "容器内建目录失败"
+docker cp "$DUMP_FILE" "${DB_CONTAINER}:${CONTAINER_DUMP}" >/dev/null 2>>"$LOG" || die "docker cp 失败"
+
+TOC_COUNT=$(dexec pg_restore -l "$CONTAINER_DUMP" 2>/dev/null | grep -cE '^[0-9]+;' || true)
 [ "${TOC_COUNT:-0}" -gt 100 ] || die "dump 不可读（TOC 条目 ${TOC_COUNT}）"
 log "TOC 条目：${TOC_COUNT}"
 
 log "创建临时库 ${DRILL_DB}"
-psql -X -q -h "$DB_HOST" -p "$DB_PORT" -U "$ADMIN_USER" -d "$LIVE_DB" \
+docker exec "$DB_CONTAINER" psql -U "$ADMIN_USER" -h 127.0.0.1 -d "$LIVE_DB" -X -q \
   -c "create database \"${DRILL_DB}\"" >>"$LOG" 2>&1 || die "建库失败（见 ${LOG}）"
 
 PRE_SQL="${DUMP_FILE%.dump}.pre.sql"
 if [ -f "$PRE_SQL" ]; then
   log "安装扩展（$(basename "$PRE_SQL")）"
-  psql -X -q -h "$DB_HOST" -p "$DB_PORT" -U "$ADMIN_USER" -d "$DRILL_DB" -f "$PRE_SQL" >>"$LOG" 2>&1 \
-    || die "扩展安装失败（见 ${LOG}）"
+  docker exec -i "$DB_CONTAINER" psql -U "$ADMIN_USER" -h 127.0.0.1 -d "$DRILL_DB" -X -q \
+    -v ON_ERROR_STOP=1 -f - < "$PRE_SQL" >>"$LOG" 2>&1 || die "扩展安装失败（见 ${LOG}）"
 else
-  log "WARN：没有 ${PRE_SQL}，尝试直接用 dump 里的对象（可能缺扩展）"
+  log "WARN：没有 ${PRE_SQL}，跳过扩展预装"
 fi
 
 log "生成恢复清单（过滤 public schema 与默认 ACL，与生产恢复口径一致）"
-pg_restore -l "$DUMP_FILE" 2>/dev/null \
+dexec pg_restore -l "$CONTAINER_DUMP" 2>/dev/null \
   | grep -vE '^[0-9]+; [0-9]+ [0-9]+ (SCHEMA - public |DEFAULT ACL)' > "${WORK_DIR}/restore.list" || true
 FILTERED=$(grep -cE '^[0-9]+;' "${WORK_DIR}/restore.list" || true)
 [ "${FILTERED:-0}" -gt 100 ] || die "过滤后的恢复清单异常（条目 ${FILTERED}）"
 log "恢复清单条目：${FILTERED}"
+docker cp "${WORK_DIR}/restore.list" "${DB_CONTAINER}:${CONTAINER_LIST}" >/dev/null 2>>"$LOG" || die "拷贝恢复清单失败"
 
-log "开始 pg_restore（单线程，禁用触发器以避开同步维护逻辑）"
+log "开始 pg_restore（容器内，单线程，禁用触发器以避开同步维护逻辑）"
 RESTORE_START=$(date +%s)
-pg_restore -h "$DB_HOST" -p "$DB_PORT" -U "$ADMIN_USER" -d "$DRILL_DB" \
-  -L "${WORK_DIR}/restore.list" --disable-triggers >/dev/null 2>"$RESTORE_ERR"
+dexec pg_restore -U "$ADMIN_USER" -h 127.0.0.1 -d "$DRILL_DB" -L "$CONTAINER_LIST" \
+  --disable-triggers "$CONTAINER_DUMP" >/dev/null 2>"$RESTORE_ERR"
 RESTORE_RC=$?
 RESTORE_DURATION=$(( $(date +%s) - RESTORE_START ))
 RESTORE_ERR_LINES=$(grep -cE '^pg_restore: error' "$RESTORE_ERR" 2>/dev/null || true)
@@ -188,8 +203,10 @@ UNEXPECTED_ERR_FILE="${WORK_DIR}/unexpected-errors.txt"
 log "比对数据量"
 COUNT_ROWS=""
 COUNTS_JSON="{"
+FAIL_DETAILS=""
 check_count() {
-  local table="$1" sql="$2" drill live critical="${3:-0}"
+  local table="$1" sql="$2" critical="${3:-0}"
+  local drill live
   drill=$(psql_db "$DRILL_DB" "$sql")
   live=$(psql_db "$LIVE_DB" "$sql")
   case "$drill" in ''|*[!0-9]*) drill=-1 ;; esac
@@ -209,7 +226,6 @@ check_count() {
 }
 
 CHECK_LINES=""
-FAIL_DETAILS=""
 check_count auth.users "select count(*) from auth.users" 1
 check_count auth.identities "select count(*) from auth.identities" 1
 check_count profiles "select count(*) from public.profiles" 1
@@ -261,10 +277,10 @@ log "结论：${VERDICT}${FAIL_DETAILS:+（${FAIL_DETAILS}）}"
 write_report
 
 # ---- 发信 ----
-if [ "$NO_MAIL" = "0" ] && [ -x "$(command -v python3 2>/dev/null || printf '/nonexistent')" ] && [ -f "$MAILER" ]; then
+if [ "$NO_MAIL" = "0" ] && command -v python3 >/dev/null 2>&1 && [ -f "$MAILER" ]; then
   SUBJECT="备份恢复演练：$([ "$VERDICT" = "PASS" ] && printf '通过' || printf '失败')（$(basename "$DUMP_FILE")）"
   if python3 "$MAILER" --subject "$SUBJECT" --body-file "$REPORT_MD"; then
-    MAIL_SENT=1
+    log "演练报告邮件已发送"
   else
     log "WARN：演练报告邮件发送失败"
   fi

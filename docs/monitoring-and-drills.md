@@ -186,6 +186,9 @@ cat /opt/liorvix-backups/drills/restore-drill-<最新>.md
 ### 4.4 注意
 
 - 演练会在同一套 PostgreSQL 实例里建临时库，**跑的时候会占 CPU/IO/磁盘**，所以放在凌晨 04:30；
+- 数据库操作一律走**容器内**的 `psql` / `pg_restore`（`docker exec` + `docker cp` dump）：
+  宿主机的 `pg_hba` 只对 `postgres` 库配了免密，连其它库会弹 `Password for user supabase_admin`，
+  在无人值守脚本里就是永久挂起（2026-11-24 首次实跑就卡在这里，已改为容器内执行）；
 - 峰值磁盘约 +3.5 GB；当前 50 GB 盘、使用率 67%，够用。如果长期吃紧，先加盘或把
   `BACKUP_DIR` 挪到大盘；
 - 脚本会用 `DROP DATABASE ... WITH (FORCE)` 清掉同名遗留库（只匹配 `liorvix_drill_*`
@@ -244,5 +247,5 @@ sudo bash /opt/liorvix/scripts/monitor/health-alert.sh --force-mail   # 验证�
 sudo systemctl list-timers liorvix-monitor.timer liorvix-restore-drill.timer
 ```
 
-依赖：`curl`、`jq`、`openssl`、`python3`、`psql`/`pg_restore`（PostgreSQL 17 客户端）、docker。
-当前 VPS 全部具备（`/usr/bin/pg_restore` 17.12 与服务端 17.6 匹配）。
+依赖：`curl`、`jq`、`openssl`、`python3`、docker。当前 VPS 全部具备。
+演练用的 `psql` / `pg_restore` 在容器内执行，不依赖宿主机的 PostgreSQL 客户端。
