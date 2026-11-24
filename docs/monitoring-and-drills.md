@@ -131,6 +131,14 @@ systemctl list-timers liorvix-monitor.timer
 3. 打开仓库 → **Actions** → `uptime-probe` → **Run workflow** 手动跑一次，确认绿；
 4. 仓库头像 → **Settings → Notifications**，确认 `Actions` 的失败邮件是开的（默认开）。
 
+线上现状（2026-11-24 11:24 验证）：
+
+- workflow 已注册为 `state=active`，默认分支 `main` 上有该文件（提交 `27d97f3`）；
+- 手动 dispatch 一次跑通：run [45319228895](https://github.com/chaofan1020-hue/rising-path/actions/runs/45319228895)
+  在 GitHub runner 上对三个公网端点全部 200（说明外部网络到站点是通的、workflow 本身没问题）；
+- 定时（`event=schedule`）第一次触发可能比 cron 晚几分钟到半小时，用
+  `Actions → uptime-probe` 看有没有 `schedule` 事件的运行即可。
+
 限制与取舍：
 
 - GitHub 的 `schedule` 在高峰期可能延迟几分钟，它是"机器整体失联"的兜底，不是秒级 SLA；
