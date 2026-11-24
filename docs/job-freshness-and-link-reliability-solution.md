@@ -261,3 +261,16 @@ create index if not exists job_sync_records_health_idx
 **修复**：选批查询内联 `jobs!inner(id)` 并过滤 `jobs.is_active`，让失效过滤进入 SQL 选批；同时补 404 优先复核队列（`JOBS_LINK_CHECK_RETRY_MINUTES` / `JOBS_LINK_CHECK_RETRY_BATCH`），并把 Apple 官方 jobDetails 的 404/410 作为确认下架信号向上传递（该站岗位页是客户端渲染壳，HTML 无法判断下架）。
 
 **验证**（生产）：部署后首轮 `links_checked: 300`、次轮 `350`（300 + 50 复核）；首批关闭 5 条（410 关闭页 1 条、两次 404 共 4 条），关闭原因均写入 `job_sync_records.last_link_error`。清理积压期间按“最久未核验优先”轮转，约 30 小时完成一轮全量；稳态后每轮保持 300–350 条。
+
+## 15. 事故记录：Ashby 私有板 404 误杀（2026-11-24）
+
+**现象**：快速排空积压期间，Saronic、Cursor 两家在 40 分钟内被批量关闭 373 条岗位（404 两次确认）。对照上游 `company-directory`：Saronic `open_jobs = 301`、`coverage_status = complete`、当日抓取成功；Ashby 官方 posting API（`https://api.ashbyhq.com/posting-api/job-board/<slug>`）当时分别返回 301 / 87 个在招岗位。
+
+**根因**：这两家企业的 Ashby 板处于私有/不公开模式——`https://jobs.ashbyhq.com/<slug>` 及每条岗位 HTML URL 对所有请求都返回 404，但官方 posting API 正常返回岗位清单。核验器只认 HTML 页 404，于是把“官方仍在招”的岗位判成已下架；这是 HTML 与官方 API 口径不一致导致的误杀，不是上游关闭事件。
+
+**修复**：
+- 判定层新增 `isAshbyJobUrl`：`jobs.ashbyhq.com` 的 404/410 一律记为“不可判定”，清零失败计数、不写 404 状态、不进入 404 复核队列，也绝不触发下架；这类企业的上下架只跟随上游官方关闭事件。
+- 数据恢复：以 Ashby 官方 posting API 清单为准，恢复被误关且官方在册的 373 条岗位（Saronic 301、Cursor 73），`job_sync_records` 写入“官方 API 在册”证据并重置链接健康字段。
+- 回归测试：`test:job-link-check-selection` 增加私有板守卫断言（主机识别、强制不关闭、404 状态不落库）。
+
+**教训**：任何“官方页面不可用”的判定都要先区分“页面口径不可用”和“岗位已下架”。同域名的 HTML 404 在私有板模式下是站点配置，不是生命周期证据；必须以官方接口或上游官方关闭事件为准。

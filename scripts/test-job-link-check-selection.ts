@@ -37,6 +37,20 @@ assert.ok(
 );
 
 /**
+ * Ashby private boards return 404 for every posting HTML URL while the official
+ * posting API still lists the job (verified 2026-11-24 with Saronic/Cursor,
+ * where a 404-based sweep falsely closed 373 live jobs). A 404/410 from that
+ * host must be classified as unverifiable, never as a close signal; lifecycle
+ * follows upstream official close events instead.
+ */
+const linkHealth = fs.readFileSync(path.join(process.cwd(), 'src/lib/job-link-health.ts'), 'utf8');
+assert.match(linkHealth, /JOBS_ASHBY_HTML_HOST|jobs\.ashbyhq\.com/);
+assert.match(linkHealth, /export function isAshbyJobUrl/);
+assert.match(maintenance, /isAshbyJobUrl\(job\.job_url\)/);
+assert.match(maintenance, /ashbyHtmlUnverifiable \? false : shouldCloseAfterLinkFailure/);
+assert.match(maintenance, /last_link_http_status: ashbyHtmlUnverifiable \? null/);
+
+/**
  * jobs.apple.com serves the same client-side shell for live and removed roles,
  * so the page HTML can never be used as a closed signal. The official
  * jobDetails API is the only authoritative answer and its 404/410 must reach

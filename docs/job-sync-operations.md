@@ -21,6 +21,9 @@
 链接核验是“官方没有关闭事件时”的兜底证据，不代表可以替代上游状态。应用内 worker 每 5 分钟跑一轮维护，每轮核验 `JOBS_LINK_CHECK_BATCH` 条（默认 300，上限 500），且**只从 active 岗位里选批**：`job_sync_records` 已下架记录同样存在，选批必须内联 `jobs!inner` 并过滤 `is_active`，否则已下架记录会永久占满第一批，核验会空转（2026-11-24 事故即此原因：日志每轮 `links_checked` 只有 0–4 条）。
 
 裸 404 需要两次观测才允许关闭（防 ATS 短暂 404），因此最近一轮出现过 404 的在招岗位会进入优先复核队列：间隔 `JOBS_LINK_CHECK_RETRY_MINUTES`（默认 30 分钟）后再次核验，每轮最多 `JOBS_LINK_CHECK_RETRY_BATCH`（默认 50）条，避免第二次确认要等完整扫描周期。410、页面明确“已关闭”文案立即关闭；403、429、超时、验证页、DNS 失败不改变岗位状态。该队列只影响核验顺序，不改变“官方为准”的下架规则。
+
+**Ashby 私有板例外**：部分企业的 Ashby 板处于私有/不公开模式，`jobs.ashbyhq.com/<slug>` 与每条岗位 HTML URL 对任何请求都返回 404，但官方 posting API（`https://api.ashbyhq.com/posting-api/job-board/<slug>`）仍列出在招岗位（2026-11-24 Saronic/Cursor 事故：单次排空误关 373 条在招岗位）。因此 `jobs.ashbyhq.com` 的 404/410 一律只记“不可判定”，清零失败计数、不写 404 状态、不触发关闭，这类企业的上下架只跟随上游官方关闭事件；需要核对时用官方 posting API 的岗位清单，不能看 HTML 页面。
+
 核验停摆或长时间未部署后需要一次性清积压时，用 `pnpm run maintain:jobs:drain`（脚本 `scripts/drain-job-link-checks.ts`）在应用服务器上连续跑同一套核验逻辑，而不是改小 worker 周期：它默认每批 500 条、并发 20（上限 40），到待核验队列清空或达到 `DRAIN_MAX_RUNS` 上限为止；排空期间可设 `JOB_FETCH_TIMEOUT_MS`（3–30 秒）缩短单请求超时，慢站点超时只会记为不可判定，不会下架岗位。脚本只套用同一套下架规则（410/明确关闭页立即、裸 404 两次、403/429/超时不动），进度写在 `job_sync_records` 里，可重复执行；日常稳态仍由应用内 worker 每 5 分钟一批完成，不需要常驻 drain。
 
 ### 主增量同步性能策略
