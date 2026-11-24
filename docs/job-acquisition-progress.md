@@ -76,9 +76,9 @@
 | D06 | done | 165719c | 2026-11-24 17:37 | 冻结 500（GH 400/Lever 100）；S98/A270/B132；50 抽 0 名称错/0 域名错 |
 | U01 | done | no-git/upstream | 2026-11-24 17:00 | shadow up/down/up 通过；3 新列+2 表；生产代码已换，迁移未执行 |
 | U02 | done | 7fa41d8 | 2026-11-24 17:44 | staging 500 dry-run；apply 50：boards 50/bulk 公司 50/active 169 不变；重复 0 新增 |
-| U03 | done | pending-commit | 2026-11-24 17:50 | Stripe 771；首跑 new 771，二次 new/changed 0；坏 token jobs 不变；source_key 771/closed 0 |
-| U04 | pending | — | — | — |
-| U05 | pending | — | — | — |
+| U03 | done | 95b5628 | 2026-11-24 17:50 | Stripe 771；首跑 new 771，二次 new/changed 0；坏 token jobs 不变；source_key 771/closed 0 |
+| U04 | done | pending-commit | 2026-11-24 18:29 | 50 board / 540s / 0 failed；jobs 45,005；closed 0；tier 排序和锁释放 bug 已修 |
+| U05 | done | pending-commit | 2026-11-24 18:32 | 同日心跳不增；昨日 last_seen 更新、updated_at 保留；missing_streak=1、仍 OPEN |
 | U06 | pending | — | — | — |
 | U07 | pending | — | — | — |
 | S01 | pending | — | — | — |
@@ -139,6 +139,15 @@
 | — | — | — | — | — | — |
 
 ## 日志（倒序）
+
+### 2026-11-24 · U04/U05 完成
+
+- U04 调度器：`poll_ats_boards` beat 每分钟；全局锁 + 每 board Redis 锁 + GH/Ashby/Lever 起步间隔（0.2/0.5/1.0s）；ThreadPool 5；失败退避、5 次 paused。
+- 首轮 50 board 540s、0 failed、45,005 jobs、closed 0。大 board list-only 后明显加速；Stripe 用 content 验证详情路径，批量用 list-only。
+- 修两个 bug：`order_by(tier)` 字典序把 C 排 S 前 → CASE S/A/B/C；Redis 锁释放异常覆盖已成功结果 → 释放异常吞掉，不覆盖结果。
+- staging 容器 sleep 2400 到期导致 3 个 running 假死；恢复脚本标记 failed、清 `bulk:*` 锁、重建 7200s 容器，重跑成功。
+- U05 心跳：`upsert_job` 会把 `last_seen_at/updated_at` 每次写成 now；在 bulk_poll 里同日恢复 `last_seen_at`，内容未变恢复 `updated_at`；昨日心跳才更新。缺失 job 只 `missing_streak+=1`，不 close。
+- 实测：同日 771 条心跳不增；aged 1 条 `last_seen_at` 更新、`updated_at` 保留；fake missing `missing_streak=1`、`OPEN`；全库 `closed=0`。
 
 ### 2026-11-24 · U03 完成
 

@@ -425,6 +425,8 @@ docker compose exec -T api python -m app.bulk_boards import --csv /tmp/p0-boards
 
 **验收**：50 board 在 10 分钟内被调度一次；无重复并发；单 board 429 不影响其他；`crawl_all` 时间表未变。
 
+**2026-11-24 staging 实测**：51 个 due，实际调度 50 个；`window_min_start=10:20:01Z`、`max_finish=10:29:01Z`，**540 秒**；50 个 board / 50 次 success / 0 failed；`jobs=45,005`、全部有 `source_key`、`closed=0`。GH 批量改为 list-only（不带 `content=true`）后，剩余 30 个 board 约 2 分钟完成；大 board（svetness 5,050）单次约 2–3 分钟。首个版本有 tier 字典序（C 排 S 前）和 Redis 锁释放异常覆盖成功结果两个 bug，已修：S/A/B/C 用 CASE 排序，锁释放异常不再覆盖已提交的 poll 结果。`crawl_all` beat 仍为 `*/6`。
+
 **回滚**：停 beat 任务；恢复 schedule；保留表。
 
 ### U05 · 心跳与 TTL 数据
@@ -437,6 +439,8 @@ docker compose exec -T api python -m app.bulk_boards import --csv /tmp/p0-boards
 4. 不修改 `updated_at`/Feed 版本，除非内容变化。
 
 **验收**：24h 模拟后，Feed 增量里心跳条数 ≤ 活跃岗位数/天；`is_closed` 无变化；stale 计算所需字段齐全。
+
+**2026-11-24 staging 实测**：Stripe 771 条同日轮询：`new=0/changed=0/missing=0`，`last_seen_at` 仍集中在同一天，`updated_at` 未变。把 1 条 `last_seen_at` 改为昨天后轮询：该条 `last_seen_at` 更新为今天，`updated_at` 保持昨天。插入一条不在 API 列表的 fake job 后轮询：`missing=1`，该 job `missing_streak=1`、`status=OPEN`，全库 `closed=0`。同日心跳行数不增加。
 
 **回滚**：停任务；字段保留。
 
