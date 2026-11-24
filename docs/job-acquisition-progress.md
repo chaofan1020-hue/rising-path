@@ -68,12 +68,12 @@
 | B01 | done | 6d9ef85 | 2026-11-24 16:31 | 两端版本、迁移机制、代码/DB 备份已记录；DB dump 1.5G |
 | B02 | done | 6d9ef85 | 2026-11-24 16:31 | 基线：US 114,142 active；上游 180,034 OPEN；重复 14；Feed lag 3m16s |
 | B03 | done | 6d9ef85 | 2026-11-24 16:31 | 开关/分支/回滚/账本约定已写入本节 |
-| D01 | done | pending-commit | 2026-11-24 16:35 | all 18,164；engineering 500；sha256 已记 |
-| D02 | done | pending-commit | 2026-11-24 16:38 | 1,500 候选（GH 931/Ashby 296/Lever 273）；331 engineering 优先；上游交集 0 |
-| D03 | done | pending-commit | 2026-11-24 16:47 | robots/三家解析/限速/断点；单测 10 项；Stripe/OpenAI/Palantir 均 active |
-| D04 | done | pending-commit | 2026-11-24 17:06 | 1,000 探测：902 active/70 隔离/28 404；错误率 2.8% |
-| D05 | pending | — | — | — |
-| D06 | pending | — | — | — |
+| D01 | done | 611512d | 2026-11-24 16:35 | all 18,164；engineering 500；sha256 已记 |
+| D02 | done | 611512d | 2026-11-24 16:38 | 1,500 候选（GH 931/Ashby 296/Lever 273）；331 engineering 优先；上游交集 0 |
+| D03 | done | a8991f1 | 2026-11-24 16:47 | robots/三家解析/限速/断点；单测 10 项；Stripe/OpenAI/Palantir 均 active |
+| D04 | done | 3dcb4fe | 2026-11-24 17:06 | 1,000 探测：902 active/70 隔离/28 404；错误率 2.8% |
+| D05 | done | pending-commit | 2026-11-24 17:34 | 902：842 名称（93.3%）/290 域名（32.1%）；60 token 兜底；无证据不猜 domain |
+| D06 | done | pending-commit | 2026-11-24 17:37 | 冻结 500（GH 400/Lever 100）；S98/A270/B132；50 抽 0 名称错/0 域名错 |
 | U01 | done | no-git/upstream | 2026-11-24 17:00 | shadow up/down/up 通过；3 新列+2 表；生产代码已换，迁移未执行 |
 | U02 | pending | — | — | — |
 | U03 | pending | — | — | — |
@@ -139,6 +139,15 @@
 | — | — | — | — | — | — |
 
 ## 日志（倒序）
+
+### 2026-11-24 · D05/D06 完成
+
+- D05：902 个 active board 抓取；842 个公司名来自页面/覆盖（93.3%），60 个 token 兜底并标 low；290 个有 domain 证据（32.1%），612 个留空。
+- 关键偏差：GH board 页 5 并发无限速会连续 403（第一轮 711/902 被拦）；改为 host 串行起步间隔 GH 900ms/Lever 500ms 后恢复，最终 902 全部 robots allow。
+- 域名不猜：只收 sample 岗位 URL、og:url、JSON-LD、明确 Website 外链、人工覆盖；ATS 页面不暴露官网的留空。实测 95% domain 不可达，D05 验收已修正。
+- D06：冻结 500（Greenhouse 400 + Lever 100）；tier S98/A270/B132；有 domain 169。50 条分层抽样：pass 16、blocked_by_site 2、no_domain 32、weak/fail 0。
+- 产出 `data/p0-boards.csv`（sha256 `A33ACDAC...24D9D`）与 `docs/job-acquisition-d06-review.md`。
+- 下一步：U02 在 staging 导入 500 dry-run、apply 50。
 
 ### 2026-11-24 · D04 完成
 

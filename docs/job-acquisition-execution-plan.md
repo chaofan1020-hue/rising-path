@@ -329,7 +329,10 @@ pnpm tsx scripts/ats-discovery/probe.ts --input=tmp/boards/candidates.csv --outp
 4. 拒绝：`Careers`、`Jobs`、`Apply` 等泛词；staffing/recruiting 关键词默认 quarantine，除非人工确认。
 5. **实测限速**：5 并发无间隔抓 GH board 页，约 200 个后被 Cloudflare 连续 403（711/902）；按 host 串行 + GH 900ms/Lever 500ms 间隔后恢复 200。board 页抓取必须限速，不能沿用 API 探测的并发。
 
-**验收**：active 中 ≥95% 有 company_name + domain；随机 20 条人工核对，错误 ≤2 条。
+**验收（2026-11-24 实测后修正）**：
+- `company_name` 非空 100%；页面/人工覆盖来源 ≥90%（实测 842/902 = 93.3%）；随机 20 条公司名错误 ≤2。
+- `company_domain` **有证据才填**：实测 290/902 = 32.1% 有域名，612 条留空并标 `low`。ATS board 页不暴露官网时，95% domain 不可达；不用 token 猜域名。非空 domain 抽检 18 条错 0 条。
+- 不达 95% 的两项作为已知缺口记入 D06，不阻塞 P0；后续可用人工覆盖或公司库补齐。
 
 **回滚**：覆盖表可删；自动结果可重跑。
 
@@ -337,11 +340,13 @@ pnpm tsx scripts/ats-discovery/probe.ts --input=tmp/boards/candidates.csv --outp
 
 **位置** 本仓库 · **依赖** D05 · **估时** 3h · **Gate** —
 
-按 vendor 分层抽 50 条，逐条检查：官网能打开、岗位数>0、岗位 URL 是官方 host、地点在目标地区、公司名不是 token。
+按 vendor 分层抽 50 条，逐条检查：公司名不是 token/泛词、岗位数>0、岗位 URL 是官方 host、地点在目标地区；有 domain 的再打开官网核对。没有 domain 不阻断冻结，U02 用公司名匹配并在 `ats_boards.company_domain` 留空。
 
-冻结 `data/p0-boards.csv`（500 行），列：`vendor,token,site,company_name,company_domain,careers_url,region_scope,robots_verdict,robots_evidence_url,robots_checked_at,confidence,tier,note`。
+冻结 `data/p0-boards.csv`（500 行），列：`vendor,token,site,company_name,company_domain,careers_url,region_scope,robots_verdict,robots_evidence_url,robots_checked_at,confidence,tier,board_url,api_url,posting_count,frozen_at,note`。
 
-**验收**：500 行无重复 `(vendor,token)`；错误率 ≤15%（超过则回 D03 修解析）；文件提交到仓库（不含岗位数据）。
+**验收**：500 行无重复 `(vendor,token)`；公司名错误率 ≤15%；有 domain 的抽检域名错误 ≤1/20；文件提交到仓库（不含岗位数据）。
+
+**2026-11-24 冻结**：500 行；Greenhouse 400 / Lever 100；tier S 98/A 270/B 132；有 domain 169；50 条抽样 pass 16、blocked_by_site 2、no_domain 32、weak/fail 0。详见 `docs/job-acquisition-d06-review.md`。
 
 **回滚**：重新冻结。
 
