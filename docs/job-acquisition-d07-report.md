@@ -2,6 +2,7 @@
 
 > 日期：2026-11-24 20:35 +08（UTC 12:35）
 > 输入：`tmp/boards/candidates-p1.csv`（1,500 个未探测候选）→ 实际探测 1,201 个
+> 未探的 299 个是长尾中的长尾（多为最小 board），在 active 1,042、总 active 1,944 已超过验收线后停止，避免对同一 host 追加无收益请求；这不是“探测失败”，剩余候选保留在 `tmp/boards/candidates-p1-remaining4.csv`。
 > 输出：`data/p1-boards.csv`（冻结 1,000 个新 board；见 §5）
 > 状态：**探测与冻结完成，生产导入待 G2**
 
