@@ -73,7 +73,7 @@ tasks:
     est_hours: 2
     location: repo
     files: ["tmp/boards/candidates.csv", "scripts/ats-discovery/build-candidates.ts"]
-    acceptance: "1,200-1,500 候选；500 engineering 全含；现有 169 token 已排除"
+    acceptance: "1,500 候选；无重复；与上游 55 token 交集 0；331 engineering 优先全在；api_url 齐全"
 
   - id: D03
     phase: P0

@@ -68,8 +68,8 @@
 | B01 | done | 6d9ef85 | 2026-11-24 16:31 | 两端版本、迁移机制、代码/DB 备份已记录；DB dump 1.5G |
 | B02 | done | 6d9ef85 | 2026-11-24 16:31 | 基线：US 114,142 active；上游 180,034 OPEN；重复 14；Feed lag 3m16s |
 | B03 | done | 6d9ef85 | 2026-11-24 16:31 | 开关/分支/回滚/账本约定已写入本节 |
-| D01 | pending | — | — | — |
-| D02 | pending | — | — | — |
+| D01 | done | pending-commit | 2026-11-24 16:35 | all 18,164；engineering 500；sha256 已记 |
+| D02 | done | pending-commit | 2026-11-24 16:38 | 1,500 候选（GH 931/Ashby 296/Lever 273）；331 engineering 优先；上游交集 0 |
 | D03 | pending | — | — | — |
 | D04 | pending | — | — | — |
 | D05 | pending | — | — | — |
@@ -139,6 +139,14 @@
 | — | — | — | — | — | — |
 
 ## 日志（倒序）
+
+### 2026-11-24 · D01-D02 完成
+
+- D01：下载 `all.csv`（18,164 行，sha256 `abd8c46f…`）、`engineering.csv`（500 行，`e3cf372e…`）、`data-quality.csv`（500 行，`8e073185…`）、`board-roles.csv`（500 行，`3638a303…`）。这些是 2026-09-03 快照，只当候选，不当当前岗位数。
+- D02：上游实际有 55 个活跃 GH/Ashby/Lever token（GH 35 / Ashby 18 / Lever 2），不是 169 个公司各自一个；已全部排除。工程质量文件里 137 个 board 的 engineering=0，不能全算“工程优先”；改为只给 `engineering>0` 的 331 个 priority=1，其余按岗位数补足。
+- 结果：1,500 行、0 重复、0 上游交集、0 缺 URL；GH 931 / Ashby 296 / Lever 273；岗位数 1-4,981。
+- 计划修正：D02 验收从“500 engineering 全在”改为“331 个 engineering 优先全在”，因为 9 个被质量隔离、26 个已在上游、137 个本身无工程岗。
+- 下一步：D03 探测工具（robots + 三家 JSON + 限速/断点），这是 P0 关键路径。
 
 ### 2026-11-24 · B01-B03 完成
 

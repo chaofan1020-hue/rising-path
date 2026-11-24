@@ -259,12 +259,12 @@ curl -L -o tmp/boards/board-roles.csv  https://veresk06.github.io/open-ats-feed/
 
 规则：
 
-1. 现有 169 家上游公司的 token **先排除**：它们已有公司级管道，P0 不重复摄入，避免一次岗位两条记录。
-2. 优先 `engineering.csv` 500 个；再取 `all.csv` 中 GH/Ashby/Lever 按岗位数前 1,000。
-3. 排除 `data-quality.csv` 标记为“招聘广告/非真实雇主”的 board。
+1. 现有 55 个上游活跃 token（GH 35 / Ashby 18 / Lever 2）**先排除**：它们已有公司级管道，P0 不重复摄入，避免一次岗位两条记录。
+2. 优先 `engineering.csv` 中 `engineering > 0` 的 board（本批 331 个）；其余用 `all.csv` 中 GH/Ashby/Lever 按岗位数补足。
+3. 排除 `data-quality.csv` 中 `not_jobs_share >= 0.5` 的 board（本批 9 个）以及已在 `all.csv` 出现的重复。
 4. 去重键 `(provider, token)`；输出 `tmp/boards/candidates.csv`，列：`priority,vendor,token,board_url,api_url,source_list,posted_count,note`。
 
-**验收**：候选 1,200-1,500 个；500 个 engineering 全在；现有 169 家 token 不在列表；输出文件可被 D03 直接读取。
+**验收**：候选 1,500 个；`(vendor,token)` 无重复；与上游 55 个活跃 token 交集为 0；331 个 engineering 优先 board 全在；所有行有可探测的 `api_url`。
 
 **回滚**：重跑脚本。
 
