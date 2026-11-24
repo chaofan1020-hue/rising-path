@@ -2,7 +2,15 @@ import { lookup } from 'node:dns/promises';
 import { request as httpsRequest, type RequestOptions } from 'node:https';
 import { isIP } from 'node:net';
 
-const FETCH_TIMEOUT_MS = 10_000;
+// Default request budget for job/link fetches. A backlog drain can lower it via
+// `JOB_FETCH_TIMEOUT_MS` (3–30s) so slow/unresponsive hosts cannot stall a whole
+// batch; the steady-state worker keeps the 10s default. Timeouts classify as
+// inconclusive and never change job lifecycle.
+function fetchTimeoutMs(): number {
+  const configured = Number(process.env.JOB_FETCH_TIMEOUT_MS);
+  if (!Number.isFinite(configured)) return 10_000;
+  return Math.min(Math.max(Math.round(configured), 3_000), 30_000);
+}
 const MAX_RESPONSE_BYTES = 1_000_000;
 // Google Careers embeds the server-rendered job detail after a large app shell.
 // Keep the default limit for every other host and allow only this exact public
@@ -185,7 +193,7 @@ function requestPinnedHttps(
       });
     });
 
-    request.setTimeout(FETCH_TIMEOUT_MS, () => {
+    request.setTimeout(fetchTimeoutMs(), () => {
       request.destroy(new Error('request timeout'));
     });
     request.on('error', (error: NodeJS.ErrnoException) => {
