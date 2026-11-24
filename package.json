@@ -29,6 +29,7 @@
     "inspect:job-link-health": "tsx scripts/inspect-job-link-health.ts",
     "reconcile:jobs": "tsx scripts/sync-jobs-feed.ts --mode=reconcile",
     "maintain:jobs": "tsx scripts/maintain-jobs.ts",
+    "maintain:jobs:drain": "tsx scripts/drain-job-link-checks.ts",
     "audit:closed-jobs": "tsx scripts/audit-closed-jobs.ts",
     "recover:closed-jobs": "tsx scripts/recover-closed-jobs.ts",
     "prepare:vad-assets": "tsx scripts/prepare-vad-assets.ts",
