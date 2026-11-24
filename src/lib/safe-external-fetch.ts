@@ -245,6 +245,33 @@ export function buildWorkdayCxsDetailUrl(rawUrl: string): string | null {
   }
 }
 
+/**
+ * Same CXS detail endpoint, but also reachable through the tenant's
+ * `myworkdaysite.com` front door — a separate Cloudflare zone from
+ * `myworkdayjobs.com`. The jobs zone answers non-browser clients with
+ * `429 cf-mitigated: challenge`; the site zone serves the identical
+ * tenant/site/slug JSON with no challenge. Keep the official origin first so
+ * behavior only changes when the public host is actually throttled.
+ */
+export function buildWorkdayCxsDetailUrls(rawUrl: string): string[] {
+  const primary = buildWorkdayCxsDetailUrl(rawUrl);
+  if (!primary) return [];
+  const urls = [primary];
+  try {
+    const url = new URL(primary);
+    const host = url.hostname.toLowerCase();
+    const match = host.match(/^[a-z0-9-]+\.(wd\d+)\.myworkdayjobs\.com$/);
+    if (match) {
+      const frontDoor = new URL(primary);
+      frontDoor.hostname = `${match[1]}.myworkdaysite.com`;
+      urls.push(frontDoor.toString());
+    }
+  } catch {
+    // Keep the official origin when the rewrite is unavailable.
+  }
+  return urls;
+}
+
 function decodeHtmlAttribute(value: string): string {
   return value
     .replace(/&quot;/gi, '"')
@@ -504,8 +531,7 @@ export async function fetchSafeExternalPage(rawUrl: string): Promise<ExternalPag
       // when the HTML request is reduced to an SPA shell. Derive the tenant,
       // site and posting slug from the official URL and use that read-only API.
       try {
-        const detailUrl = buildWorkdayCxsDetailUrl(resolved.url.toString());
-        if (detailUrl) {
+        for (const detailUrl of buildWorkdayCxsDetailUrls(resolved.url.toString())) {
           const detailResponse = await fetch(detailUrl, {
             headers: {
               Accept: 'application/json',
@@ -513,23 +539,23 @@ export async function fetchSafeExternalPage(rawUrl: string): Promise<ExternalPag
               'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/131.0.0.0 Safari/537.36',
             },
           });
-          if (detailResponse.ok) {
-            const detailPayload = await detailResponse.json() as Record<string, unknown>;
-            const info = detailPayload.jobPostingInfo;
-            if (info && typeof info === 'object') {
-              const record = info as Record<string, unknown>;
-              workdayStructuredData = {
-                '@context': 'https://schema.org',
-                '@type': 'JobPosting',
-                title: record.title,
-                description: record.jobDescription || record.description,
-                employmentType: record.timeType || record.employmentType,
-                jobLocation: record.primaryLocation || record.location,
-                baseSalary: record.baseSalary || record.salary,
-                validThrough: record.postingEndDate || record.validThrough,
-                experienceRequirements: record.experience,
-              };
-            }
+          if (!detailResponse.ok) continue;
+          const detailPayload = await detailResponse.json() as Record<string, unknown>;
+          const info = detailPayload.jobPostingInfo;
+          if (info && typeof info === 'object') {
+            const record = info as Record<string, unknown>;
+            workdayStructuredData = {
+              '@context': 'https://schema.org',
+              '@type': 'JobPosting',
+              title: record.title,
+              description: record.jobDescription || record.description,
+              employmentType: record.timeType || record.employmentType,
+              jobLocation: record.primaryLocation || record.location,
+              baseSalary: record.baseSalary || record.salary,
+              validThrough: record.postingEndDate || record.validThrough,
+              experienceRequirements: record.experience,
+            };
+            break;
           }
         }
       } catch {

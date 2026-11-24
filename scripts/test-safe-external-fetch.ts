@@ -1,5 +1,5 @@
 import assert from 'node:assert/strict';
-import { buildWorkdayCxsDetailUrl, isForbiddenExternalAddress } from '../src/lib/safe-external-fetch';
+import { buildWorkdayCxsDetailUrl, buildWorkdayCxsDetailUrls, isForbiddenExternalAddress } from '../src/lib/safe-external-fetch';
 
 for (const address of [
   '127.0.0.1',
@@ -26,4 +26,17 @@ assert.equal(
   buildWorkdayCxsDetailUrl('https://citi.wd5.myworkdayjobs.com/en-US/2/job/Houston-Texas/example_25926650'),
   'https://citi.wd5.myworkdayjobs.com/wday/cxs/citi/2/job/Houston-Texas/example_25926650',
 );
+assert.deepEqual(
+  buildWorkdayCxsDetailUrls('https://citi.wd5.myworkdayjobs.com/en-US/2/job/Houston-Texas/example_25926650'),
+  [
+    'https://citi.wd5.myworkdayjobs.com/wday/cxs/citi/2/job/Houston-Texas/example_25926650',
+    'https://wd5.myworkdaysite.com/wday/cxs/citi/2/job/Houston-Texas/example_25926650',
+  ],
+);
+// 官方 origin 必须排第一：前门只是 429 时的退路。
+assert.equal(
+  buildWorkdayCxsDetailUrls('https://citi.wd5.myworkdayjobs.com/2/job/x/y')[0],
+  'https://citi.wd5.myworkdayjobs.com/wday/cxs/citi/2/job/x/y',
+);
+assert.deepEqual(buildWorkdayCxsDetailUrls('https://example.com/foo'), []);
 console.log('safe external fetch address checks passed');

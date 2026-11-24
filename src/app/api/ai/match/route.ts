@@ -3,7 +3,7 @@ import type { SupabaseClient } from '@supabase/supabase-js';
 import { getAuthContext, unauthorizedResponse } from '@/lib/auth-server';
 import { consumeAuthRateLimit } from '@/lib/auth-security';
 import { createTextProviderClient } from '@/lib/ai/text-provider';
-import { configuredRegionScopeKeys, targetRegionScopeKeys } from '@/lib/job-region-scope';
+import { configuredRegionScopeKeys, regionMatchesScopeKeys, targetRegionScopeKeys } from '@/lib/job-region-scope';
 import { consumeTrackedTextBatch } from '@/lib/ai-usage';
 import { betaEntitlementResponse } from '@/lib/beta-entitlements';
 import {
@@ -734,33 +734,39 @@ export async function POST(request: NextRequest) {
             hint: error.hint,
             message: error.message,
           });
-          const { data: scopedIds, error: scopeError } = await client
-            .from('job_ai_match_scopes')
-            .select('job_id')
-            .in('scope', regionScopes)
+          // Emergency path only. It used to read `job_ai_match_scopes` unordered,
+          // which is a stale table (179k rows for 87k active jobs), so the active
+          // filter cut the page down to a couple of rows. Page the live table by
+          // recency instead, filter that small page in memory, and keep the whole
+          // path bounded so it can never hang on a cold TOAST read.
+          const { data: recentRows, error: recentError } = await client
+            .from('jobs')
+            .select('id, region')
+            .eq('is_active', true)
+            .order('created_at', { ascending: false })
+            .limit(MATCH_RETRIEVAL_LIMIT * 2);
+          if (recentError) throw new Error(`查询岗位失败: ${error.message}`);
+          const fallbackIds = (recentRows || [])
+            .filter((row) => regionMatchesScopeKeys(row.region as string | null, regionScopes))
+            .slice(0, MATCH_RETRIEVAL_LIMIT)
+            .map((row) => Number(row.id))
+            .filter((id) => Number.isInteger(id) && id > 0);
+          if (fallbackIds.length === 0) throw new Error(`查询岗位失败: ${error.message}`);
+          const { data: fallbackJobs, error: fallbackError } = await client
+            .from('jobs')
+            .select(JOB_MATCH_FIELDS)
+            .eq('is_active', true)
+            .in('id', fallbackIds)
+            .order('created_at', { ascending: false })
             .limit(MATCH_RETRIEVAL_LIMIT);
-          if (!scopeError && scopedIds?.length) {
-            const ids = scopedIds.map((row) => Number(row.job_id)).filter((id) => Number.isInteger(id) && id > 0);
-            const { data: fallbackJobs, error: fallbackError } = await client
-              .from('jobs')
-              .select(JOB_MATCH_FIELDS)
-              .eq('is_active', true)
-              .in('id', ids)
-              .order('created_at', { ascending: false })
-              .limit(MATCH_RETRIEVAL_LIMIT);
-            if (!fallbackError && fallbackJobs?.length) {
-              retrieved = fallbackJobs as CandidateJob[];
-              console.warn('[AI match retrieval fallback]', {
-                requestId,
-                candidateCount: retrieved.length,
-                durationMs: Math.round(performance.now() - retrievalStartedAt),
-              });
-            } else {
-              throw new Error(`查询岗位失败: ${error.message}`);
-            }
-          } else {
-            throw new Error(`查询岗位失败: ${error.message}`);
-          }
+          if (fallbackError || !fallbackJobs?.length) throw new Error(`查询岗位失败: ${error.message}`);
+          retrieved = fallbackJobs as CandidateJob[];
+          console.warn('[AI match retrieval fallback]', {
+            requestId,
+            candidateCount: retrieved.length,
+            regionScopeCount: regionScopes.length,
+            durationMs: Math.round(performance.now() - retrievalStartedAt),
+          });
         } else {
           retrieved = (data || []) as CandidateJob[];
           console.info('[AI match retrieval complete]', {

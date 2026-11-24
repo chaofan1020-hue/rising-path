@@ -145,6 +145,33 @@ export function targetRegionScopeKeys(): string[] {
   return ['us', 'canada', 'uk', 'australia', 'hong_kong', 'singapore'];
 }
 
+/**
+ * Market scopes covered by each grouping returned from `getTargetRegion`.
+ * `north_america` intentionally spans both countries because feeds frequently
+ * only publish city or state names, which cannot be split into `us`/`canada`
+ * without a second lookup.
+ */
+const TARGET_REGION_TO_SCOPES: Record<string, string[]> = {
+  north_america: ['us', 'canada'],
+  united_kingdom: ['uk'],
+  australia: ['australia'],
+  hong_kong: ['hong_kong'],
+  singapore: ['singapore'],
+};
+
+/**
+ * JS twin of the SQL helper `public.ai_match_region_scope`, used only by the
+ * bounded emergency fallback of the AI-match retrieval so that it can filter a
+ * small candidate page in memory instead of scanning the `jobs` table again.
+ */
+export function regionMatchesScopeKeys(region: string | null | undefined, scopes: string[]): boolean {
+  if (scopes.length === 0) return true;
+  const key = getTargetRegion(region, null);
+  if (!key) return false;
+  const keys = TARGET_REGION_TO_SCOPES[key] || [];
+  return keys.some((scope) => scopes.includes(scope));
+}
+
 function escapePostgrestLike(value: string): string {
   return value.replace(/[\\%_,()]/g, (character) => `\\${character}`);
 }
