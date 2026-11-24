@@ -87,6 +87,7 @@ const ghQuota = Number.parseInt(arg('gh', '400'), 10);
 const leverQuota = Number.parseInt(arg('lever', '100'), 10);
 const ashbyQuota = Number.parseInt(arg('ashby', '0'), 10);
 const existingPath = arg('existing', '');
+const allowTokenName = arg('allow-token-name', 'false') === 'true';
 
 const existingCompanies = new Set<string>();
 if (existingPath && fs.existsSync(path.resolve(existingPath))) {
@@ -106,8 +107,12 @@ for (const row of all) {
     rejected.robots = (rejected.robots ?? 0) + 1;
     continue;
   }
-  if (!row.company_name || row.name_source === 'token_fallback' || genericName(row.company_name)) {
+  if (!allowTokenName && (!row.company_name || row.name_source === 'token_fallback' || genericName(row.company_name))) {
     rejected.name_fallback = (rejected.name_fallback ?? 0) + 1;
+    continue;
+  }
+  if (allowTokenName && (!row.company_name || genericName(row.company_name))) {
+    rejected.name_missing = (rejected.name_missing ?? 0) + 1;
     continue;
   }
   if (/\b(staffing|recruiting|recruitment|personnel|talent|employment|placement|manpower)\b/i.test(row.company_name)) {

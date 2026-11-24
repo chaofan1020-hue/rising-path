@@ -3,7 +3,7 @@
 > 日期：2026-11-24 20:35 +08（UTC 12:35）
 > 输入：`tmp/boards/candidates-p1.csv`（1,500 个未探测候选）→ 实际探测 1,201 个
 > 输出：`data/p1-boards.csv`（冻结 1,000 个新 board；见 §5）
-> 状态：**探测完成，冻结/生产导入待 G2 后**
+> 状态：**探测与冻结完成，生产导入待 G2**
 
 ## 1. 结果
 
@@ -56,10 +56,13 @@
 
 ## 5. 冻结
 
-- 输出 `data/p1-boards.csv`，目标 1,000 个**新** board（排除 P0 500 个公司）；
-- 配额：GH 700 / Ashby 200 / Lever 100，不足时从剩余 active 补齐；
-- 字段与 P0 一致：公司名、域名、careers URL、robots、tier、board/api URL、posting count、frozen_at；
-- 冻结后不自动导入生产；等 V02 48h 观察通过（G2）后，按 U08/U09 的节奏分批导入 1,000 个。
+- 输出 `data/p1-boards.csv`，实际 **1,000** 个新 board；P0 500 个公司已排除。
+- 配额与结果：GH 610 / Ashby 236 / Lever 154；A 21 / B 895 / C 84。
+- 公司名：954/1,042 有页面标题/域名证据；冻结 1,000 个里 **86 个 `name_source=token_fallback`**，已标记 `confidence=low`，导入前需人工/域名补全，不能直接当成高质量公司名。
+- 域名：仅 199/1,000 有可验证公司域名；GH/Ashby/Lever 的 board URL 常驻 ATS 域名，不能从 board 反推公司官网。`missing_domain` 不阻断抓取，但阻断“公司官网”展示。
+- 其他拒绝：staffing 6、与现有 active 同公司 7、P1 内重复公司 2；重复 token 0。
+- `data/p1-boards.csv` sha256 `C77E235864A700E0335DFFAD794E9037EDE167E24C15F3ED255913AC7227B6B7`。
+- 冻结后不自动导入生产；等 V02 48h 观察通过（G2）后，按 U08/U09 的节奏分批导入 1,000 个；86 个 fallback 先不导入或先补名。
 
 ## 6. 回滚
 
