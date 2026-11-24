@@ -142,7 +142,11 @@ systemctl list-timers liorvix-monitor.timer
 限制与取舍：
 
 - GitHub 的 `schedule` 在高峰期可能延迟几分钟，它是"机器整体失联"的兜底，不是秒级 SLA；
+- 新加入的 schedule 工作流首次触发可能比 cron 晚很久（2026-11-24 实测：文件落到 main 后 1 小时
+  内的 4 个整刻钟都没派发）。**判断是否真的启用的标准**：Actions 里出现 `event=schedule` 的运行，
+  而不是"文件在 main 上"。24 小时仍没有 `event=schedule` 运行，就按下面第 3 条接外部服务兜底。
 - 私有仓库会消耗 Actions 分钟数：15 分钟一次 ≈ 每月 2880 次 × 约 15 秒 ≈ 720 分钟，免费额度 2000 分钟够用；
+  本仓库是公开仓库，不消耗额度。
 - 如果你要秒级、要页面状态、要多地探测，注册 [UptimeRobot](https://uptimerobot.com) 或
   [BetterStack](https://betterstack.com)（免费档即可），加两个 HTTP(s) 监控：
   `https://liorvix.com/api/health` 与 `https://supabase.liorvix.com/auth/v1/health`，
