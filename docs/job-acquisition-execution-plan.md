@@ -275,8 +275,15 @@ curl -L -o tmp/boards/board-roles.csv  https://veresk06.github.io/open-ats-feed/
 新增：
 
 - `src/lib/ats-discovery/robots.ts`：解析 robots，按 RFC 9309 做最长匹配；记录证据 URL、抓取时间、原文 sha256。
-- `src/lib/ats-discovery/providers.ts`：三家端点与字段映射；GH `boards-api.../jobs?content=false&per_page=1`，Ashby `posting-api/job-board/{token}`，Lever `api.lever.co/v0/postings/{token}?mode=json`。
+- `src/lib/ats-discovery/providers.ts`：三家端点与字段映射；GH `boards-api.../jobs?content=false&per_page=100`，Ashby `posting-api/job-board/{token}`，Lever `api.lever.co/v0/postings/{token}?mode=json&limit=25`。
 - `scripts/ats-discovery/probe.ts`：并发/限速/重试/断点续跑；输出 `probe-results.jsonl`。
+
+已核实的事实（2026-11-24）：
+
+- GH `boards-api.greenhouse.io/robots.txt` 为 200，仅 `Disallow: /embed/`；API 路径允许。
+- Lever `api.lever.co/robots.txt` 为 200，`Allow: /` + `Crawl-delay: 1`。
+- Ashby `api.ashbyhq.com/robots.txt` 返回 **401 Unauthorized**；`jobs.ashbyhq.com/robots.txt` 为 200 但只管 board host。Ashby 公开职位 API 无鉴权、官方文档明确供 job board 使用，代码按 `public_api_documented_robots_unavailable` 记录证据并放行；这是**有记录的例外**，不是默认规则。
+- Lever 全量响应对 Palantir 这类大 board 会超 1.9MB/60s；探测固定 `limit=25`，`postingCount` 标 `postingCountIsLowerBound=true`，D05 再取全量。
 
 硬性要求：
 
@@ -292,7 +299,7 @@ curl -L -o tmp/boards/board-roles.csv  https://veresk06.github.io/open-ats-feed/
 pnpm tsx scripts/ats-discovery/probe.ts --input=tmp/boards/candidates.csv --output=tmp/boards/probe-results.jsonl --limit=1000 --concurrency=8
 ```
 
-**验收**：`pnpm test:ats-discovery` 通过（robots allow/disallow/404、三家 JSON fixture、空 board、429 退避）；Stripe/OpenAI/Palantir 三个真实 board 探测成功。
+**验收**：`pnpm test:ats-discovery` 通过（robots allow/disallow/404、三家 JSON fixture、空 board、429 退避）；Stripe/OpenAI/Palantir 三个真实 board 探测成功（2026-11-24 实测：771/483、863/748、25/样本均 active）。
 
 **回滚**：新增文件，直接删分支。
 

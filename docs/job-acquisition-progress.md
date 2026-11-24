@@ -70,7 +70,7 @@
 | B03 | done | 6d9ef85 | 2026-11-24 16:31 | 开关/分支/回滚/账本约定已写入本节 |
 | D01 | done | pending-commit | 2026-11-24 16:35 | all 18,164；engineering 500；sha256 已记 |
 | D02 | done | pending-commit | 2026-11-24 16:38 | 1,500 候选（GH 931/Ashby 296/Lever 273）；331 engineering 优先；上游交集 0 |
-| D03 | pending | — | — | — |
+| D03 | done | pending-commit | 2026-11-24 16:47 | robots/三家解析/限速/断点；单测 10 项；Stripe/OpenAI/Palantir 均 active |
 | D04 | pending | — | — | — |
 | D05 | pending | — | — | — |
 | D06 | pending | — | — | — |
@@ -139,6 +139,14 @@
 | — | — | — | — | — | — |
 
 ## 日志（倒序）
+
+### 2026-11-24 · D03 完成，D04 启动
+
+- 新增 `robots.ts`（RFC 9309 最长匹配、`*`/`$`、Crawl-delay、401/403 三态）、`providers.ts`（GH/Ashby/Lever 字段映射 + 目标地区计数）、`probe.ts`（每 vendor 限速、并发 8、3 次退避、JSONL 断点）、`test-ats-discovery.ts`（10 项）。
+- 实测：GH Stripe 771 岗/483 目标地区；Ashby OpenAI 863/748；Lever Palantir 25 下限样本全目标地区。`tsc --noEmit` 通过。
+- 关键偏差：Ashby API host robots 是 401，不是 200；按“公开文档 API”例外放行并在结果里写明 `public_api_documented_robots_unavailable`，G1 复核。Lever 大 board 全量会超时，探测固定 `limit=25` 并标 lower bound。
+- D04 已后台启动：GH+Lever 1,204 行中取 1,000，输出 `tmp/boards/probe-results-gh-lever.jsonl`。Ashby 296 个因单请求 13s+，留到 GH/Lever 之后单独跑。
+- 并行推进 U01（上游 `ats_boards` 模型与迁移）；D04 不依赖 U01，两者不写同一端。
 
 ### 2026-11-24 · D01-D02 完成
 
