@@ -15,7 +15,7 @@
 | 层 | 在哪跑 | 频率 | 覆盖 | 挂了谁会发现 |
 | --- | --- | --- | --- | --- |
 | **本机巡检 + 邮件告警** | VPS（`liorvix-monitor.timer`） | 每 3 分钟 | 容器、端口、磁盘、数据库连接数、备份新鲜度、公网可达、岗位同步是否在动、写入新鲜度、5xx 比例、证书天数、演练报告是否过期 | 发邮件给 `ALERT_EMAIL_TO`（线上当前 `support@liorvix.com`；未设置才会回退到 `SMTP_ADMIN_EMAIL`） |
-| **外部拨测** | GitHub Actions（`uptime-probe.yml`） | 每 15 分钟 | `https://liorvix.com/api/health`、首页、`https://supabase.liorvix.com/auth/v1/health` | Actions 失败 → GitHub 给仓库 owner 发失败通知 |
+| **外部拨测** | cron-job.org（主力）+ GitHub Actions（备用） | 10 分钟 / 15 分钟 | `https://liorvix.com/api/health`、`https://supabase.liorvix.com/auth/v1/health` | cron-job.org 任务失败 → 邮件到 `support@liorvix.com`；GitHub Actions 失败 → GitHub 给仓库 owner 发通知 |
 | **月度恢复演练** | VPS（`liorvix-restore-drill.timer`） | 每月 1 日 04:30 | dump 能否真的恢复、数据量是否对得上、RLS/函数/属主是否还在 | 演练报告邮件（通过/失败）+ 报告文件 |
 
 三层各自独立：本机巡检挂了不影响外部拨测；外部拨测能发现"整台机器失联"这类本机发不出告警的故障；
@@ -114,7 +114,53 @@ systemctl list-timers liorvix-monitor.timer
 
 ---
 
-## 3. 外部拨测（GitHub Actions）
+## 3. 外部拨测
+
+外部拨测解决的是**本机发不出告警**的那类故障：VPS 整机失联、机房/运营商故障、Cloudflare 到源站链路断了。
+现在有两层，第一层是主力，第二层是备用（可观测性不嫌多，但主力必须是确定能发信的）。
+
+### 3.1 cron-job.org（主力，2026-11-24 已配置并验证）
+
+背景：UptimeRobot 免费档已取消/改收费，改用 [cron-job.org](https://cron-job.org)（官网写明
+"Absolutely free"，靠捐赠运营；免费额度每分钟一次、失败/恢复邮件、SSL 到期提醒、状态页、REST API）。
+
+已配置的两条作业（在 `console.cron-job.org` 里可以看到）：
+
+| 作业 | URL | 间隔 | 判定 | 通知 |
+| --- | --- | --- | --- | --- |
+| Liorvix 主站健康 | `https://liorvix.com/api/health` | 10 分钟 | HTTP 200 | 失败 / 恢复 / SSL 到期，邮件到 `support@liorvix.com` |
+| Liorvix Supabase Auth | `https://supabase.liorvix.com/auth/v1/health` | 10 分钟 | HTTP 200 | 同上 |
+
+已验证它有真的打到源站（2026-11-24，nginx 访问日志；`/api/health` 与 `/auth/v1/health` 各一条，
+稳态间隔约 10 分钟，两条作业发车时间差几十秒）：
+
+```text
+13:37:59  /api/health        200  UA=Mozilla/4.0 (compatible; cron-job.org; ...)   # 手动 Test run
+13:40:20  /api/health        200  UA=cron-job.org
+13:50:19  /api/health        200  UA=cron-job.org
+14:00:35  /api/health        200  UA=cron-job.org
+13:41:58  /auth/v1/health    200  UA=cron-job.org                                 # 手动 Test run
+13:50:20  /auth/v1/health    200  UA=cron-job.org
+14:00:33  /auth/v1/health    200  UA=cron-job.org
+```
+
+**以后怎么确认它还在工作**（比看 cron-job.org 控制台更直接）：
+
+```bash
+grep -h 'cron-job.org' /var/log/nginx/access.log /var/log/nginx/supabase.access.log | tail -5
+# 正常应看到新时间戳 + 200；超过 15 分钟没有任何记录 → 打开 cron-job.org 控制台看作业是否被禁用
+```
+
+注意点：
+
+- cron-job.org 的请求走 Cloudflare 到源站，所以日志里看到的是 Cloudflare 边缘 IP，靠 UA 里的
+  `cron-job.org` 识别，不是靠 IP；
+- 如果以后换域名/换源站 IP，记得同步改 cron-job.org 里两条作业的 URL；
+- 它只能判断"HTTP 200 能否拿到"，不能判断业务逻辑是否正确——那是本机巡检（§2）和 AI 冒烟的事；
+- 告警邮件先到 `support@liorvix.com`，如果哪天收不到，按 §5.1 的顺序查（收件人 → 垃圾箱 →
+  cron-job.org 控制台的作业历史/通知设置）。
+
+### 3.2 GitHub Actions（备用，schedule 尚未生效）
 
 文件：`.github/workflows/uptime-probe.yml`
 
@@ -131,26 +177,21 @@ systemctl list-timers liorvix-monitor.timer
 3. 打开仓库 → **Actions** → `uptime-probe` → **Run workflow** 手动跑一次，确认绿；
 4. 仓库头像 → **Settings → Notifications**，确认 `Actions` 的失败邮件是开的（默认开）。
 
-线上现状（2026-11-24 11:24 验证）：
+线上现状（2026-11-24 13:45 复查）：
 
 - workflow 已注册为 `state=active`，默认分支 `main` 上有该文件（提交 `27d97f3`）；
 - 手动 dispatch 一次跑通：run [45319228895](https://github.com/chaofan1020-hue/rising-path/actions/runs/45319228895)
   在 GitHub runner 上对三个公网端点全部 200（说明外部网络到站点是通的、workflow 本身没问题）；
-- 定时（`event=schedule`）第一次触发可能比 cron 晚几分钟到半小时，用
-  `Actions → uptime-probe` 看有没有 `schedule` 事件的运行即可。
+- **但 `event=schedule` 的定时运行至今 0 次**（文件落到 main 后 2.5 小时内所有整刻钟都没派发），
+  所以它现在只能当"手动可跑的备用检查"，外部拨测的主力已换成 §3.1 的 cron-job.org。
 
 限制与取舍：
 
 - GitHub 的 `schedule` 在高峰期可能延迟几分钟，它是"机器整体失联"的兜底，不是秒级 SLA；
-- 新加入的 schedule 工作流首次触发可能比 cron 晚很久（2026-11-24 实测：文件落到 main 后 1 小时
-  内的 4 个整刻钟都没派发）。**判断是否真的启用的标准**：Actions 里出现 `event=schedule` 的运行，
-  而不是"文件在 main 上"。24 小时仍没有 `event=schedule` 运行，就按下面第 3 条接外部服务兜底。
+- 新加入的 schedule 工作流首次触发可能比 cron 晚很久。**判断是否真的启用的标准**：Actions 里
+  出现 `event=schedule` 的运行，而不是"文件在 main 上"；如果一直不出现，不要依赖它发告警；
 - 私有仓库会消耗 Actions 分钟数：15 分钟一次 ≈ 每月 2880 次 × 约 15 秒 ≈ 720 分钟，免费额度 2000 分钟够用；
   本仓库是公开仓库，不消耗额度。
-- 如果你要秒级、要页面状态、要多地探测，注册 [UptimeRobot](https://uptimerobot.com) 或
-  [BetterStack](https://betterstack.com)（免费档即可），加两个 HTTP(s) 监控：
-  `https://liorvix.com/api/health` 与 `https://supabase.liorvix.com/auth/v1/health`，
-  告警联系人填同一个邮箱。两者不冲突，可以都开。
 
 ---
 

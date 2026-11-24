@@ -1080,7 +1080,7 @@ DUMP_FILE=/opt/liorvix-backups/liorvix-<stamp>.dump \
 脚本已做 JSON 转义。**注意 `--quiet` 模式只在异常时输出**，避免每 5 分钟刷 journal。
 
 **还需要人工接的（外站视角）**：`https://liorvix.com/api/health`、`https://supabase.liorvix.com/auth/v1/health`
-用 Cloudflare/UptimeRobot 加 5 分钟探针 —— DNS 生效后才能加。
+用 cron-job.org 加 5 分钟探针（已配置，见 §12 增量交付与 monitoring-and-drills.md §3.1）。
 数据库层慢查询：`pg_stat_statements` 已装，`select * from pg_stat_statements order by mean_exec_time desc limit 20;`。
 
 ### 11.3 备份/恢复闭环演练（2026-11-23，本机 PG17）
@@ -1321,10 +1321,14 @@ DUMP_FILE=/opt/liorvix-backups/liorvix-<stamp>.dump \
    部署后 5xx=0、访客 401 不变、公网页面 200、浏览器冒烟无 console 错误。
 4. **Git 历史整理**：47 个未提交改动按主题拆成 7 个提交（迁移资产 / AI 选岗与源抓取 / 登录鉴权与
    i18n / 监控与演练 / Workday 429 文档 / 演练修复 / gitignore），`secrets/` 私钥目录已加入忽略。
-5. **已推送 GitHub（2026-11-24 11:24）**：功能分支 `codex/ui-overlay-from-ui-change` 推到
-   `3d10903`（11 个提交）；另外把 `uptime-probe.yml` 单独补到默认分支 `main`（`27d97f3`）——
+5. **已推送 GitHub（2026-11-24 11:24，13:45 补充）**：功能分支 `codex/ui-overlay-from-ui-change` 推到
+   `5a2d7a5`（13 个提交）；另外把 `uptime-probe.yml` 单独补到默认分支 `main`（`27d97f3`）——
    GitHub 只对默认分支的 `schedule` 生效，只放功能分支时"每 15 分钟"永远不会触发。
    已用 workflow dispatch 实跑一次验证：run `45319228895` 在 GitHub runner 上三个端点全部 200。
+   **但 GitHub 的 `event=schedule` 到 13:45 仍未派发过一次**（文件上 main 后 2.5 小时），
+   所以外部拨测主力改为 **cron-job.org**（免费）：2026-11-24 13:37–13:42 已在 nginx 日志中
+   确认它的探测打到 `/api/health` 与 `/auth/v1/health` 且均为 200，告警邮件发 `support@liorvix.com`。
+   GitHub workflow 保留作为手动备用。
 
 ### 遗留待办（不阻塞线上）
 
@@ -1332,9 +1336,11 @@ DUMP_FILE=/opt/liorvix-backups/liorvix-<stamp>.dump \
 2. ~~外部拨测~~ **已完成（2026-11-24）**：三层监控已落地，详见
    [monitoring-and-drills.md](./monitoring-and-drills.md)。
    - 本机 `liorvix-monitor.timer` 每 3 分钟巡检（基础设施 + 公网可达 + 同步/写入新鲜度 + 5xx + 证书 + 演练报告），
-     异常按"立即告警 / 每小时提醒 / 恢复通知"发邮件到 `ALERT_EMAIL_TO`（默认 `SMTP_ADMIN_EMAIL`）；
-   - 外部 `uptime-probe.yml`（GitHub Actions，每 15 分钟）从 GitHub 网络打公网端点，用于发现"整机失联"；
-   - 如需要秒级/多地拨测，再另接 UptimeRobot/BetterStack（步骤见上述文档 §3）。
+     异常按"立即告警 / 每小时提醒 / 恢复通知"发邮件到 `ALERT_EMAIL_TO`（现为 `support@liorvix.com`）；
+   - **外部拨测主力：cron-job.org（免费）**，5 分钟一次打 `/api/health` 与
+     `https://supabase.liorvix.com/auth/v1/health`，失败/恢复/SSL 到期都发邮件，用于发现"整机失联"；
+   - GitHub Actions `uptime-probe.yml`（每 15 分钟）保留为备用：workflow 可手动跑通，但 `schedule`
+     到 2026-11-24 13:45 仍未生效，不能依赖它发告警。
 3. 官方源 Meta / Workday 若干公司连续失败（始于切流前 11-13），按 `docs/job-company-field-connector-runbook.md` 单独立项排查，不要用猜测定截止日期/薪资。
 4. ~~备份恢复演练~~ **已完成自动化（2026-11-24）**：`scripts/migrate/restore-drill.sh` +
    `liorvix-restore-drill.timer`（每月 1 日 04:30）会把最新 dump 恢复进临时库、逐表与生产比对、
