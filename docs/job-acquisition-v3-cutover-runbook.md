@@ -54,6 +54,8 @@ sudo git -C /opt/liorvix rev-parse HEAD
 
 **为什么第 4 项是硬条件**：`jobs` 有 39 个读路径索引，`jobs_v3` 原本只有 7 个。2026-11-25 实测同一筛选查询（`region_market=us`，精确计数）**旧表 75ms、影子表 930ms（12 倍）**。`0157_jobs_v3_read_indexes.sql` 补齐 15 个表达式/部分索引后降到 56–110ms。缺索引时切读 = 让目录页变慢甚至超时。
 
+**证据日志的保留方式（2026-11-25 核实）**：`liorvix-jobs-v3-reconcile.service` 用 `StandardOutput=append:`/`StandardError=append:` 追加写，`/etc/logrotate.conf` 与 `/etc/logrotate.d/*` 都没有匹配该文件的规则、`tmpfiles.d` 也没有，所以它是**只增不减**（约 7 KB/天）。也就是说 24h/48h 证据不会因为轮转被清零；反过来说，**谁手工清空或改名这个文件，证据窗口就会从零重算**。
+
 任一项不满足 → 停止，不进入第 2 步。
 
 ## 2. 方案 A：只切读（推荐先做）

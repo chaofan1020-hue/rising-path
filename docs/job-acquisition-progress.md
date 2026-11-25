@@ -143,6 +143,11 @@
 
 ## 日志（倒序）
 
+### 2026-11-25 · 证据日志保留方式核实
+
+- 担心“24h 证据会不会被日志轮转清零”，核实结果：`liorvix-jobs-v3-reconcile.service` 是 `append:` 追加写，`/etc/logrotate.conf`、`/etc/logrotate.d/*`、`tmpfiles.d` 都没有匹配该文件的规则 → **只增不减**（约 7 KB/天，32 行 ≈ 2.3h 历史）。24h/48h 窗口能自然累积；但手工清空/改名会让证据从零重算，这一点已写进手册。
+- 顺带明确时间线：24h 证据到 **11-26 15:11 +08**，R26 的 48h 观察随之到 **11-27 15:11 +08**；P1 1,500 board 最早只能排在 11-27 之后，且仍需你确认。
+
 ### 2026-11-25 · 一键切换前置门禁（precheck）
 
 - 新增 [scripts/jobs-v3-cutover-precheck.sh](scripts/jobs-v3-cutover-precheck.sh)：一条只读命令跑完 T-1 全部检查（对账不变量全 0、feed 新鲜度 <15min、`source_active == jobs_v3` active、`read_index_gaps=0`、56 列全量一致、DLQ pending=0、24h 证据 `verdict=PASS`），输出 `VERDICT READY_TO_CUT_OVER` 或 `NOT_READY failures=N`。
