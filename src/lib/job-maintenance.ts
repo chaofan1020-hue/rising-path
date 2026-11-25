@@ -1,6 +1,6 @@
 import type { SupabaseClient } from '@supabase/supabase-js';
 import { ExternalFetchError, fetchSafeExternalPage } from '@/lib/safe-external-fetch';
-import { JOBS_FEED_SOURCE } from '@/lib/jobs-feed';
+import { JOBS_FEED_SOURCE, fetchJobForSyncRetry, isClosedItem } from '@/lib/jobs-feed';
 import { isJobDeadlineExpired, resolveJobDeadline } from '@/lib/job-deadline';
 import { parseExperience } from '@/lib/job-connectors/utils';
 import { isAshbyJobUrl, nextLinkFailureCount, shouldCloseAfterLinkFailure, type JobAvailabilityStatus, type JobLinkHealth } from '@/lib/job-link-health';
@@ -13,6 +13,8 @@ interface LinkCandidate {
   id: number;
   company: string;
   job_url: string;
+  source_url: string | null;
+  external_job_id: string | null;
   valid_through: string | null;
   source_system: string | null;
   field_evidence: Record<string, unknown> | null;
@@ -137,6 +139,31 @@ function chunks<T>(values: T[], size: number): T[][] {
   return output;
 }
 
+/**
+ * A 404/410 from the official page is a link signal, not a lifecycle verdict.
+ * The upstream feed remains authoritative for collector jobs, so before a link
+ * check is allowed to close one we ask upstream for that exact record:
+ *   true  -> upstream still lists the role as OPEN, keep it active
+ *   false -> upstream no longer lists it, the close is consistent
+ *   null  -> upstream could not be verified, never close on uncertainty
+ * Legacy rows are excluded by callers: they are not part of the ATS feed and
+ * must not be closed from a link signal at all.
+ */
+async function upstreamStillOpen(job: LinkCandidate): Promise<boolean | null> {
+  if (job.source_system !== JOBS_FEED_SOURCE) return false;
+  try {
+    const item = await fetchJobForSyncRetry({
+      externalJobId: job.external_job_id,
+      sourceUrl: job.source_url || job.job_url,
+      company: job.company,
+    });
+    if (!item) return false;
+    return !isClosedItem(item);
+  } catch {
+    return null;
+  }
+}
+
 export async function maintainJobLifecycle(options: {
   client?: SupabaseClient;
   linkBatchSize?: number;
@@ -235,7 +262,7 @@ export async function maintainJobLifecycle(options: {
     ? { data: [], error: null }
     : await client
       .from('jobs')
-      .select('id,company,job_url,valid_through,source_system,field_evidence,description,requirements,experience_min_years,experience_max_years,experience_text,region')
+      .select('id,company,job_url,source_url,external_job_id,valid_through,source_system,field_evidence,description,requirements,experience_min_years,experience_max_years,experience_text,region')
       .in('id', jobIds)
       .eq('is_active', true)
       .not('job_url', 'is', null);
@@ -244,6 +271,8 @@ export async function maintainJobLifecycle(options: {
     id: job.id,
     company: job.company,
     job_url: job.job_url,
+    source_url: job.source_url,
+    external_job_id: job.external_job_id,
     valid_through: job.valid_through,
     link_check_failures: stateByJobId.get(job.id)?.link_check_failures || 0,
     description: job.description,
@@ -384,11 +413,25 @@ export async function maintainJobLifecycle(options: {
           httpStatus: upstreamStatus,
           previousFailures: job.link_check_failures,
         });
-        const persistedClassification = ashbyHtmlUnverifiable
+        // The link signal alone never closes a collector job: upstream must
+        // agree (or be silent). A 404 from LinkedIn/Deloitte/BCG is often
+        // geo/anti-bot, and closing on it hides roles upstream still lists.
+        const upstreamVerdict = shouldClose ? await upstreamStillOpen(job) : false;
+        const allowedToClose = shouldClose && upstreamVerdict === false;
+        const vetoedByUpstream = shouldClose && upstreamVerdict !== false;
+        const persistedClassification = ashbyHtmlUnverifiable || vetoedByUpstream
           ? { availabilityStatus: 'unknown' as const, linkHealth: 'unknown' as const }
           : isNotFound && !shouldClose
             ? { availabilityStatus: 'unknown' as const, linkHealth: 'unknown' as const }
             : classification;
+        const baseLinkError = requestError instanceof Error ? requestError.message.slice(0, 2_000) : String(requestError).slice(0, 2_000);
+        const linkError = ashbyHtmlUnverifiable
+          ? 'Ashby 私有板：HTML 岗位页返回 404 不构成下架证据，改以上游官方关闭事件为准'
+          : upstreamVerdict === true
+            ? `${baseLinkError}；上游仍标记 OPEN，不据此关闭`
+            : upstreamVerdict === null
+              ? `${baseLinkError}；上游状态无法核验，暂不关闭`
+              : baseLinkError;
         const { error: updateError } = await client
           .from('job_sync_records')
           .update({
@@ -396,16 +439,14 @@ export async function maintainJobLifecycle(options: {
             last_link_status: ashbyHtmlUnverifiable ? null : upstreamStatus || null,
             last_link_http_status: ashbyHtmlUnverifiable ? null : upstreamStatus || null,
             link_check_failures: failures,
-            last_link_error: ashbyHtmlUnverifiable
-              ? 'Ashby 私有板：HTML 岗位页返回 404 不构成下架证据，改以上游官方关闭事件为准'
-              : requestError instanceof Error ? requestError.message.slice(0, 2_000) : String(requestError).slice(0, 2_000),
+            last_link_error: linkError,
             availability_status: persistedClassification.availabilityStatus,
             link_health: persistedClassification.linkHealth,
             availability_checked_at: new Date().toISOString(),
           })
           .eq('job_id', job.id);
         if (updateError) throw updateError;
-        if (shouldClose) {
+        if (allowedToClose) {
           const { error: closeError } = await client
             .from('jobs')
             .update({ is_active: false, is_closed: true, updated_at: new Date().toISOString() })
@@ -415,7 +456,7 @@ export async function maintainJobLifecycle(options: {
         }
         if (isNotFound && !ashbyHtmlUnverifiable) result.links_not_found += 1;
         else result.links_inconclusive += 1;
-        if (shouldClose) result.links_closed += 1;
+        if (allowedToClose) result.links_closed += 1;
       }
     }));
   }
