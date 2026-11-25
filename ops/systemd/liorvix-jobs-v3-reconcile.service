@@ -6,6 +6,7 @@ Wants=network-online.target
 [Service]
 Type=oneshot
 User=root
+EnvironmentFile=-/opt/liorvix/.env.local
 Nice=10
 IOSchedulingClass=best-effort
 IOSchedulingPriority=7
