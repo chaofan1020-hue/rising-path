@@ -19,21 +19,21 @@
 
 | 项 | 值 |
 |---|---|
-| 美国站生产 commit | `eb5cac9`（v3 Phase 0 关闭权威修复；2026-11-25 12:20 +08 部署）；仓库最新 `eb5cac9` |
+| 美国站生产 commit | `8e86313`（Phase 2 steady/catch-up；2026-11-25 13:00 +08 部署）；仓库最新 `8e86313` |
 | 美国站生产目录 | `/opt/liorvix`（git repo；systemd `liorvix.service` 跑 `node dist/server.js`） |
 | 美国站服务重启点 | 2026-11-24 19:41:12 +08；部署前 release `924ae747a3cc8d819bf6a812ebea5a6ee277e09e` |
 | 上游 commit | 无 git；版本证据 = 文件哈希 + 镜像 `global-jobs-api:latest` ID `fc66e4c34...`（pre-u07 `342cc0aa7c26`） |
 | 上游目录 | `/opt/global-jobs` |
-| 上游镜像 tag（回滚点） | `global-jobs-api/worker/beat:pre-u07` = `342cc0aa7c26` |
+| 上游镜像 tag（回滚点） | API 当前 `1c7d1c82348a`；旧 API 镜像 `fc66e4c34ed2`（仍存在，可 tag 回 `global-jobs-api:latest`）；pre-u07 `342cc0aa7c26` |
 | 上游迁移机制 | Alembic（`alembic.ini` + `migrations/versions`，当前 head `0018_feed_v2.py`） |
 | 上游关键文件哈希 | connectors `856561c3…`、tasks `06e27ebd…`、models `e0a9b947…`、services `48eab560…` |
-| 上游代码备份 | `/opt/global-jobs/ops-backups/u07-20261124T104555Z/`（含 sha256） |
+| 上游代码备份 | `/opt/global-jobs/ops-backups/u07-20261124T104555Z/`（含 sha256）；scope=ats 备份 `/opt/global-jobs/ops-backups/v3-scope-ats-20261125T044029Z/main.py` |
 | 上游 DB 备份 | `/opt/global-jobs/ops-backups/b01-db-20261124T082748Z.dump`（1.5G，sha256 `165a0b5c…`；DB 7.3G） |
 | 美国站最新迁移 | `0141_job_feed_v2_columns.sql`（含 `jobs_listing` 重建、display 索引） |
 | 基线文件 | `tmp/baseline-20261124.json` |
 | Supabase 备份时间点 | `/opt/liorvix-backups/liorvix-20261124-032117.dump`（444MB；DB 容器 2026-11-23 03:15 UTC 起） |
 | Feed worker 实际配置 | `JOBS_AUTO_WORKER=true`、`JOBS_SYNC_INTERVAL_MINUTES=5`；**systemd jobs timers 全部 disabled**，不要按 timer 文档推断 |
-| 当前生产事实 | 2026-11-25 04:30 UTC：US active **199,209**（v2 `source_key` 87,240 / legacy 111,969）；上游 500 active board、`source_key` 岗位 127,869 OPEN / 8 CLOSED；feed 已连续 success、0 row failures；详见下方 v3 Phase 0 日志 |
+| 当前生产事实 | 2026-11-25 05:00 UTC：US active **199,209**（v2 `source_key` 87,240 / legacy 111,969）；上游 539,649 行，`scope=ats` **127,900**（8 CLOSED）/ legacy 411,749；feed 已切 `scope=ats` + steady/catch-up，最近 run `195225` success、0 row failure，`caught_up_at=05:00:25 UTC`；详见下方 v3 Phase 0/1/2 日志 |
 
 ## 执行约定（B03）
 
@@ -89,7 +89,7 @@
 | S04 | done | c5b979b | 2026-11-24 19:41 | `/api/jobs` 默认 `display_status in (listed,enriched)`；closed/all 保留；jobs_listing 重建 |
 | S05 | done | c5b979b | 2026-11-24 20:06 | 只读审计：`ats:*` 0、跨来源重复 0；53 组通用 URL 14,597 额外行，不按 URL 去重 |
 | V01 | done | c5b979b | 2026-11-24 19:50 | 50 board 44,234 岗位；US 27,697 v2；20/20 官方 URL；0 误关；G1 |
-| V02 | in_progress | eb5cac9 | — | 500 board、127,869 source OPEN / 8 合法 CLOSED；30/25,949 run 失败（99.884%）、P95 29.2min；US feed 因 legacy null source_tier 卡死已由 f163324/3767e0f 修复并追平；11-25 发现跨 lane 关闭漏洞，eb5cac9 已按 `source_key` 限定 close；1,942 条 legacy 关闭审计中 73 条上游仍 OPEN 已恢复；48h 观察至 2026-11-26 11:50 UTC |
+| V02 | in_progress | 8e86313 | — | 500 board、上游 `scope=ats` 127,900（8 合法 CLOSED）；US feed 因 legacy null source_tier 卡死已由 f163324/3767e0f 修复并追平；11-25 发现跨 lane 关闭漏洞，eb5cac9 已按 `source_key` 限定 close；1,942 条 legacy 关闭审计中 73 条上游仍 OPEN 已恢复；09f40ed 已切 `scope=ats`，连续 3 轮 success；8e86313 已上 steady/catch-up + `caught_up_at`；48h 观察至 2026-11-26 11:50 UTC |
 | D07 | done | a1cd627 | 2026-11-24 21:06 | 探测 1,440：active 1,245、隔离 153（10.6%）；总 active 2,147；重冻结 1,000（GH630/Ashby252/Lever118），token fallback 0 |
 | U08 | pending | — | — | — |
 | U09 | pending | — | — | — |
@@ -142,6 +142,29 @@
 
 ## 日志（倒序）
 
+### 2026-11-25 · v3 Phase 3 回填与 Phase 4 影子写入
+
+- 迁移 `0143_jobs_v3_schema.sql` 建 `jobs_v3`：独立序列/PK、`lane`、`closure_evidence`、`canonical_job_id`、ATS 唯一索引、active 读索引、RLS。
+- 迁移 `0144_jobs_v3_backfill.sql` 回填 active：**199,185 行**（ATS 87,244 / legacy 111,941）；全字段与源库比对 **0 mismatch**，核心字段空值 0；v3 总大小 **2.1 GB**，剩余磁盘 **11 GB**。
+- R15 决策：53 组 canonical URL 是通用申请入口，不是重复岗位，**不做物理合并**；ATS 身份唯一索引冲突 0。
+- 迁移 `0145_jobs_v3_shadow_write.sql`：`jobs` 触发器把后续变更镜像到 v3，异常只 warning、不阻断源写入；回填后一次性对齐 380 行，当前 mismatch=0。
+- 读取开关：`jobReadTable()` + `/api/jobs/stats` 支持 `JOBS_READ_SOURCE=v3`；默认 `jobs`，其它读 API 未切。
+- 未完成：关闭证据/tier/地区逐项对账、1,500 board 压测、完整读路径切换与回滚演练。
+
+### 2026-11-25 · v3 Phase 2 steady/catch-up 与追平状态
+
+- 迁移 `0142_job_feed_catchup_state.sql`：`job_sync_state` 增加 `last_page_at`、`caught_up_at`；已在生产应用，`caught_up_at` 从旧 `last_incremental_success_at` 回填。
+- `8e86313`：cursor 为空走 **steady**（最多 2 页），cursor 非空走 **catch-up**（30 页 / 4 分钟）；每页写 `last_page_at`，`has_more=false` 才写 `caught_up_at` + `last_incremental_success_at`。
+- `/api/jobs/sync-feed` 新鲜度优先读 `caught_up_at`；`last_page_at` 作为 catch-up 心跳。部署后 `195225` success、0 row failure，`last_page_at=caught_up_at=05:00:25 UTC`。
+- 未完成：独立 upstream watermark 未持久化；DLQ 仍只沿用 `job_sync_failures`，未做自动退避/最大重试列。
+
+### 2026-11-25 · v3 Phase 1 ATS scope 与关闭权威
+
+- 上游 `app/main.py` 增加 `scope=ats`（只保留 `source_key is not null`），默认 `scope=all` 不变；备份 `ops-backups/v3-scope-ats-20261125T044029Z/main.py`，`py_compile` 通过，API 镜像 `1c7d1c82348a` 重建并重启。
+- 实测上游 539,649 行 / 411,749 legacy → `scope=ats` **127,900** 行，8 个合法 CLOSED 仍在；接口返回 `contract_version=jobs.v2`，首条 ATS close 带 `source_key=greenhouse:doordashusa`。
+- 美国站 `09f40ed` 默认请求 `scope=ats`，`JOBS_FEED_SCOPE=all` 为回滚开关；部署后 `195203` run success、0 row failures。
+- 关闭权威：`eb5cac9` 后 ATS close 只能命中同 `source_key` 行；legacy close 被跳过。R07 核心完成。
+
 ### 2026-11-25 · v3 Phase 0 备份、基线与关闭权威修复
 
 - 生产备份：`/opt/liorvix-backups/jobs-v3-pre-20261125-040722.dump`，449 MB，`pg_restore -l` 1,637 项，sha256 `6320a3e9…ba2df`；基线 `tmp/v3-baseline.json`（04:08 UTC）。
@@ -150,7 +173,7 @@
 - 修复 `eb5cac9`：close 事件必须带 `source_key`，并按 `source_key` 过滤目标行；无 `source_key` 的 legacy close 直接跳过。部署后新 feed run `closed=0`，legacy 不再被 ATS close 跨 lane 关闭。
 - 全量审计 2026-11-25 00:00 以来 1,942 条 legacy 关闭：73 条上游仍 OPEN 已恢复；其余上游 CLOSED，属于合法关闭或待链路复核。04:26/04:27 两条 HTTP 404 关闭保留，属于官方链接权威关闭，不恢复。
 - 新增 `/api/jobs/sync-feed` 的 `lag_minutes`、`heartbeat_age_minutes`、`stale`、`catching_up`；`healthy` 不再仅凭“worker 最近动过”为真（`4d3a592`）。
-- R03 外部告警仍待接；R04 只完成“关闭事件冻结”，legacy 新增写入冻结仍待做。下一步进入 Phase 1 上游 `scope=ats`。
+- R03 外部告警仍待接；R04 已完成 legacy feed 写入/关闭冻结（ATS feed 仍正常 success）。下一步进入 Phase 1 上游 `scope=ats`。
 
 ### 2026-11-24 · D07 P1 扩量探测与冻结
 

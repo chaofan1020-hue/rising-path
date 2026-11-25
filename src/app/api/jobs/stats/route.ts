@@ -2,6 +2,7 @@ import { NextResponse } from 'next/server';
 import { getSupabaseClient } from '@/storage/database/supabase-client';
 import { targetRegionPostgrestClauses } from '@/lib/job-region-scope';
 import { requireJobAccess } from '@/lib/job-access';
+import { jobReadTable } from '@/lib/job-read-source';
 
 // GET /api/jobs/stats - 获取岗位统计数据
 //
@@ -31,7 +32,7 @@ async function countJobs(
   options: { targetIndex: boolean; since?: string },
 ): Promise<number> {
   let query = client
-    .from('jobs')
+    .from(jobReadTable())
     .select('id', { count: 'planned', head: true })
     .eq('is_active', true);
   query = options.targetIndex
