@@ -18,6 +18,16 @@
 
 ## 1. 前置检查（T-1 天）
 
+一条命令跑完下面 6 项，输出 `VERDICT READY_TO_CUT_OVER` 才算过线（只读，不写库、不重启、不翻开关）：
+
+```sh
+sudo sh /opt/liorvix/scripts/jobs-v3-cutover-precheck.sh
+```
+
+它逐项检查：对账不变量全 0、feed 新鲜度 <15min、`source_active` == `jobs_v3` active、`read_index_gaps=0`、56 列全量一致、DLQ pending=0、24h 证据 `verdict=PASS`。
+
+需要手工复核时按下面原命令跑：
+
 ```sh
 # 1) 24h / 48h 证据（必须 PASS）
 sudo sh /opt/liorvix/scripts/jobs-v3-evidence.sh /var/log/liorvix-jobs-v3-reconcile.log 24 \

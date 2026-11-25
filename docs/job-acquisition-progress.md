@@ -143,6 +143,13 @@
 
 ## 日志（倒序）
 
+### 2026-11-25 · 一键切换前置门禁（precheck）
+
+- 新增 [scripts/jobs-v3-cutover-precheck.sh](scripts/jobs-v3-cutover-precheck.sh)：一条只读命令跑完 T-1 全部检查（对账不变量全 0、feed 新鲜度 <15min、`source_active == jobs_v3` active、`read_index_gaps=0`、56 列全量一致、DLQ pending=0、24h 证据 `verdict=PASS`），输出 `VERDICT READY_TO_CUT_OVER` 或 `NOT_READY failures=N`。
+- 线上实测：6 项 PASS、1 项 `FAIL evidence_24h verdict=WAITING reason=clean_streak_shorter_than_window` → `NOT_READY failures=1`，正是“其余都就绪、只等 24h 证据”的预期状态。
+- 两处小坑已修并写进测试：`jobs-v3-evidence.sh` 部署后没有 +x（要用 `-f` + `sh` 调）；`docker exec` 缺 `-i` 会让 psql 空跑并假成功。
+- 手册第 1 节改成“先跑这一条”，手工命令保留在下面备查。
+
 ### 2026-11-25 · 全列审计与投影级等价
 
 - Watchdog 每 tick 只比 8 列（title/company/region/display_status/source_key/job_url/apply_url/is_active），掉别的列不会报警。新增 [scripts/jobs-v3-column-audit.sh](scripts/jobs-v3-column-audit.sh)：按 `information_schema` 枚举 `jobs` 与 `jobs_v3` 的**全部 56 个共享列**，逐列 `is distinct from` 比对 active 行，实测 `total_mismatches=0`，非零则 `raise exception` 并 exit 1；已随 `f4df19a` 部署到 `/opt/liorvix/scripts/`，线上跑通 exit 0。

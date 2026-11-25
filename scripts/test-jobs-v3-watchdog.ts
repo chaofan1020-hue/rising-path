@@ -77,4 +77,19 @@ assert.ok(
   'docker exec without -i swallows the SQL and reports a false OK',
 );
 
+/** The pre-cutover gate must cover every T-1 check and must never write. */
+const precheck = fs.readFileSync(path.join(process.cwd(), 'scripts/jobs-v3-cutover-precheck.sh'), 'utf8');
+for (const needle of [
+  'missing_evidence',
+  'read_index_gaps',
+  'jobs-v3-column-audit.sh',
+  'job_sync_failures',
+  'jobs-v3-evidence.sh',
+  'VERDICT READY_TO_CUT_OVER',
+  'VERDICT NOT_READY',
+]) {
+  assert.ok(precheck.includes(needle), `precheck must check ${needle}`);
+}
+assert.ok(!/\b(update|insert|delete|alter|drop)\b/i.test(precheck.replace(/^#.*$/gm, '')), 'precheck must stay read-only');
+
 console.log('jobs v3 watchdog tests passed');
