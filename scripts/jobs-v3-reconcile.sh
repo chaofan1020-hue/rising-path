@@ -42,14 +42,34 @@ select
   (select coalesce(r.row_failures, 0)
     from public.job_sync_runs r
     where r.source_system = 'collector_feed'
-    order by r.id desc limit 1)
+    order by r.id desc limit 1),
+  -- Read-path index parity. jobs carried 39 read indexes while jobs_v3 had 7,
+  -- and a filtered listing was 12x slower on the shadow table (930ms vs 75ms).
+  -- 0157 mirrors them; this counts the critical ones so a restore or a future
+  -- table rebuild cannot quietly lose them before JOBS_READ_SOURCE=v3.
+  (select count(*) from (values
+      ('jobs_v3_active_market_created_idx'),
+      ('jobs_v3_active_market_feed_idx'),
+      ('jobs_v3_active_region_group_created_idx'),
+      ('jobs_v3_active_region_group_feed_idx'),
+      ('jobs_v3_active_updated_created_id_idx'),
+      ('jobs_v3_active_created_idx'),
+      ('jobs_v3_target_active_created_idx'),
+      ('jobs_v3_target_active_feed_idx'),
+      ('jobs_v3_active_job_type_feed_idx'),
+      ('jobs_v3_active_title_trgm_idx'),
+      ('jobs_v3_active_company_trgm_idx')
+    ) as req(name)
+    where not exists (
+      select 1 from pg_indexes i
+      where i.schemaname = 'public' and i.tablename = 'jobs_v3' and i.indexname = req.name))
 ")"
 
-IFS='|' read -r source_active v3_total ats legacy missing extra bad_ats_key field_mismatches inactive_shadow missing_evidence feed_age_minutes consecutive_failures row_failures <<EOF
+IFS='|' read -r source_active v3_total ats legacy missing extra bad_ats_key field_mismatches inactive_shadow missing_evidence feed_age_minutes consecutive_failures row_failures read_index_gaps <<EOF
 $row
 EOF
 
-echo "$(date -u +%Y-%m-%dT%H:%M:%SZ) source_active=$source_active v3_total=$v3_total ats=$ats legacy=$legacy missing=$missing extra=$extra bad_ats_key=$bad_ats_key field_mismatches=$field_mismatches inactive_shadow=$inactive_shadow missing_evidence=$missing_evidence feed_age_minutes=$feed_age_minutes consecutive_failures=$consecutive_failures row_failures=$row_failures"
+echo "$(date -u +%Y-%m-%dT%H:%M:%SZ) source_active=$source_active v3_total=$v3_total ats=$ats legacy=$legacy missing=$missing extra=$extra bad_ats_key=$bad_ats_key field_mismatches=$field_mismatches inactive_shadow=$inactive_shadow missing_evidence=$missing_evidence feed_age_minutes=$feed_age_minutes consecutive_failures=$consecutive_failures row_failures=$row_failures read_index_gaps=$read_index_gaps"
 
 reasons=""
 if [ "$missing" -ne 0 ] || [ "$extra" -ne 0 ] || [ "$bad_ats_key" -ne 0 ] \
@@ -65,6 +85,9 @@ if [ "$consecutive_failures" -ne 0 ]; then
 fi
 if [ "$row_failures" -ne 0 ]; then
   reasons="$reasons latest_run_row_failures_${row_failures}"
+fi
+if [ "$read_index_gaps" -ne 0 ]; then
+  reasons="$reasons v3_read_index_gaps_${read_index_gaps}"
 fi
 
 if [ -n "$reasons" ]; then

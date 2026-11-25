@@ -30,6 +30,35 @@ assert.match(reconcile, /field_mismatches.*-ne 0/);
 assert.match(reconcile, /missing_evidence.*-ne 0/);
 assert.match(reconcile, /JOBS_FEED_ALERT_MAX_AGE_MINUTES/);
 
+/**
+ * Read-path index parity: jobs_v3 must keep the expression indexes the listing
+ * query needs. Missing them made a filtered listing 12x slower (930ms vs 75ms),
+ * so a restore or rebuild that drops them has to raise an alert before anyone
+ * flips JOBS_READ_SOURCE=v3.
+ */
+assert.match(reconcile, /read_index_gaps/, 'watchdog must report v3 read index gaps');
+assert.match(reconcile, /jobs_v3_active_market_created_idx/, 'watchdog must check the market index');
+assert.match(reconcile, /jobs_v3_active_title_trgm_idx/, 'watchdog must check the trgm search index');
+assert.match(reconcile, /v3_read_index_gaps_/, 'missing read indexes must produce an alert reason');
+
+const migration = fs.readFileSync(path.join(process.cwd(), 'supabase/migrations/0157_jobs_v3_read_indexes.sql'), 'utf8');
+for (const name of [
+  'jobs_v3_active_market_created_idx',
+  'jobs_v3_active_market_feed_idx',
+  'jobs_v3_active_region_group_created_idx',
+  'jobs_v3_active_region_group_feed_idx',
+  'jobs_v3_active_updated_created_id_idx',
+  'jobs_v3_active_created_idx',
+  'jobs_v3_target_active_created_idx',
+  'jobs_v3_target_active_feed_idx',
+  'jobs_v3_active_job_type_feed_idx',
+  'jobs_v3_active_title_trgm_idx',
+  'jobs_v3_active_company_trgm_idx',
+]) {
+  assert.ok(reconcile.includes(name), `watchdog must list ${name}`);
+  assert.ok(migration.includes(name), `0157 must create ${name}`);
+}
+
 /** The evidence summarizer must flag a short clean streak instead of passing. */
 const evidence = fs.readFileSync(path.join(process.cwd(), 'scripts/jobs-v3-evidence.sh'), 'utf8');
 assert.match(evidence, /verdict=WAITING/);
