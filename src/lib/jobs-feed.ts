@@ -513,6 +513,7 @@ export function normalizeFeedItem(item: JobsFeedItem): JobSyncRecord | null {
   const company = text(item.company_name);
   const sourceUrl = text(item.source_url);
   if (!title || !company || !sourceUrl) return null;
+  if (JOBS_FEED_V2_CLIENT_ENABLED && !text(item.source_key)) return null;
 
   // Normalize rich text before writing it to the shared jobs table. The feed
   // frequently returns HTML (and sometimes encoded HTML), so keeping the raw

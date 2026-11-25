@@ -49,6 +49,7 @@ async function main() {
   assert.equal(normalizeSkipReason(item()), null);
   assert.equal(normalizeSkipReason(item({ source_key: null })), 'not_ats_source');
   assert.equal(normalizeSkipReason(item({ title: '' })), 'missing_title');
+  assert.equal(normalizeFeedItem(item({ source_key: null })), null);
 
   // The daily heartbeat must not churn the content hash.
   assert.equal(jobContentHash(record), jobContentHash({ ...record, last_seen_at: '2026-11-25T10:00:00.000Z' }));
