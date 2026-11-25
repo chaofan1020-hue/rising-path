@@ -751,6 +751,11 @@ export function isClosedItem(item: JobsFeedItem, now = Date.now()): boolean {
 async function fetchPage(cursor?: string, since?: string, includeClosed = true, companyId?: string): Promise<FeedPage> {
   const config = getFeedConfig();
   const params = new URLSearchParams({ include_closed: String(includeClosed) });
+  // The downstream source is ATS-only in v2. Keeping the filter server-side
+  // reduces the feed from ~540k rows to ~128k and prevents legacy rows from
+  // occupying pages, while `JOBS_FEED_SCOPE=all` is the explicit rollback.
+  const scope = (process.env.JOBS_FEED_SCOPE || (JOBS_FEED_V2_CLIENT_ENABLED ? 'ats' : 'all')).toLowerCase();
+  if (scope === 'ats') params.set('scope', 'ats');
   if (cursor) params.set('cursor', cursor);
   if (since) params.set('since', since);
   if (companyId) params.set('company_id', companyId);
