@@ -34,7 +34,7 @@
 | 基线文件 | `tmp/baseline-20261124.json` |
 | Supabase 备份时间点 | `/opt/liorvix-backups/liorvix-20261124-032117.dump`（444MB；DB 容器 2026-11-23 03:15 UTC 起） |
 | Feed worker 实际配置 | `JOBS_AUTO_WORKER=true`、`JOBS_SYNC_INTERVAL_MINUTES=5`；**systemd jobs timers 全部 disabled**，不要按 timer 文档推断 |
-| 当前生产事实 | 2026-11-25 15:30 +08：US active **199,196**；v3 `jobs_v3` total 199,235（ATS 87,273 / legacy 111,962；active gap 0、字段 mismatch 0；39 条关闭行 evidence 全覆盖）；上游 `scope=ats` 127,900（8 CLOSED）；feed 最近 success、0 row failure；**DLQ pending 0**（dead 3,768 审计 / resolved 14）；对账 timer 每 5 分钟运行，24h 证据基线 `2026-11-25T07:11:43Z`；生产 commit `fca4cfa`（回滚点 `82e3947`）；DB 7.75 GB / 剩余 11 GB |
+| 当前生产事实 | 2026-11-25 16:00 +08：US active **199,211**；v3 `jobs_v3` total 199,250（ATS 87,288 / legacy 111,962；active gap 0、字段 mismatch 0；`v3_active_only=0`、`dup_ats_keys=0`、`ats_missing_key=0`；39 条关闭行 evidence 全覆盖）；`jobs_v3` 读索引 43 个（`read_index_gaps=0`）；feed 最近 success、0 row failure、age 4.6min；**DLQ pending 0**（dead 3,768 审计 / resolved 14）；对账 timer 每 5 分钟运行，24h 证据基线 `2026-11-25T07:11:43Z`（完成 `2026-11-26T07:11:43Z`，当前 WAITING 0.76/24h）；生产 commit `19ec486`（回滚点 `fca4cfa`）；DB 7.9 GB / 剩余 11 GB |
 
 ## 执行约定（B03）
 
