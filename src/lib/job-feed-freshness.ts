@@ -3,6 +3,8 @@ export const JOB_FEED_HEARTBEAT_ACTIVE_MS = 20 * 60_000;
 
 export interface JobFeedFreshnessState {
   last_incremental_success_at: string | null;
+  caught_up_at?: string | null;
+  last_page_at?: string | null;
   updated_at: string;
   consecutive_failures: number;
 }
@@ -32,8 +34,11 @@ export function describeJobFeedFreshness(
   state: JobFeedFreshnessState,
   now = Date.now(),
 ): JobFeedFreshness {
-  const lagMinutes = ageMinutes(state.last_incremental_success_at, now);
-  const heartbeatAgeMinutes = ageMinutes(state.updated_at, now);
+  const completedAt = state.caught_up_at || state.last_incremental_success_at;
+  const lagMinutes = ageMinutes(completedAt, now);
+  // `last_page_at` is the catch-up heartbeat; fall back to `updated_at` for
+  // rows created before the migration.
+  const heartbeatAgeMinutes = ageMinutes(state.last_page_at || state.updated_at, now);
   const stale = lagMinutes === null || lagMinutes * 60_000 > JOB_FEED_MAX_SUCCESS_AGE_MS;
   const catchingUp = heartbeatAgeMinutes !== null
     && heartbeatAgeMinutes * 60_000 < JOB_FEED_HEARTBEAT_ACTIVE_MS;

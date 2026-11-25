@@ -77,6 +77,8 @@ export async function GET(request: NextRequest) {
     const state = await getJobFeedState();
     const freshness = describeJobFeedFreshness({
       last_incremental_success_at: state.last_incremental_success_at,
+      caught_up_at: state.caught_up_at,
+      last_page_at: state.last_page_at,
       updated_at: state.updated_at,
       consecutive_failures: state.consecutive_failures,
     });

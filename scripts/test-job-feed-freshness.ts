@@ -35,4 +35,17 @@ result = describeJobFeedFreshness(state('2026-11-25T04:15:00.000Z', '2026-11-25T
 assert.equal(result.catching_up, false);
 assert.equal(result.healthy, true);
 
+// `caught_up_at` is the completion proof; `last_page_at` is only liveness.
+result = describeJobFeedFreshness({
+  last_incremental_success_at: '2026-11-25T04:15:00.000Z',
+  caught_up_at: '2026-11-25T03:15:00.000Z',
+  last_page_at: '2026-11-25T04:19:00.000Z',
+  updated_at: '2026-11-25T03:00:00.000Z',
+  consecutive_failures: 0,
+}, now);
+assert.equal(result.lag_minutes, 65);
+assert.equal(result.heartbeat_age_minutes, 1);
+assert.equal(result.stale, true);
+assert.equal(result.healthy, false);
+
 console.log('job-feed-freshness: ok');

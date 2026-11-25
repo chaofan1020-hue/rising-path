@@ -21,6 +21,8 @@ export interface JobFeedState {
   reconcile_open_seen: number;
   last_incremental_success_at: string | null;
   last_reconcile_success_at: string | null;
+  last_page_at: string | null;
+  caught_up_at: string | null;
   last_error: string | null;
   consecutive_failures: number;
   last_attempted_at: string | null;
@@ -246,16 +248,26 @@ export async function runJobFeedSync(options: {
   if (mode === 'reconcile' && process.env.JOBS_ALLOW_FULL_RECONCILE !== 'true') {
     throw new Error('完整岗位对账默认关闭。它仅用于人工恢复审计，须显式设置 JOBS_ALLOW_FULL_RECONCILE=true');
   }
-  const incrementalPolicy = getIncrementalSyncPolicy();
-  const maxPages = Math.min(
-    Math.max(options.maxPages ?? (mode === 'reconcile' ? 1000 : incrementalPolicy.maxPages), 1),
-    mode === 'reconcile' ? 1000 : MAX_INCREMENTAL_PAGES,
-  );
   const owner = randomUUID();
   // `job_sync_state.source_system` is varchar(50). Keep company cursors
   // isolated without exceeding that persisted key limit.
   const stateSourceSystem = options.companyId ? `feed:company:${options.companyId}` : JOBS_FEED_SOURCE;
   const state = await getJobFeedState(client, stateSourceSystem);
+  const incrementalPolicy = getIncrementalSyncPolicy();
+  // A non-null cursor means the previous round stopped before the feed ended.
+  // Drain that backlog with the full catch-up budget; a null cursor means the
+  // normal steady path, which should stay small so one slow page cannot turn
+  // the 5-minute worker into a permanent catch-up loop.
+  const catchingUp = mode === 'incremental' && Boolean(state.cursor);
+  const defaultMaxPages = mode === 'reconcile'
+    ? 1000
+    : catchingUp
+      ? incrementalPolicy.maxPages
+      : Math.min(2, incrementalPolicy.maxPages);
+  const maxPages = Math.min(
+    Math.max(options.maxPages ?? defaultMaxPages, 1),
+    mode === 'reconcile' ? 1000 : MAX_INCREMENTAL_PAGES,
+  );
   await claimLease(client, owner, stateSourceSystem);
   const runId = await recordJobSyncRunStart(client, {
     source_system: stateSourceSystem,
@@ -406,20 +418,26 @@ export async function runJobFeedSync(options: {
         throw new Error(`岗位同步第 ${aggregate.pages} 页发生 ${page.fatal_failures} 个页面级失败，已保留游标等待重试`);
       }
 
+      const pageAt = new Date().toISOString();
       if (mode === 'reconcile') {
         await updateState(client, {
           reconcile_cursor: page.has_more ? page.next_cursor : null,
           reconcile_pages: state.reconcile_pages + aggregate.pages,
           reconcile_open_seen: state.reconcile_open_seen + aggregate.open_seen,
+          last_page_at: pageAt,
+          ...(page.has_more ? {} : { caught_up_at: pageAt }),
           last_error: null,
           consecutive_failures: 0,
         }, stateSourceSystem);
       } else {
         await updateState(client, {
           cursor: page.has_more ? page.next_cursor : null,
+          last_page_at: pageAt,
           last_error: null,
           consecutive_failures: 0,
-          ...(page.has_more ? {} : { last_incremental_success_at: new Date().toISOString() }),
+          ...(page.has_more
+            ? {}
+            : { last_incremental_success_at: pageAt, caught_up_at: pageAt }),
         }, stateSourceSystem);
       }
 
