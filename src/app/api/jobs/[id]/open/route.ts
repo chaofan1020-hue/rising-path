@@ -4,6 +4,7 @@ import { ExternalFetchError, fetchSafeExternalPage } from '@/lib/safe-external-f
 import { looksLikeClosedJobPage } from '@/lib/job-maintenance';
 import { nextLinkFailureCount, shouldCloseAfterLinkFailure } from '@/lib/job-link-health';
 import { hasMatchingPhenomDetailPayload, isRegisteredPhenomJobUrl } from '@/lib/job-connectors';
+import { jobReadTable } from '@/lib/job-read-source';
 
 const LINK_CHECK_MAX_AGE_MS = 30 * 60 * 1000;
 
@@ -21,7 +22,7 @@ export async function GET(
 
   const client = getSupabaseClient();
   const { data: job, error } = await client
-    .from('jobs')
+    .from(jobReadTable())
     .select('id,company,job_url,source_system,is_active')
     .eq('id', id)
     .maybeSingle();

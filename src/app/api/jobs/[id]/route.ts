@@ -13,6 +13,7 @@ import { extractOfficialJobDetails, isJobContentShell, officialEvercoreDetailUrl
 import { parseFeedPostedAt } from '@/lib/jobs-feed';
 import { hasMatchingPhenomDetailPayload, isRegisteredPhenomJobUrl } from '@/lib/job-connectors';
 import { requireJobAccess } from '@/lib/job-access';
+import { jobReadTable } from '@/lib/job-read-source';
 
 // 本地 logo 缓存
 let localLogosCache: Record<string, string> = {};
@@ -74,7 +75,7 @@ export async function GET(
     }
 
     const { data, error } = await client
-      .from('jobs')
+      .from(jobReadTable())
       .select('*, company_info:company_config(id, company_name, careers_page, logo_url, short_desc, full_desc, headquarters, industry)')
       .eq('id', id)
       .eq('is_active', true)
