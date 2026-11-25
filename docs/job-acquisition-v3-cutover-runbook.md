@@ -31,9 +31,15 @@ sudo sh /opt/liorvix/scripts/jobs-v3-evidence.sh /var/log/liorvix-jobs-v3-reconc
 sudo systemctl list-timers liorvix-db-backup.timer
 ls -lh /opt/liorvix/backups | tail -3
 
-# 4) 记录回滚点
+# 4) 读路径索引齐（0157 已建，watchdog 每 5 分钟检查）
+#    期望输出里 read_index_gaps=0；不为 0 就先补索引再谈切读
+sudo tail -1 /var/log/liorvix-jobs-v3-reconcile.log
+
+# 5) 记录回滚点
 sudo git -C /opt/liorvix rev-parse HEAD
 ```
+
+**为什么第 4 项是硬条件**：`jobs` 有 39 个读路径索引，`jobs_v3` 原本只有 7 个。2026-11-25 实测同一筛选查询（`region_market=us`，精确计数）**旧表 75ms、影子表 930ms（12 倍）**。`0157_jobs_v3_read_indexes.sql` 补齐 15 个表达式/部分索引后降到 56–110ms。缺索引时切读 = 让目录页变慢甚至超时。
 
 任一项不满足 → 停止，不进入第 2 步。
 
@@ -77,12 +83,33 @@ sudo systemctl restart liorvix
 
 ```sh
 curl -s -o /dev/null -w 'health=%{http_code}\n' http://127.0.0.1:5000/
-curl -s -o /dev/null -w 'jobs_list=%{http_code}\n' 'http://127.0.0.1:5000/api/jobs?limit=5'
-curl -s 'http://127.0.0.1:5000/api/jobs?limit=5' | head -c 300
-curl -s -o /dev/null -w 'stats=%{http_code}\n' http://127.0.0.1:5000/api/jobs/stats
-# 取列表里任意 id，验详情与 open
-curl -s -o /dev/null -w 'detail=%{http_code}\n' http://127.0.0.1:5000/api/jobs/<id>
+# /api/jobs 与 /api/jobs/stats 都是“登录后权益”，未带凭证时 401 是**预期**，
+# 只能证明路由活着，不能证明读的是 v3。真正的读切换证据看下面的计数器。
+curl -s -o /dev/null -w 'jobs_unauth=%{http_code}\n' 'http://127.0.0.1:5000/api/jobs?limit=5'
 ```
+
+读路径是否真的切过去，用表级计数器证明（切换前记一次基线，切换后再记一次）：
+
+```sh
+sudo docker exec liorvix-supabase-db psql -U postgres -d postgres -At -F ' | ' -c "
+select relname, idx_scan, seq_scan from pg_stat_user_tables
+where relname in ('jobs','jobs_v3') order by relname;"
+```
+
+判据：切换后 `jobs_v3.idx_scan` 持续增长、`jobs.idx_scan` 基本冻结（feed 写入仍打在 `jobs`，所以只冻结读扫描，不是完全不动）。若两边都没动，说明请求没进来，不要当成切换成功。
+
+另外用 service-role 直连 PostgREST 做一次等价性抽查（这条与 API 无关，只证明视图可用）：
+
+```sh
+KEY=$(sudo bash -c "grep -m1 '^SUPABASE_SERVICE_ROLE_KEY=' /opt/liorvix/.env.local | cut -d= -f2- | tr -d '\r'")
+for V in jobs_listing jobs_listing_v3; do
+  curl -s -D - -o /dev/null -H "apikey: $KEY" -H "Authorization: Bearer $KEY" \
+    -H 'Prefer: count=exact' "http://127.0.0.1:3000/$V?is_active=eq.true&select=id&limit=1" \
+    | grep -i '^content-range' | tr -d '\r' | sed "s/^/$V /"
+done
+```
+
+两个视图的 `Content-Range` 总数必须相同。
 
 同时确认日志无 `jobs_v3` 报错：
 
@@ -115,6 +142,9 @@ sudo liorvix-rollback <上一个 release sha>
 
 - 每 5 分钟对账继续跑；`feed_age` P95 ≤15 min，`row_failures` 连续 24h = 0；
 - 读 API P95 不高于切换前 10%（对比 `/api/jobs` 与 `/api/jobs/stats` 抽样 20 次）；
+  切换前基线（2026-11-25，直接量 PostgREST，service-role）：
+  `is_active` 精确计数 75ms、`region_market=us` 精确计数 56–110ms、
+  计划型列表查询 2–2.5ms；`jobs_v3` 在 0157 索引建好前是 930ms，别拿旧数字当基线；
 - 误关 <0.2%：抽样 50 条 v3 关闭行核对上游与 `closure_evidence`；
 - 48h 达标后才允许 P1 1,500 board（R28）与 G3（R29）。
 
@@ -123,4 +153,5 @@ sudo liorvix-rollback <上一个 release sha>
 - 不清空 `public.jobs`、不直接 SQL 改生产岗位数据；
 - 不在同一窗口同时做“写切换 + 清理旧表”；
 - 不在没有证据 `PASS` 的情况下先用 `JOBS_READ_SOURCE=v3` 对外；
-- 不把方案 A 说成“写入量已下降”。
+- 不把方案 A 说成“写入量已下降”；
+- **不在 `jobs_v3` 缺读索引（`read_index_gaps>0`）时切读**。
