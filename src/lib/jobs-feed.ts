@@ -691,10 +691,15 @@ export function normalizeFeedItem(item: JobsFeedItem): JobSyncRecord | null {
   };
 }
 
-function normalizeSkipReason(item: JobsFeedItem): string | null {
+export function normalizeSkipReason(item: JobsFeedItem): string | null {
   if (!text(item.title)) return 'missing_title';
   if (!text(item.company_name)) return 'missing_company';
   if (!text(item.source_url)) return 'missing_source_url';
+  // The v2 feed also carries legacy official-source rows whose source_key is
+  // null. They belong to the legacy ingestion lane; accepting them here makes
+  // the ATS sync spend its time on records the US schema cannot store
+  // (source_tier is NOT NULL) and prevents the cursor from advancing.
+  if (!text(item.source_key)) return 'not_ats_source';
   if (!isTargetRegion(
     [
       normalizeFeedLocation(item.location),
