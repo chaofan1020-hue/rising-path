@@ -1,6 +1,6 @@
 # 岗位库 v3 影子重建与 Feed 精简计划
 
-> 状态：Phase 0 完成（R01/R02/R04 完成；R03 代码已完成、外部告警器待接）；Phase 1 完成；Phase 2 进行中；Phase 3 回填完成；Phase 4 影子写入进行中
+> 状态：Phase 0 完成（R01/R02/R04 完成；R03 代码已完成、外部告警器待接）；Phase 1 完成；Phase 2 完成；Phase 3 回填完成；Phase 4 影子写入进行中
 > 制定时间：2026-11-25 12:10（北京）/ 04:10 UTC
 > 适用范围：上游采集器 + 美国站岗位库 + `collector_feed`
 > 原则：**不清空生产库；不重抓 500 个 board；影子重建、对账后切换；旧库只读保留 7 天。**
@@ -230,8 +230,8 @@ S05 已知 53 组 canonical URL、14,650 行重复：
 | ID | 任务 | 产出 | 验收 |
 |---|---|---|---|
 | R08 | worker 双模式 | `steady` 1–2 页；`catch-up` 30 分钟 | **已完成代码**：`8e86313`；cursor 为空走 steady（最多 2 页），cursor 非空走 catch-up（30 页/4 分钟）；生产 run `195225` success |
-| R09 | watermark 成功判定 | cursor >= 本轮 watermark | **部分完成**：以 cursor 非空判定未追平；成功仅在 `has_more=false` 时写 `caught_up_at`；独立 upstream watermark 未持久化 |
-| R10 | DLQ | 无效行隔离，不无限重试 | **部分完成**：沿用 `job_sync_failures`，cursor 每页前进，row failure 不会卡住整轮；尚无自动退避/最大重试列 |
+| R09 | watermark 成功判定 | cursor >= 本轮 watermark | **已完成**：迁移 0147 增加 `job_sync_state.upstream_watermark_at`；客户端从每页 `generated_at` 取最大值落库，`c77d27d` 部署后实测 `upstream_watermark_at=2026-11-25 05:45:11 UTC`；cursor 仍是续传唯一依据 |
+| R10 | DLQ | 无效行隔离，不无限重试 | **已完成（复用既有队列）**：`job_sync_failures` 有 `attempts`/`next_retry_at`/`status`；`fail_job_sync_failure` 退避 1m→5m→30m→2h，5 次转 `dead`；worker 每轮 claim 20 条，`195279` row_failures=0。历史上约 3k 条 `source_tier` 无效行仍在 pending 重试，不阻塞 feed |
 | R11 | 指标 | `last_page_at` / `caught_up_at` / lag / rows/s | **已完成**：迁移 0142 已应用；`last_page_at` 每页写、`caught_up_at` 追平写；health 优先用 `caught_up_at` |
 
 ### Phase 3 · v3 建表与回填（1–2 天）
@@ -248,10 +248,10 @@ S05 已知 53 组 canonical URL、14,650 行重复：
 
 | ID | 任务 | 产出 | 验收 |
 |---|---|---|---|
-| R17 | 新 feed 影子写入 v3 | v3 cursor 正常 | **已完成双写影子**：`0145` 在 `public.jobs` 上挂异常安全触发器，源写入仍走旧表，变更镜像到 v3；回填后一次性对齐 380 行，mismatch=0 |
-| R18 | 影子读 | feature flag 内部读取 v3 | **部分完成**：`jobReadTable()` + `/api/jobs/stats` 支持 `JOBS_READ_SOURCE=v3`；其它读 API 尚未切，默认仍读 `jobs` |
-| R19 | 对账 | 计数、重复、关闭、tier、地区 | **当前快照完成**：active gap 0、全字段 mismatch 0、region/tier/is_closed mismatch 0、v3 关闭行 4/4 有 `closure_evidence`；24h 持续对账待观察 |
-| R20 | 压测 | 1,500 board 模拟流量 | 未开始；P1 扩量前必须先做 |
+| R17 | 新 feed 影子写入 v3 | v3 cursor 正常 | **已完成双写影子**：`0145` + `0149` 在 `public.jobs` 上挂异常安全触发器；从逐行改为 insert/update/delete 三条 statement 级 transition-table 触发器，源写入仍走旧表；回填后 mismatch=0，insert/update/delete 事务内 CRUD 验证通过 |
+| R18 | 影子读 | feature flag 内部读取 v3 | **部分完成**：`jobReadTable()` + `/api/jobs/stats` 支持 `JOBS_READ_SOURCE=v3`；详情/列表仍有 `jobs_listing` 视图依赖，默认读 `jobs` |
+| R19 | 对账 | 计数、重复、关闭、tier、地区 | **当前快照完成**：active gap 0、全字段 mismatch 0、region/tier/is_closed mismatch 0、关闭行 evidence 全覆盖；24h 持续对账待观察 |
+| R20 | 压测 | 1,500 board 模拟流量 | **未完成**：只做了 1,500 行影子写微基准（statement trigger 5.9s，关闭影子 2.5s；影子额外约 3.4s）；真实 1,500 board 需要先扩上游，按停止线未做 |
 
 **停止线**：v3 与上游 ATS 覆盖差 >0.5%；重复 >0.5%；关闭误判 >0.1%；API 5xx 增加。
 
