@@ -143,6 +143,12 @@
 
 ## 日志（倒序）
 
+### 2026-11-25 · G2 现状实测 + 误关口径修正
+
+- G2 观察已跑 21.4/48h：**成功率 99.914%**（34,695 run / 30 failed）、board P95 `last_ok_at` **30.1 min**、重复 0、US active 199,304（`source_key` 覆盖 500）、feed lag 1 min、vendor 失败率 lever 0.64% / greenhouse 0.013%——除 P95 卡在阈值边缘外全部达标。
+- **发现 G2 原查询会误判**：`count(status='CLOSED' and source_key is not null)=8` 原口径直接算“误关”，但查证这 8 条全是 `greenhouse:doordashusa`，`missing_streak` 52–67（相当于连续 14 小时全量 200 快照里都不存在），`closed_at` 11-24 16:48Z/23:10Z——是**正常下架**。已把 G2 口径改成 `closed_without_evidence = count(missing_streak < 12)`，并写明原因，避免明天判 G2 时因为正常下架被误判为不通过。
+- P95 30.1 min 的结构性原因：132 个 board 配置 `poll_interval_seconds=1800`，P95 必然贴着 30 min。要么放宽阈值到 35 min，要么把 Tier C 的 1800s 降到 1200s（后者增加 request 量，G2 前不动）。
+
 ### 2026-11-25 · 读路径覆盖补齐（切读前必须）
 
 - 审计发现切读会“只切一半”：只有列表/详情/stats/open 四个入口用了 `jobReadTable()`，收藏、投递记录、dashboard、AI 匹配、AI 优化、面试、JD 检索等 20 处仍硬编码 `jobs`。已全部改成开关（列表页 `jobListingReadTable`，其余 `jobReadTable`），`c8650c7` 部署，冒烟 `health=200 / 鉴权路由 401 / /api/interview/jobs 200 / search-jd 405(POST-only)`、无 error 日志、feed 两轮 success、对账仍全 0。
