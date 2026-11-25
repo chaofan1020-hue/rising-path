@@ -143,6 +143,18 @@
 
 ## 日志（倒序）
 
+### 2026-11-25 · 24h 证据脚本加夹具测试
+
+- 24h 证据是切读的停止线，但 `jobs-v3-evidence.sh` 本身没被测过：判错就是“脏数据也 PASS”或“永远 WAITING”。新增 [scripts/test-jobs-v3-evidence.sh](scripts/test-jobs-v3-evidence.sh)，在 Linux 上合成 7 组日志夹具，**7/7 通过**：
+  1. 25h 全干净 → `verdict=PASS` exit 0；
+  2. 只有 12h → `WAITING clean_streak_shorter_than_window` exit 1；
+  3. 中间一条 `field_mismatches=3` → `samples_breaking_streak=1`，连续段从该点重启；
+  4. 一条 `feed_age_minutes=42` → 同样断streak，并报出 `max_feed_age_minutes=42.00`；
+  5. 只有 `ALERT` 行、指标全干净 → `FAIL alert_without_metric_break`（不会误判成 WAITING）；
+  6. 空日志 → `NOT_READY no_samples_in_window` exit 2；
+  7. 钉住基线时，**基线之前的坏样本必须被忽略**（26h 前的 drift 行不进窗口，`samples_breaking_streak=0`、`verdict=PASS`）——这正是我们 07:11:43Z 之前误报样本的处理方式。
+- 测试需要 `sh`/`awk`/GNU date，Windows 开发机跑不了，标注为在生产机执行。
+
 ### 2026-11-25 · 证据日志保留方式核实
 
 - 担心“24h 证据会不会被日志轮转清零”，核实结果：`liorvix-jobs-v3-reconcile.service` 是 `append:` 追加写，`/etc/logrotate.conf`、`/etc/logrotate.d/*`、`tmpfiles.d` 都没有匹配该文件的规则 → **只增不减**（约 7 KB/天，32 行 ≈ 2.3h 历史）。24h/48h 窗口能自然累积；但手工清空/改名会让证据从零重算，这一点已写进手册。
