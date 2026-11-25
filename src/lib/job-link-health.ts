@@ -123,3 +123,21 @@ export function nextLinkFailureCount(
   if (httpStatus === 404 || httpStatus === 410) return (previousFailures || 0) + 1;
   return previousFailures || 0;
 }
+
+/**
+ * What upstream says about a job at the moment a link check wants to close it.
+ * `absent` means the authoritative feed no longer lists the record at all.
+ */
+export type UpstreamCloseVerdict = 'open' | 'absent' | 'unknown';
+
+/**
+ * A 404/410 is a link signal, not a lifecycle verdict. The upstream feed owns
+ * the lifecycle, so a link check may only close a job when upstream agrees the
+ * record is gone. If upstream still lists it OPEN, or cannot be reached, the
+ * job stays active: LinkedIn/Deloitte/BCG serve anti-bot 404s and 410s for
+ * roles that are still live, and closing on that hides real openings
+ * (2026-11-25: 25 legacy rows were closed this way while upstream had them OPEN).
+ */
+export function allowsLinkClose(shouldClose: boolean, verdict: UpstreamCloseVerdict): boolean {
+  return shouldClose && verdict === 'absent';
+}

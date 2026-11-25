@@ -3,7 +3,7 @@ import { ExternalFetchError, fetchSafeExternalPage } from '@/lib/safe-external-f
 import { JOBS_FEED_SOURCE, fetchJobForSyncRetry, isClosedItem } from '@/lib/jobs-feed';
 import { isJobDeadlineExpired, resolveJobDeadline } from '@/lib/job-deadline';
 import { parseExperience } from '@/lib/job-connectors/utils';
-import { isAshbyJobUrl, nextLinkFailureCount, shouldCloseAfterLinkFailure, type JobAvailabilityStatus, type JobLinkHealth } from '@/lib/job-link-health';
+import { allowsLinkClose, isAshbyJobUrl, nextLinkFailureCount, shouldCloseAfterLinkFailure, type JobAvailabilityStatus, type JobLinkHealth, type UpstreamCloseVerdict } from '@/lib/job-link-health';
 import { getSupabaseClient } from '@/storage/database/supabase-client';
 import { extractOfficialJobDetails, isJobContentShell, officialEvercoreDetailUrl } from '@/lib/job-official-detail';
 import { hasMatchingPhenomDetailPayload } from '@/lib/job-connectors/fetch';
@@ -149,18 +149,18 @@ function chunks<T>(values: T[], size: number): T[][] {
  * Legacy rows are excluded by callers: they are not part of the ATS feed and
  * must not be closed from a link signal at all.
  */
-async function upstreamStillOpen(job: LinkCandidate): Promise<boolean | null> {
-  if (job.source_system !== JOBS_FEED_SOURCE) return false;
+async function upstreamVerdict(job: LinkCandidate): Promise<UpstreamCloseVerdict> {
+  if (job.source_system !== JOBS_FEED_SOURCE) return 'absent';
   try {
     const item = await fetchJobForSyncRetry({
       externalJobId: job.external_job_id,
       sourceUrl: job.source_url || job.job_url,
       company: job.company,
     });
-    if (!item) return false;
-    return !isClosedItem(item);
+    if (!item) return 'absent';
+    return isClosedItem(item) ? 'absent' : 'open';
   } catch {
-    return null;
+    return 'unknown';
   }
 }
 
@@ -416,9 +416,9 @@ export async function maintainJobLifecycle(options: {
         // The link signal alone never closes a collector job: upstream must
         // agree (or be silent). A 404 from LinkedIn/Deloitte/BCG is often
         // geo/anti-bot, and closing on it hides roles upstream still lists.
-        const upstreamVerdict = shouldClose ? await upstreamStillOpen(job) : false;
-        const allowedToClose = shouldClose && upstreamVerdict === false;
-        const vetoedByUpstream = shouldClose && upstreamVerdict !== false;
+        const verdict = shouldClose ? await upstreamVerdict(job) : 'absent';
+        const allowedToClose = allowsLinkClose(shouldClose, verdict);
+        const vetoedByUpstream = shouldClose && !allowedToClose;
         const persistedClassification = ashbyHtmlUnverifiable || vetoedByUpstream
           ? { availabilityStatus: 'unknown' as const, linkHealth: 'unknown' as const }
           : isNotFound && !shouldClose
@@ -427,9 +427,9 @@ export async function maintainJobLifecycle(options: {
         const baseLinkError = requestError instanceof Error ? requestError.message.slice(0, 2_000) : String(requestError).slice(0, 2_000);
         const linkError = ashbyHtmlUnverifiable
           ? 'Ashby 私有板：HTML 岗位页返回 404 不构成下架证据，改以上游官方关闭事件为准'
-          : upstreamVerdict === true
+          : verdict === 'open'
             ? `${baseLinkError}；上游仍标记 OPEN，不据此关闭`
-            : upstreamVerdict === null
+            : verdict === 'unknown'
               ? `${baseLinkError}；上游状态无法核验，暂不关闭`
               : baseLinkError;
         const { error: updateError } = await client
