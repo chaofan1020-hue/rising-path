@@ -1,4 +1,6 @@
 import assert from 'node:assert/strict';
+import fs from 'node:fs';
+import path from 'node:path';
 import {
   getOfficialDetailsRetryDelayMs,
   selectFairOfficialDetailsTargets,
@@ -70,3 +72,19 @@ assert.deepEqual(
 );
 
 console.log('official details scheduler tests passed');
+
+/**
+ * A throttled page must not pin a company forever.
+ *
+ * The child batch walks the whole candidate window, so a single HTTP 429 used to
+ * leave the cursor untouched and every cycle re-read the same 100 candidates
+ * (2026-11-25: 127 companies stuck at "99 skipped / 1 failed"). The failure
+ * branch must keep the backoff but still move the cursor past the batch.
+ */
+const workerSource = fs.readFileSync(path.join(process.cwd(), 'src/lib/official-details-worker.ts'), 'utf8');
+assert.match(workerSource, /游标已推进到/);
+assert.match(workerSource, /await saveState\(client, source, \{ cursor: advancedCursor \}\)/);
+assert.ok(
+  !/保留游标等待重试/.test(workerSource),
+  'the pinning failure message must not come back',
+);

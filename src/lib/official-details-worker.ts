@@ -413,8 +413,15 @@ async function runCompany(client: SupabaseClient, target: SourceTarget, batchSiz
       stop_reason: failed > 0 ? 'row_failures' : null,
     });
     if (failed > 0) {
-      const message = `官方字段批次有 ${failed} 条失败，保留游标等待重试`;
+      // A single throttled page (HTTP 429) must not pin the company forever.
+      // The child process already walked the whole batch, so advance the cursor
+      // past it and keep the backoff for visibility; otherwise every cycle
+      // re-reads the same 100 candidates and never reaches the rest of the
+      // company's jobs (observed 2026-11-25: 127 companies looping on 1 failure).
+      const advancedCursor = resultCursor ?? state.cursor;
+      const message = `官方字段批次有 ${failed} 条失败，游标已推进到 ${advancedCursor ?? '未变'}，下轮从其后继续`;
       await recordFailure(client, source, state, message);
+      await saveState(client, source, { cursor: advancedCursor });
       const consecutiveFailures = (Number(state.consecutive_failures) || 0) + 1;
       await syncSourceRegistry(client, target, {
         last_error: message,

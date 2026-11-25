@@ -34,6 +34,6 @@ assert.equal(shouldCloseAfterLinkFailure({ httpStatus: 404, previousFailures: 0 
 assert.equal(shouldCloseAfterLinkFailure({ httpStatus: 404, previousFailures: 1 }), true);
 assert.equal(shouldCloseAfterLinkFailure({ httpStatus: 410 }), true);
 assert.equal(shouldCloseAfterLinkFailure({ httpStatus: 200 }), false);
-assert.equal(shouldCloseAfterLinkFailure({ explicitClosed: true }), true);
+assert.equal(shouldCloseAfterLinkFailure({ httpStatus: null, explicitClosed: true }), true);
 
 console.log('job close guard tests passed');
