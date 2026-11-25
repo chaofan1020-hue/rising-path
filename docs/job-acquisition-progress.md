@@ -34,7 +34,7 @@
 | 基线文件 | `tmp/baseline-20261124.json` |
 | Supabase 备份时间点 | `/opt/liorvix-backups/liorvix-20261124-032117.dump`（444MB；DB 容器 2026-11-23 03:15 UTC 起） |
 | Feed worker 实际配置 | `JOBS_AUTO_WORKER=true`、`JOBS_SYNC_INTERVAL_MINUTES=5`；**systemd jobs timers 全部 disabled**，不要按 timer 文档推断 |
-| 当前生产事实 | 2026-11-25 16:00 +08：US active **199,211**；v3 `jobs_v3` total 199,250（ATS 87,288 / legacy 111,962；active gap 0、字段 mismatch 0；`v3_active_only=0`、`dup_ats_keys=0`、`ats_missing_key=0`；39 条关闭行 evidence 全覆盖）；`jobs_v3` 读索引 43 个（`read_index_gaps=0`）；feed 最近 success、0 row failure、age 4.6min；**DLQ pending 0**（dead 3,768 审计 / resolved 14）；对账 timer 每 5 分钟运行，24h 证据基线 `2026-11-25T07:11:43Z`（完成 `2026-11-26T07:11:43Z`，当前 WAITING 0.76/24h）；生产 commit `19ec486`（回滚点 `fca4cfa`）；DB 7.9 GB / 剩余 11 GB |
+| 当前生产事实 | 2026-11-25 16:26 +08：US active **199,241**；v3 `jobs_v3` total 199,280（ATS 87,318 / legacy 111,962；active gap 0、全 56 列 mismatch 0；`v3_active_only=0`、`dup_ats_keys=0`、`ats_missing_key=0`；39 条关闭行 evidence 全覆盖）；`jobs_v3` 读索引 43 个（`read_index_gaps=0`）；feed 最近 success、0 row failure、age 0.1min；**DLQ pending 0**（dead 3,768 审计 / resolved 14）；对账 timer 每 5 分钟运行，24h 证据基线 `2026-11-25T07:11:43Z`（完成 `2026-11-26T07:11:43Z`）；生产 commit `f4df19a`（回滚点 `19ec486`）；DB ~7.9 GB / 剩余 11 GB |
 
 ## 执行约定（B03）
 
@@ -145,11 +145,12 @@
 
 ### 2026-11-25 · 全列审计与投影级等价
 
-- Watchdog 每 tick 只比 8 列（title/company/region/display_status/source_key/job_url/apply_url/is_active），掉别的列不会报警。新增 [scripts/jobs-v3-column-audit.sh](scripts/jobs-v3-column-audit.sh)：按 `information_schema` 枚举 `jobs` 与 `jobs_v3` 的**全部 56 个共享列**，逐列 `is distinct from` 比对 active 行，实测 `total_mismatches=0`，非零则 `raise exception` 并 exit 1。
+- Watchdog 每 tick 只比 8 列（title/company/region/display_status/source_key/job_url/apply_url/is_active），掉别的列不会报警。新增 [scripts/jobs-v3-column-audit.sh](scripts/jobs-v3-column-audit.sh)：按 `information_schema` 枚举 `jobs` 与 `jobs_v3` 的**全部 56 个共享列**，逐列 `is distinct from` 比对 active 行，实测 `total_mismatches=0`，非零则 `raise exception` 并 exit 1；已随 `f4df19a` 部署到 `/opt/liorvix/scripts/`，线上跑通 exit 0。
 - 脚本第一版有个假 OK：`docker exec` 少了 `-i`，psql 收不到 stdin、零输出还 exit 0，打出“全部一致”。已修，并把这条写进测试（`docker exec -i` 必须在、无 `-i` 形式不许回来）。
 - 幂等负向验证：临时表复制 500 行、改 1 行 title/posted_at，`is distinct from` 计数分别命中 1，证明比对逻辑真的能抓差异。
 - 投影级等价：用 `/api/jobs` 的真实 `DETAIL_COLUMNS`/`SUMMARY_COLUMNS` 加默认筛选请求两个视图，**40 行、312,433 / 238,735 字节逐字节相同**，id 顺序也一致。
 - `/api/jobs/stats` 走的是表级 `count=planned`：`matches_target_region` 真实值 116,317，`jobs` 估算 123,791（+6.4%）、`jobs_v3` 估算 118,239（+1.7%）；切读后统计卡片的“总量”会小幅变小但更准。
+- 部署 `f4df19a` 时踩到第二个洞：上次 dev 模式预演把 `/opt/liorvix/next-env.d.ts` 改成了 `.next/dev/types/routes.d.ts`，导致 deploy 报“工作区有未提交改动”。`git checkout -- next-env.d.ts` 后重新部署成功（冒烟 health=200 login_form=1 admin=307 analytics_unauth=401，回滚点 `19ec486`）。手册 §2.5 已补这条。
 
 ### 2026-11-25 · 切换预演与两个“第二实例”陷阱
 
