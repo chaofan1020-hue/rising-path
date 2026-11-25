@@ -223,7 +223,7 @@ S05 已知 53 组 canonical URL、14,650 行重复：
 | ID | 任务 | 产出 | 验收 |
 |---|---|---|---|
 | R05 | 上游增加 `scope=ats` | 只返回 `source_key` 行 | **已完成**：上游 `/opt/global-jobs/app/main.py` 增加 `scope=ats`；备份 `/opt/global-jobs/ops-backups/v3-scope-ats-20261125T044029Z/main.py`；实测 539,649 → **127,900** 行，8 个合法 CLOSED 仍在；默认 `scope=all` 不变。追加：同端点支持 `external_job_id`/`source_url` 精确查询（备份 `ops-backups/v3-feed-lookup-20261125T064143Z`），单条生命周期核对不再翻全量 feed |
-| R06 | 美国站客户端兼容 | 请求带 `scope=ats`，记录 watermark | **已完成**：`09f40ed` 默认请求 `scope=ats`；`JOBS_FEED_SCOPE=all` 是回滚开关；`195203/195210/195217` 连续 3 轮 success、0 row failure |
+| R06 | 美国站客户端兼容 | 请求带 `scope=ats`，记录 watermark | **已完成**：`09f40ed` 默认请求 `scope=ats`；`JOBS_FEED_SCOPE=all` 是回滚开关；`195203/195210/195217` 连续 3 轮 success、0 row failure。**2026-11-25 上游快照**：`ats_boards` 共 **500** 条全 active（greenhouse 400 / lever 100；S 98 条 55,049 岗位、A 270 条 33,449、B 132 条 36,952）；近 2 小时 `board_poll_runs` success 3,221 / running 5；上游 `jobs` OPEN **309,820**、CLOSED 230,548。我方 active 199,215，**上游还有约 11 万 OPEN 岗位不在 board 覆盖内**（非 board 来源），这就是 P1 把 board 从 500 扩到 1,500 想补的口径 |
 | R07 | 关闭权威拆分 | ATS close 只处理 ATS lane | **已完成核心代码**：`eb5cac9` 要求 close 带 `source_key` 并按 `source_key` 过滤；无 `source_key` legacy close 跳过；部署后 `closed=0` |
 
 **停止线**：任何 `source_key` 岗位丢失、CLOSED 数异常增减、连续 2 轮 row_failures>0。
