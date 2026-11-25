@@ -249,7 +249,7 @@ S05 已知 53 组 canonical URL、14,650 行重复：
 | ID | 任务 | 产出 | 验收 |
 |---|---|---|---|
 | R17 | 新 feed 影子写入 v3 | v3 cursor 正常 | **已完成双写影子**：`0145` + `0149` 在 `public.jobs` 上挂异常安全触发器；从逐行改为 insert/update/delete 三条 statement 级 transition-table 触发器，源写入仍走旧表；回填后 mismatch=0，insert/update/delete 事务内 CRUD 验证通过 |
-| R18 | 影子读 | feature flag 内部读取 v3 | **部分完成**：`jobReadTable()` + `/api/jobs/stats` 支持 `JOBS_READ_SOURCE=v3`；详情/列表仍有 `jobs_listing` 视图依赖，默认读 `jobs` |
+| R18 | 影子读 | feature flag 内部读取 v3 | **部分完成**：`jobReadTable()` + `/api/jobs/stats`，以及 `jobListingReadTable()` + `/api/jobs` 列表支持 `JOBS_READ_SOURCE=v3`；新增 `jobs_listing_v3` 视图，anon 可读且 active 计数与源库一致；详情/搜索等其它读 API 未切，生产未启用该 flag |
 | R19 | 对账 | 计数、重复、关闭、tier、地区 | **当前快照完成**：active gap 0、全字段 mismatch 0、region/tier/is_closed mismatch 0、关闭行 evidence 全覆盖；24h 持续对账待观察 |
 | R20 | 压测 | 1,500 board 模拟流量 | **未完成**：只做了 1,500 行影子写微基准（statement trigger 5.9s，关闭影子 2.5s；影子额外约 3.4s）；真实 1,500 board 需要先扩上游，按停止线未做 |
 
