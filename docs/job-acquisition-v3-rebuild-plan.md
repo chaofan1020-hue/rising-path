@@ -345,7 +345,8 @@ V02 48h 观察仍按原计划到 **2026-11-26 11:50 UTC（19:50 北京）**；v3
 
 ## 8.1 已知遗留（不阻塞 v3 观察）
 
-- **official_details 每家公司稳定 1 条 failed**：2026-11-25 起每轮 company batch 都是 `candidate_jobs≈100 / skipped≈99 / failed=1`，与 v3 无关，但会让“官方字段补充”长期原地打转。需要单独排查该条写入为什么失败（不走 DLQ、日志里只有计数）。
+- **official_details 进展缓慢（游标钉死已修，产能问题仍在）**：`fca4cfa` 之后游标不再停在原地，但实测 6 小时 **369 次 company run 只写入 259 行**、`row_failures=877`（多为官方页 429 + 页面缺字段）。原因不是死循环，而是 `hasCandidate` 要求“每个字段要么有值、要么被标记为官方源不可用”，而 salary/deadline 在 Workday 页上通常根本没有，只能靠一次次抓取去标 unavailable，进度被 429 卡住。结论：**不阻塞 v3**，但“官方字段补全”按当前产能要数月；要提速需单独改（降频只抓没有 `field_evidence` 的行、或给行级 exhausted 标记），需另开任务，不在本次切换范围内。
+- **`detail_fetched_at` 全表为 0**：199,211 条 active 里 `detail_fetched_at` 全是 null（`field_evidence` 却 100% 有值）。该列当前没有任何写入方，别拿它当“详情已抓”的指标；判断字段补全请看 `field_evidence.fields`。
 - **R03 外部 webhook 未配置**：告警只写日志与 stderr；`JOBS_ALERT_WEBHOOK_URL` 未设置前，没人会收到推送，24h 证据仍靠 `jobs-v3-evidence.sh` 人工核对。
 - **65,192 条 active 岗位没有 `region_market`**（占 32.7%）：`/api/jobs` 默认 `region_scope=target`，这些行不会出现在默认列表里。两张表行为一致、不属于 v3 偏差，但属于“库存里有多少岗位实际对用户可见”的产品问题，需要单独决定是否补地区或放开 scope。
 - **筛选后的“总数”是计划估算，不准**：`/api/jobs` 用 `count=planned`，未加筛选时估算接近真实（v3 199,389 vs 真实 199,197），但带 `region_market` 之类筛选时估算塌到 ~1000（真实 111,202），因为视图列是函数表达式、planner 没有统计。路由已对短页回填精确值、并标注 `total_is_estimate`，所以不是数据错误；若要精确总数需改 `count=exact`（实测 56–110ms/次）。**两张表表现一致，不属于 v3 回归。**
