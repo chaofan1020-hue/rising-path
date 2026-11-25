@@ -1,6 +1,6 @@
 # 岗位库 v3 影子重建与 Feed 精简计划
 
-> 状态：Phase 0 完成（R01/R02/R04 完成；R03 代码已完成、外部告警器待接）；Phase 1 完成；Phase 2 完成；Phase 3 回填完成；Phase 4 影子写入进行中
+> 状态：Phase 0 完成（R01/R02/R04 完成；R03 监控和 webhook 能力已完成、webhook URL 待配置）；Phase 1 完成；Phase 2 完成；Phase 3 回填完成；Phase 4 影子写入进行中
 > 制定时间：2026-11-25 12:10（北京）/ 04:10 UTC
 > 适用范围：上游采集器 + 美国站岗位库 + `collector_feed`
 > 原则：**不清空生产库；不重抓 500 个 board；影子重建、对账后切换；旧库只读保留 7 天。**
@@ -203,7 +203,7 @@ S05 已知 53 组 canonical URL、14,650 行重复：
 |---|---|---|---|
 | R01 | 生产库全量备份 | `/opt/liorvix-backups/jobs-v3-pre-20261125-040722.dump` | 已生成 449 MB 备份，`pg_restore -l` 1,637 项可读；sha256 `6320a3e9f2cea0c9acb754cdd8a7538c70565e35a376c4ed2d0124269edba2df` |
 | R02 | 固化基线 | `tmp/v3-baseline.json` + 本文 0 节 | 已记录 2026-11-25 04:08 UTC 基线 |
-| R03 | 告警 | feed lag / row_failures / caught_up 三项 | 4d3a592 已暴露 `lag_minutes`/`heartbeat_age_minutes`/`stale`/`catching_up`，`healthy` 需 success 新鲜；外部告警器待接 |
+| R03 | 告警 | feed lag / row_failures / caught_up 三项 | 4d3a592 已暴露 `lag_minutes`/`heartbeat_age_minutes`/`stale`/`catching_up`；`scripts/jobs-v3-reconcile.sh` + systemd timer 每 5 分钟检查 feed 新鲜度、最新 run row_failures、v3 对账，并支持 `JOBS_ALERT_WEBHOOK_URL` 发 JSON；webhook URL 尚未提供，外部投递待接 |
 | R04 | 冻结策略 | legacy 停止新增写入；ATS feed 仍正常 | eb5cac9 已冻结 legacy close 事件并限定 ATS close 只能命中同 `source_key`；`normalizeFeedItem` 对无 `source_key` 的 open 行返回 null，legacy feed 新增也已冻结；ATS feed 仍 success |
 
 **已发现并修复的 Phase 0 事故（2026-11-25）**：
@@ -250,7 +250,7 @@ S05 已知 53 组 canonical URL、14,650 行重复：
 |---|---|---|---|
 | R17 | 新 feed 影子写入 v3 | v3 cursor 正常 | **已完成双写影子**：`0145` + `0149` 在 `public.jobs` 上挂异常安全触发器；从逐行改为 insert/update/delete 三条 statement 级 transition-table 触发器，源写入仍走旧表；回填后 mismatch=0，insert/update/delete 事务内 CRUD 验证通过 |
 | R18 | 影子读 | feature flag 内部读取 v3 | **部分完成**：`jobReadTable()` + `/api/jobs/stats`，以及 `jobListingReadTable()` + `/api/jobs` 列表支持 `JOBS_READ_SOURCE=v3`；新增 `jobs_listing_v3` 视图，anon 可读且 active 计数与源库一致；详情/搜索等其它读 API 未切，生产未启用该 flag |
-| R19 | 对账 | 计数、重复、关闭、tier、地区 | **当前快照完成**：active gap 0、全字段 mismatch 0、region/tier/is_closed mismatch 0、关闭行 evidence 全覆盖；24h 持续对账待观察 |
+| R19 | 对账 | 计数、重复、关闭、tier、地区 | **当前快照完成 + 持续监控已启用**：active gap 0、全字段 mismatch 0、关闭行 evidence 全覆盖；`liorvix-jobs-v3-reconcile.timer` 每 5 分钟只读对账并写 `/var/log/liorvix-jobs-v3-reconcile.log`，24h 连续证据待 2026-11-26 06:07 UTC 后确认 |
 | R20 | 压测 | 1,500 board 模拟流量 | **未完成**：只做了 1,500 行影子写微基准（statement trigger 5.9s，关闭影子 2.5s；影子额外约 3.4s）；真实 1,500 board 需要先扩上游，按停止线未做 |
 
 **停止线**：v3 与上游 ATS 覆盖差 >0.5%；重复 >0.5%；关闭误判 >0.1%；API 5xx 增加。
