@@ -401,6 +401,7 @@ type CloseMatchField = 'external_job_id' | 'source_url' | 'job_url';
 async function closeJobsByField(
   client: SupabaseClient,
   company: string,
+  sourceKey: string,
   values: string[],
   field: CloseMatchField,
   closePayload: Record<string, unknown>,
@@ -414,6 +415,7 @@ async function closeJobsByField(
       .update(closePayload)
       .eq('source_system', JOBS_FEED_SOURCE)
       .eq('company', company)
+      .eq('source_key', sourceKey)
       .eq('is_active', true)
       .in(field, batch)
       .select('id');
@@ -432,6 +434,7 @@ async function closeJobsByField(
           .update(closePayload)
           .eq('source_system', JOBS_FEED_SOURCE)
           .eq('company', company)
+          .eq('source_key', sourceKey)
           .eq('is_active', true)
           .eq(field, value)
           .select('id');
@@ -938,8 +941,13 @@ export async function syncJobsFeed(
     }
 
     const openItems: JobSyncRecord[] = [];
-    const closeSourcesByCompany = new Map<string, string[]>();
-    const closeExternalIdsByCompany = new Map<string, string[]>();
+    type CloseGroup = {
+      company: string;
+      sourceKey: string;
+      externalIds: string[];
+      sourceUrls: string[];
+    };
+    const closeGroups = new Map<string, CloseGroup>();
     for (const item of items) {
       if (isClosedItem(item)) {
         // v2 ATS feed owns only ATS lifecycle. Legacy rows have no source_key
@@ -954,22 +962,23 @@ export async function syncJobsFeed(
         const observed = companyObservation(result, text(item.company_name));
         const sourceUrl = text(item.source_url);
         const externalJobId = text(item.external_job_id) || text(item.id);
+        const company = text(item.company_name);
+        const sourceKey = text(item.source_key);
         if (!sourceUrl && !externalJobId) {
           incrementSkipReason(result, 'closed_without_identity');
           if (observed) observed.skipped += 1;
           continue;
         }
-        const company = text(item.company_name);
-        if (company && sourceUrl) {
-          const urls = closeSourcesByCompany.get(company) || [];
-          urls.push(sourceUrl);
-          closeSourcesByCompany.set(company, urls);
+        if (!company || !sourceKey) {
+          incrementSkipReason(result, 'not_ats_source');
+          if (observed) observed.skipped += 1;
+          continue;
         }
-        if (company && externalJobId) {
-          const ids = closeExternalIdsByCompany.get(company) || [];
-          ids.push(externalJobId);
-          closeExternalIdsByCompany.set(company, ids);
-        }
+        const key = `${company}\u0000${sourceKey}`;
+        const group = closeGroups.get(key) || { company, sourceKey, externalIds: [], sourceUrls: [] };
+        if (sourceUrl) group.sourceUrls.push(sourceUrl);
+        if (externalJobId) group.externalIds.push(externalJobId);
+        closeGroups.set(key, group);
         continue;
       }
       const normalized = normalizeFeedItem(item);
@@ -990,28 +999,32 @@ export async function syncJobsFeed(
     };
     const closedJobIds = new Set<number>();
     const closeFailures: JobSyncFailureInput[] = [];
-    // Stable IDs survive ATS URL rotations, so use them before URL fallbacks.
-    for (const [company, externalIds] of closeExternalIdsByCompany) {
-      const outcome = await closeJobsByField(client, company, externalIds, 'external_job_id', closePayload, 'close');
-      for (const id of outcome.closedIds) closedJobIds.add(id);
-      closeFailures.push(...outcome.failures);
-    }
-    // Older records can predate external IDs. Preserve both URL fallbacks so
-    // close events can still find a job after the feed changed its URL field.
-    for (const [company, sourceUrls] of closeSourcesByCompany) {
-      const outcome = await closeJobsByField(client, company, sourceUrls, 'source_url', closePayload, 'close');
-      for (const id of outcome.closedIds) closedJobIds.add(id);
-      closeFailures.push(...outcome.failures);
-    }
-    for (const [company, sourceUrls] of closeSourcesByCompany) {
-      const outcome = await closeJobsByField(client, company, sourceUrls, 'job_url', closePayload, 'close');
-      for (const id of outcome.closedIds) closedJobIds.add(id);
-      closeFailures.push(...outcome.failures);
+    // A close event may only close rows in its own ATS lane. Without the
+    // source_key predicate, a close for (company, external_id) can hit a
+    // legacy row that shares the same company and ID.
+    for (const group of closeGroups.values()) {
+      if (group.externalIds.length > 0) {
+        const outcome = await closeJobsByField(client, group.company, group.sourceKey, group.externalIds, 'external_job_id', closePayload, 'close');
+        for (const id of outcome.closedIds) closedJobIds.add(id);
+        closeFailures.push(...outcome.failures);
+      }
+      // Older records can predate external IDs. Preserve both URL fallbacks so
+      // close events can still find a job after the feed changed its URL field.
+      if (group.sourceUrls.length > 0) {
+        const outcome = await closeJobsByField(client, group.company, group.sourceKey, group.sourceUrls, 'source_url', closePayload, 'close');
+        for (const id of outcome.closedIds) closedJobIds.add(id);
+        closeFailures.push(...outcome.failures);
+      }
+      if (group.sourceUrls.length > 0) {
+        const outcome = await closeJobsByField(client, group.company, group.sourceKey, group.sourceUrls, 'job_url', closePayload, 'close');
+        for (const id of outcome.closedIds) closedJobIds.add(id);
+        closeFailures.push(...outcome.failures);
+      }
     }
     result.closed += closedJobIds.size;
-    for (const [company, externalIds] of closeExternalIdsByCompany) {
-      const observed = companyObservation(result, company);
-      if (observed) observed.closed += externalIds.length;
+    for (const group of closeGroups.values()) {
+      const observed = companyObservation(result, group.company);
+      if (observed) observed.closed += group.externalIds.length;
     }
     if (closedJobIds.size > 0) {
       const { error: syncStateError } = await client
