@@ -250,8 +250,8 @@ S05 已知 53 组 canonical URL、14,650 行重复：
 |---|---|---|---|
 | R17 | 新 feed 只写 v3 | v3 cursor 正常 | **已完成影子写入**：`0145_jobs_v3_shadow_write.sql` 在 `public.jobs` 上挂异常安全触发器，变更镜像到 v3；源库写入失败不会发生；回填后一次性对齐 380 行，mismatch=0 |
 | R18 | 影子读 | feature flag 内部读取 v3 | **部分完成**：`jobReadTable()` + `/api/jobs/stats` 支持 `JOBS_READ_SOURCE=v3`；其它读 API 尚未切，默认仍读 `jobs` |
-| R19 | 对账 | 计数、重复、关闭、tier、地区 | **进行中**：active 计数一致、ATS 唯一冲突 0、字段 mismatch 0；关闭证据与 tier/地区分布待逐项对账 |
-| R20 | 压测 | 1,500 board 模拟流量 | 未开始 |
+| R19 | 对账 | 计数、重复、关闭、tier、地区 | **当前快照完成**：active gap 0、全字段 mismatch 0、region/tier/is_closed mismatch 0、v3 关闭行 4/4 有 `closure_evidence`；24h 持续对账待观察 |
+| R20 | 压测 | 1,500 board 模拟流量 | 未开始；P1 扩量前必须先做 |
 
 **停止线**：v3 与上游 ATS 覆盖差 >0.5%；重复 >0.5%；关闭误判 >0.1%；API 5xx 增加。
 

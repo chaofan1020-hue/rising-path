@@ -148,8 +148,10 @@
 - 迁移 `0144_jobs_v3_backfill.sql` 回填 active：**199,185 行**（ATS 87,244 / legacy 111,941）；全字段与源库比对 **0 mismatch**，核心字段空值 0；v3 总大小 **2.1 GB**，剩余磁盘 **11 GB**。首次执行被 1 分钟 `statement_timeout` 取消，设 `statement_timeout=0` 后重跑成功，未留下半成品。
 - R15 决策：53 组 canonical URL 是通用申请入口，不是重复岗位，**不做物理合并**；ATS 身份唯一索引冲突 0。
 - 迁移 `0145_jobs_v3_shadow_write.sql`：`jobs` 触发器把后续变更镜像到 v3，异常只 warning、不阻断源写入；回填后一次性对齐 380 行，当前 mismatch=0。
+- 迁移 `0146_jobs_v3_closure_evidence.sql`：关闭时写 `closure_evidence`（feed / link_check / manual_or_legacy + 时间 + HTTP 状态）；当前 v3 的 4 条关闭行证据齐全；事务内模拟 404 关闭已验证，回滚后无残留。
 - 读取开关：`jobReadTable()` + `/api/jobs/stats` 支持 `JOBS_READ_SOURCE=v3`；默认 `jobs`，其它读 API 未切。`c135ab2` 已部署，smoke 通过。
-- 未完成：关闭证据/tier/地区逐项对账、1,500 board 压测、完整读路径切换与回滚演练。
+- R19 当前快照：active gap 0、字段 mismatch 0、region/tier/is_closed mismatch 0、关闭证据 4/4；24h 持续对账未做。
+- 未完成：1,500 board 压测、完整读路径切换与回滚演练、v3 48h 观察。
 
 ### 2026-11-25 · v3 Phase 2 steady/catch-up 与追平状态
 
