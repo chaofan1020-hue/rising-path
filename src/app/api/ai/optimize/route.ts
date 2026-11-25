@@ -14,6 +14,7 @@ import {
   type OptimizedResumeData,
 } from '@/lib/optimized-resume-contract';
 import { untrustedBusinessDataBlock, untrustedBusinessDataPolicy } from '@/lib/prompt-safety';
+import { jobReadTable } from '@/lib/job-read-source';
 
 // 地区名称映射
 const REGION_NAMES: Record<string, string> = {
@@ -121,7 +122,7 @@ export async function POST(request: NextRequest) {
     } | null = null;
     if (jobId !== null) {
       const { data, error } = await client
-        .from('jobs')
+        .from(jobReadTable())
         .select('id, title, company, region, description, requirements')
         .eq('id', jobId)
         .eq('is_active', true)

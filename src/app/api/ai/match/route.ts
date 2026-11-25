@@ -48,6 +48,7 @@ import {
   type MatchRunSummary,
 } from '@/lib/ai-match-session';
 import type { CareerStage, ResumeProfile, UserSegmentation } from '@/lib/resume-types';
+import { jobReadTable } from '@/lib/job-read-source';
 
 export const runtime = 'nodejs';
 export const maxDuration = 120;
@@ -179,7 +180,7 @@ async function loadMatchFeedbackSignals(
       .filter((jobId) => Number.isInteger(jobId) && jobId > 0);
     if (jobIds.length === 0) return [];
     const { data: feedbackJobs, error: jobsError } = await client
-      .from('jobs')
+      .from(jobReadTable())
       .select('id, company, direction')
       .in('id', jobIds);
     if (jobsError) return [];
@@ -370,7 +371,7 @@ Only return the JSON object.`;
 async function hydrateJobs(client: SupabaseClient, jobs: CandidateJob[], fields: string): Promise<CandidateJob[]> {
   if (jobs.length === 0) return jobs;
   const { data, error } = await client
-    .from('jobs')
+    .from(jobReadTable())
     .select(fields)
     .in('id', jobs.map((job) => job.id));
   if (error) throw new Error(`读取岗位字段失败: ${error.message}`);
@@ -676,7 +677,7 @@ export async function POST(request: NextRequest) {
         emit?.({ type: 'stage', stage: 'retrieval' });
         stage = 'target_job';
         const { data, error } = await client
-          .from('jobs')
+          .from(jobReadTable())
           .select(JOB_MATCH_FIELDS)
           .eq('id', targetJobId)
           .eq('is_active', true)
@@ -688,7 +689,7 @@ export async function POST(request: NextRequest) {
         stage = 'shortlist';
         const shortlistStartedAt = performance.now();
         const { data, error } = await client
-          .from('jobs')
+          .from(jobReadTable())
           .select(JOB_MATCH_FIELDS)
           .eq('is_active', true)
           .in('id', requestedJobIds);
@@ -740,7 +741,7 @@ export async function POST(request: NextRequest) {
           // recency instead, filter that small page in memory, and keep the whole
           // path bounded so it can never hang on a cold TOAST read.
           const { data: recentRows, error: recentError } = await client
-            .from('jobs')
+            .from(jobReadTable())
             .select('id, region')
             .eq('is_active', true)
             .order('created_at', { ascending: false })
@@ -753,7 +754,7 @@ export async function POST(request: NextRequest) {
             .filter((id) => Number.isInteger(id) && id > 0);
           if (fallbackIds.length === 0) throw new Error(`查询岗位失败: ${error.message}`);
           const { data: fallbackJobs, error: fallbackError } = await client
-            .from('jobs')
+            .from(jobReadTable())
             .select(JOB_MATCH_FIELDS)
             .eq('is_active', true)
             .in('id', fallbackIds)

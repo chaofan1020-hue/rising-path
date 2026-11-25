@@ -7,6 +7,7 @@ import {
   OPTIMIZATION_SCORE_RESPONSE_SCHEMA,
   parseOptimizationScoreComparison,
 } from '@/lib/optimization-score-contract';
+import { jobReadTable } from '@/lib/job-read-source';
 
 function positiveInteger(value: unknown): number | null {
   const parsed = Number(value);
@@ -36,7 +37,7 @@ export async function POST(request: NextRequest) {
     let jobContent: string;
     if (optimization.job_id) {
       const { data: job, error: jobError } = await auth.client
-        .from('jobs')
+        .from(jobReadTable())
         .select('id, title, company, region, description, requirements')
         .eq('id', optimization.job_id)
         .maybeSingle();

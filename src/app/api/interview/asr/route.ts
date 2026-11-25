@@ -11,6 +11,7 @@ import { betaEntitlementResponse } from '@/lib/beta-entitlements';
 import { reserveCredits, settleCredits } from '@/lib/credits';
 import { parseInterviewVoiceRoute, resolveInterviewVoiceRoute } from '@/lib/interview-voice-routing';
 
+import { jobReadTable } from '@/lib/job-read-source';
 export const runtime = 'nodejs';
 export const dynamic = 'force-dynamic';
 
@@ -42,7 +43,7 @@ export async function POST(request: NextRequest) {
 
     let voiceRoute = parseInterviewVoiceRoute(session.voice_route);
     if (!voiceRoute && session.job_id) {
-      const { data: job } = await auth.client.from('jobs').select('region').eq('id', session.job_id).maybeSingle();
+      const { data: job } = await auth.client.from(jobReadTable()).select('region').eq('id', session.job_id).maybeSingle();
       voiceRoute = resolveInterviewVoiceRoute(job?.region);
     }
     voiceRoute ||= resolveInterviewVoiceRoute(null);

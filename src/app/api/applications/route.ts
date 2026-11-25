@@ -3,6 +3,7 @@ import { getSupabaseClient } from '@/storage/database/supabase-client';
 import { hasValidAdminSession } from '@/lib/admin-auth';
 import { getAuthContext, unauthorizedResponse } from '@/lib/auth-server';
 import { isApplicationStatus } from '@/lib/application-status';
+import { jobReadTable } from '@/lib/job-read-source';
 
 export async function GET(request: NextRequest) {
   try {
@@ -66,7 +67,7 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ error: '岗位 ID 为必填项且必须有效' }, { status: 400 });
     }
     const { data: job, error: jobError } = await client
-      .from('jobs')
+      .from(jobReadTable())
       .select('id, is_active, is_closed')
       .eq('id', jobId)
       .maybeSingle();

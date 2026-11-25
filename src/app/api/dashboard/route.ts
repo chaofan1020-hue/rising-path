@@ -14,6 +14,7 @@ import {
 import { getUserResume } from '@/lib/resume-selection';
 import { computeDashboardReadiness } from '@/lib/dashboard-readiness';
 import type { ResumeProcessingStatus } from '@/lib/resume-types';
+import { jobReadTable } from '@/lib/job-read-source';
 
 type Timeframe = 'now' | 'week' | 'month';
 type CareerStage = 'junior' | 'senior' | 'experienced' | 'returning_intern';
@@ -521,7 +522,7 @@ export async function GET(request: NextRequest) {
       : null;
     if (answers && latestResume?.profile) {
       const { data: jobs } = await supabase
-        .from('jobs')
+        .from(jobReadTable())
         .select('direction, sponsorship, region')
         .eq('is_active', true);
       const sponsorshipStats = computeSponsorshipStatsByRole(jobs || [], selectedRegion);

@@ -12,6 +12,7 @@ import type { RegionKey } from '@/lib/region-dna';
 import type { ResumeProfile } from '@/lib/resume-types';
 import { getUserResume } from '@/lib/resume-selection';
 
+import { jobReadTable } from '@/lib/job-read-source';
 function positiveInteger(value: unknown): number | null {
   if (value === undefined || value === null || value === '') return null;
   const parsed = Number(value);
@@ -108,7 +109,7 @@ export async function POST(request: NextRequest) {
     }
 
     const { data: jobs, error: jobsError } = await auth.client
-      .from('jobs')
+      .from(jobReadTable())
       .select('direction, sponsorship, region')
       .eq('is_active', true);
     if (jobsError) throw new Error(`读取岗位 sponsor 数据失败: ${jobsError.message}`);

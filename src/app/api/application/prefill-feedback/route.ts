@@ -9,6 +9,7 @@ import {
   type ProfileSourceMap,
 } from '@/lib/application-profile';
 import { prefillFeedbackRequestSchema } from '@/lib/application-contracts';
+import { jobReadTable } from '@/lib/job-read-source';
 import { getSupabaseClient } from '@/storage/database/supabase-client';
 import { getUserResume } from '@/lib/resume-selection';
 
@@ -22,7 +23,7 @@ export async function POST(request: NextRequest) {
 
     if (jobId) {
       const { data: job, error: jobError } = await getSupabaseClient()
-        .from('jobs')
+        .from(jobReadTable())
         .select('id')
         .eq('id', jobId)
         .maybeSingle();

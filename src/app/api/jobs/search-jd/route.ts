@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from 'next/server';
 import { getAuthContext, unauthorizedResponse } from '@/lib/auth-server';
 import { getSupabaseClient } from '@/storage/database/supabase-client';
 import { isDisplayableJobDescription, jobHtmlToPlainText } from '@/lib/job-content';
+import { jobReadTable } from '@/lib/job-read-source';
 
 // 岗位描述检索：只查站内岗位库，不依赖任何外部搜索服务。
 // 站内 23 万岗位中 98% 自带完整 JD，比联网搜索更稳定、零成本、零延迟。
@@ -89,7 +90,7 @@ function toSource(job: JobRow) {
 async function loadJobById(jobId: number): Promise<JobRow | null> {
   const client = getSupabaseClient();
   const { data, error } = await client
-    .from('jobs')
+    .from(jobReadTable())
     .select(JD_COLUMNS)
     .eq('id', jobId)
     .eq('is_active', true)
@@ -104,7 +105,7 @@ async function searchJobs(
 ): Promise<JobRow[]> {
   const client = getSupabaseClient();
   let query = client
-    .from('jobs')
+    .from(jobReadTable())
     .select(JD_COLUMNS)
     .eq('is_active', true)
     .eq('is_closed', false);

@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { getAuthContext, unauthorizedResponse } from '@/lib/auth-server';
+import { jobReadTable } from '@/lib/job-read-source';
 
 const FEEDBACK_VALUES = new Set(['interested', 'not_interested', 'inaccurate']);
 
@@ -48,7 +49,7 @@ export async function POST(request: NextRequest) {
     if (!resume) return NextResponse.json({ error: '简历不存在或无权使用' }, { status: 404 });
 
     const { data: job, error: jobError } = await auth.client
-      .from('jobs')
+      .from(jobReadTable())
       .select('id')
       .eq('id', jobId)
       .maybeSingle();

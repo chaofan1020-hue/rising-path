@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { getAuthContext, unauthorizedResponse } from '@/lib/auth-server';
+import { jobReadTable } from '@/lib/job-read-source';
 
 function parsePositiveId(value: unknown): number | null {
   const id = Number(value);
@@ -43,7 +44,7 @@ export async function POST(request: NextRequest) {
     if (!jobId) return NextResponse.json({ error: '岗位 ID 无效' }, { status: 400 });
 
     const { data: job, error: jobError } = await auth.client
-      .from('jobs')
+      .from(jobReadTable())
       .select('id')
       .eq('id', jobId)
       .eq('is_active', true)

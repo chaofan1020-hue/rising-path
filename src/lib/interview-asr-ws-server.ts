@@ -17,6 +17,7 @@ import {
   createAlibabaRealtimeASRSocket,
   createRealtimeEventId,
 } from '@/lib/asr-realtime-provider';
+import { jobReadTable } from '@/lib/job-read-source';
 import {
   buildCartesiaInkClose,
   buildCartesiaInkConfig,
@@ -141,7 +142,7 @@ async function authenticateTicket(ticket: string): Promise<AuthenticatedRealtime
     let voiceRoute = parseInterviewVoiceRoute(session.voice_route);
     if (!voiceRoute && session.job_id) {
       const { data: job } = await client
-        .from('jobs')
+        .from(jobReadTable())
         .select('region')
         .eq('id', session.job_id)
         .maybeSingle();

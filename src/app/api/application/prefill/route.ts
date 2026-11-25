@@ -14,6 +14,7 @@ import { applicationPrefillRequestSchema } from '@/lib/application-contracts';
 import { consumeAuthRateLimit } from '@/lib/auth-security';
 import { getUserResume } from '@/lib/resume-selection';
 
+import { jobReadTable } from '@/lib/job-read-source';
 function decayedConfidence(fieldSource?: { source?: string; confidence?: number; updatedAt?: string }): number {
   const base = typeof fieldSource?.confidence === 'number' ? fieldSource.confidence : 0.9;
   if (fieldSource?.source !== 'manual' || !fieldSource.updatedAt) return base;
@@ -193,7 +194,7 @@ export async function POST(request: NextRequest) {
     let jobContext = '';
     if (body.jobId) {
       const { data: job } = await client
-        .from('jobs')
+        .from(jobReadTable())
         .select('title, company, description, requirements')
         .eq('id', body.jobId)
         .maybeSingle();

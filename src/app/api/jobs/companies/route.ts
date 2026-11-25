@@ -4,6 +4,7 @@ import { getSupabaseClient } from '@/storage/database/supabase-client';
 import { resolveDisplayLogoUrls } from '@/lib/company-logo';
 import { targetRegionPostgrestClauses } from '@/lib/job-region-scope';
 import { requireJobAccess } from '@/lib/job-access';
+import { jobReadTable } from '@/lib/job-read-source';
 
 interface ActiveCompany {
   companyName: string;
@@ -33,7 +34,7 @@ async function fetchCompanies(): Promise<ActiveCompany[]> {
     rows = rpcResult.data;
   } else {
     const fallbackResult = await supabase
-      .from('jobs')
+      .from(jobReadTable())
       .select('company,job_url')
       .eq('is_active', true)
       .or(targetRegionPostgrestClauses().join(','))

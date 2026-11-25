@@ -66,6 +66,7 @@ import {
 import { shouldEndInterviewEarly } from '@/lib/interview-answer-quality';
 import { resolveInterviewVoiceRoute } from '@/lib/interview-voice-routing';
 
+import { jobReadTable } from '@/lib/job-read-source';
 interface ChatMessage {
   role: 'interviewer' | 'candidate';
   content: string;
@@ -421,7 +422,7 @@ export async function POST(request: NextRequest) {
       // it could create a session or warm the realtime sockets.
       const resumeAccessPromise = requireConfirmedResume(client, resumeId, auth.user.id);
       const jobPromise = client
-        .from('jobs')
+        .from(jobReadTable())
         .select('id, title, company, description, requirements, region, direction')
         .eq('id', jobId)
         .eq('is_active', true)

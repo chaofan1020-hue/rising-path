@@ -3,6 +3,7 @@ import { getSupabaseClient } from '@/storage/database/supabase-client';
 import { sanitizeJobContent } from '@/lib/job-content';
 import { TARGET_REGION_KEYWORDS, targetRegionPostgrestClauses } from '@/lib/job-region-scope';
 
+import { jobReadTable } from '@/lib/job-read-source';
 export const runtime = 'nodejs';
 // The endpoint has two query shapes (company catalog and company jobs), so
 // keep request routing dynamic. Public cache headers and client-side caching
@@ -59,7 +60,7 @@ async function loadJobsForCompany(company: string): Promise<InterviewPickerJob[]
   const request = (async () => {
     const client = getSupabaseClient();
     const { data, error } = await client
-      .from('jobs')
+      .from(jobReadTable())
       // The picker only renders an id and title. The full JD is loaded by the
       // authoritative chat endpoint after the candidate has selected a job.
       .select('id, title, company')

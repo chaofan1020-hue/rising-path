@@ -18,6 +18,7 @@ import {
   type InterviewVoiceRoute,
 } from '@/lib/interview-voice-routing';
 import WebSocket, { WebSocketServer } from 'ws';
+import { jobReadTable } from '@/lib/job-read-source';
 
 const TTS_WS_PATH = '/ws/interview/tts';
 const CLIENT_PROTOCOL = 'rising-path-tts-v1';
@@ -94,7 +95,7 @@ async function authenticateTicket(ticket: string): Promise<AuthenticatedTtsSessi
     if (!claimed?.user_id || !claimed.session_id) return null;
     let voiceRoute = parseInterviewVoiceRoute(session.voice_route);
     if (!voiceRoute && session.job_id) {
-      const { data: job } = await client.from('jobs').select('region').eq('id', session.job_id).maybeSingle();
+      const { data: job } = await client.from(jobReadTable()).select('region').eq('id', session.job_id).maybeSingle();
       voiceRoute = resolveInterviewVoiceRoute(job?.region);
     }
     return {

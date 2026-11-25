@@ -9,7 +9,7 @@ import { resolveDisplayLogoUrls } from '@/lib/company-logo';
 import { isVerifiedField } from '@/lib/job-field-provenance';
 import { isDisplayableJobDeadline } from '@/lib/job-deadline';
 import { requireJobAccess } from '@/lib/job-access';
-import { jobListingReadTable } from '@/lib/job-read-source';
+import { jobListingReadTable, jobReadTable } from '@/lib/job-read-source';
 
 export const dynamic = 'force-dynamic';
 export const revalidate = 0;
@@ -252,7 +252,7 @@ export async function GET(request: NextRequest) {
       // generated parser does not instantiate a union of both row shapes.
       const columns: string = summaryOnly ? SUMMARY_COLUMNS : DETAIL_COLUMNS;
       let query = client
-        .from(options.listingView ? jobListingReadTable() : 'jobs')
+        .from(options.listingView ? jobListingReadTable() : jobReadTable())
         .select(columns, { count: 'planned' });
 
       if (diverseFeed) {
