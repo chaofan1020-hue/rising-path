@@ -9,3 +9,8 @@ export function jobReadTable(env: Record<string, string | undefined> = process.e
   const value = (env.JOBS_READ_SOURCE || 'jobs').trim().toLowerCase();
   return value === 'v3' || value === 'jobs_v3' ? 'jobs_v3' : 'jobs';
 }
+
+export function jobListingReadTable(env: Record<string, string | undefined> = process.env): 'jobs_listing' | 'jobs_listing_v3' {
+  const value = (env.JOBS_READ_SOURCE || 'jobs').trim().toLowerCase();
+  return value === 'v3' || value === 'jobs_v3' ? 'jobs_listing_v3' : 'jobs_listing';
+}
