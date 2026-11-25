@@ -34,7 +34,7 @@
 | 基线文件 | `tmp/baseline-20261124.json` |
 | Supabase 备份时间点 | `/opt/liorvix-backups/liorvix-20261124-032117.dump`（444MB；DB 容器 2026-11-23 03:15 UTC 起） |
 | Feed worker 实际配置 | `JOBS_AUTO_WORKER=true`、`JOBS_SYNC_INTERVAL_MINUTES=5`；**systemd jobs timers 全部 disabled**，不要按 timer 文档推断 |
-| 当前生产事实 | 2026-11-25 14:55 +08：US active **199,193**；v3 `jobs_v3` total 199,232（ATS 87,270 / legacy 111,962；active gap 0、字段 mismatch 0；39 条关闭行 evidence 全覆盖）；上游 `scope=ats` 127,900（8 CLOSED）；feed 最近 success、0 row failure；**DLQ pending 0**（dead 3,768 审计 / resolved 14）；5 分钟对账 timer 已运行（06:07 UTC 起，48h 观察至 11-26 11:50 UTC）；DB 7.75 GB / 剩余 11 GB |
+| 当前生产事实 | 2026-11-25 15:30 +08：US active **199,196**；v3 `jobs_v3` total 199,235（ATS 87,273 / legacy 111,962；active gap 0、字段 mismatch 0；39 条关闭行 evidence 全覆盖）；上游 `scope=ats` 127,900（8 CLOSED）；feed 最近 success、0 row failure；**DLQ pending 0**（dead 3,768 审计 / resolved 14）；对账 timer 每 5 分钟运行，24h 证据基线 `2026-11-25T07:11:43Z`；生产 commit `fca4cfa`（回滚点 `82e3947`）；DB 7.75 GB / 剩余 11 GB |
 
 ## 执行约定（B03）
 
@@ -142,6 +142,15 @@
 | — | — | — | — | — | — |
 
 ## 日志（倒序）
+
+### 2026-11-25 · 监控误报修正与 official_details 游标钉死
+
+- **watchdog 误报**：`jobs-v3-reconcile.sh` 的 `row_failures` 取“任意来源最新 run”，而 official_details 每家公司稳定带 1 条失败，于是 06:30 / 07:05 UTC 两次 `ALERT latest_run_row_failures_1` 与 ATS feed 无关。改为只读 `source_system='collector_feed'` 的 run（`42b7200`），并新增 `scripts/test-jobs-v3-watchdog.ts` 防回归。
+- **24h 证据基线重置为 `2026-11-25T07:11:43Z`**（修正后的第一个干净样本），完成时间 `2026-11-26T07:11:43Z`；`scripts/jobs-v3-evidence.sh` 支持 `[log] [hours] [since]`，输出 `clean_since` / `clean_hours` / `verdict`，避免把“短窗口”误判成 PASS。前 2 个告警样本按缺陷处理，不纳入证据窗口。
+- **official_details 127 家公司原地打转**：每轮 `candidate_jobs≈100 / skipped≈99 / failed=1`，失败原因是官方页返回 HTTP 429。旧代码 `failed>0` 时“保留游标”，于是每轮重读同一批 100 条，永远到不了后面的岗位。`fca4cfa` 改为保留退避但把游标推进到本批最后处理的 job id。
+- 验证（deploy 后 `07:26:44` 批次）：Microchip `state_cursor=193702`、CIBC `197972`、Motorola `195202`，均等于 `cursor_after`，不再停在 `cursor_before`。
+- 切换手册已落到 [job-acquisition-v3-cutover-runbook.md](./job-acquisition-v3-cutover-runbook.md)：明确“只切读（现成）”与“读写都切（尚无写开关）”的差别，避免把只切读说成写入量已下降。
+- 新增不变量复核：`v3_active_only=0`、`dup_ats_keys=0`、`ats_missing_key=0`、legacy 行 `source_key` 全空、关闭行 `closure_evidence` 全覆盖。
 
 ### 2026-11-25 · DLQ 清零与重试链路修复
 
