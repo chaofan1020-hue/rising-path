@@ -19,7 +19,7 @@
 
 | 项 | 值 |
 |---|---|
-| 美国站生产 commit | `c5b979b`（S02-S04；2026-11-24 19:41 +08 部署）；仓库最新 `d4b8aa7` |
+| 美国站生产 commit | `eb5cac9`（v3 Phase 0 关闭权威修复；2026-11-25 12:20 +08 部署）；仓库最新 `eb5cac9` |
 | 美国站生产目录 | `/opt/liorvix`（git repo；systemd `liorvix.service` 跑 `node dist/server.js`） |
 | 美国站服务重启点 | 2026-11-24 19:41:12 +08；部署前 release `924ae747a3cc8d819bf6a812ebea5a6ee277e09e` |
 | 上游 commit | 无 git；版本证据 = 文件哈希 + 镜像 `global-jobs-api:latest` ID `fc66e4c34...`（pre-u07 `342cc0aa7c26`） |
@@ -33,7 +33,7 @@
 | 基线文件 | `tmp/baseline-20261124.json` |
 | Supabase 备份时间点 | `/opt/liorvix-backups/liorvix-20261124-032117.dump`（444MB；DB 容器 2026-11-23 03:15 UTC 起） |
 | Feed worker 实际配置 | `JOBS_AUTO_WORKER=true`、`JOBS_SYNC_INTERVAL_MINUTES=5`；**systemd jobs timers 全部 disabled**，不要按 timer 文档推断 |
-| 当前生产事实 | 2026-11-25 03:40 UTC 快照：US active 200,251（其中 v2 `source_key` 86,934）；上游 500 active board、`source_key` 岗位 127,843 OPEN / 8 CLOSED；board P95 29.2min（岗位加权 27.3min）；US feed 追平中，见 V02 行 |
+| 当前生产事实 | 2026-11-25 04:30 UTC：US active **199,209**（v2 `source_key` 87,240 / legacy 111,969）；上游 500 active board、`source_key` 岗位 127,869 OPEN / 8 CLOSED；feed 已连续 success、0 row failures；详见下方 v3 Phase 0 日志 |
 
 ## 执行约定（B03）
 
@@ -51,14 +51,14 @@
 | 上游 | `BULK_BOARDS_ENABLED` | `false` | 批量 board 调度总开关 |
 | 上游 | `BULK_BOARD_WRITE` | `false` | 是否写岗位；false 只记录 run |
 | 上游 | `BULK_MAX_ACTIVE_BOARDS` | 未实现 | 当前只用 500 board；观察期不再导入，靠流程约束而非代码上限 |
-| 美国站 | `JOBS_FEED_V2_ENABLED` | `false` | v2 字段/行为 |
+| 美国站 | `JOBS_FEED_V2_ENABLED` | `true`（代码缺省；生产未显式关闭） | v2 字段/行为 |
 | 美国站 | `JOB_TTL_ENABLED` | `false` | stale 计算 |
 
 ## Gate 状态
 
 | Gate | 状态 | 开启时间 | 依据 |
 |---|---|---|---|
-| G1（500 board 生产） | passed | 2026-11-24 20:10 | V01 50 board 44,234；V02 500 board 89,144+；board P95 16min、成功率 100%、0 误关；US feed lag 3min |
+| G1（500 board 生产） | passed | 2026-11-24 20:10 | V01 50 board 44,234；V02 500 board 89,144+；board P95 16min、成功率 100%；当时记录 0 误关，11-25 发现跨 lane 关闭漏洞并修复（见 v3 Phase 0 日志） |
 | G2（1,500 + Feed v2） | closed | — | V02 48h 观察中；未到 1,500 |
 | G3（3,000 + 适配器） | closed | — | V03 |
 | G4（6,000） | closed | — | V04 |
@@ -89,7 +89,7 @@
 | S04 | done | c5b979b | 2026-11-24 19:41 | `/api/jobs` 默认 `display_status in (listed,enriched)`；closed/all 保留；jobs_listing 重建 |
 | S05 | done | c5b979b | 2026-11-24 20:06 | 只读审计：`ats:*` 0、跨来源重复 0；53 组通用 URL 14,597 额外行，不按 URL 去重 |
 | V01 | done | c5b979b | 2026-11-24 19:50 | 50 board 44,234 岗位；US 27,697 v2；20/20 官方 URL；0 误关；G1 |
-| V02 | in_progress | 3767e0f | — | 500 board、127,843 source OPEN / 8 合法 CLOSED；30/25,949 run 失败（99.884%）、P95 29.2min；US feed 因 legacy null source_tier 卡死，已由 f163324/3767e0f 修复并追平中；48h 观察至 2026-11-26 11:50 UTC |
+| V02 | in_progress | eb5cac9 | — | 500 board、127,869 source OPEN / 8 合法 CLOSED；30/25,949 run 失败（99.884%）、P95 29.2min；US feed 因 legacy null source_tier 卡死已由 f163324/3767e0f 修复并追平；11-25 发现跨 lane 关闭漏洞，eb5cac9 已按 `source_key` 限定 close；1,942 条 legacy 关闭审计中 73 条上游仍 OPEN 已恢复；48h 观察至 2026-11-26 11:50 UTC |
 | D07 | done | a1cd627 | 2026-11-24 21:06 | 探测 1,440：active 1,245、隔离 153（10.6%）；总 active 2,147；重冻结 1,000（GH630/Ashby252/Lever118），token fallback 0 |
 | U08 | pending | — | — | — |
 | U09 | pending | — | — | — |
@@ -141,6 +141,16 @@
 | — | — | — | — | — | — |
 
 ## 日志（倒序）
+
+### 2026-11-25 · v3 Phase 0 备份、基线与关闭权威修复
+
+- 生产备份：`/opt/liorvix-backups/jobs-v3-pre-20261125-040722.dump`，449 MB，`pg_restore -l` 1,637 项，sha256 `6320a3e9…ba2df`；基线 `tmp/v3-baseline.json`（04:08 UTC）。
+- Feed 12h 卡死已由 `f163324`（跳过 null `source_key`）+ `3767e0f`（normalize 前早退）修复；04:21 后连续 success、0 row failures。
+- **新发现跨 lane 关闭漏洞**：ATS close event 只按 `(company, external_id/url)` 匹配，会把同公司同 ID 的 legacy 行一起关闭。04:10–04:15 的 40 条 legacy 关闭中，60/62 上游也已 CLOSED，2 条上游仍 OPEN 已恢复。
+- 修复 `eb5cac9`：close 事件必须带 `source_key`，并按 `source_key` 过滤目标行；无 `source_key` 的 legacy close 直接跳过。部署后新 feed run `closed=0`，legacy 不再被 ATS close 跨 lane 关闭。
+- 全量审计 2026-11-25 00:00 以来 1,942 条 legacy 关闭：73 条上游仍 OPEN 已恢复；其余上游 CLOSED，属于合法关闭或待链路复核。04:26/04:27 两条 HTTP 404 关闭保留，属于官方链接权威关闭，不恢复。
+- 新增 `/api/jobs/sync-feed` 的 `lag_minutes`、`heartbeat_age_minutes`、`stale`、`catching_up`；`healthy` 不再仅凭“worker 最近动过”为真（`4d3a592`）。
+- R03 外部告警仍待接；R04 只完成“关闭事件冻结”，legacy 新增写入冻结仍待做。下一步进入 Phase 1 上游 `scope=ats`。
 
 ### 2026-11-24 · D07 P1 扩量探测与冻结
 

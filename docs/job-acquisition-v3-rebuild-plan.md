@@ -1,6 +1,6 @@
 # 岗位库 v3 影子重建与 Feed 精简计划
 
-> 状态：待执行（Phase 0 已开始）
+> 状态：Phase 0 进行中（备份/基线完成；跨 lane 关闭漏洞已修复；等外部告警与 legacy 写入冻结）
 > 制定时间：2026-11-25 12:10（北京）/ 04:10 UTC
 > 适用范围：上游采集器 + 美国站岗位库 + `collector_feed`
 > 原则：**不清空生产库；不重抓 500 个 board；影子重建、对账后切换；旧库只读保留 7 天。**
@@ -203,8 +203,15 @@ S05 已知 53 组 canonical URL、14,650 行重复：
 |---|---|---|---|
 | R01 | 生产库全量备份 | `/opt/liorvix-backups/jobs-v3-pre-20261125-040722.dump` | 已生成 449 MB 备份，`pg_restore -l` 1,637 项可读；sha256 `6320a3e9f2cea0c9acb754cdd8a7538c70565e35a376c4ed2d0124269edba2df` |
 | R02 | 固化基线 | `tmp/v3-baseline.json` + 本文 0 节 | 已记录 2026-11-25 04:08 UTC 基线 |
-| R03 | 告警 | feed lag / row_failures / caught_up 三项 | 人为制造 16 分钟 lag 能触发 |
-| R04 | 冻结策略 | legacy 停止新增写入；ATS feed 仍正常 | 不改变现有用户可见数据 |
+| R03 | 告警 | feed lag / row_failures / caught_up 三项 | 4d3a592 已暴露 `lag_minutes`/`heartbeat_age_minutes`/`stale`/`catching_up`，`healthy` 需 success 新鲜；外部告警器待接 |
+| R04 | 冻结策略 | legacy 停止新增写入；ATS feed 仍正常 | eb5cac9 已冻结 legacy close 事件并限定 ATS close 只能命中同 `source_key`；legacy 新增写入冻结待做 |
+
+**已发现并修复的 Phase 0 事故（2026-11-25）**：
+
+- ATS close event 原先只按 `(company, external_id/source_url/job_url)` 匹配；同公司同 ID 的 legacy 行会被一起关闭。04:10–04:15 的 40 条 legacy 关闭中，2 条上游仍 OPEN，已恢复。
+- `eb5cac9` 后 close 事件必须携带 `source_key`，SQL 增加 `source_key` 过滤；无 `source_key` 的 legacy close 直接跳过。部署后新 run `closed=0`。
+- 全量审计 00:00 以来 1,942 条 legacy 关闭：73 条上游仍 OPEN 已恢复；04:26/04:27 两条 HTTP 404 关闭保留（官方链接关闭，属于合法证据）。
+- 结论：R04 的“关闭权威拆分”已完成核心代码；仍需做 legacy 新增写入冻结与外部告警，才算 R04/R03 全验收。
 
 **停止线**：备份不可读、磁盘剩余 <5 GB、当前 feed 非 success。
 
