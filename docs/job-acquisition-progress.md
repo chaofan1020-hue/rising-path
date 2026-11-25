@@ -143,6 +143,14 @@
 
 ## 日志（倒序）
 
+### 2026-11-25 · 全列审计与投影级等价
+
+- Watchdog 每 tick 只比 8 列（title/company/region/display_status/source_key/job_url/apply_url/is_active），掉别的列不会报警。新增 [scripts/jobs-v3-column-audit.sh](scripts/jobs-v3-column-audit.sh)：按 `information_schema` 枚举 `jobs` 与 `jobs_v3` 的**全部 56 个共享列**，逐列 `is distinct from` 比对 active 行，实测 `total_mismatches=0`，非零则 `raise exception` 并 exit 1。
+- 脚本第一版有个假 OK：`docker exec` 少了 `-i`，psql 收不到 stdin、零输出还 exit 0，打出“全部一致”。已修，并把这条写进测试（`docker exec -i` 必须在、无 `-i` 形式不许回来）。
+- 幂等负向验证：临时表复制 500 行、改 1 行 title/posted_at，`is distinct from` 计数分别命中 1，证明比对逻辑真的能抓差异。
+- 投影级等价：用 `/api/jobs` 的真实 `DETAIL_COLUMNS`/`SUMMARY_COLUMNS` 加默认筛选请求两个视图，**40 行、312,433 / 238,735 字节逐字节相同**，id 顺序也一致。
+- `/api/jobs/stats` 走的是表级 `count=planned`：`matches_target_region` 真实值 116,317，`jobs` 估算 123,791（+6.4%）、`jobs_v3` 估算 118,239（+1.7%）；切读后统计卡片的“总量”会小幅变小但更准。
+
 ### 2026-11-25 · 切换预演与两个“第二实例”陷阱
 
 - 用 `PORT=5011 JOBS_READ_SOURCE=v3 node dist/server.js` 起第二实例做预演，发现两个坑并写进手册：

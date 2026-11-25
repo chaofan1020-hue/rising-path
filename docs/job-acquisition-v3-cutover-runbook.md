@@ -35,7 +35,10 @@ ls -lh /opt/liorvix/backups | tail -3
 #    期望输出里 read_index_gaps=0；不为 0 就先补索引再谈切读
 sudo tail -1 /var/log/liorvix-jobs-v3-reconcile.log
 
-# 5) 记录回滚点
+# 5) 全列一致性（56 个共享列，比 watchdog 的 8 列更严）
+sudo sh /opt/liorvix/scripts/jobs-v3-column-audit.sh
+
+# 6) 记录回滚点
 sudo git -C /opt/liorvix rev-parse HEAD
 ```
 

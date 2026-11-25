@@ -65,4 +65,16 @@ assert.match(evidence, /verdict=WAITING/);
 assert.match(evidence, /clean_since=/);
 assert.match(evidence, /verdict=PASS/);
 
+/** The full-column audit must actually compare every shared column, not a sample. */
+const audit = fs.readFileSync(path.join(process.cwd(), 'scripts/jobs-v3-column-audit.sh'), 'utf8');
+assert.match(audit, /information_schema\.columns/, 'audit must enumerate shared columns');
+assert.match(audit, /table_name = 'jobs_v3'/, 'audit must target the shadow table');
+assert.match(audit, /is distinct from/, 'audit must compare with is distinct from');
+assert.match(audit, /raise exception 'jobs_v3 column mismatch/, 'audit must fail loudly on mismatch');
+assert.match(audit, /docker exec -i /, 'audit feeds SQL through stdin, so docker exec needs -i');
+assert.ok(
+  !/DB="docker exec liorvix-supabase-db/.test(audit),
+  'docker exec without -i swallows the SQL and reports a false OK',
+);
+
 console.log('jobs v3 watchdog tests passed');
