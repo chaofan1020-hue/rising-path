@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { ADMIN_PERMISSIONS, requireAdminPermission } from '@/lib/admin-permissions';
 import { getJobFeedState, isJobFeedSyncDisabled, runJobFeedSync, type JobFeedSyncMode } from '@/lib/job-feed-orchestrator';
+import { describeJobFeedFreshness } from '@/lib/job-feed-freshness';
 import { recordAdminAuditEvent, recordAdminAuditFailure } from '@/lib/admin-audit';
 
 export const maxDuration = 300;
@@ -74,21 +75,21 @@ export async function GET(request: NextRequest) {
   }
   try {
     const state = await getJobFeedState();
-    const updatedAt = Date.parse(state.updated_at);
-    const catchingUp = Boolean(
-      state.cursor
-      && !state.last_error
-      && Number.isFinite(updatedAt)
-      && Date.now() - updatedAt < 20 * 60_000,
-    );
+    const freshness = describeJobFeedFreshness({
+      last_incremental_success_at: state.last_incremental_success_at,
+      updated_at: state.updated_at,
+      consecutive_failures: state.consecutive_failures,
+    });
     return NextResponse.json({
       configured: Boolean(process.env.JOBS_FEED_API_KEY || process.env.INTEGRATION_API_KEY),
       state,
-      catching_up: catchingUp,
-      healthy: state.consecutive_failures === 0 && (Boolean(state.last_incremental_success_at) || catchingUp),
-      description: catchingUp
-        ? '正在从稳定增量游标追平历史变更；已写入的数据会立即可用。'
-        : '增量同步用于快速更新和接收上游关闭事件；完整对账只允许在维护窗口人工执行，不会自动下架岗位。',
+      ...freshness,
+      healthy: freshness.healthy,
+      description: freshness.stale
+        ? '最近一次完整增量同步已超过 15 分钟；worker 可能仍在跑，但数据已不新鲜，不能视为健康。'
+        : freshness.catching_up
+          ? '正在从稳定增量游标追平历史变更；已写入的数据会立即可用。'
+          : '增量同步用于快速更新和接收上游关闭事件；完整对账只允许在维护窗口人工执行，不会自动下架岗位。',
     });
   } catch (error) {
     return NextResponse.json({

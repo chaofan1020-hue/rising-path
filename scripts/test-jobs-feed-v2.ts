@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict';
 import { jobContentHash } from '@/lib/job-sync';
-import { normalizeFeedItem, normalizeSkipReason, type JobsFeedItem } from '@/lib/jobs-feed';
+import { normalizeFeedItem, normalizeSkipReason, shouldSkipClosedLegacyItem, type JobsFeedItem } from '@/lib/jobs-feed';
 
 function item(overrides: Partial<JobsFeedItem> = {}): JobsFeedItem {
   return {
@@ -50,6 +50,8 @@ async function main() {
   assert.equal(normalizeSkipReason(item({ source_key: null })), 'not_ats_source');
   assert.equal(normalizeSkipReason(item({ title: '' })), 'missing_title');
   assert.equal(normalizeFeedItem(item({ source_key: null })), null);
+  assert.equal(shouldSkipClosedLegacyItem(item({ source_key: null })), true);
+  assert.equal(shouldSkipClosedLegacyItem(item()), false);
 
   // The daily heartbeat must not churn the content hash.
   assert.equal(jobContentHash(record), jobContentHash({ ...record, last_seen_at: '2026-11-25T10:00:00.000Z' }));

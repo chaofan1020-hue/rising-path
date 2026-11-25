@@ -508,6 +508,10 @@ function extractExperience(item: JobsFeedItem): { min: number | null; max: numbe
   ], item.level);
 }
 
+export function shouldSkipClosedLegacyItem(item: JobsFeedItem): boolean {
+  return JOBS_FEED_V2_CLIENT_ENABLED && !text(item.source_key);
+}
+
 export function normalizeFeedItem(item: JobsFeedItem): JobSyncRecord | null {
   const title = text(item.title);
   const company = text(item.company_name);
@@ -938,6 +942,15 @@ export async function syncJobsFeed(
     const closeExternalIdsByCompany = new Map<string, string[]>();
     for (const item of items) {
       if (isClosedItem(item)) {
+        // v2 ATS feed owns only ATS lifecycle. Legacy rows have no source_key
+        // and are one-time imported into their own lane; letting an ATS close
+        // event touch them would re-create cross-lane closures.
+        if (shouldSkipClosedLegacyItem(item)) {
+          incrementSkipReason(result, 'not_ats_source');
+          const observed = companyObservation(result, text(item.company_name));
+          if (observed) observed.skipped += 1;
+          continue;
+        }
         const observed = companyObservation(result, text(item.company_name));
         const sourceUrl = text(item.source_url);
         const externalJobId = text(item.external_job_id) || text(item.id);
