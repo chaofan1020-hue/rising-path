@@ -211,7 +211,10 @@ S05 已知 53 组 canonical URL、14,650 行重复：
 - ATS close event 原先只按 `(company, external_id/source_url/job_url)` 匹配；同公司同 ID 的 legacy 行会被一起关闭。04:10–04:15 的 40 条 legacy 关闭中，2 条上游仍 OPEN，已恢复。
 - `eb5cac9` 后 close 事件必须携带 `source_key`，SQL 增加 `source_key` 过滤；无 `source_key` 的 legacy close 直接跳过。部署后新 run `closed=0`。
 - 全量审计 00:00 以来 1,942 条 legacy 关闭：73 条上游仍 OPEN 已恢复；04:26/04:27 两条 HTTP 404 关闭保留（官方链接关闭，属于合法证据）。
-- 结论：R04 的 legacy feed 写入/关闭冻结已完成；R03 只剩外部告警器接入，不再阻塞 Phase 1。
+- 二次审计（2026-11-25 06:40 UTC，逐条对齐上游数据库）：00:00 以来仍处于关闭态的 **1,914** 条 legacy 行，按 `company + external_job_id` 对照上游：**1,889 条上游确为 CLOSED**，**25 条上游仍是 OPEN（误关）**。25 条已用迁移 `0153` 恢复。
+- 根因不是 feed close 事件，而是 **link-health 链路**：LinkedIn 404、Deloitte 404、BCG 410 被当成下架证据。`313d988` 改为关闭前必须先向上游核对，上游仍 OPEN 或不确认则一律不关。
+- 顺带发现并修复：上游 `/integrations/v1/jobs` 原本不支持按 `external_job_id` / `source_url` 查询，`fetchJobForSyncRetry` 实际拿不到目标行（DLQ 重试一直“未返回完全匹配的岗位”）。已在 `/opt/global-jobs/app/main.py` 增加这两个过滤参数（备份 `/opt/global-jobs/ops-backups/v3-feed-lookup-20261125T064143Z/main.py`），实测精确命中，`scope=ats` 默认 feed 仍 200。
+- 结论：R04 的 legacy feed 写入/关闭冻结已完成；跨 lane 关闭已收敛；R03 只剩外部告警器接入。
 
 **停止线**：备份不可读、磁盘剩余 <5 GB、当前 feed 非 success。
 
@@ -219,7 +222,7 @@ S05 已知 53 组 canonical URL、14,650 行重复：
 
 | ID | 任务 | 产出 | 验收 |
 |---|---|---|---|
-| R05 | 上游增加 `scope=ats` | 只返回 `source_key` 行 | **已完成**：上游 `/opt/global-jobs/app/main.py` 增加 `scope=ats`；备份 `/opt/global-jobs/ops-backups/v3-scope-ats-20261125T044029Z/main.py`；实测 539,649 → **127,900** 行，8 个合法 CLOSED 仍在；默认 `scope=all` 不变 |
+| R05 | 上游增加 `scope=ats` | 只返回 `source_key` 行 | **已完成**：上游 `/opt/global-jobs/app/main.py` 增加 `scope=ats`；备份 `/opt/global-jobs/ops-backups/v3-scope-ats-20261125T044029Z/main.py`；实测 539,649 → **127,900** 行，8 个合法 CLOSED 仍在；默认 `scope=all` 不变。追加：同端点支持 `external_job_id`/`source_url` 精确查询（备份 `ops-backups/v3-feed-lookup-20261125T064143Z`），单条生命周期核对不再翻全量 feed |
 | R06 | 美国站客户端兼容 | 请求带 `scope=ats`，记录 watermark | **已完成**：`09f40ed` 默认请求 `scope=ats`；`JOBS_FEED_SCOPE=all` 是回滚开关；`195203/195210/195217` 连续 3 轮 success、0 row failure |
 | R07 | 关闭权威拆分 | ATS close 只处理 ATS lane | **已完成核心代码**：`eb5cac9` 要求 close 带 `source_key` 并按 `source_key` 过滤；无 `source_key` legacy close 跳过；部署后 `closed=0` |
 
@@ -249,7 +252,7 @@ S05 已知 53 组 canonical URL、14,650 行重复：
 | ID | 任务 | 产出 | 验收 |
 |---|---|---|---|
 | R17 | 新 feed 影子写入 v3 | v3 cursor 正常 | **已完成双写影子**：`0145` + `0149` 在 `public.jobs` 上挂异常安全触发器；从逐行改为 insert/update/delete 三条 statement 级 transition-table 触发器，源写入仍走旧表；回填后 mismatch=0，insert/update/delete 事务内 CRUD 验证通过 |
-| R18 | 影子读 | feature flag 内部读取 v3 | **部分完成**：`jobReadTable()` + `/api/jobs/stats`，以及 `jobListingReadTable()` + `/api/jobs` 列表支持 `JOBS_READ_SOURCE=v3`；新增 `jobs_listing_v3` 视图，anon 可读且 active 计数与源库一致；详情/搜索等其它读 API 未切，生产未启用该 flag |
+| R18 | 影子读 | feature flag 内部读取 v3 | **完成读路径覆盖**：`jobReadTable()` 覆盖 `/api/jobs/stats`、`/api/jobs/[id]` 详情、`/api/jobs/[id]/open`；`jobListingReadTable()` 覆盖 `/api/jobs` 列表（新增 `jobs_listing_v3` 视图）；迁移 0152 给 `jobs_v3` 补上 `company_config` 外键，PostgREST 详情嵌套查询实测 200；写路径仍只走 `jobs`，生产 flag 未启用 |
 | R19 | 对账 | 计数、重复、关闭、tier、地区 | **当前快照完成 + 持续监控已启用**：active gap 0、全字段 mismatch 0、关闭行 evidence 全覆盖；`liorvix-jobs-v3-reconcile.timer` 每 5 分钟只读对账并写 `/var/log/liorvix-jobs-v3-reconcile.log`，24h 连续证据待 2026-11-26 06:07 UTC 后确认 |
 | R20 | 压测 | 1,500 board 模拟流量 | **未完成**：只做了 1,500 行影子写微基准（statement trigger 5.9s，关闭影子 2.5s；影子额外约 3.4s）；真实 1,500 board 需要先扩上游，按停止线未做 |
 
