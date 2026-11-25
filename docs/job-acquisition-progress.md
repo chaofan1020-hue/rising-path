@@ -148,6 +148,7 @@
 - 上游补齐 `external_job_id`/`source_url` 精确查询后，重试 worker 第一次真正拿到目标行：原先全部报“未返回完全匹配的岗位”，现在分成两类——ATS 行可正常标准化并 resolve（14 条已恢复），legacy 行报“当前仍无法标准化”。
 - lane 拆分结果：pending 452 条中 **ATS 0 / legacy 392 / unmatched 6**，全部无法进入 ATS lane（R04 冻结 + 无本地目标）。`0154` 先 park 58 条已暴露的，`0155` 结清余下 392 条；**`job_sync_failures` pending = 0**，dead 3,768（保留 payload/error 审计），resolved 14。
 - 重试批大小提到 `JOBS_SYNC_FAILURE_BATCH_SIZE=100`，避免 20 条/5 分钟排长队。
+- 关闭门禁抽成可测函数 `allowsLinkClose(shouldClose, verdict)`（`src/lib/job-link-health.ts`），新增 `scripts/test-job-close-guard.ts` 覆盖 open/unknown/absent 三种裁定与 404 二次确认；生产 `82e3947` 已部署（回滚点 `313d988`）。
 - 5 分钟对账快照：`source_active=199193 v3_total=199232 ats=87270 legacy=111962 missing=0 extra=0 field_mismatches=0 inactive_shadow=39 missing_evidence=0 feed_age=0.8min row_failures=0`。
 
 ### 2026-11-25 · 链接误关根因与上游精确查询
