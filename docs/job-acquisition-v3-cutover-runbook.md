@@ -128,6 +128,25 @@ sudo liorvix-rollback <上一个 release sha>
 
 回滚**只切读路径**，不回滚已写入的 v3 增量，也不删数据。
 
+### 2.5 可选预演（不影响线上服务）
+
+想在切之前证明“带 `JOBS_READ_SOURCE=v3` 也能正常起服务”，可以另起一个端口做预演。**必须同时满足下面两个条件**，否则会出两个坑（2026-11-25 实测）：
+
+```sh
+# 缺 NODE_ENV 会以 dev 模式启动（/api/* 的行为与线上不一致，看到的 200/401 不能作数）
+# 缺 JOBS_AUTO_WORKER=false 会起第二个 feed worker，和线上 worker 抢同一批游标
+sudo -n bash -c 'cd /opt/liorvix && NODE_ENV=production PORT=5011 \
+  JOBS_AUTO_WORKER=false JOBS_SYNC_DISABLED=true JOBS_READ_SOURCE=v3 \
+  nohup node dist/server.js > /tmp/v3rehearsal.log 2>&1 & echo started'
+sleep 12
+curl -s -o /dev/null -w 'root=%{http_code}\n' http://127.0.0.1:5011/
+# 收尾一定要杀干净（env 不在 argv 里，pkill -f PORT=5011 匹配不到该进程）
+sudo -n ss -ltnp | grep ':5011'   # 取 pid
+sudo -n kill <pid>
+```
+
+预演只能证明“服务能起、路由不 500”；它拿不到登录凭证，`/api/jobs` 只会 401，读切换的真实证据仍然是 §2.3 的 `idx_scan` 计数器和 PostgREST 计数比对。
+
 ## 3. 方案 B：写路径迁移（未建，需先开发）
 
 需要的改动（按依赖顺序）：

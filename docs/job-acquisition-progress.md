@@ -143,6 +143,14 @@
 
 ## 日志（倒序）
 
+### 2026-11-25 · 切换预演与两个“第二实例”陷阱
+
+- 用 `PORT=5011 JOBS_READ_SOURCE=v3 node dist/server.js` 起第二实例做预演，发现两个坑并写进手册：
+  1) 没带 `NODE_ENV=production` → 以 dev 模式启动，`/api/*` 行为与线上不一致（实测 `/api/jobs` 返回 200，而线上同请求 401），预演结果不可作数；
+  2) 没带 `JOBS_AUTO_WORKER=false`/`JOBS_SYNC_DISABLED=true` → 第二实例会起第二个 feed worker，日志里可见它独立跑完一轮 `upserted: 4`，与线上 worker 抢同一批游标。
+- 已杀掉预演进程（pid 933377），`5011` 端口释放；事后对账 `missing=0 extra=0 field_mismatches=0`、feed 正常，未发现数据影响。
+- 结论：方案 A 的技术前置已齐（读路径代码 + 0157 索引 + 视图等价 + 计数器验证法），剩的就是 24h 证据到点。
+
 ### 2026-11-25 · v3 读路径索引补齐（切换前置条件）
 
 - 发现切换读之前没人量过的东西：**`jobs` 有 39 个读路径索引，`jobs_v3` 只有 7 个**。实测 `region_market=us` 精确计数：`jobs_listing` ~75ms、`jobs_listing_v3` **~930ms（12 倍）**。如果现在切读，默认列表和每次筛选都会变慢，还可能触发 statement timeout。
