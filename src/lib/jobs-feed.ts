@@ -90,6 +90,7 @@ interface FeedPage {
   next_cursor?: string | null;
   has_more?: boolean;
   contract_version?: string;
+  generated_at?: string | null;
 }
 
 export function isValidFeedPage(value: unknown): value is FeedPage {
@@ -114,6 +115,7 @@ export interface JobsFeedSyncResult {
   write_duration_ms: number;
   next_cursor: string | null;
   has_more: boolean;
+  upstream_watermark_at: string | null;
   open_seen: number;
   skipped_by_reason: Record<string, number>;
   company_observations: Record<string, {
@@ -926,6 +928,7 @@ export async function syncJobsFeed(
     write_duration_ms: 0,
     next_cursor: cursor || null,
     has_more: false,
+    upstream_watermark_at: null,
     open_seen: 0,
     skipped_by_reason: {},
     company_observations: {},
@@ -939,6 +942,10 @@ export async function syncJobsFeed(
     const items = await enrichAshbyLocations(greenhouseEnriched);
     result.pages += 1;
     result.received += items.length;
+    const pageGeneratedAt = feedTimestamp(page.generated_at);
+    if (pageGeneratedAt && (!result.upstream_watermark_at || pageGeneratedAt > result.upstream_watermark_at)) {
+      result.upstream_watermark_at = pageGeneratedAt;
+    }
 
     for (const item of items) {
       const observed = companyObservation(result, text(item.company_name));

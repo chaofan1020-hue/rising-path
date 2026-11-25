@@ -23,6 +23,7 @@ export interface JobFeedState {
   last_reconcile_success_at: string | null;
   last_page_at: string | null;
   caught_up_at: string | null;
+  upstream_watermark_at: string | null;
   last_error: string | null;
   consecutive_failures: number;
   last_attempted_at: string | null;
@@ -222,6 +223,7 @@ function emptyResult(mode: JobFeedSyncMode): JobFeedRunResult {
     stop_reason: null,
     next_cursor: null,
     has_more: false,
+    upstream_watermark_at: null,
     open_seen: 0,
     skipped_by_reason: {},
     company_observations: {},
@@ -368,6 +370,10 @@ export async function runJobFeedSync(options: {
       aggregate.write_fallback_rows += page.write_fallback_rows;
       aggregate.write_duration_ms += page.write_duration_ms;
       aggregate.open_seen += page.open_seen;
+      if (page.upstream_watermark_at
+        && (!aggregate.upstream_watermark_at || page.upstream_watermark_at > aggregate.upstream_watermark_at)) {
+        aggregate.upstream_watermark_at = page.upstream_watermark_at;
+      }
       for (const [reason, count] of Object.entries(page.skipped_by_reason)) {
         aggregate.skipped_by_reason[reason] = (aggregate.skipped_by_reason[reason] || 0) + count;
       }
@@ -425,6 +431,7 @@ export async function runJobFeedSync(options: {
           reconcile_pages: state.reconcile_pages + aggregate.pages,
           reconcile_open_seen: state.reconcile_open_seen + aggregate.open_seen,
           last_page_at: pageAt,
+          ...(page.upstream_watermark_at ? { upstream_watermark_at: page.upstream_watermark_at } : {}),
           ...(page.has_more ? {} : { caught_up_at: pageAt }),
           last_error: null,
           consecutive_failures: 0,
@@ -433,6 +440,7 @@ export async function runJobFeedSync(options: {
         await updateState(client, {
           cursor: page.has_more ? page.next_cursor : null,
           last_page_at: pageAt,
+          ...(page.upstream_watermark_at ? { upstream_watermark_at: page.upstream_watermark_at } : {}),
           last_error: null,
           consecutive_failures: 0,
           ...(page.has_more
