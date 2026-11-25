@@ -143,6 +143,14 @@
 
 ## 日志（倒序）
 
+### 2026-11-25 · v3 读路径索引补齐（切换前置条件）
+
+- 发现切换读之前没人量过的东西：**`jobs` 有 39 个读路径索引，`jobs_v3` 只有 7 个**。实测 `region_market=us` 精确计数：`jobs_listing` ~75ms、`jobs_listing_v3` **~930ms（12 倍）**。如果现在切读，默认列表和每次筛选都会变慢，还可能触发 statement timeout。
+- 迁移 `0157_jobs_v3_read_indexes.sql` 补齐 15 个表达式/部分索引（region_market、region_group、created/updated 排序、target-region、job_type、sponsorship、title/company trgm 等）。因为影子触发器在 feed 事务里写 `jobs_v3`，用 `concurrently` 建（24.8s，未阻塞写入）。
+- 补齐后同一查询 **56–110ms**；`direction=SDE`、`display_status in (...)`、`title ilike` 等计划型查询 2ms 级，与旧表持平。`jobs_v3` 索引 7→43，表 2,165→2,347 MB，磁盘余 11 GB。
+- 建索引期间与之后 3 个 5 分钟对账点保持 `missing=0 extra=0 field_mismatches=0 missing_evidence=0`，feed 连续 success，`write_duration_ms` 187–217。
+- 顺带确认：`count=planned` 的“总数”在带筛选时会塌到 ~1000（真实 111,202），是视图函数表达式没有统计所致，**两张表表现一致**，不是 v3 回归；路由已对短页回填精确值并标 `total_is_estimate`。
+
 ### 2026-11-25 · 监控误报修正与 official_details 游标钉死
 
 - **watchdog 误报**：`jobs-v3-reconcile.sh` 的 `row_failures` 取“任意来源最新 run”，而 official_details 每家公司稳定带 1 条失败，于是 06:30 / 07:05 UTC 两次 `ALERT latest_run_row_failures_1` 与 ATS feed 无关。改为只读 `source_system='collector_feed'` 的 run（`42b7200`），并新增 `scripts/test-jobs-v3-watchdog.ts` 防回归。

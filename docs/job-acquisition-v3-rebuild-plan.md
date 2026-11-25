@@ -252,7 +252,7 @@ S05 已知 53 组 canonical URL、14,650 行重复：
 | ID | 任务 | 产出 | 验收 |
 |---|---|---|---|
 | R17 | 新 feed 影子写入 v3 | v3 cursor 正常 | **已完成双写影子**：`0145` + `0149` 在 `public.jobs` 上挂异常安全触发器；从逐行改为 insert/update/delete 三条 statement 级 transition-table 触发器，源写入仍走旧表；回填后 mismatch=0，insert/update/delete 事务内 CRUD 验证通过 |
-| R18 | 影子读 | feature flag 内部读取 v3 | **完成读路径覆盖**：`jobReadTable()` 覆盖 `/api/jobs/stats`、`/api/jobs/[id]` 详情、`/api/jobs/[id]/open`；`jobListingReadTable()` 覆盖 `/api/jobs` 列表（新增 `jobs_listing_v3` 视图）；迁移 0152 给 `jobs_v3` 补上 `company_config` 外键，PostgREST 详情嵌套查询实测 200；写路径仍只走 `jobs`，生产 flag 未启用。追加 2026-11-25 视图级对账：8 组真实筛选（active 199,197 / `region_market=us` 111,202 / 目标四市场 130,936 / `direction=SDE` 50,458 / `job_type=实习` 5,000 / `title~engineer` 48,135 / us+SDE 33,281 / remote 6,129）在 `jobs_listing` 与 `jobs_listing_v3` **计数完全一致**；另按三种排序（`posted_at`/`created_at`/`source_updated_at` desc）各取 top-50，两个视图 **id 集合与顺序完全一致**；`v3_active_only=0` |
+| R18 | 影子读 | feature flag 内部读取 v3 | **完成读路径覆盖**：`jobReadTable()` 覆盖 `/api/jobs/stats`、`/api/jobs/[id]` 详情、`/api/jobs/[id]/open`；`jobListingReadTable()` 覆盖 `/api/jobs` 列表（新增 `jobs_listing_v3` 视图）；迁移 0152 给 `jobs_v3` 补上 `company_config` 外键，PostgREST 详情嵌套查询实测 200；写路径仍只走 `jobs`，生产 flag 未启用。追加 2026-11-25 视图级对账：8 组真实筛选（active 199,197 / `region_market=us` 111,202 / 目标四市场 130,936 / `direction=SDE` 50,458 / `job_type=实习` 5,000 / `title~engineer` 48,135 / us+SDE 33,281 / remote 6,129）在 `jobs_listing` 与 `jobs_listing_v3` **计数完全一致**；另按三种排序（`posted_at`/`created_at`/`source_updated_at` desc）各取 top-50，两个视图 **id 集合与顺序完全一致**；`v3_active_only=0`。**追加索引补齐（切换前置条件）**：`jobs` 有 39 个读路径索引、`jobs_v3` 原只有 7 个，实测 `region_market=us` 精确计数 **jobs_listing 75ms vs jobs_listing_v3 930ms（12x）**；迁移 `0157_jobs_v3_read_indexes.sql` 在影子表上以 `concurrently` 补齐 15 个表达式/部分索引（24.8s，未阻塞写入），补齐后同一查询 **56–110ms**，其余计划型查询 2ms 级，与旧表持平；`jobs_v3` 索引数 7→43，表 2,165→2,347 MB |
 | R19 | 对账 | 计数、重复、关闭、tier、地区 | **当前快照完成 + 持续监控已启用**：active gap 0、全字段 mismatch 0、关闭行 evidence 全覆盖；`liorvix-jobs-v3-reconcile.timer` 每 5 分钟只读对账并写 `/var/log/liorvix-jobs-v3-reconcile.log`。**24h 证据基线 = 2026-11-25T07:11:43Z**（此前 watchdog 用“任意来源的最新 run”读 `row_failures`，把 official_details 的 1 条跳过误报成 feed 失败，已改为只读 `collector_feed` run，`42b7200`）；证据命令 `jobs-v3-evidence.sh <log> 24 2026-11-25T07:11:43Z`，完成时间 2026-11-26T07:11:43Z |
 | R20 | 压测 | 1,500 board 模拟流量 | **未完成**：只做了 1,500 行影子写微基准（statement trigger 5.9s，关闭影子 2.5s；影子额外约 3.4s）；真实 1,500 board 需要先扩上游，按停止线未做 |
 
@@ -348,6 +348,8 @@ V02 48h 观察仍按原计划到 **2026-11-26 11:50 UTC（19:50 北京）**；v3
 - **official_details 每家公司稳定 1 条 failed**：2026-11-25 起每轮 company batch 都是 `candidate_jobs≈100 / skipped≈99 / failed=1`，与 v3 无关，但会让“官方字段补充”长期原地打转。需要单独排查该条写入为什么失败（不走 DLQ、日志里只有计数）。
 - **R03 外部 webhook 未配置**：告警只写日志与 stderr；`JOBS_ALERT_WEBHOOK_URL` 未设置前，没人会收到推送，24h 证据仍靠 `jobs-v3-evidence.sh` 人工核对。
 - **65,192 条 active 岗位没有 `region_market`**（占 32.7%）：`/api/jobs` 默认 `region_scope=target`，这些行不会出现在默认列表里。两张表行为一致、不属于 v3 偏差，但属于“库存里有多少岗位实际对用户可见”的产品问题，需要单独决定是否补地区或放开 scope。
+- **筛选后的“总数”是计划估算，不准**：`/api/jobs` 用 `count=planned`，未加筛选时估算接近真实（v3 199,389 vs 真实 199,197），但带 `region_market` 之类筛选时估算塌到 ~1000（真实 111,202），因为视图列是函数表达式、planner 没有统计。路由已对短页回填精确值、并标注 `total_is_estimate`，所以不是数据错误；若要精确总数需改 `count=exact`（实测 56–110ms/次）。**两张表表现一致，不属于 v3 回归。**
+- **`count=planned` 在切换瞬间会变**：`jobs` 的估算 210,450 → 分析后 198,469，`jobs_v3` 199,389，真实 199,211；对用户可见的“约 X 个岗位”会小幅下降，属更准确而非丢数据。
 
 ## 9. 立即执行（Phase 0）
 
