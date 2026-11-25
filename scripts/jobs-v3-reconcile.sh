@@ -1,6 +1,8 @@
 #!/bin/sh
-# Read-only v3 shadow reconciliation. Runs from a systemd timer on the US host.
-# It never writes job data; a mismatch exits non-zero so journald/alerting sees it.
+# Read-only v3 shadow reconciliation and feed freshness watchdog.
+# Runs from a systemd timer on the US host. It never writes job data.
+# A mismatch/stale feed exits non-zero and, when JOBS_ALERT_WEBHOOK_URL is set,
+# posts a generic JSON alert to that webhook.
 set -eu
 
 DB="docker exec liorvix-supabase-db psql -U postgres -d postgres -At -F | -v ON_ERROR_STOP=1"
@@ -29,17 +31,45 @@ select
     )),
   (select count(*) from public.jobs_v3 where not is_active),
   (select count(*) from public.jobs_v3
-    where not is_active and (closure_evidence is null or closure_evidence = '{}'::jsonb));
+    where not is_active and (closure_evidence is null or closure_evidence = '{}'::jsonb)),
+  (select coalesce(extract(epoch from now() - last_incremental_success_at) / 60, 9999)
+    from public.job_sync_state where source_system = 'collector_feed'),
+  (select coalesce(consecutive_failures, 0)
+    from public.job_sync_state where source_system = 'collector_feed'),
+  (select coalesce(row_failures, 0)
+    from public.job_sync_runs order by id desc limit 1)
 ")"
 
-IFS='|' read -r source_active v3_total ats legacy missing extra bad_ats_key field_mismatches inactive_shadow missing_evidence <<EOF
+IFS='|' read -r source_active v3_total ats legacy missing extra bad_ats_key field_mismatches inactive_shadow missing_evidence feed_age_minutes consecutive_failures row_failures <<EOF
 $row
 EOF
 
-echo "$(date -u +%Y-%m-%dT%H:%M:%SZ) source_active=$source_active v3_total=$v3_total ats=$ats legacy=$legacy missing=$missing extra=$extra bad_ats_key=$bad_ats_key field_mismatches=$field_mismatches inactive_shadow=$inactive_shadow missing_evidence=$missing_evidence"
+echo "$(date -u +%Y-%m-%dT%H:%M:%SZ) source_active=$source_active v3_total=$v3_total ats=$ats legacy=$legacy missing=$missing extra=$extra bad_ats_key=$bad_ats_key field_mismatches=$field_mismatches inactive_shadow=$inactive_shadow missing_evidence=$missing_evidence feed_age_minutes=$feed_age_minutes consecutive_failures=$consecutive_failures row_failures=$row_failures"
 
+reasons=""
 if [ "$missing" -ne 0 ] || [ "$extra" -ne 0 ] || [ "$bad_ats_key" -ne 0 ] \
   || [ "$field_mismatches" -ne 0 ] || [ "$missing_evidence" -ne 0 ]; then
-  echo "ALERT v3 shadow reconciliation mismatch" >&2
+  reasons="$reasons v3_shadow_reconciliation_mismatch"
+fi
+max_age="${JOBS_FEED_ALERT_MAX_AGE_MINUTES:-15}"
+if awk -v age="$feed_age_minutes" -v max="$max_age" 'BEGIN { exit !(age > max) }'; then
+  reasons="$reasons feed_stale_${feed_age_minutes}_minutes"
+fi
+if [ "$consecutive_failures" -ne 0 ]; then
+  reasons="$reasons feed_consecutive_failures_${consecutive_failures}"
+fi
+if [ "$row_failures" -ne 0 ]; then
+  reasons="$reasons latest_run_row_failures_${row_failures}"
+fi
+
+if [ -n "$reasons" ]; then
+  echo "ALERT$reasons" >&2
+  payload="$(printf '{"event":"liorvix_jobs_v3_alert","reasons":"%s","source_active":%s,"v3_total":%s,"missing":%s,"extra":%s,"field_mismatches":%s,"feed_age_minutes":%s,"consecutive_failures":%s,"row_failures":%s}' \
+    "$reasons" "$source_active" "$v3_total" "$missing" "$extra" "$field_mismatches" "$feed_age_minutes" "$consecutive_failures" "$row_failures")"
+  if [ -n "${JOBS_ALERT_WEBHOOK_URL:-}" ] && command -v curl >/dev/null 2>&1; then
+    if ! curl -fsS --max-time 10 -H 'Content-Type: application/json' -d "$payload" "$JOBS_ALERT_WEBHOOK_URL" >/dev/null; then
+      echo "ALERT webhook delivery failed" >&2
+    fi
+  fi
   exit 1
 fi
