@@ -1,0 +1,12 @@
+[Unit]
+Description=Run Liorvix jobs v3 shadow reconciliation every 5 minutes
+
+[Timer]
+OnBootSec=2min
+OnUnitActiveSec=5min
+AccuracySec=30s
+Persistent=true
+Unit=liorvix-jobs-v3-reconcile.service
+
+[Install]
+WantedBy=timers.target

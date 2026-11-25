@@ -1,0 +1,15 @@
+[Unit]
+Description=Liorvix jobs v3 shadow reconciliation (read-only)
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=oneshot
+User=root
+Nice=10
+IOSchedulingClass=best-effort
+IOSchedulingPriority=7
+ExecStart=/bin/sh /opt/liorvix/scripts/jobs-v3-reconcile.sh
+StandardOutput=append:/var/log/liorvix-jobs-v3-reconcile.log
+StandardError=append:/var/log/liorvix-jobs-v3-reconcile.log
+SyslogIdentifier=liorvix-jobs-v3-reconcile
