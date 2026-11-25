@@ -36,8 +36,13 @@ select
     from public.job_sync_state where source_system = 'collector_feed'),
   (select coalesce(consecutive_failures, 0)
     from public.job_sync_state where source_system = 'collector_feed'),
-  (select coalesce(row_failures, 0)
-    from public.job_sync_runs order by id desc limit 1)
+  -- Only the collector feed run describes feed health. Official-detail and
+  -- per-company enrichment runs share the table but routinely report a skipped
+  -- row, and counting those here produced false ALERTs (2026-11-25).
+  (select coalesce(r.row_failures, 0)
+    from public.job_sync_runs r
+    where r.source_system = 'collector_feed'
+    order by r.id desc limit 1)
 ")"
 
 IFS='|' read -r source_active v3_total ats legacy missing extra bad_ats_key field_mismatches inactive_shadow missing_evidence feed_age_minutes consecutive_failures row_failures <<EOF
