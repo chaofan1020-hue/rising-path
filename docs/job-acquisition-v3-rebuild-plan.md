@@ -269,7 +269,7 @@ S05 已知 53 组 canonical URL、14,650 行重复：
 |---|---|---|---|
 | R21 | 停写窗口 | 5–10 分钟 | 旧/新游标差值可解释 |
 | R22 | 追最后增量 | v3 到 watermark | `caught_up_at` 当前时间 |
-| R23 | 读路径切换 | feature flag 指向 v3 | health/login/jobs/admin smoke 通过 |
+| R23 | 读路径切换 | feature flag 指向 v3 | health/login/jobs/admin smoke 通过。**读路径覆盖已补齐（`c8650c7`）**：此前只有列表/详情/stats/open 四个入口用 `jobReadTable()`，收藏、投递记录、dashboard、AI 匹配、AI 优化、面试、JD 检索等仍硬编码 `jobs`——切读会变成“一半 v3 一半旧表”。现在 20 个用户可见读入口全部走开关（列表页 `jobListingReadTable`，其余 `jobReadTable`）；写路径、生命周期 worker、admin 运维保持 `public.jobs`。`scripts/test-job-read-source.ts` 固化边界：受控读文件必须含 `jobReadTable()`，写/worker 文件不许出现它，open 路由必须“读走开关、关岗写仍进 jobs” |
 | R24 | 旧库只读 | 禁止旧 worker 写 `public.jobs` | 旧表行数不再增长 |
 | R25 | 回滚演练 | 切回旧读路径 | 5 分钟内完成 |
 

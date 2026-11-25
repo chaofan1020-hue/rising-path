@@ -34,7 +34,7 @@
 | 基线文件 | `tmp/baseline-20261124.json` |
 | Supabase 备份时间点 | `/opt/liorvix-backups/liorvix-20261124-032117.dump`（444MB；DB 容器 2026-11-23 03:15 UTC 起） |
 | Feed worker 实际配置 | `JOBS_AUTO_WORKER=true`、`JOBS_SYNC_INTERVAL_MINUTES=5`；**systemd jobs timers 全部 disabled**，不要按 timer 文档推断 |
-| 当前生产事实 | 2026-11-25 16:26 +08：US active **199,241**；v3 `jobs_v3` total 199,280（ATS 87,318 / legacy 111,962；active gap 0、全 56 列 mismatch 0；`v3_active_only=0`、`dup_ats_keys=0`、`ats_missing_key=0`；39 条关闭行 evidence 全覆盖）；`jobs_v3` 读索引 43 个（`read_index_gaps=0`）；feed 最近 success、0 row failure、age 0.1min；**DLQ pending 0**（dead 3,768 审计 / resolved 14）；对账 timer 每 5 分钟运行，24h 证据基线 `2026-11-25T07:11:43Z`（完成 `2026-11-26T07:11:43Z`）；生产 commit `f4df19a`（回滚点 `19ec486`）；DB ~7.9 GB / 剩余 11 GB |
+| 当前生产事实 | 2026-11-25 16:56 +08：US active **199,301**；v3 `jobs_v3` total 199,340（ATS 87,378 / legacy 111,962；active gap 0、全 56 列 mismatch 0）；`jobs_v3` 读索引 43 个（`read_index_gaps=0`）；feed 最近 success、0 row failure、age 2.5min；**DLQ pending 0**；对账 timer 每 5 分钟运行，24h 证据基线 `2026-11-25T07:11:43Z`（完成 `2026-11-26T07:11:43Z`）；生产 commit `c8650c7`（回滚点 `58b969b`）；`JOBS_READ_SOURCE` 未设置（仍读 `jobs`）；DB ~7.9 GB / 剩余 11 GB |
 
 ## 执行约定（B03）
 
@@ -142,6 +142,13 @@
 | — | — | — | — | — | — |
 
 ## 日志（倒序）
+
+### 2026-11-25 · 读路径覆盖补齐（切读前必须）
+
+- 审计发现切读会“只切一半”：只有列表/详情/stats/open 四个入口用了 `jobReadTable()`，收藏、投递记录、dashboard、AI 匹配、AI 优化、面试、JD 检索等 20 处仍硬编码 `jobs`。已全部改成开关（列表页 `jobListingReadTable`，其余 `jobReadTable`），`c8650c7` 部署，冒烟 `health=200 / 鉴权路由 401 / /api/interview/jobs 200 / search-jd 405(POST-only)`、无 error 日志、feed 两轮 success、对账仍全 0。
+- 边界写进 [scripts/test-job-read-source.ts](scripts/test-job-read-source.ts)：受控读文件必须含 `jobReadTable()`；写路径/生命周期 worker/admin 运维文件**不许**出现它（防止 `JOBS_READ_SOURCE=v3` 把 upsert 或关岗写进影子表）；open 路由必须“读走开关、关岗写仍进 `jobs`”；开关必须按调用读 env，不能模块加载时缓存。
+- `jobs/[id]`、`jobs/batch`、`generate-*`、`fetch-descriptions`、`check-sponsor`、`sync-techmap`、`admin/job-rotation`、`admin/job-field-quality`、`health` 保持旧表——它们要么写、要么是运维/admin 视角，切读不该影响它们。
+- 过程中两次踩 CRLF：`write_text`/`edit` 会把整文件行尾从 CRLF 改成 LF，diff 直接变成全文件重写。最终用字节级 patch（检测原文件 `\r\n` 后写入对应行尾）才得到每文件 3–5 行的干净 diff；`tsc --noEmit` 通过。
 
 ### 2026-11-25 · 24h 证据脚本加夹具测试
 

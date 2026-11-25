@@ -11,7 +11,7 @@
 
 | 方案 | 内容 | 现状 | 风险 | 收益 |
 |---|---|---|---|---|
-| **A · 只切读** | `JOBS_READ_SOURCE=v3`，读走 `jobs_v3`；写仍进 `public.jobs`，由影子触发器同步 v3 | **代码已就绪**（`jobReadTable`/`jobListingReadTable` 覆盖列表、详情、stats、open） | 低，10 分钟内可回滚 | 读路径先用上新表；写出问题不影响读 |
+| **A · 只切读** | `JOBS_READ_SOURCE=v3`，读走 `jobs_v3`；写仍进 `public.jobs`，由影子触发器同步 v3 | **代码已就绪**：20 个用户可见读入口全部走 `jobReadTable()`/`jobListingReadTable()`（列表、详情、stats、公司列表、JD 检索、收藏、投递记录、dashboard、AI 匹配/优化、面试、prefill）；写路径、生命周期 worker、admin 运维仍指向 `public.jobs` | 低，10 分钟内可回滚 | 读路径先用上新表；写出问题不影响读 |
 | **B · 读写都切** | feed/worker 直接写 `jobs_v3`，`public.jobs` 转只读 | **代码未建**：目前只有读开关，没有写目标开关 | 高，需要改写入层并重跑全部影子对账 | 才有“写入量下降 ≥60%”的收益 |
 
 计划里 R24“旧库只读”属于方案 B。**在做完 B 之前，不能对外宣称数据库压力/写入量已经改善。**
