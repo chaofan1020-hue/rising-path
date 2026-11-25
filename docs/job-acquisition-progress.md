@@ -33,7 +33,7 @@
 | 基线文件 | `tmp/baseline-20261124.json` |
 | Supabase 备份时间点 | `/opt/liorvix-backups/liorvix-20261124-032117.dump`（444MB；DB 容器 2026-11-23 03:15 UTC 起） |
 | Feed worker 实际配置 | `JOBS_AUTO_WORKER=true`、`JOBS_SYNC_INTERVAL_MINUTES=5`；**systemd jobs timers 全部 disabled**，不要按 timer 文档推断 |
-| 当前生产事实 | 2026-11-25 05:45 UTC：US total 321,138 / active **199,183**（v2 `source_key` 87,260 / legacy 111,941）；v3 `jobs_v3` **199,201**（ATS 87,260 / legacy 111,941；active gap 0、字段 mismatch 0；18 条关闭行全部有 `closure_evidence`）；上游 539,649 行，`scope=ats` **127,900**（8 CLOSED）/ legacy 411,749；feed `195279` success、0 row failure，`caught_up_at=05:45:11 UTC`、`upstream_watermark_at=05:45:11 UTC`；DB 7.75 GB / 剩余 11 GB |
+| 当前生产事实 | 2026-11-25 05:45 UTC：US total 321,138 / active **199,183**（v2 `source_key` 87,260 / legacy 111,941）；v3 `jobs_v3` **199,201**（ATS 87,260 / legacy 111,941；active gap 0、字段 mismatch 0；18 条关闭行全部有 `closure_evidence`）；上游 539,649 行，`scope=ats` **127,900**（8 CLOSED）/ legacy 411,749；feed `195279` success、0 row failure，`caught_up_at=05:45:11 UTC`、`upstream_watermark_at=05:45:11 UTC`；DLQ pending 452 / dead 3,318；DB 7.75 GB / 剩余 11 GB |
 
 ## 执行约定（B03）
 
@@ -145,7 +145,8 @@
 ### 2026-11-25 · Phase 2 watermark 与 v3 statement 触发器
 
 - 迁移 `0147_job_sync_state_upstream_watermark.sql`：`job_sync_state.upstream_watermark_at` 已应用；客户端按每页 `generated_at` 取最大值；`c77d27d` 部署后 `195269/195279` success，watermark 与 `caught_up_at` 同步前进。
-- DLQ 复核：`job_sync_failures` 已有 attempts/next_retry_at/status、1m→5m→30m→2h 退避、5 次转 `dead`；worker 每轮 claim 20。当前约 3k 条历史 `source_tier` 无效行仍在 pending，不阻塞 feed，row_failures 持续 0。
+- DLQ 复核：`job_sync_failures` 已有 attempts/next_retry_at/status、1m→5m→30m→2h 退避、5 次转 `dead`；worker 每轮 claim 20。
+- 迁移 `0150_jobs_dlq_park_invalid_legacy.sql`：把 3,020 条永久无效的 legacy `source_tier` 行标为 `dead`（payload/error 保留）；DLQ pending 从 3,472 降到 **452**，`dead=3,318`、`resolved=12`，不阻塞 feed。
 - 迁移 `0149_jobs_v3_statement_triggers.sql`：把逐行影子触发器改为 insert/update/delete 三条 statement 级 transition-table 触发器；insert/update/delete 事务内 CRUD 验证通过。
 - 微基准（事务内 rollback，不动生产数据）：1,500 行更新，关闭影子 2.5s，statement 影子 5.9s；逐行触发器同条件 11.9s。影子额外成本从约 9.4s 降到约 3.4s。
 - 注意：这是 1,500 行写入基准，不是 1,500 board 真实压测；真实扩量仍需用户确认和上游 board 扩容。

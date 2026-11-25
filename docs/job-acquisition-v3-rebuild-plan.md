@@ -231,7 +231,7 @@ S05 已知 53 组 canonical URL、14,650 行重复：
 |---|---|---|---|
 | R08 | worker 双模式 | `steady` 1–2 页；`catch-up` 30 分钟 | **已完成代码**：`8e86313`；cursor 为空走 steady（最多 2 页），cursor 非空走 catch-up（30 页/4 分钟）；生产 run `195225` success |
 | R09 | watermark 成功判定 | cursor >= 本轮 watermark | **已完成**：迁移 0147 增加 `job_sync_state.upstream_watermark_at`；客户端从每页 `generated_at` 取最大值落库，`c77d27d` 部署后实测 `upstream_watermark_at=2026-11-25 05:45:11 UTC`；cursor 仍是续传唯一依据 |
-| R10 | DLQ | 无效行隔离，不无限重试 | **已完成（复用既有队列）**：`job_sync_failures` 有 `attempts`/`next_retry_at`/`status`；`fail_job_sync_failure` 退避 1m→5m→30m→2h，5 次转 `dead`；worker 每轮 claim 20 条，`195279` row_failures=0。历史上约 3k 条 `source_tier` 无效行仍在 pending 重试，不阻塞 feed |
+| R10 | DLQ | 无效行隔离，不无限重试 | **已完成**：`job_sync_failures` 有 `attempts`/`next_retry_at`/`status`；`fail_job_sync_failure` 退避 1m→5m→30m→2h，5 次转 `dead`；worker 每轮 claim 20 条，`195279` row_failures=0；0150 已把 3,020 条永久无效 legacy `source_tier` 行标为 `dead`（保留 payload/error），pending 从 3,472 降到 452 |
 | R11 | 指标 | `last_page_at` / `caught_up_at` / lag / rows/s | **已完成**：迁移 0142 已应用；`last_page_at` 每页写、`caught_up_at` 追平写；health 优先用 `caught_up_at` |
 
 ### Phase 3 · v3 建表与回填（1–2 天）
