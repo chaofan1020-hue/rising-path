@@ -106,6 +106,16 @@ docker exec -e PYTHONPATH=/app global-jobs-bulk-worker-1 \
 - Feed v2 客户端默认开启；v1 回退仍可用 `JOBS_FEED_V2_ENABLED=false`。
 - 没有因为同步/字段缺失改变任何 `is_active/is_closed`。
 
+### 2026-11-25 03:00–03:40 UTC 复检与事故修复
+
+- 上游 board：**500 active，0 paused**；最近 25,949 次 run 中失败 30 次，**成功率 99.884%**，仍在 ≥98% 目标内。
+- board 新鲜度：P95 **29.2 min**，按岗位加权 P95 **27.3 min**，max 29.4 min；`lb-capital` 的 Lever 502 已恢复，当前无连续失败 board。
+- `source_closed` 从 0 变为 **8**：全部为 `greenhouse:doordashusa`，close 时间 2026-11-24 16:48/23:10 UTC，reason `source_missing_on_complete_crawl`。逐条用 Greenhouse 公开 API 核对，8 个 ID 当前均不在 DoorDash board 的 399 条列表中；属于**合法关闭**，不是误关。误关率仍按 0 计。
+- 美国站发现并修复一次 **feed 卡死**：`collector_feed.last_incremental_success_at` 停在 **2026-11-24 15:39 UTC**，原因是上游 feed 同时携带 411,505 条无 `source_key` 的 legacy 官方源岗位；这些行 `source_tier=null`，美国 schema 的 `jobs.source_tier` 为 NOT NULL，导致每页 `invalid_sync_record` 写入失败，cursor 无法完成一轮成功。
+- 修复：`normalizeFeedItem` 在 v2 模式拒绝无 `source_key` 的 legacy 行；`normalizeSkipReason` 标记 `not_ats_source`。已部署 **f163324 → 3767e0f**，生产 health/login/admin 烟测通过。
+- 修复后新 run（195113/195117）连续 30+ 页、15,000+ 条，**row_failures=0**，`not_ats_source` 正常计数；卡死 cursor 从 17:38 继续前进。`last_incremental_success_at` 会在追平后更新，当前仍在追赶，**不能据此判定 G2 通过**。
+- 02:00–03:00 UTC 美国站另有 529 条 legacy 岗位被 feed close 信号关闭（526 条无 `source_key`，主要为 Workday/Amgen 等）；初步判断为上游 legacy 关闭事件回放，不是 P0 `source_key` 误关。需按 close 事件来源单独审计，暂不反向恢复。
+
 ## 3. Gate 判定
 
 | Gate | 条件 | 判定 |

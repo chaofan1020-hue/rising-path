@@ -31,7 +31,7 @@
 | 基线文件 | `tmp/baseline-20261124.json` |
 | Supabase 备份时间点 | `/opt/liorvix-backups/liorvix-20261124-032117.dump`（444MB；DB 容器 2026-11-23 03:15 UTC 起） |
 | Feed worker 实际配置 | `JOBS_AUTO_WORKER=true`、`JOBS_SYNC_INTERVAL_MINUTES=5`；**systemd jobs timers 全部 disabled**，不要按 timer 文档推断 |
-| 当前生产事实 | US active 200,449（其中 v2 `source_key` 86,479）；上游 500 active board、`source_key` 岗位 126,144（OPEN 126,144 / CLOSED 0）；board P95 17.4min |
+| 当前生产事实 | 2026-11-25 03:40 UTC 快照：US active 200,251（其中 v2 `source_key` 86,934）；上游 500 active board、`source_key` 岗位 127,843 OPEN / 8 CLOSED；board P95 29.2min（岗位加权 27.3min）；US feed 追平中，见 V02 行 |
 
 ## 执行约定（B03）
 
@@ -87,7 +87,7 @@
 | S04 | done | c5b979b | 2026-11-24 19:41 | `/api/jobs` 默认 `display_status in (listed,enriched)`；closed/all 保留；jobs_listing 重建 |
 | S05 | done | c5b979b | 2026-11-24 20:06 | 只读审计：`ats:*` 0、跨来源重复 0；53 组通用 URL 14,597 额外行，不按 URL 去重 |
 | V01 | done | c5b979b | 2026-11-24 19:50 | 50 board 44,234 岗位；US 27,697 v2；20/20 官方 URL；0 误关；G1 |
-| V02 | in_progress | c5b979b | — | 500 board 89,144 岗位、0 失败、0 误关；48h 观察至 2026-11-26 11:50 UTC |
+| V02 | in_progress | 3767e0f | — | 500 board、127,843 source OPEN / 8 合法 CLOSED；30/25,949 run 失败（99.884%）、P95 29.2min；US feed 因 legacy null source_tier 卡死，已由 f163324/3767e0f 修复并追平中；48h 观察至 2026-11-26 11:50 UTC |
 | D07 | done | a1cd627 | 2026-11-24 21:06 | 探测 1,440：active 1,245、隔离 153（10.6%）；总 active 2,147；重冻结 1,000（GH630/Ashby252/Lever118），token fallback 0 |
 | U08 | pending | — | — | — |
 | U09 | pending | — | — | — |
