@@ -253,12 +253,17 @@ S05 已知 53 组 canonical URL、14,650 行重复：
 |---|---|---|---|
 | R17 | 新 feed 影子写入 v3 | v3 cursor 正常 | **已完成双写影子**：`0145` + `0149` 在 `public.jobs` 上挂异常安全触发器；从逐行改为 insert/update/delete 三条 statement 级 transition-table 触发器，源写入仍走旧表；回填后 mismatch=0，insert/update/delete 事务内 CRUD 验证通过 |
 | R18 | 影子读 | feature flag 内部读取 v3 | **完成读路径覆盖**：`jobReadTable()` 覆盖 `/api/jobs/stats`、`/api/jobs/[id]` 详情、`/api/jobs/[id]/open`；`jobListingReadTable()` 覆盖 `/api/jobs` 列表（新增 `jobs_listing_v3` 视图）；迁移 0152 给 `jobs_v3` 补上 `company_config` 外键，PostgREST 详情嵌套查询实测 200；写路径仍只走 `jobs`，生产 flag 未启用 |
-| R19 | 对账 | 计数、重复、关闭、tier、地区 | **当前快照完成 + 持续监控已启用**：active gap 0、全字段 mismatch 0、关闭行 evidence 全覆盖；`liorvix-jobs-v3-reconcile.timer` 每 5 分钟只读对账并写 `/var/log/liorvix-jobs-v3-reconcile.log`，24h 连续证据待 2026-11-26 06:07 UTC 后确认 |
+| R19 | 对账 | 计数、重复、关闭、tier、地区 | **当前快照完成 + 持续监控已启用**：active gap 0、全字段 mismatch 0、关闭行 evidence 全覆盖；`liorvix-jobs-v3-reconcile.timer` 每 5 分钟只读对账并写 `/var/log/liorvix-jobs-v3-reconcile.log`。**24h 证据基线 = 2026-11-25T07:11:43Z**（此前 watchdog 用“任意来源的最新 run”读 `row_failures`，把 official_details 的 1 条跳过误报成 feed 失败，已改为只读 `collector_feed` run，`42b7200`）；证据命令 `jobs-v3-evidence.sh <log> 24 2026-11-25T07:11:43Z`，完成时间 2026-11-26T07:11:43Z |
 | R20 | 压测 | 1,500 board 模拟流量 | **未完成**：只做了 1,500 行影子写微基准（statement trigger 5.9s，关闭影子 2.5s；影子额外约 3.4s）；真实 1,500 board 需要先扩上游，按停止线未做 |
 
 **停止线**：v3 与上游 ATS 覆盖差 >0.5%；重复 >0.5%；关闭误判 >0.1%；API 5xx 增加。
 
 ### Phase 5 · 切换（0.5 天）
+
+> 操作清单见 [job-acquisition-v3-cutover-runbook.md](./job-acquisition-v3-cutover-runbook.md)。
+> 现有代码只支持**方案 A 只切读**（`JOBS_READ_SOURCE=v3`，写仍进 `public.jobs` 并由影子触发器同步）；
+> 计划中 R24“旧库只读”属于**方案 B**，需要先补写目标开关与写入层适配，尚未开发。
+> 因此切换前必须让用户明确选择方案，不能默认执行。
 
 | ID | 任务 | 产出 | 验收 |
 |---|---|---|---|
@@ -337,6 +342,11 @@ V02 48h 观察仍按原计划到 **2026-11-26 11:50 UTC（19:50 北京）**；v3
 | G2 被跳过 | v3 观察独立；不拿旧库数据直接判 G2 |
 
 **回滚命令**：切换前记录 release/DB snapshot；回滚只切读路径，不回滚已写入的 v3 增量；旧库保持只读，避免双写。
+
+## 8.1 已知遗留（不阻塞 v3 观察）
+
+- **official_details 每家公司稳定 1 条 failed**：2026-11-25 起每轮 company batch 都是 `candidate_jobs≈100 / skipped≈99 / failed=1`，与 v3 无关，但会让“官方字段补充”长期原地打转。需要单独排查该条写入为什么失败（不走 DLQ、日志里只有计数）。
+- **R03 外部 webhook 未配置**：告警只写日志与 stderr；`JOBS_ALERT_WEBHOOK_URL` 未设置前，没人会收到推送，24h 证据仍靠 `jobs-v3-evidence.sh` 人工核对。
 
 ## 9. 立即执行（Phase 0）
 
