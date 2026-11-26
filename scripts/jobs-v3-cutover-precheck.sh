@@ -44,12 +44,16 @@ else
   else
     fail "feed_age_minutes=${age:-absent}"
   fi
-  active="$(get source_active)"
+  # Compare two *live* counts in one snapshot. Comparing the log's
+  # source_active against a live count gave a false FAIL on 2026-11-26: the
+  # last reconcile line was ~4 minutes old and the feed had closed three rows
+  # in between (log 200644 vs live 200641 while both tables actually agreed).
+  active="$($DB -c "select count(*) from public.jobs where is_active" 2>/dev/null || echo '')"
   v3_active="$($DB -c "select count(*) from public.jobs_v3 where is_active" 2>/dev/null || echo '')"
   if [ -n "$active" ] && [ "$active" = "$v3_active" ]; then
-    pass "active_rows_match source=$active v3=$v3_active"
+    pass "active_rows_match live source=$active v3=$v3_active"
   else
-    fail "active_rows_mismatch source=${active:-absent} v3=${v3_active:-absent}"
+    fail "active_rows_mismatch live source=${active:-absent} v3=${v3_active:-absent}"
   fi
 fi
 
