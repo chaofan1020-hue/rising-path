@@ -20,6 +20,7 @@ import Link from 'next/link';
 import { AuthGuard } from '@/components/auth-guard';
 import { apiFetch } from '@/lib/api-client';
 import { Header1 } from '@/components/header1';
+import { JobGeoFilter, type JobFilterFacets } from '@/components/job-geo-filter';
 import { useLanguage } from '@/lib/language-context';
 import { getJobDeadlineRemaining } from '@/lib/job-deadline';
 import { formatLocationDisplay, localizeJobEnum } from '@/lib/job-display';
@@ -829,12 +830,17 @@ function JobsContent() {
   const [totalJobsIsUnknown, setTotalJobsIsUnknown] = useState(false);
   const [hasMoreJobs, setHasMoreJobs] = useState(false);
   const [selectedRegions, setSelectedRegions] = useState<string[]>([]);
+  // 全量地区筛选：大洲与国家互斥（后端同时收到两者会做 AND）。
+  const [selectedContinents, setSelectedContinents] = useState<string[]>([]);
+  const [selectedCountries, setSelectedCountries] = useState<string[]>([]);
   const [selectedDirections, setSelectedDirections] = useState<string[]>([]);
   const [selectedJobType, setSelectedJobType] = useState('');
   const [selectedSponsorship, setSelectedSponsorship] = useState('');
   const [selectedCompanies, setSelectedCompanies] = useState<string[]>([]);
   const [filterOpen, setFilterOpen] = useState(false);
   const [draftRegions, setDraftRegions] = useState<string[]>([]);
+  const [draftContinents, setDraftContinents] = useState<string[]>([]);
+  const [draftCountries, setDraftCountries] = useState<string[]>([]);
   const [draftDirections, setDraftDirections] = useState<string[]>([]);
   const [draftJobType, setDraftJobType] = useState('');
   const [draftSponsorship, setDraftSponsorship] = useState('');
@@ -857,6 +863,8 @@ function JobsContent() {
     direction: JobConfig[];
     audience: JobConfig[];
   }>({ region: [], direction: [], audience: [] });
+  // 全量地区筛选选项：仅挂载时拉取一次；失败或后端未部署时保持 null，退回旧的固定地区 chips。
+  const [geoFacets, setGeoFacets] = useState<JobFilterFacets | null>(null);
   const jobsRequestIdRef = useRef(0);
   const jobsFetchedAtRef = useRef(0);
   const previousFilterKeyRef = useRef<string | null>(null);
@@ -872,15 +880,19 @@ function JobsContent() {
   useEffect(() => {
     if (filterOpen) {
       setDraftRegions(selectedRegions);
+      setDraftContinents(selectedContinents);
+      setDraftCountries(selectedCountries);
       setDraftDirections(selectedDirections);
       setDraftJobType(selectedJobType);
       setDraftSponsorship(selectedSponsorship);
       setDraftCompanies(selectedCompanies);
     }
-  }, [filterOpen, selectedRegions, selectedDirections, selectedJobType, selectedSponsorship, selectedCompanies]);
+  }, [filterOpen, selectedRegions, selectedContinents, selectedCountries, selectedDirections, selectedJobType, selectedSponsorship, selectedCompanies]);
 
   const clearFilters = useCallback(() => {
     setSelectedRegions([]);
+    setSelectedContinents([]);
+    setSelectedCountries([]);
     setSelectedDirections([]);
     setSelectedJobType('');
     setSelectedSponsorship('');
@@ -890,6 +902,8 @@ function JobsContent() {
 
   const applyDraftFilters = () => {
     setSelectedRegions(draftRegions);
+    setSelectedContinents(draftContinents);
+    setSelectedCountries(draftCountries);
     setSelectedDirections(draftDirections);
     setSelectedJobType(draftJobType);
     setSelectedSponsorship(draftSponsorship);
@@ -898,19 +912,55 @@ function JobsContent() {
     setFilterOpen(false);
   };
 
+  // 大洲 / 国家 / 旧的固定地区三者互斥：选任一层都清空另外两层。
+  const handleDraftContinentsChange = (values: string[]) => {
+    setDraftContinents(values);
+    if (values.length > 0) {
+      setDraftCountries([]);
+      setDraftRegions([]);
+    }
+  };
+
+  const handleDraftCountriesChange = (values: string[]) => {
+    setDraftCountries(values);
+    if (values.length > 0) {
+      setDraftContinents([]);
+      setDraftRegions([]);
+    }
+  };
+
+  const handleDraftRegionsChange = (values: string[]) => {
+    setDraftRegions(values);
+    if (values.length > 0) {
+      setDraftContinents([]);
+      setDraftCountries([]);
+    }
+  };
+
   useEffect(() => {
     const timeoutId = window.setTimeout(() => setDebouncedSearchTerm(searchTerm), 300);
     return () => window.clearTimeout(timeoutId);
   }, [searchTerm]);
 
   const activeFilterCount = selectedRegions.length
+    + selectedContinents.length
+    + selectedCountries.length
     + selectedDirections.length
     + (selectedJobType ? 1 : 0)
     + (selectedSponsorship ? 1 : 0)
     + selectedCompanies.length;
 
+  const selectedContinentLabels = selectedContinents.map(
+    (value) => geoFacets?.continents.find((continent) => continent.value === value)?.label ?? value,
+  );
+  const selectedCountryNames = selectedCountries.map(
+    (code) => geoFacets?.countries.find((country) => country.code === code)?.name ?? code,
+  );
+
   const activeFilterSummaries = [
     selectedRegions.length > 0 ? { id: 'region', label: `${t('jobs.region')}: ${selectedRegions.join(', ')}` } : null,
+    selectedContinentLabels.length > 0 ? { id: 'continent', label: `${t('jobs.region')}: ${selectedContinentLabels.join(', ')}` } : null,
+    selectedCountryNames.length > 0 ? { id: 'country', label: `${t('jobs.region')}: ${selectedCountryNames.join(', ')}` } : null,
     selectedDirections.length > 0 ? { id: 'direction', label: `${t('jobs.direction')}: ${selectedDirections.join(', ')}` } : null,
     selectedCompanies.length > 0 ? { id: 'company', label: `${t('jobs.company')}: ${selectedCompanies.join(', ')}` } : null,
     selectedJobType ? { id: 'job-type', label: `${t('jobs.jobType')}: ${selectedJobType}` } : null,
@@ -927,7 +977,12 @@ function JobsContent() {
     try {
       const params = new URLSearchParams();
       if (selectedRegions.length > 0) {
+        // region= 优先于 country/continent，界面层已保证三者互斥。
         selectedRegions.forEach(r => params.append('region', r));
+      } else if (selectedContinents.length > 0) {
+        selectedContinents.forEach(c => params.append('continent', c));
+      } else if (selectedCountries.length > 0) {
+        selectedCountries.forEach(c => params.append('country', c));
       }
       if (selectedDirections.length > 0) {
         selectedDirections.forEach(d => params.append('direction', d));
@@ -970,11 +1025,13 @@ function JobsContent() {
     } finally {
       if (requestId === jobsRequestIdRef.current) setLoading(false);
     }
-  }, [page, pageSize, debouncedSearchTerm, selectedRegions, selectedDirections, selectedCompanies, selectedJobType, selectedSponsorship]);
+  }, [page, pageSize, debouncedSearchTerm, selectedRegions, selectedContinents, selectedCountries, selectedDirections, selectedCompanies, selectedJobType, selectedSponsorship]);
 
   const activeFilterKey = JSON.stringify([
     debouncedSearchTerm,
     selectedRegions,
+    selectedContinents,
+    selectedCountries,
     selectedDirections,
     selectedCompanies,
     selectedJobType,
@@ -1054,6 +1111,40 @@ function JobsContent() {
     fetchAppliedJobIds();
     fetchFavoriteJobIds();
   }, [fetchAppliedJobIds, fetchFavoriteJobIds]);
+
+  useEffect(() => {
+    // 全量地区筛选项只在挂载时拉一次；其他筛选变化会重新请求岗位列表，但不会再打这个接口。
+    let cancelled = false;
+    apiFetch('/api/jobs/filters', { cache: 'no-store' })
+      .then((response) => {
+        if (!response.ok) throw new Error(`Job filter facets request failed (${response.status})`);
+        return response.json() as Promise<Partial<JobFilterFacets>>;
+      })
+      .then((data) => {
+        if (cancelled || !data || data.unavailable === true) return;
+        if (!Array.isArray(data.continents) || !Array.isArray(data.countries)) return;
+        // 目录为空（或后端降级）时没有可选的地区，保留旧的固定地区 chips。
+        if (data.continents.length === 0 && data.countries.length === 0) return;
+        // 全量地区筛选器接管后，旧的固定地区选择不再有可编辑入口，清掉以免
+        // 出现“界面显示全部、实际仍带 region=”的幽灵筛选。
+        setSelectedRegions((current) => (current.length > 0 ? [] : current));
+        setDraftRegions((current) => (current.length > 0 ? [] : current));
+        setGeoFacets({
+          continents: data.continents,
+          countries: data.countries,
+          unplaced: Number(data.unplaced) || 0,
+          total: Number(data.total) || 0,
+          generated_at: typeof data.generated_at === 'string' ? data.generated_at : '',
+        });
+      })
+      .catch((error) => {
+        // 筛选项接口失败只影响地区筛选器（退回旧的固定地区 chips），不影响岗位列表。
+        if (!cancelled) console.error('Failed to fetch job filter facets:', error);
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, []);
 
   useEffect(() => {
     const refresh = () => {
@@ -1251,7 +1342,18 @@ function JobsContent() {
                     </SheetHeader>
                     <div className="flex-1 space-y-6 overflow-y-auto px-5 py-5">
                       <FilterSection label={t('jobs.region')} icon={MapPin}>
-                        <CheckboxOptions options={configs.region || []} selected={draftRegions} onChange={setDraftRegions} t={t} />
+                        {geoFacets ? (
+                          <JobGeoFilter
+                            facets={geoFacets}
+                            selectedContinents={draftContinents}
+                            selectedCountries={draftCountries}
+                            onContinentsChange={handleDraftContinentsChange}
+                            onCountriesChange={handleDraftCountriesChange}
+                          />
+                        ) : (
+                          /* 全量地区筛选项不可用时退回旧的固定目标市场 chips。 */
+                          <CheckboxOptions options={configs.region || []} selected={draftRegions} onChange={handleDraftRegionsChange} t={t} />
+                        )}
                       </FilterSection>
                       <FilterSection label={t('jobs.direction')} icon={Briefcase}>
                         <CheckboxOptions options={configs.direction || []} selected={draftDirections} onChange={setDraftDirections} t={t} />
@@ -1276,7 +1378,7 @@ function JobsContent() {
                       </FilterSection>
                     </div>
                     <SheetFooter className="border-t border-zinc-100 px-5 py-4 dark:border-zinc-800 sm:flex-row sm:justify-between">
-                      <Button type="button" variant="ghost" onClick={() => { setDraftRegions([]); setDraftDirections([]); setDraftJobType(''); setDraftSponsorship(''); setDraftCompanies([]); setBrandSearch(''); }}>
+                      <Button type="button" variant="ghost" onClick={() => { setDraftRegions([]); setDraftContinents([]); setDraftCountries([]); setDraftDirections([]); setDraftJobType(''); setDraftSponsorship(''); setDraftCompanies([]); setBrandSearch(''); }}>
                         <RotateCcw className="mr-2 h-4 w-4" />{t('jobs.reset')}
                       </Button>
                       <Button type="button" onClick={applyDraftFilters} className="bg-zinc-900 text-white hover:bg-zinc-800 dark:bg-white dark:text-zinc-900 dark:hover:bg-zinc-200">{t('jobs.apply')}</Button>

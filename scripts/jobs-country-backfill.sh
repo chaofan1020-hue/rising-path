@@ -30,9 +30,11 @@ round=0
 while :; do
   round=$((round + 1))
   out=$(psql_run "$last_id")
-  # The driver statement prints one row: "  last_id | updated"
-  new_id=$(echo "$out" | awk -F'|' '/^ *[0-9]+ \|/ {gsub(/ /,"",$1); print $1}' | tail -1)
-  updated=$(echo "$out" | awk -F'|' '/^ *[0-9]+ \|/ {gsub(/ /,"",$2); print $2}' | tail -1)
+  # The driver statement prints one row "last_id | updated" before the trailing
+  # coverage/unresolved reports, which also start with a number ("315846 | 79418
+  # | 25.14"). Take the FIRST numeric row, not the last one.
+  new_id=$(echo "$out" | awk -F'|' '/^ *[0-9]+ \|/ {gsub(/ /,"",$1); print $1}' | head -1)
+  updated=$(echo "$out" | awk -F'|' '/^ *[0-9]+ \|/ {gsub(/ /,"",$2); print $2}' | head -1)
   if [[ -z "${new_id:-}" || -z "${updated:-}" ]]; then
     echo "could not parse batch output (round $round):" >&2
     echo "$out" >&2
@@ -51,9 +53,9 @@ while :; do
   printf 'round %d: +%d rows (last_id=%d)\n' "$round" "$updated" "$last_id"
 done
 
-# Final coverage + unresolved report (the tail of the SQL file).
-sudo -n docker exec -i "$CONTAINER" psql -U postgres -d "$DB" -X -v ON_ERROR_STOP=1 \
-  -v last_id="$last_id" -f - < "$SQL_FILE" >/dev/null
+# Final coverage report (the tail of the SQL file prints it too, but that run is
+# redirected: re-running one more batch after completion would just rewrite the
+# same numbers).
 echo "coverage:"
 sudo -n docker exec -i "$CONTAINER" psql -U postgres -d "$DB" -X -v ON_ERROR_STOP=1 \
   -c "select count(*) as active_total, count(country_code) as resolved, round(100.0*count(country_code)/nullif(count(*),0),2) as pct from public.jobs_v3 where is_active"

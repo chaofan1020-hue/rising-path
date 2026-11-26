@@ -25,6 +25,7 @@ const localLogosCache: Record<string, string> = {};
 let listingViewRetryAt = 0;
 let regionListingRetryAt = 0;
 let targetRegionRetryAt = 0;
+let countryIndexRetryAt = 0;
 const STRUCTURE_RETRY_MS = 10 * 60 * 1000;
 const SCHEMA_CACHE_RETRY_MS = 60 * 1000;
 
@@ -185,9 +186,38 @@ type ListingQueryOptions = {
   listingView: boolean;
   regionIndex: boolean;
   targetIndex: boolean;
+  countryIndex: boolean;
 };
 
-function detectMissingStructure(error: { code?: string; message?: string }): 'view' | 'region' | 'target' | null {
+// D4/D5: country and continent live on `jobs_v3` only (see migration 0161), so
+// they are unusable while the read switch is off and the archive path still
+// reads `public.jobs`. They also have to degrade on their own when a rolling
+// deploy serves this code before the migration lands.
+const FILTER_CONTINENTS = new Set(['north_america', 'south_america', 'europe', 'asia', 'africa', 'oceania']);
+
+function parseCountryFilter(values: string[]): string[] {
+  const codes = new Set<string>();
+  for (const value of values) {
+    for (const part of value.split(',')) {
+      const code = part.trim().toUpperCase();
+      if (/^[A-Z]{2}$/.test(code)) codes.add(code);
+    }
+  }
+  return [...codes];
+}
+
+function parseContinentFilter(values: string[]): string[] {
+  const continents = new Set<string>();
+  for (const value of values) {
+    for (const part of value.split(',')) {
+      const name = part.trim().toLowerCase();
+      if (FILTER_CONTINENTS.has(name)) continents.add(name);
+    }
+  }
+  return [...continents];
+}
+
+function detectMissingStructure(error: { code?: string; message?: string }): 'view' | 'region' | 'target' | 'country' | null {
   const code = error.code || '';
   const message = error.message || '';
   // 42P01 undefined_table, 42703 undefined_column, PGRST204/205 schema cache.
@@ -197,6 +227,7 @@ function detectMissingStructure(error: { code?: string; message?: string }): 'vi
   if (code === '42703' || code === 'PGRST204') {
     if (/region_market|region_group/i.test(message)) return 'region';
     if (/matches_target_region/i.test(message)) return 'target';
+    if (/country_code|continent/i.test(message)) return 'country';
   }
   return null;
 }
@@ -220,7 +251,15 @@ export async function GET(request: NextRequest) {
     const jobType = searchParams.get('job_type');
     const sponsorship = searchParams.get('sponsorship');
     const status = searchParams.get('status') || 'active';
-    const regionScope = searchParams.get('region_scope') || 'target';
+    // D5: the catalog now holds every region, so the default listing must not
+    // hide non-target postings any more. `region_scope=target` stays available
+    // as an explicit opt-in (AI match scoping still uses the target index).
+    const regionScope = searchParams.get('region_scope') || 'all';
+    const countries = parseCountryFilter(searchParams.getAll('country'));
+    const continents = parseContinentFilter(searchParams.getAll('continent'));
+    // An explicit country/continent pick is a complete geography statement: it
+    // replaces (not combines with) the default target-region narrowing.
+    const explicitGeo = countries.length > 0 || continents.length > 0;
     const search = searchParams.get('search')?.trim() || '';
     const summaryOnly = searchParams.get('summary') === '1';
     const exactCompanies = searchParams.getAll('company_exact').map((value) => value.trim()).filter(Boolean);
@@ -233,7 +272,7 @@ export async function GET(request: NextRequest) {
     const offset = Number.isFinite(requestedOffset) ? Math.max(requestedOffset, 0) : 0;
 
     const company = searchParams.get('company')?.trim() || '';
-    const targetScopeRequested = regions.length === 0 && regionScope !== 'all';
+    const targetScopeRequested = regions.length === 0 && !explicitGeo && regionScope !== 'all';
     const entryLevelFilter = jobType === '实习' || jobType === '校招';
     const rangeEnd = entryLevelFilter ? offset + (pageLimit * 3) : offset + pageLimit;
     const regionListingFilter = configuredRegionListingFilter(regions);
@@ -308,10 +347,17 @@ export async function GET(request: NextRequest) {
           }
           if (regionClauses.size > 0) query = query.or([...regionClauses].join(','));
         }
-      } else if (regionScope !== 'all') {
+      } else if (!explicitGeo && regionScope !== 'all') {
         query = options.targetIndex
           ? query.eq('matches_target_region', true)
           : query.or(targetRegionPostgrestClauses().join(','));
+      }
+
+      // Country / continent facets (D4/D5). The archive path reads `public.jobs`,
+      // which does not have these columns until C2 moves the write path to v3.
+      if (!archiveQuery && options.countryIndex) {
+        if (countries.length > 0) query = query.in('country_code', countries);
+        if (continents.length > 0) query = query.in('continent', continents);
       }
 
       if (directions.length > 0) query = query.in('direction', expandMappedValues(directions, directionMapping));
@@ -324,6 +370,7 @@ export async function GET(request: NextRequest) {
       listingView: Date.now() >= listingViewRetryAt,
       regionIndex: Date.now() >= regionListingRetryAt,
       targetIndex: Date.now() >= targetRegionRetryAt,
+      countryIndex: Date.now() >= countryIndexRetryAt,
     };
     let result = await buildQuery(options);
 
@@ -351,6 +398,9 @@ export async function GET(request: NextRequest) {
       } else if (missing === 'target' && options.targetIndex) {
         targetRegionRetryAt = retryAt;
         options.targetIndex = false;
+      } else if (missing === 'country' && options.countryIndex) {
+        countryIndexRetryAt = retryAt;
+        options.countryIndex = false;
       } else {
         break;
       }
@@ -361,6 +411,7 @@ export async function GET(request: NextRequest) {
       if (options.listingView) listingViewRetryAt = 0;
       if (options.regionIndex && regionListingFilter) regionListingRetryAt = 0;
       if (options.targetIndex && targetScopeRequested) targetRegionRetryAt = 0;
+      if (options.countryIndex && explicitGeo) countryIndexRetryAt = 0;
     }
 
     const { data, error, count } = result;
@@ -369,8 +420,13 @@ export async function GET(request: NextRequest) {
       console.error('Jobs listing query failed', {
         code: error.code,
         message: error.message,
-        filters: { regions, directions, jobType, sponsorship, status, hasSearch: Boolean(search), offset },
-        indexes: { listingView: options.listingView, regionIndex: options.regionIndex, targetIndex: options.targetIndex },
+        filters: { regions, directions, jobType, sponsorship, status, countries, continents, hasSearch: Boolean(search), offset },
+        indexes: {
+          listingView: options.listingView,
+          regionIndex: options.regionIndex,
+          targetIndex: options.targetIndex,
+          countryIndex: options.countryIndex,
+        },
       });
       if (error.message.includes('Requested range not satisfiable')) {
         return NextResponse.json({

@@ -121,41 +121,52 @@ legacy 车道（`src/lib/job-connectors/sync.ts`）没有地区过滤，不用�
 
 现状 `ai_match_region_scope()` 只认 us/uk/canada/australia/singapore/hong_kong，其余全部 NULL —— 不满足「所有地区可筛」。
 
-**D4-1 数据结构（迁移 `0161_job_country_taxonomy.sql`）**
+**D4-1 数据结构（迁移 `0161_job_country_taxonomy.sql`）— ✅ 已上生产**
 - `jobs_v3` 新增两列：
   - `country_code char(2)`：ISO-3166 alpha-2（`US`/`GB`/`CA`/`IN`/`DE`/…），无法识别为 NULL
-  - `continent text`：`north_america` / `latin_america` / `europe` / `middle_east` / `africa` / `asia` / `oceania` / NULL
-- 新增函数 `job_country_code(region text) returns char(2)`，按**优先级四级解析**：
-  1. `City, XX, <国家名/国家码>` 三段式（已有逻辑可复用）
-  2. 国家名 / ISO 国家码全表匹配（约 250 个）——注意 `CA`/`IN`/`DE`/`GA` 等歧义码要靠上下文消歧
-  3. **城市→国家字典**（约 300–500 个高频城市：London/Paris/Berlin/Bangalore/Toronto/São Paulo/…）
-  4. 美国州码 / 加拿大省码 / 澳洲州码 → `US`/`CA`/`AU`
-  - 仍无法解析 → NULL，前端落到「未知地区」桶
-- 新增索引：`(country_code, created_at desc, id desc) where is_active` 和 `(continent, created_at desc, id desc) where is_active`
-- `jobs_listing_v3` 视图补这两列
-- 触发器 `jobs_sync_country_code`（BEFORE INSERT OR UPDATE OF region）维护，**同时建在 `public.jobs` 和 `jobs_v3` 上**（与 C2 的触发器迁移一起做，避免重复回填）
+  - `continent text`：**6 个大洲** `north_america` / `south_america` / `europe` / `asia` / `africa` / `oceania` / NULL
+    （计划原先写的 `latin_america`/`middle_east` 是两个跨洲分组，做进大洲维度会让 `country_code` 与大洲不自洽，故统一为 ISO 大洲；EMEA/APAC/LATAM/Americas 一律 NULL，不猜）
+- `public.job_country_taxonomy`：**1,610 条**种子（country / country_iso / alias / city / state 五类）。
+  用 `kind` 区分真实冲突：`georgia` 既是美国州又是国家、`in` 既是 Indiana 又是 India 的 ISO-2、`london` 在 GB/CA 都有。
+- `job_location_normalize(text)`：小写 + 去重音 + **去点号**（`st. louis`→`st louis`、`u.s.a.`→`usa`）+ 折叠空白。
+- `job_country_code(region text) returns char(2)`：实际形态远比「四级」复杂，最终是**分层解析**：
+  0. 带前导国家标记（`France > Rungis : Miami building` 是法国岗）→ 括号 ISO-2 → Workday 码（`US-CT-…`/`CA-QC-…`/`IN-KA-…`）
+  1. 去噪切段：州前缀 `ut:`、首尾邮编、`(Headquarters)` 括号后缀、`office/hq/area/metro/state/corporate` 后缀（剥两遍）、`greater/all of/hybrid/remote/home based` 前缀、空格分隔符（`Remote - Canada`、`AZ - Chandler`）
+  2. 末段国家（**该 token 同时是州名则跳过**：`London, United Kingdom` 不能变成 London, Ontario）→ 城市右→左 → 州/邮编（末段或末词 `Baldwin NY`；两字母 `in/ca/de/il` 由城市一致性裁决）→ 词级国家/双词地名/双词城市（`Mississauga Ontario Canada`、`Kowloon  Hong Kong`、`San Francisco or Palo Alto`）→ 段级兜底 → 显式 `us/uk/uae` 标记
+  3. 都不中 → NULL，前端落「未归属地区」桶（`Remote`/`Worldwide`/`TBD` 等**本就该 NULL**）
+- `job_region_continent(text)`：只判大洲的兜底（`North America`、`Asia Pacific`、`Middle East`），仅当国家为空时使用。
+- 新增索引：`jobs_v3_country_active_idx` / `jobs_v3_continent_active_idx`，均为 `(列, created_at desc, id desc) where is_active`。
+- `jobs_listing_v3` 视图重建补这两列（`select v.*` 在视图创建时冻结且 `CREATE OR REPLACE VIEW` 不能换序，只能 drop+create；已确认无依赖对象）。
+- 触发器 `jobs_sync_country_code`（BEFORE INSERT OR UPDATE OF region）**只建在 `jobs_v3`**，这是对原计划的**有意偏离**：
+  0149 的影子触发器是按位 `insert into jobs_v3 select n.*, lane, evidence`，给 `public.jobs` 加列会让 v3 尾部三列整体错位、**静默打断全部影子写**（处理器只 warn）。新列追加在 `canonical_job_id` 之后，由 BEFORE 触发器填；`public.jobs` 侧留到 C2 与显式列影子一起改。
 - `region_market` / `ai_match_region_scope` **保持不变**（AI 选岗继续只用 6 个目标市场，符合决策 4）
 
-**D4-2 回填（约 319k 行，分批 5,000 行/批）**
-- `scripts/jobs-country-backfill.sql`，幂等，只补 `country_code is null` 的行
-- 目标：**≥95% 的 active 行解析出 country_code**；剩余落「未知地区」
+**D4-2 回填（约 319k 行，分批 5,000 行/批）— ✅ 已跑完**
+- `scripts/jobs-country-backfill.sql` + `.sh`，幂等，只补 `country_code is null` 的行；`set region = region` 是**故意的**（值不变但点名了 `update of region`，才会触发解析器）
+- 实测 50 轮 / 约 2 分钟（每轮 5,000 行，1.8 s），与 D3 的 reconcile 并行无冲突
+- **覆盖率**（2026-11-26 17:20 快照）：active 319,258 行 → 解析出 301,576 = **94.46%**；
+  其中 7,477 行属于「本就无国家」（`Remote`/`Worldwide`/`Home based - EMEA`/`Location TBD`/`Any city`/`Nationwide`），
+  **真正漏判 10,205 行**（长尾唯一字符串），**可归属覆盖率 = 301,576 / 311,781 = 96.75%** ✅
+- 最大单条残差是 `Prolific Expert Network, Remote`（4,039 行，公司名+Remote，本就无国家）
 
-**D4-3 API**
-- `/api/jobs` 新增参数：`country=US,GB,IN`（多选）、`continent=europe`（多选）
-- 保留原有 `regions`（us/uk/… 目标市场关键词）向后兼容
-- 新增 `/api/jobs/filters`（或复用现有 meta 接口）返回**可用国家列表 + 每国数量**，供筛选器渲染
-- 排序/分页仍走新索引
+**D4-3 API — ✅ 代码完成（待部署）**
+- `/api/jobs` 新增参数：`country=US,GB,IN`（可重复/逗号分隔）、`continent=europe`（多选）；两者同时传是**取交集**（收窄），前端不会同时传
+- 保留原有 `regions`（目标市场关键词）向后兼容，且 `region=` 优先于国家/大洲
+- 新列只在 `jobs_v3`，所以：归档路径（`status=closed|all` 读 `public.jobs`）不适用；读切换关掉时自动降级（`countryIndex` 标志 + 42703/PGRST204 识别，同 region/target 的既有降级机制）
+- 新增 `/api/jobs/filters`：208 行以内的国家 facet（`continent/country_code/country_name/jobs`），进程内缓存 10 min；底层是迁移 `0162_jobs_country_filter_counts.sql` 的 RPC（PostgREST 不支持 GROUP BY，所以用一个聚合函数，口径与列表查询完全一致：`is_active and display_status in ('listed','enriched')`）
+- 实测 facet：158 个国家/地区、301,879 条可归属、`unplaced = 17,768`
 
-**D4-4 前端筛选器**
-- 地区筛选从「6 个目标市场」升级为：**大洲分组 + 国家多选（可搜索）+「未知地区」**
-- 保留原有快捷项（美国/英国/加拿大/澳洲/新加坡/香港），点一下等价于选中对应国家
+**D4-4 前端筛选器 — 🔄 进行中**
+- 地区筛选从「7 个目标市场」升级为：**大洲快捷 chips（带数量）+ 大洲分组的国家多选（可搜索，带数量）+「未归属地区」提示**
+- 大洲 chips 与国家多选**互斥**（选大洲清空国家，选国家清空大洲），避免「欧洲 + 美国」这种交集为空的组合
 - 未选任何地区 = 全部
+- 保留原有目标市场快捷项（美国/英国/加拿大/澳洲/新加坡/香港），点一下等价于选中对应国家
 
 **D4 验收**
-- 覆盖率：`select count(*) filter (where country_code is not null)::float / count(*) from jobs_v3 where is_active` **≥ 0.95**
-- 抽样：`Bangalore, IN`→IN、`London, United Kingdom`→GB、`CA-QC-LONGUEUIL-J01…`→CA、`Remote`→NULL、`NY, New York`→US、`Warsaw, Poland`→PL
-- 每个国家筛选的返回数与 SQL 直查一致（误差 0）
-- 迁移可回滚：`drop column`（视图先重建）
+- ✅ 覆盖率：可归属覆盖率 **96.75%**（原始 94.46%，差额是 7,477 行本就无国家的 remote 岗）；阈值 ≥95% 达标
+- ✅ 抽样：`Bangalore, IN`→IN、`London, United Kingdom`→GB、`CA-QC-LONGUEUIL-J01…`→CA、`Remote`→NULL、`USA.VA.Reston`→US、`Warsaw, Poland`→PL、`Atlanta, Georgia`→US、`Tbilisi, Georgia`→GE —— 118 条断言在**生产库临时库**里 118/118 通过（`tmp/dryrun-0161.py`）
+- ⏳ 每个国家筛选的返回数与 SQL 直查一致（误差 0）：待 API 部署后用 curl 抽查
+- ✅ 迁移可回滚：回滚 DDL 写在迁移头注释里（drop 触发器/函数/索引/列 + 重建视图）
 
 #### D5 · 展示与筛选放开（1–2 h）
 - `/api/jobs` 的 `regionScope` 默认值 **`target` → `all`**（决策 2）
@@ -192,14 +203,14 @@ legacy 车道（`src/lib/job-connectors/sync.ts`）没有地区过滤，不用�
 | # | 动作 | 依赖 | 预计 |
 |---|---|---|---|
 | C1 | 设计稿 | — | ✅ 已完成 |
-| **C2** | 迁移 `0162_jobs_v3_write_ready.sql`：① id 默认改共用序列；② 3 个业务触发器迁到 v3；③ `lane` 加默认；④ 反向影子 + 回环守卫（`liorvix.reverse_shadow` session 变量）；⑤ 提交 12.2 万关闭行回填到 v3（归档读一并切 v3） | P0、D4（触发器可合并到同一迁移批次） | 4–6 h |
+| **C2** | 迁移 `0163_jobs_v3_write_ready.sql`：① id 默认改共用序列；② 3 个业务触发器迁到 v3；③ `lane` 加默认；④ 反向影子 + 回环守卫（`liorvix.reverse_shadow` session 变量）；⑤ 提交 12.2 万关闭行回填到 v3（归档读一并切 v3） | P0、D4（触发器可合并到同一迁移批次） | 4–6 h |
 | C3 | `jobWriteTable()` + `JOBS_WRITE_SOURCE`，改 8 个写文件；新增 `scripts/test-job-write-source.ts` | C2 | 3 h |
 | C4 | 双向影子对账 24h | C3 | 24 h 观察 |
 | C5 | 切写 `JOBS_WRITE_SOURCE=v3`，反向影子常开，观察 7 天 | C4 | 7 d |
 | C6 | 归档 `jobs` 表，**再释放 5.5 G** | C5 | 1 h |
 
 **C 与 D 的关系**：C6 释放的 5.5 G 覆盖 D 的数据增长，所以顺序是 **P0 → D → C**，不必单独扩容。
-**迁移编号**：D4 用 `0161`，C2 用 `0162`（避免撞号）。
+**迁移编号**：D4-1 用 `0161`，D4-3 的 facet RPC 用 `0162`（占用后 C2 顺延为 `0163`）。
 
 ---
 
@@ -230,7 +241,7 @@ legacy 车道（`src/lib/job-connectors/sync.ts`）没有地区过滤，不用�
 | 计划 | `docs/job-acquisition-plan-v3.md`（本文） |
 | 写切换设计 | `docs/job-acquisition-write-switch-design.md` |
 | 进度日志 | `docs/job-acquisition-progress.md` |
-| 迁移 | `supabase/migrations/0161_job_country_taxonomy.sql`、`0162_jobs_v3_write_ready.sql` |
+| 迁移 | `supabase/migrations/0161_job_country_taxonomy.sql`、`0162_jobs_country_filter_counts.sql`、`0163_jobs_v3_write_ready.sql` |
 | 代码 | `src/lib/jobs-feed.ts`、`src/lib/job-region-scope.ts`、`src/app/api/jobs/route.ts`、`src/app/jobs/*`、`src/lib/job-write-source.ts`（新） |
 | 脚本 | `scripts/test-job-feed-region-filter.ts`、`scripts/jobs-country-backfill.sql`、`scripts/test-job-write-source.ts` |
 
