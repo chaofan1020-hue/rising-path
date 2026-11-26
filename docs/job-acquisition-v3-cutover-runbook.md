@@ -11,7 +11,7 @@
 
 | 方案 | 内容 | 现状 | 风险 | 收益 |
 |---|---|---|---|---|
-| **A · 只切读** | `JOBS_READ_SOURCE=v3`，读走 `jobs_v3`；写仍进 `public.jobs`，由影子触发器同步 v3 | **代码已就绪**：20 个用户可见读入口全部走 `jobReadTable()`/`jobListingReadTable()`（列表、详情、stats、公司列表、JD 检索、收藏、投递记录、dashboard、AI 匹配/优化、面试、prefill）；写路径、生命周期 worker、admin 运维仍指向 `public.jobs` | 低，10 分钟内可回滚 | 读路径先用上新表；写出问题不影响读 |
+| **A · 只切读** | `JOBS_READ_SOURCE=v3`，读走 `jobs_v3`；写仍进 `public.jobs`，由影子触发器同步 v3 | **已于 2026-11-26 09:59 +08 执行**：备份 `.env.local.pre-v3-cutover` → 追加 flag → 重启；进程 env 含 `JOBS_READ_SOURCE=v3`；exact 计数 `jobs_listing`=`jobs_listing_v3`=200,637（target region 117,442）；12 次请求后 `jobs_v3.idx_scan` +3、`jobs.seq_scan` 不动；45 分钟 0 error | 低，10 分钟内可回滚（删 flag + restart） | 读路径已用上新表；写出问题不影响读 |
 
 **切读前已知差异（重要）**：`jobs_v3` 只有 203 条 inactive 行（活跃期关闭的那几条），而 `public.jobs` 有 **122,112** 条历史关闭记录——v3 回填只覆盖了 active 岗位。因此：
 

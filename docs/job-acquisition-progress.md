@@ -34,7 +34,7 @@
 | 基线文件 | `tmp/baseline-20261124.json` |
 | Supabase 备份时间点 | `/opt/liorvix-backups/liorvix-20261124-032117.dump`（444MB；DB 容器 2026-11-23 03:15 UTC 起） |
 | Feed worker 实际配置 | `JOBS_AUTO_WORKER=true`、`JOBS_SYNC_INTERVAL_MINUTES=5`；**systemd jobs timers 全部 disabled**，不要按 timer 文档推断 |
-| 当前生产事实 | 2026-11-26 10:30 +08：**已切读 `JOBS_READ_SOURCE=v3`**，US active **200,637** = v3 active 200,637（56 列全等、gap 0、`read_index_gaps=0`、DLQ 0）；`jobs` 5.3GB / `jobs_v3` 2.5GB / 库 8.1GB / 磁盘剩 9.0GB；生产 `0977d52`（回滚 `59d28a5`；切读回滚 = 删 flag 重启）；**上游 board 已 1,000**（GH 900 / Lever 100，P1 第一批 500 已导入，0 失败），OPEN 312,506 |
+| 当前生产事实 | 2026-11-26 10:57 +08：**已切读 `JOBS_READ_SOURCE=v3`**；US active **215,916** = v3 active 215,916（56 列全等、gap 0、`read_index_gaps=0`、DLQ 0、feed age 1.76min）；`jobs` 5.3GB / `jobs_v3` 2.6GB / 库 8.3GB / 磁盘剩 8.1GB；生产 `0977d52`（回滚 `59d28a5`；切读回滚 = 删 flag 重启）；**上游 board 1,500**（GH 1,030 / Ashby 252 / Lever 218，导入后 8 分钟 527 poll / 0 failed），OPEN 岗位随新 board 首轮同步持续上涨 |
 
 ## 执行约定（B03）
 
@@ -143,7 +143,7 @@
 
 ## 日志（倒序）
 
-### 2026-11-26 · 🔴 生产切读已执行（方案 A）+ P1 第一批 500 已导入
+### 2026-11-26 · 🔴 生产切读已执行（方案 A）+ P1 1,000 board 全部导入
 
 用户明确要求“不用等到那个时候，现在就开始”，因此两个闸门都提前执行。
 
@@ -157,13 +157,15 @@
 - 切后冒烟：`/` 200、鉴权路由 401、`/api/interview/jobs` 200、`/api/health` 200；20 分钟 0 error；对账仍 `missing/extra/field_mismatches/missing_evidence/read_index_gaps` 全 0，feed age 3.7min。
 - 回滚：`sed -i '/^JOBS_READ_SOURCE=/d'` + restart，10 分钟内。
 
-**任务①（P1 扩量）— 第一批 500 已进生产**
+**任务①（P1 扩量）— 1,000 个 board 全部进生产（两批）**
 
 - 用户直接授权“现在先导入 500，然后再第二批”，跳过等 48h。执行前 G2 实测（38.5h 处）：成功率 **99.944%**（62,643 run / 35 failed）、board P95 **25.6min**、误关（修正口径）**0**、重复 **0**、active board 500、OPEN 312,506。
 - `data/p1-boards.csv` 上传上游 `/tmp`，sha256 校验 `a9b982a5…6ffe` 一致（1,000 行 + 表头）。
-- `docker exec global-jobs-bulk-worker-1 python -m app.bulk_boards --csv /tmp/p1-boards.csv --apply --limit 500` → `ats_boards` active **500 → 1,000**（greenhouse 400→900、lever 100）。
-- 导入后 10 分钟：204 次 greenhouse 轮询、失败 **0**；新 board 逐个被拾起（GH 504/900 已有 `last_ok_at`，其余排队）。
-- **已确认 Ashby 可用**：live `connectors.py` 有 `AshbyConnector` 且在 `CONNECTORS` 映射里；`bulk_poll.py` 对非 GH/Lever 的 vendor 走 `{"board_name": token}`，`VENDOR_SPACING` 含 ashby 0.5s → 第二批的 252 个 Ashby board 能被正常轮询。
+- 第一批 500（全是 greenhouse）：`bulk_boards --csv /tmp/p1-boards.csv --apply --limit 500` → active **500 → 1,000**；25 分钟内 GH 1,198 次轮询 / **0 失败**、900 个 board 全部拿到 `last_ok_at`、P95 17.5min。
+- **踩坑：`--limit` 是「取 CSV 前 N 行」，不是「新建 N 个」**。第二批若重跑同一个 CSV，会再读前 500 行、全部命中已有 board → 新建 0 个（实测 active 仍 1,000）。改成导 501–1000 行切片（`tmp/p1-boards-b2.csv`，252 ashby + 130 greenhouse + 118 lever）后成功：active **1,000 → 1,500**（GH 1,030 / Ashby 252 / Lever 218）。
+- **Ashby 首次进生产**：导入后 8 分钟内 252 个 ashby board 有 237 个已 `last_ok_at`、0 failing、238 次轮询 / 0 失败、avg 2.22s；`last_error` 全空 → vendor 适配正常（live `connectors.py` 有 `AshbyConnector`，`bulk_poll.py` 走 `{"board_name": token}`，`VENDOR_SPACING` ashby 0.5s）。
+- 三 vendor 导入后 8 分钟：527 次轮询（ashby 238 / GH 173 / Lever 116）、**0 失败**。
+- **效果**：美国站 active 岗位 **200,637 → 215,916（+15,279，+7.6%）**，用时约 1 小时（新 board 首轮全量同步）。
 
 ### 2026-11-26 · 切读前发现“关闭档案”缺口并加守卫
 
