@@ -1,7 +1,7 @@
 # 岗位采集规模化 · 执行账本
 
 > 这是 AI 唯一允许改状态的地方。`tasks.yaml` 只读；本文件每完成一个任务必须更新。
-> 最后更新：2026-11-25（V02 feed 已追平；v3 影子重建计划启动，Phase 0 备份/基线完成）
+> 最后更新：2026-11-26（P0 磁盘清洁完成；D2 开关上线；D1 count 实测完成；D3 全量 reconcile 进行中；D4-a 国家级维度迁移已上生产）
 >
 > v3 重建计划：`docs/job-acquisition-v3-rebuild-plan.md`
 
@@ -142,6 +142,54 @@
 | — | — | — | — | — | — |
 
 ## 日志（倒序）
+
+### 2026-11-26 · D4-a 完成：国家级维度 `0161_job_country_taxonomy`（迁移已上生产）
+
+- 新增迁移 `supabase/migrations/0161_job_country_taxonomy.sql`（约 110 KB，含种子）：
+  - `public.job_country_taxonomy`（1,610 行）：`country` / `country_iso` / `alias` / `city` / `state` 五类 token → `country_code` + `continent`。用 `kind` 区分真实冲突：`georgia` 既是美国州又是国家、`in` 既是 Indiana 又是 India 的 ISO-2。迁移内先 `delete` 再全量灌种子，保证重复执行不会留下过期 token。
+  - `public.job_location_normalize(text)`：小写 + 去重音 + **去点号**（`st. louis`→`st louis`、`u.s.a.`→`usa`）+ 折叠空白。
+  - `public.job_country_code(text)`：分层解析器。`region` 的实际形态远超“城市+国家”：Workday 式 `US-CT-EAST HARTFORD…`/`CA-QC-LONGUEUIL…`/`IN-KA-BENGALURU…`、`Remote - Canada`、`Greater Seattle Area`、`USA.VA.Reston`、街道地址+邮编、`Singapore  Singapore`，所以顺序是：带前导国家标记 → 括号 ISO-2 → 去噪切段（州前缀 `ut:`、邮编、`(Headquarters)`、`office/hq/area/metro/state` 后缀剥两遍、`greater/all of/hybrid/remote/home based` 前缀、空格分隔符切分）→ 末段国家（**若该 token 同时是州名则跳过**，`London, United Kingdom` 不能变成 London, Ontario）→ 城市右→左 → 州/邮编（末段或末词，如 `Baldwin NY`；两字母 `in/ca/de/il` 由城市一致性裁决：`Bangalore, IN`=印度、`Irvine, CA`=美国）→ 词级国家/双词地名/双词城市（`Mississauga Ontario Canada`、`Kowloon  Hong Kong`、`San Francisco or Palo Alto`）→ 段级兜底 → 显式 `us/uk/uae` 标记。
+  - `public.job_region_continent(text)`：只判大洲的兜底（`North America`、`Asia Pacific`、`Middle East`）；EMEA/APAC/LATAM/Americas 这类跨洲分组**故意返回 NULL**，不猜。
+  - **列只加在 `public.jobs_v3`**，没加 `public.jobs`：0149 影子触发器是**按位**`insert into jobs_v3 select n.*, lane, closure_evidence`，给 `jobs` 加列会让 v3 尾部三列整体错位、静默打断全部影子写（处理器只 warn）。新列追加在 `canonical_job_id` 之后，由 BEFORE 触发器填。`jobs` 侧留到 C2 与“显式列影子”一起改。
+  - `jobs_sync_country_code`（BEFORE INSERT OR UPDATE OF region，仅 v3）+ 两个 `is_active` 部分索引 `(country_code, created_at desc, id desc)` / `(continent, …)`；`jobs_listing_v3` 重建（`select v.*` 在视图创建时已冻结，且新列落在 `region_market` 前面，`CREATE OR REPLACE VIEW` 不能换序，故 drop+create；已确认无依赖对象）。
+- 验证方式：`tmp/dryrun-0161.py` 在**生产库里的临时库** 建同构 `jobs`/`jobs_v3` 后整篇执行迁移，再用 118 条断言跑解析器 —— **118/118 通过**，临时库自动删除。断言覆盖真实生产 top-unresolved 字符串（`New York City`、`Greater Seattle Area`、`SG - Singapore`、`Mississauga Ontario Canada`、`Remote - Canada`、`CA-QC-LONGUEUIL…`、`USA.VA.Reston`、`Baldwin NY`、`Columbia, MO (Headquarters)`、`Soho Beach House Miami, 4385 Collins Ave, Miami Beach, FL 33140` 等）。
+- 生产应用（4 次迭代，全部幂等重跑）：`docker exec -i … psql -f -`，每次 rc=0；最终 `job_country_code` 在**活跃且 region 非空**的 306,553 行上解析出 290,481（**94.7%**），其中 `unresolved_no_country_expected` 6,800（`Remote`/`Worldwide`/`Home based - EMEA`/`Location TBD` 等**本就该 NULL**）、`unresolved_genuine_miss` 9,603。最大单条残差是 `Prolific Expert Network, Remote`（4,039 行，公司名+Remote，本就无国家）。
+- 待办（D4-b）：`scripts/jobs-country-backfill.sql` + `.sh` 已写好但**尚未跑**——等 D3 全量 reconcile 结束再跑（reconcile 的影子写已自动为新写入行填 `country_code`，回填只需处理迁移前的存量）；随后才是 API `country=`/`continent=`、`/api/jobs/filters` 与前端大洲多选。
+
+### 2026-11-26 · P0 磁盘清洁执行成功（主站）
+
+- 清理前 `/dev/vda2 50G 41G used 6.2G free 87%` → **清理后 `50G 32G used 16G free 67%`**（+9.8 G）。执行脚本 `tmp/p0-execute.py`，全程 RC=0，日志 `tmp/p0-execute.log.txt`。
+- P0-A：`journalctl --vacuum-size=300M` 释放 **2.6 G**（现 296 M）；nginx 轮转日志全部 gzip，`/var/log` → **492 M**；`/var/log/btmp` + `btmp.1` 截断为 0。
+- P0-B：`/opt/liorvix-backups` **5.7 G → 2.2 G**。按“只留最新 + 上一份 + pre-v3 切换 dump”删 10 个（sha256 记在日志里）。保留三份：
+  - `liorvix-20261126-032401.dump` 1.2 G sha256 `db569967df6500a6426bb7ebea27795b185667e12cae725fff5d70fdad246276`，`pg_restore --list` 1379 项
+  - `liorvix-20261125-032535.dump` 423 M sha256 `959b7cd2833ca025ab0e63c17a2c3584f434173e3588059e2206d2c4dcd69708`，1305 项
+  - `jobs-v3-pre-20261125-040722.dump` 449 M sha256 `6320a3e9f2cea0c9acb754cdd8a7538c70565e35a376c4ed2d0124269edba2df`，1637 项
+  - 举证方式：`sudo -n cat <dump> | sudo -n docker exec -i ... pg_restore --list`（直接重定向会因 0600 权限拿到 0 条目）
+- P0-C：`/opt` 四个陈旧目录（1.4 G+1.3 G+1.4 G+2.0 G）与 4 个 tarball（284 M/41 M/40 M/20 M）已删。
+- P0-D：`docker image prune -f` → 0 B（无 dangling image，符合预期）。
+- 收尾核验：`systemctl is-active liorvix` = active；`/`、`/jobs`、`/ai-match` 全 200；5 个 supabase 容器 running。
+
+### 2026-11-26 · D2 完成：`JOBS_FEED_REGION_FILTER` 开关（`e906971`，已部署生产）
+
+- `src/lib/job-region-scope.ts` 新增 `RegionFilterMode = 'target'|'all'|'count'` 与 `regionFilterMode()` / `regionFilterDisabled()`；**默认 `target` 保持历史行为**，配置写错不会静默改变入库集合。
+- `src/lib/jobs-feed.ts`：`buildJobRecord` 与 `normalizeSkipReason` 两处地区拦截都改为 `if (!regionFilterDisabled() && !isTargetRegion(...))`；新增 `regionFilteredCountryKey()` 与 `recordRegionFilteredCountry()`，仅 `count` 模式把被丢弃记录按国家/城市分桶（每页日志只打 top 25，直方图最多 400 键，超出归 `(other)`）。
+- `src/lib/job-feed-orchestrator.ts`：跨页聚合 `region_filtered_by_country`、回传 `region_filter_mode`，日志行做 top-25 截断。
+- 新增 `scripts/test-job-feed-region-filter.ts`（模式解析/默认回退/两处拦截在位/分桶键/编排器聚合），`npx tsx` → **region filter contract ok**；`npx tsc --noEmit` 仅剩 `.next/dev/types/app/probe-plain` 历史产物错误。
+- 部署：`sudo /usr/local/bin/liorvix-deploy e906971`，smoke `health=200 login_form=1 admin=307 analytics_unauth=401`，16:09:55 重启后 `journalctl` 已出现 `"region_filter_mode":"target"→"all"`。
+
+### 2026-11-26 · D1 完成：`count` 模式实测被地区过滤掉的量级
+
+- 以 `JOBS_FEED_REGION_FILTER=count` 跑 **40 页 reconcile**（每页 500）：**received 40,000 / upserted 26,118 / outside_target_region 13,882 = 34.7%**。
+- 被丢弃的 top 国家/城市：india 1,102、brazil 382、germany 344、spain 341、paris 332、france 298、**california 259**、switzerland 244、**virginia 237**、netherlands 230、ireland 227、**georgia 217**、remote 191、malaysia 183、**louisiana 168**、philippines 163、**oklahoma 141**、**maryland 138**、tokyo 137、italy 135。
+- **关键发现（计划外，影响 D3/D4）**：被过滤集合里约 1/4 是美国岗位——feed 的 `country` 字段常直接写州全名（california/virginia/georgia/louisiana/oklahoma/maryland/arizona/new jersey/utah/texas…）或 `remote`/`various locations`，而 JS 侧 `TARGET_PATTERNS` 只认州缩写与少数城市，于是这些美国岗位被误判为非目标地区。`all` 模式会连带把这些美国岗位收回来，收益大于原计划的“补齐 ATS gap ≈ 59,340”。
+- 另记一处已知偏差：JS 侧仍把裸 `IN` 当 Indiana（`Bangalore, IN` 会被误留），SQL 侧 `0160` 已用 `([^a-z]|$)` + 城市段守卫修掉；本项不在 D2 范围，`count` 直方图即为后续 D4 的输入。
+
+### 2026-11-26 · D3 启动：`all` 模式全量 reconcile（进行中）
+
+- `.env.local` 备份 `/opt/liorvix/.env.local.pre-region-all`，追加 `JOBS_FEED_REGION_FILTER=all`，16:09:55 重启；运行中进程日志确认 `"region_filter_mode":"all"`、`skipped_by_reason` 为空。
+- 清空 `job_sync_state.reconcile_*`（`collector_feed`）后，以 `JOBS_ALLOW_FULL_RECONCILE=true` 起 detached 全量 reconcile（`/tmp/d3-reconcile.out`）。
+- 启动基线：`jobs` total 383,184 / active 261,260 / ats_active 149,997 / legacy_active 111,263 / active_target 244,458；磁盘 16 G free。
+- 运行期间增量 worker 会因共享租约失败若干次（预期，reconcile 自己持续在推进 upstream watermark）；跑完后需核验 active/ats_active 增量、`matches_target_region` 分布与磁盘。
 
 ### 2026-11-26 · P1 扩量：1,500 → 3,007 board（open-ats-feed 长尾探测 + 三批导入）
 
