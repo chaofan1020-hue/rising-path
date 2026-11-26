@@ -34,7 +34,7 @@
 | 基线文件 | `tmp/baseline-20261124.json` |
 | Supabase 备份时间点 | `/opt/liorvix-backups/liorvix-20261124-032117.dump`（444MB；DB 容器 2026-11-23 03:15 UTC 起） |
 | Feed worker 实际配置 | `JOBS_AUTO_WORKER=true`、`JOBS_SYNC_INTERVAL_MINUTES=5`；**systemd jobs timers 全部 disabled**，不要按 timer 文档推断 |
-| 当前生产事实 | 2026-11-25 16:56 +08：US active **199,301**；v3 `jobs_v3` total 199,340（ATS 87,378 / legacy 111,962；active gap 0、全 56 列 mismatch 0）；`jobs_v3` 读索引 43 个（`read_index_gaps=0`）；feed 最近 success、0 row failure、age 2.5min；**DLQ pending 0**；对账 timer 每 5 分钟运行，24h 证据基线 `2026-11-25T07:11:43Z`（完成 `2026-11-26T07:11:43Z`）；生产 commit `c8650c7`（回滚点 `58b969b`）；`JOBS_READ_SOURCE` 未设置（仍读 `jobs`）；DB ~7.9 GB / 剩余 11 GB |
+| 当前生产事实 | 2026-11-26 09:39 +08：US active **200,674**；v3 total 200,877（ATS 88,915 / legacy 111,962；missing/extra/gap 0、全 56 列 mismatch 0）；`jobs_v3` 读索引 43 个（`read_index_gaps=0`）；feed age 3.6min；**DLQ pending 0**；24h 证据 clean **18.5h/24h**（完成 `2026-11-26T07:11:43Z` = 15:11 +08）；生产 commit `59d28a5`（回滚点 `c8650c7`）；`JOBS_READ_SOURCE` 未设置（仍读 `jobs`）；`jobs` 5.3GB / `jobs_v3` 2.5GB / 库 8.1GB / 磁盘剩 9.0GB |
 
 ## 执行约定（B03）
 
@@ -142,6 +142,19 @@
 | — | — | — | — | — | — |
 
 ## 日志（倒序）
+
+### 2026-11-26 · 切读前发现“关闭档案”缺口并加守卫
+
+- `jobs_v3` 只有 **203** 条 inactive 行，`public.jobs` 有 **122,112** 条历史关闭记录——v3 回填只覆盖 active 岗位。详情接口本来 `.eq('is_active', true)`，行为不变；但 `/api/jobs?status=closed|all` 切到 v3 会瞬间返回空档案。
+- 已加守卫（`59d28a5`）：`status=closed|all` 固定读 `public.jobs`，并在 `scripts/test-job-read-source.ts` 里锁住这条分支，防止以后有人把档案也切到影子表。回填 12.2 万行（约 +1.5 GB）是另一条可选路线，不阻塞方案 A。
+- 顺手确认：全站没有任何前端/接口用 `status=closed|all` 查目录，关闭岗位的详情页今天就已经 404，所以切读对用户可见行为无影响。
+
+### 2026-11-26 · 两个任务合并检查（37.6h / 18.5h）
+
+- 任务②（v3）：active **200,674**（16 小时净增 1,370），`missing/extra/field_mismatches/missing_evidence/read_index_gaps` 全 0，feed age 3.6min，DLQ 0；24h 证据 **clean 18.5h/24h**、218 条样本、`max_feed_age 7.88min`、无 ALERT、无 coverage gap；到点 **11-26 15:11 +08**。生产 `59d28a5`（回滚 `c8650c7`）。`jobs` 5.3 GB / `jobs_v3` 2.5 GB / 库 8.1 GB / 磁盘剩 9.0 GB。
+- 生产 16h 内 9 条 error 全是 `Server Reference ID did not match`（页面 server-action 校验），与岗位链路无关。
+- 任务①（上游）：G2 观察 **37.6/48h**，成功率 **99.935%**（61,303 run / 35 failed）、board P95 **23.0 min**（已从 30.1 回落）、500 board / 125,197 岗位、24h 新增 6,132 岗位、vendor 失败 greenhouse 0 / lever 0.15%。
+- **G2 “误关”口径再修**：窗口内共 6,667 条 CLOSED，其中 6,654 条是旧连接器车道（`source_key` 为空）历史式关闭、`missing_streak` 恒 0——按新口径会得出“6,654 条误关”的假警报。正确口径是「窗口内 + ATS 车道 + `missing_streak < 12`」：实测 **0**（ATS 车道窗口内关闭 13 条，全部 `missing_streak ≥ 12`，有连续缺席证据）。
 
 ### 2026-11-25 · G2 现状实测 + 误关口径修正
 

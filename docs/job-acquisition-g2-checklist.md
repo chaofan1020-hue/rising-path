@@ -20,12 +20,17 @@ select round(percentile_cont(0.95) within group (
 from ats_boards where status='active' and last_ok_at is not null;
 
 -- 误关 / 重复
--- 注意：不能直接 count(status='CLOSED')。正常下架的岗位也是 CLOSED，
--- 只有“缺少连续缺席证据”的 CLOSED 才算误关。上游 `missing_streak`
--- 记录该岗位连续多少次全量 200 快照里没出现，`closed_at` 是判定时间。
+-- 注意三点，否则这一项会误判：
+-- 1) 正常下架的岗位也是 CLOSED，要用 missing_streak（连续缺席次数）区分；
+-- 2) missing_streak 只在 ATS board 车道（source_key 非空）有意义；旧连接器
+--    车道（source_key 为空、external_job_id 是 URL）历史行 missing_streak
+--    恒为 0，按它统计会得出“23 万条误关”的假警报（2026-11-26 实测）；
+-- 3) 只看观察窗口内 closed_at 的行，历史积压不算。
 select count(*) filter (where status::text='CLOSED') as closed,
-       count(*) filter (where status::text='CLOSED' and missing_streak < 12) as closed_without_evidence,
-       count(*) filter (where source_key is not null) as source_jobs
+       count(*) filter (where status::text='CLOSED' and source_key is not null) as closed_sourced,
+       count(*) filter (where status::text='CLOSED' and source_key is not null
+                               and closed_at >= timestamptz '2026-11-24 11:50+00'
+                               and missing_streak < 12) as closed_without_evidence
 from jobs;
 select count(*) from (
   select source_key, external_job_id from jobs
@@ -52,7 +57,7 @@ from job_sync_state where source_system='collector_feed';
 | 项 | 阈值 | 通过条件 |
 |---|---|---|
 | 48h 成功率 | ≥98% | 失败数/总 run；单次 502 可接受 |
-| 误关 | 0 | `missing_streak < 12` 的 CLOSED 必须为 0（有连续缺席证据的正常下架不计入；11-25 实测 8 个 DoorDash 岗位 `missing_streak` 52–67，属正常下架） |
+| 误关 | 0 | 窗口内、ATS 车道、`missing_streak < 12` 的 CLOSED 为 0（旧连接器车道 `missing_streak` 恒 0，不能计入；11-25 的 8 个 DoorDash 岗位 `missing_streak` 52–67 属正常下架） |
 | 重复 | <0.5% | `(source_key, external_job_id)` 重复 0 |
 | board P95 | ≤30 min | 用 `last_ok_at` |
 | Feed lag | <15 min | 最近成功时间 |

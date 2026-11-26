@@ -12,6 +12,12 @@
 | 方案 | 内容 | 现状 | 风险 | 收益 |
 |---|---|---|---|---|
 | **A · 只切读** | `JOBS_READ_SOURCE=v3`，读走 `jobs_v3`；写仍进 `public.jobs`，由影子触发器同步 v3 | **代码已就绪**：20 个用户可见读入口全部走 `jobReadTable()`/`jobListingReadTable()`（列表、详情、stats、公司列表、JD 检索、收藏、投递记录、dashboard、AI 匹配/优化、面试、prefill）；写路径、生命周期 worker、admin 运维仍指向 `public.jobs` | 低，10 分钟内可回滚 | 读路径先用上新表；写出问题不影响读 |
+
+**切读前已知差异（重要）**：`jobs_v3` 只有 203 条 inactive 行（活跃期关闭的那几条），而 `public.jobs` 有 **122,112** 条历史关闭记录——v3 回填只覆盖了 active 岗位。因此：
+
+- 岗位详情接口 `.eq('is_active', true)`，关闭岗位本来就不提供详情，**行为不变**；
+- 但 `/api/jobs?status=closed|all` 的“关闭档案”若走 v3 会瞬间变空。已在 `src/app/api/jobs/route.ts` 加守卫：`status=closed|all` 固定读 `public.jobs`，并用 `scripts/test-job-read-source.ts` 锁住；
+- 想让档案也进 v3 需要回填 12.2 万行（约 +1.5 GB，当前磁盘剩 9 GB），属于独立决定，不阻塞方案 A。
 | **B · 读写都切** | feed/worker 直接写 `jobs_v3`，`public.jobs` 转只读 | **代码未建**：目前只有读开关，没有写目标开关 | 高，需要改写入层并重跑全部影子对账 | 才有“写入量下降 ≥60%”的收益 |
 
 计划里 R24“旧库只读”属于方案 B。**在做完 B 之前，不能对外宣称数据库压力/写入量已经改善。**
