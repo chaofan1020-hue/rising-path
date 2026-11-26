@@ -34,7 +34,7 @@
 | 基线文件 | `tmp/baseline-20261124.json` |
 | Supabase 备份时间点 | `/opt/liorvix-backups/liorvix-20261124-032117.dump`（444MB；DB 容器 2026-11-23 03:15 UTC 起） |
 | Feed worker 实际配置 | `JOBS_AUTO_WORKER=true`、`JOBS_SYNC_INTERVAL_MINUTES=5`；**systemd jobs timers 全部 disabled**，不要按 timer 文档推断 |
-| 当前生产事实 | 2026-11-26 10:57 +08：**已切读 `JOBS_READ_SOURCE=v3`**；US active **215,916** = v3 active 215,916（56 列全等、gap 0、`read_index_gaps=0`、DLQ 0、feed age 1.76min）；`jobs` 5.3GB / `jobs_v3` 2.6GB / 库 8.3GB / 磁盘剩 8.1GB；生产 `0977d52`（回滚 `59d28a5`；切读回滚 = 删 flag 重启）；**上游 board 1,500**（GH 1,030 / Ashby 252 / Lever 218，导入后 8 分钟 527 poll / 0 failed），OPEN 岗位随新 board 首轮同步持续上涨 |
+| 当前生产事实 | 2026-11-26 13:40 +08：**已切读 `JOBS_READ_SOURCE=v3`**；US active **222,432** = v3 active（56 列全等、gap 0、`read_index_gaps=0`、DLQ 0、feed age 1.5min、reconcile 全 0）；**默认目录可见 206,330（92.7%）**（迁移 `0160` 地区识别修复 + 回填 90,368 行后，切读前为 60%）；`jobs` 5.3GB / `jobs_v3` 2.6GB / 库 8.3GB / 磁盘剩 6.2GB；生产 `0977d52`（回滚 `59d28a5`；切读回滚 = 删 flag 重启）；**上游 board 1,500**（GH 1,030 / Ashby 252 / Lever 218，导入后 0 failed），OPEN 岗位随新 board 首轮同步持续上涨 |
 
 ## 执行约定（B03）
 
@@ -142,6 +142,26 @@
 | — | — | — | — | — | — |
 
 ## 日志（倒序）
+
+### 2026-11-26 · P0 地区识别修复：默认目录可见 60% → 92.7%（+72,931 条）
+
+**问题量化（修复前实测）**：active 222,432 条中，默认目录（`matches_target_region=true`）只有 **133,399（60%）**；`region_market` 为 NULL 的 **70,894（31.9%）**。其中 41,441 条是标准美国地址——ATS 返回 `Bastrop, TX` / `Phoenix, AZ` / `Boise, ID - Main Site` 这类格式，而库里的两个函数都不认美国州代码。
+
+**根因**：两个 SQL 函数各写一套关键词表且互相漂移——
+- `public.job_region_matches_target(region)`（BEFORE 触发器算 `matches_target_region`）：只有 88 个国家/城市关键词，**没有任何州代码**；`%USA%` 也匹配不到 `City, US`。
+- `public.ai_match_region_scope(value)`（`jobs_listing_v3.region_market` + `job_ai_match_scopes`）：有 `(^|[^a-z])us([^a-z]|$)` 但没有州代码、没有重音折叠。
+
+**修复**（迁移 `supabase/migrations/0160_job_region_scope_state_codes.sql`）：
+1. `ai_match_region_scope` 重写为 7 段判定：① 国家前缀排除（`France > Rungis : Miami Building` 不是美国岗）→ ② 非 ISO 国家码的美国州/属地码（AK/CT/DC/FL/HI/IA/KS/KY/ME/MI/MN/NC/ND/NH/NJ/NM/NV/NY/OH/OK/OR/RI/TX/UT/VT/WA/WI/WV/WY/PR/GU/VI/AS/MP）→ ③ 显式 US/North America/ANZ → ④ 原城市白名单 → ⑤ 歧义州码（AL/AZ/AR/CA/CO/DE/GA/ID/IL/LA/MA/MD/MO/MT/NE/PA/SC/SD/TN/VA）：要求 `[^,]{3,}, ST` 的城市段 + 排除印度/欧洲/以色列/亚洲/加拿大城市词 + 排除 `City, XX, 国家码` 三段式（`Nieuwegein, UT, nl`）；另有 `translate()` 重音折叠（`Montréal, Qc`）。印度 `, IN` 保守不判美国（避免 Bangalore/Pune 混入）。
+2. `job_region_matches_target` = 原 88 关键词 **OR** `ai_match_region_scope(region) is not null` → **单调扩张，任何原本可见的行不会变不可见**。
+
+**干跑**：4 轮只读事务（`begin; create function tmp_*; ... rollback`）。第 1 轮发现 PostgreSQL ARE 里 `\b` 是退格不是词边界（导致州码规则全不命中）；改用 `([^a-z]|$)`。第 2 轮暴露误判（`Nieuwegein, UT, nl` → 加拿大、`Wiesbaden, HE, de` → 美国、`LUCKNOW, IN` → 美国）；第 3 轮收缩为「非 ISO 州码」得 +43,974；第 4 轮加入歧义码守卫后得到 **+72,896**，随机 50 条抽样全部为美国地址（`Hawthorne, CA`、`Starbase, TX`、`Boise, ID - ID1`…）、foreign 探测 1,186 条逐条检查均为多地区 US 岗（`Canada; United States`、`Vancouver, WA`）。
+
+**回填**：`scripts/jobs-region-backfill.sql`（`set region = region` 借 BEFORE 触发器重算 flag，AFTER 触发器同步 `job_ai_match_scopes`，shadow 触发器同步 `jobs_v3`），20 批 × 5,000，实测每批 ~5s，共更新 **90,368 行**（含 inactive 历史行），`remaining_mismatches=0`。
+
+**结果**：`catalog_total=222,432` → `catalog_visible=206,330`（**92.7%，原 60%**）；`catalog_us=179,948`；lane 覆盖率 ATS 96.6%、legacy 88.9%；`job_ai_match_scopes` 313,519 行（us 270,543 / uk 18,544 / canada 10,938 / singapore 7,566 / australia 3,887 / hong_kong 2,041）；`v3 vs jobs flag parity = 0`；reconcile `missing/extra/field_mismatches/missing_evidence/read_index_gaps` 全 0；四个页面 200；全表 `count(*)` 从 3.7s 降到 **35ms**（走 `jobs_v3` partial index，函数改动没有拖慢读）。
+
+**回滚**：迁移文件底部保留两个旧函数定义原文；恢复后重跑同一个回填脚本即可把 flag 收缩回原状（脚本双向幂等）。仍未覆盖（有意）：印度岗位 4,000+（非目标地区，正确保持隐藏）、`Indianapolis, IN` 178 条（`IN` 同时是 Indiana/India，保守不动）、`CA-QC-…` 130 条。
 
 ### 2026-11-26 · 🔴 生产切读已执行（方案 A）+ P1 1,000 board 全部导入
 
