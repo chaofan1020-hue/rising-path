@@ -80,6 +80,19 @@ const openRoute = fs.readFileSync(path.join(process.cwd(), 'src/app/api/jobs/[id
 assert.ok(openRoute.includes('.from(jobReadTable())'), 'open route read must follow the switch');
 assert.ok(/\.from\('jobs'\)\.update\(/.test(openRoute), 'open route close write must stay on public.jobs');
 
+// Archived rows are not in jobs_v3 yet. A `status=closed|all` catalog query
+// must not be routed to the shadow table, or the archive silently empties
+// (jobs_v3: 203 inactive vs public.jobs: 122,112 as of 2026-11-26).
+const listingRoute = fs.readFileSync(path.join(process.cwd(), 'src/app/api/jobs/route.ts'), 'utf8');
+assert.ok(
+  /status === 'closed' \|\| status === 'all'/.test(listingRoute),
+  'catalog must keep closed/all status queries on public.jobs until closed rows are backfilled',
+);
+assert.ok(
+  listingRoute.includes("archiveQuery ? 'jobs'"),
+  'catalog archive branch must name the write table explicitly',
+);
+
 // 4) The switch itself must read env lazily, so one restart can flip it.
 const helper = fs.readFileSync(path.join(process.cwd(), 'src/lib/job-read-source.ts'), 'utf8');
 assert.ok(helper.includes("env.JOBS_READ_SOURCE"), 'helper must read JOBS_READ_SOURCE per call');

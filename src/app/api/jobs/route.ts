@@ -251,8 +251,15 @@ export async function GET(request: NextRequest) {
       // estimated in the response. Widen the projection to `string` so the
       // generated parser does not instantiate a union of both row shapes.
       const columns: string = summaryOnly ? SUMMARY_COLUMNS : DETAIL_COLUMNS;
+      // Archived rows only exist on public.jobs: jobs_v3 carries 200k active
+      // rows plus the few that closed during the shadow run, while the old
+      // table still holds ~122k historical records. Without this guard a
+      // `status=closed|all` query silently returns an empty archive after the
+      // read switch. Backfilling those rows (~+1.5 GB) is the alternative; until
+      // then the archive is deliberately served from the write table.
+      const archiveQuery = status === 'closed' || status === 'all';
       let query = client
-        .from(options.listingView ? jobListingReadTable() : jobReadTable())
+        .from(archiveQuery ? 'jobs' : options.listingView ? jobListingReadTable() : jobReadTable())
         .select(columns, { count: 'planned' });
 
       if (diverseFeed) {
