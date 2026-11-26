@@ -34,7 +34,7 @@
 | 基线文件 | `tmp/baseline-20261124.json` |
 | Supabase 备份时间点 | `/opt/liorvix-backups/liorvix-20261124-032117.dump`（444MB；DB 容器 2026-11-23 03:15 UTC 起） |
 | Feed worker 实际配置 | `JOBS_AUTO_WORKER=true`、`JOBS_SYNC_INTERVAL_MINUTES=5`；**systemd jobs timers 全部 disabled**，不要按 timer 文档推断 |
-| 当前生产事实 | 2026-11-26 14:55 +08：**已切读 `JOBS_READ_SOURCE=v3`**；US active **235,933（首轮同步中）** = v3 active（gap 0、`read_index_gaps=0`、DLQ 0、feed age 2.8min、reconcile 全 0）；**默认目录可见 219,707（93.1%）**（迁移 `0160` 地区识别修复 + 回填 90,368 行后，切读前为 60%）；`jobs` 5,400 MB / `jobs_v3` 3,344 MB / 磁盘剩 6.4 GB；生产 `0977d52`（回滚 `59d28a5`；切读回滚 = 删 flag 重启）；**上游 board 3,007**（GH 1,576 / Ashby 536 / Lever 388，0 failing），OPEN 岗位 361,669 |
+| 当前生产事实 | 2026-11-26 15:19 +08：**已切读 `JOBS_READ_SOURCE=v3`**；US active **258,739** = v3 active（gap 0、`read_index_gaps=0`、DLQ 0、feed age 4.5min、reconcile 全 0）；**默认目录可见 242,086（93.6%）**（迁移 `0160` 地区识别修复 + 回填 90,368 行后，切读前为 60%）；`jobs` 5,498 MB / `jobs_v3` 3,501 MB / 磁盘剩 5.8 GB；生产 `0977d52`（回滚 `59d28a5`；切读回滚 = 删 flag 重启）；**上游 board 3,007**（GH 1,828 / Ashby 713 / Lever 466，0 failing），OPEN 岗位 387,971 |
 
 ## 执行约定（B03）
 
@@ -167,7 +167,12 @@
 - batch2 500（GH 274 / Ashby 149 / Lever 77）→ active **2,000 → 2,500**
 - batch3 507（GH 252 / Ashby 177 / Lever 78）→ active **2,500 → 3,007**
 
-**验收（每批后实测）**：`ats_boards` 3,007 全 active，`consecutive_failures>0` = **0**；近 30 分钟 `board_poll_runs` 1,611 次 success、**0 failed**；美国站 active **222,473 → 235,933（+13,460，仍在首轮同步中）**、默认目录可见 219,707；feed lag **2.83 min**；reconcile `missing/extra/field_mismatches/missing_evidence/read_index_gaps` 全 0；`/ /jobs /ai-match` 全 200；30 分钟 0 error；磁盘剩 **6.4 GB**（`jobs_v3` 3,344 MB 仍在长）。
+**验收（每批后实测）**：`ats_boards` 3,007 全 active，`consecutive_failures>0` = **0**；近 30 分钟 `board_poll_runs` 1,531+329+237 次 success、**0 failed**；美国站 active **222,473 → 258,739（+36,266，+16.3%）**、默认目录可见 **242,086**；feed lag 峰值 8.6min、回落到 **4.5min**；reconcile `missing/extra/field_mismatches/missing_evidence/read_index_gaps` 全 0；`/ /jobs /ai-match` 全 200；30 分钟仅 1 条 error（`Server Reference ID did not match` —— 与岗位链路无关的 Next.js RSC 请求）；磁盘剩 **5.8 GB**（`jobs` 5,498 MB / `jobs_v3` 3,501 MB）。
+
+**已知观察点（不阻塞，但要盯）**：
+1. **feed lag 从 2.8min 抬到 7–8min**：board 数翻倍后上游首轮全量同步页数变多（`incremental` 单页 500 行 / `write_duration_ms` 4.2–4.5s / 10 个 write batch），仍在 15min 停止线内。若持续 >10min，考虑把 `JOBS_SYNC_INTERVAL_MINUTES` 从 5 调小或增大单页行数。
+2. **磁盘 5.8 GB**：`jobs_v3` 从 3,344 → 3,501 MB（仍在长），`jobs` 稳定在 5,500 MB。做方案 B 前需要先 `vacuum full` 或归档关闭行（见 `docs/job-acquisition-write-switch-design.md` §6）。
+3. **方案 B 两个硬阻塞已定位**：`jobs_v3` 上**没有任何业务触发器**（`matches_target_region` / `job_ai_match_scopes` / `company_config_id` 都不会自动维护，直写会让新岗位 flag 为 NULL → 目录里看不见），且 `jobs_v3_id_seq` 的 `last_value=325,404` 落后于 `max(id)=382,313`（直写会撞主键）。详见设计文档 §3.1/§3.2。
 
 **回滚**：`update ats_boards set status='paused' where token in (...)` 或按 `created_at` 批次回退；岗位由上游 close 流程自然收缩。
 
