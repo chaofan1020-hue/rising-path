@@ -1,7 +1,7 @@
 # 岗位采集规模化 · 执行账本
 
 > 这是 AI 唯一允许改状态的地方。`tasks.yaml` 只读；本文件每完成一个任务必须更新。
-> 最后更新：2026-11-26（P0 磁盘清洁完成；D2 开关上线；D1 count 实测完成；D3 全量 reconcile 进行中；D4-a 国家级维度迁移已上生产）
+> 最后更新：2026-11-26（P0 磁盘清洁完成；D1 实测完成；D2 开关上线；D3 全量 reconcile 完成；D4-a/D4-b + D5 已上生产并验证）
 >
 > v3 重建计划：`docs/job-acquisition-v3-rebuild-plan.md`
 
@@ -142,6 +142,37 @@
 | — | — | — | — | — | — |
 
 ## 日志（倒序）
+
+### 2026-11-26 · D3 完成：全量 reconcile 走完（425 页 / 212,139 行），feed 已恢复
+
+- 前置：`JOBS_FEED_REGION_FILTER=all` 写入 `/opt/liorvix/.env.local`（备份 `.env.local.pre-region-all`），清空 `reconcile_*` 状态后 16:09:55 重启，16:12:57 起 detached 全量 reconcile（`/tmp/d3-reconcile.out`）。
+- 结果：**16:12:57 → 17:09:12（56 分钟）**，`status=success`，**425 页 / received 212,139 / upserted 212,138**，`has_more=false`、`stop_reason` 空、`current_stage=finished`，`row_failures=1`、`fatal_failures=0`。
+- **重要修正**：计划里按「上游 OPEN 390,507 ÷ 500 = 780 页」预估，实际 bulk feed 只吐出 **212,139 行**就跑完了（390,507 是全库口径，含大量 legacy 车道）。也就是说 ATS 车道这次是**真的全量**了：v3 `lane='ats'` 212,142 ≥ 上游 ATS 208,391。
+- 覆盖变化：`active` **261,260 → 323,387（+62,127，+23.8%）**，与计划预估 +23% 一致；`jobs_v3` 总量 345,775（ats 212,142 / legacy 133,633；legacy 上游 181,549，剩余是各公司连接器尚未覆盖的部分）。
+- 影子一致性（`scripts/jobs-v3-reconcile.sh`，只读）：`missing=0 extra=0 bad_ats_key=0 field_mismatches=0 inactive_shadow=22,388 missing_evidence=0 read_index_gaps=0` → **全 0，rc=0**。
+- feed 恢复：reconcile 期间 incremental 停摆约 1 小时（**计划里已列为批准例外**），结束后 17:11（7 页 / 3,138 行）、17:14 两轮正常，`feed_age=2.5 min`、`consecutive_failures=0`、`row_failures=0`。watchdog 定时器在窗口内按设计 exit 1（`feed_stale_*`）并把 unit 标成 failed，17:17 起自行恢复 success —— 不是坏件，无需处理。
+- 磁盘：15 G 可用（清洁前 5.9 G）；D3 新增行 + D4 两列与回填共约 1 G。距离 4 G 停止线有充足余量。
+
+### 2026-11-26 · D4-b + D5 完成并上线（国家/大洲筛选 + 默认全量展示）
+
+- 迁移 `supabase/migrations/0162_jobs_country_filter_counts.sql` 已应用生产：RPC `job_country_filter_counts()` / `job_unplaced_count()`。PostgREST 不支持 GROUP BY，所以用两个小聚合函数；**口径与列表查询严格一致**（`is_active and display_status in ('listed','enriched')`），否则 facet 数量会和结果数漂移。
+- `/api/jobs`：
+  - **默认 `region_scope` 从 `target` 改成 `all`**（D5）；`region_scope=target` 保留为显式可选。
+  - 新增 `country=US,CA`（可重复、可逗号分隔）、`continent=europe`（可重复）；两者同时传是**取交集**（前端保证不会同时传）。
+  - 新列只在 `jobs_v3`：归档路径（`status=closed|all` 读 `public.jobs`）自动跳过；读切换关闭/迁移未就绪时通过 `countryIndex` 标志 + `42703/PGRST204` 识别**单独降级**，不会 500。
+- 新增 `/api/jobs/filters`：158 个国家/地区 facet（`continent` / `country_code` / `country_name` / `jobs`）+ 6 大洲汇总 + `unplaced`，进程内 10 min 缓存；国家名在接口层做 Title Case（taxonomy 里存的是小写 token）。
+- 前端：`src/components/job-geo-filter.tsx`（新，188 行）+ `/jobs` 筛选抽屉「地区」区改造：
+  - 大洲 chips（全部 + 6 大洲，带岗位数）→ 可搜索、按大洲分组、可滚动的国家多选（带岗位数）→ 「未归属地区 N」灰条提示。
+  - facets 接口失败或返回 `unavailable` 时**自动退回**旧的 7 个固定目标地区 chips，页面其他部分不受影响。
+  - 大洲与国家两级互斥（选大洲清空国家、反之亦然），后端 AND 语义下不会出现「欧洲 + 美国 = 空」。
+  - 挂载时只拉一次 facets；选中项进 `activeFilterCount` / 汇总标签 / 重置 / 页码归零逻辑。
+- 部署：commit `ee5e0ef`，17:13:53 smoke `health=200 login_form=1 admin=307 analytics_unauth=401`；`/jobs` 页面 200、服务 active。
+- 端到端验证（临时账号走本地 GoTrue 取 token，验完即删；不触碰真实用户）：
+  - `/api/jobs/filters` 200 → 大洲 `north_america 232,340 / europe 37,255 / asia 25,541 / oceania 5,893 / south_america 3,735 / africa 719`；国家 `US 220,638 / GB 17,246 / IN 11,119 / CA 9,934 / AU 5,684`；`unplaced 17,904`、`total 323,387`。
+  - 默认 `/api/jobs` 首屏已返回**新加坡、澳洲远程、英国 Selfridges** 等非目标地区岗位 → 全量展示生效。
+  - `country=US` → 全部美国地区；`continent=europe` → 西班牙 / Europe-Remote；`country=IN` → Bengaluru / Pune / Hyderabad。抽样 100% 命中。
+  - 未登录访问 `/api/jobs/filters` → 401 `AUTH_REQUIRED`（与列表接口同一道登录门槛）。
+- 已知/未做：`region_scope=target` 目前没有前端入口（AI 选岗仍用目标市场口径，按决策 4 保持不变）；facet 数量是**全局**数量，不随其他筛选条件联动（避免额外一次聚合查询，可后续按需加）。
 
 ### 2026-11-26 · D4-a 完成：国家级维度 `0161_job_country_taxonomy`（迁移已上生产）
 
