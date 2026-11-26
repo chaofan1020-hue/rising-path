@@ -34,6 +34,31 @@ const TARGET_PATTERNS: Array<[string, RegExp]> = [
   ['united_kingdom', /\b(united kingdom|u\.k\.?|uk|england|scotland|wales|northern ireland|london|bournemouth|bristol|manchester|edinburgh|glasgow|birmingham|leeds|cardiff|belfast|cambridge|oxford|southampton|reading|guildford|crawley|aberdeen|newcastle|sheffield|liverpool)\b/i],
 ];
 
+/**
+ * How the ATS feed treats jobs whose location is outside the target markets.
+ *
+ * - `target` (default): keep the historical behavior — drop the record at
+ *   ingestion. This is the rollback position for `JOBS_FEED_REGION_FILTER`.
+ * - `all`: ingest every record. The catalog then decides visibility, which is
+ *   why the listing default is `region_scope=all` and the region dimension is
+ *   backed by `country_code` (see migration 0161).
+ * - `count`: keep dropping, but additionally record a per-country histogram so
+ *   a full reconcile pass can measure exactly how many records and which
+ *   countries the filter is discarding before the switch is flipped.
+ */
+export type RegionFilterMode = 'target' | 'all' | 'count';
+
+export function regionFilterMode(env: Record<string, string | undefined> = process.env): RegionFilterMode {
+  const raw = String(env.JOBS_FEED_REGION_FILTER ?? '').trim().toLowerCase();
+  if (raw === 'all' || raw === 'count') return raw;
+  return 'target';
+}
+
+/** True when the ingestion gate must stop discarding non-target regions. */
+export function regionFilterDisabled(env: Record<string, string | undefined> = process.env): boolean {
+  return regionFilterMode(env) === 'all';
+}
+
 export function getTargetRegion(location?: string | null, country?: string | null): string | null {
   const value = `${location || ''} ${country || ''}`.trim();
   if (!value) return null;

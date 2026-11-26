@@ -8,7 +8,7 @@ import {
 } from '@/lib/job-sync';
 import { jobHtmlToPlainText, sanitizeJobContent } from '@/lib/job-content';
 import { normalizeWorkplace, parseExperience } from '@/lib/job-connectors/utils';
-import { isTargetRegion } from '@/lib/job-region-scope';
+import { isTargetRegion, regionFilterDisabled, regionFilterMode } from '@/lib/job-region-scope';
 import { resolveJobDeadline } from '@/lib/job-deadline';
 import { fieldEvidence as buildFieldEvidence } from '@/lib/job-field-provenance';
 import { hasOfficialCompanyHost, isCompanyFieldEvidenceTrusted } from '@/lib/job-company-field-rules';
@@ -118,6 +118,14 @@ export interface JobsFeedSyncResult {
   upstream_watermark_at: string | null;
   open_seen: number;
   skipped_by_reason: Record<string, number>;
+  /**
+   * Only populated when `JOBS_FEED_REGION_FILTER=count`. Maps the observed
+   * country fragment of every record the ingestion gate would have discarded
+   * to the number of records seen, so one reconcile pass can size the
+   * full-sync delta before the filter is switched off.
+   */
+  region_filtered_by_country?: Record<string, number>;
+  region_filter_mode?: string;
   company_observations: Record<string, {
     received: number;
     upserted: number;
@@ -539,7 +547,7 @@ export function normalizeFeedItem(item: JobsFeedItem): JobSyncRecord | null {
   ]);
   const rawCountry = normalizeFeedLocation(item.country);
   const location = joinLocationParts([rawLocation, rawCountry]) || '未注明';
-  if (!isTargetRegion(rawLocation, rawCountry)) return null;
+  if (!regionFilterDisabled() && !isTargetRegion(rawLocation, rawCountry)) return null;
   const requirements = required.length > 0
     ? required.map((value) => jobHtmlToPlainText(value)).filter(Boolean).join('\n')
     : '';
@@ -710,7 +718,7 @@ export function normalizeSkipReason(item: JobsFeedItem): string | null {
   // the ATS sync spend its time on records the US schema cannot store
   // (source_tier is NOT NULL) and prevents the cursor from advancing.
   if (!text(item.source_key)) return 'not_ats_source';
-  if (!isTargetRegion(
+  if (!regionFilterDisabled() && !isTargetRegion(
     [
       normalizeFeedLocation(item.location),
       normalizeFeedLocation(item.offices),
@@ -719,6 +727,36 @@ export function normalizeSkipReason(item: JobsFeedItem): string | null {
     normalizeFeedLocation(item.country),
   )) return 'outside_target_region';
   return null;
+}
+
+/**
+ * Buckets the country fragment of a record the region gate discarded. The
+ * feed's `country` field is often a city or a bare state code rather than a
+ * country, so normalization prefers the country field and falls back to the
+ * last location segment; the histogram is diagnostic, not authoritative.
+ */
+export function regionFilteredCountryKey(item: JobsFeedItem): string {
+  const country = normalizeFeedLocation(item.country);
+  if (country) return country.toLowerCase();
+  const location = normalizeFeedLocation(item.location)
+    || normalizeFeedLocation(item.offices)
+    || normalizeFeedLocation(item.official_location);
+  if (!location) return '(empty)';
+  const parts = location.split(',').map((part) => part.trim()).filter(Boolean);
+  return (parts[parts.length - 1] || location).toLowerCase();
+}
+
+function recordRegionFilteredCountry(result: JobsFeedSyncResult, item: JobsFeedItem): void {
+  if (regionFilterMode() !== 'count') return;
+  const bucket = result.region_filtered_by_country || (result.region_filtered_by_country = {});
+  const key = regionFilteredCountryKey(item);
+  // The feed exposes ~10k distinct `country` values; cap the histogram so a
+  // single logged page cannot balloon the journal while staying diagnostic.
+  if (!(key in bucket) && Object.keys(bucket).length >= 400) {
+    bucket['(other)'] = (bucket['(other)'] || 0) + 1;
+    return;
+  }
+  bucket[key] = (bucket[key] || 0) + 1;
 }
 
 function incrementSkipReason(result: JobsFeedSyncResult, reason: string): void {
@@ -932,6 +970,7 @@ export async function syncJobsFeed(
     open_seen: 0,
     skipped_by_reason: {},
     company_observations: {},
+    region_filter_mode: regionFilterMode(),
   };
 
   while (hasMore && result.pages < maxPages) {
@@ -996,7 +1035,9 @@ export async function syncJobsFeed(
       const normalized = normalizeFeedItem(item);
       if (normalized) openItems.push(normalized);
       else {
-        incrementSkipReason(result, normalizeSkipReason(item) || 'invalid_record');
+        const skipReason = normalizeSkipReason(item) || 'invalid_record';
+        incrementSkipReason(result, skipReason);
+        if (skipReason === 'outside_target_region') recordRegionFilteredCountry(result, item);
         const observed = companyObservation(result, text(item.company_name));
         if (observed) observed.skipped += 1;
       }

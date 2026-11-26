@@ -203,6 +203,14 @@ async function releaseLease(client: SupabaseClient, owner: string, sourceSystem 
   if (error) console.error(`释放岗位同步租约失败: ${error.message}`);
 }
 
+function topCounts(counts: Record<string, number>, limit: number): Record<string, number> {
+  return Object.fromEntries(
+    Object.entries(counts)
+      .sort((left, right) => right[1] - left[1])
+      .slice(0, limit),
+  );
+}
+
 function emptyResult(mode: JobFeedSyncMode): JobFeedRunResult {
   return {
     mode,
@@ -377,6 +385,14 @@ export async function runJobFeedSync(options: {
       for (const [reason, count] of Object.entries(page.skipped_by_reason)) {
         aggregate.skipped_by_reason[reason] = (aggregate.skipped_by_reason[reason] || 0) + count;
       }
+      if (page.region_filtered_by_country) {
+        const histogram = aggregate.region_filtered_by_country
+          || (aggregate.region_filtered_by_country = {});
+        for (const [country, count] of Object.entries(page.region_filtered_by_country)) {
+          histogram[country] = (histogram[country] || 0) + count;
+        }
+      }
+      if (page.region_filter_mode) aggregate.region_filter_mode = page.region_filter_mode;
       for (const [company, observation] of Object.entries(page.company_observations)) {
         const current = aggregate.company_observations[company] || {
           received: 0,
@@ -451,7 +467,15 @@ export async function runJobFeedSync(options: {
 
       await recordFeedCompanyObservations(client, page.company_observations, page.next_cursor || null);
 
-      console.log(JSON.stringify({ phase: mode, page: aggregate.pages, ...page }));
+      // The region histogram is diagnostic only; keep the log line bounded and
+      // report the top countries so a full reconcile pass stays readable.
+      const pageForLog = page.region_filtered_by_country
+        ? {
+          ...page,
+          region_filtered_by_country: topCounts(page.region_filtered_by_country, 25),
+        }
+        : page;
+      console.log(JSON.stringify({ phase: mode, page: aggregate.pages, ...pageForLog }));
       if (!page.has_more) {
         aggregate.completed = true;
         break;
