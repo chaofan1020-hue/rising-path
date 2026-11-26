@@ -34,7 +34,7 @@
 | 基线文件 | `tmp/baseline-20261124.json` |
 | Supabase 备份时间点 | `/opt/liorvix-backups/liorvix-20261124-032117.dump`（444MB；DB 容器 2026-11-23 03:15 UTC 起） |
 | Feed worker 实际配置 | `JOBS_AUTO_WORKER=true`、`JOBS_SYNC_INTERVAL_MINUTES=5`；**systemd jobs timers 全部 disabled**，不要按 timer 文档推断 |
-| 当前生产事实 | 2026-11-26 13:40 +08：**已切读 `JOBS_READ_SOURCE=v3`**；US active **222,432** = v3 active（56 列全等、gap 0、`read_index_gaps=0`、DLQ 0、feed age 1.5min、reconcile 全 0）；**默认目录可见 206,330（92.7%）**（迁移 `0160` 地区识别修复 + 回填 90,368 行后，切读前为 60%）；`jobs` 5.3GB / `jobs_v3` 2.6GB / 库 8.3GB / 磁盘剩 6.2GB；生产 `0977d52`（回滚 `59d28a5`；切读回滚 = 删 flag 重启）；**上游 board 1,500**（GH 1,030 / Ashby 252 / Lever 218，导入后 0 failed），OPEN 岗位随新 board 首轮同步持续上涨 |
+| 当前生产事实 | 2026-11-26 14:55 +08：**已切读 `JOBS_READ_SOURCE=v3`**；US active **235,933（首轮同步中）** = v3 active（gap 0、`read_index_gaps=0`、DLQ 0、feed age 2.8min、reconcile 全 0）；**默认目录可见 219,707（93.1%）**（迁移 `0160` 地区识别修复 + 回填 90,368 行后，切读前为 60%）；`jobs` 5,400 MB / `jobs_v3` 3,344 MB / 磁盘剩 6.4 GB；生产 `0977d52`（回滚 `59d28a5`；切读回滚 = 删 flag 重启）；**上游 board 3,007**（GH 1,576 / Ashby 536 / Lever 388，0 failing），OPEN 岗位 361,669 |
 
 ## 执行约定（B03）
 
@@ -142,6 +142,34 @@
 | — | — | — | — | — | — |
 
 ## 日志（倒序）
+
+### 2026-11-26 · P1 扩量：1,500 → 3,007 board（open-ats-feed 长尾探测 + 三批导入）
+
+**新增工具（此前仓库里缺失）**
+- `scripts/probe-ats-boards.cjs`：候选 CSV → 官方 ATS JSON 接口探测（GH/Ashby/Lever）→ robots 证据 → 最多 50 条地点抽样 → JSONL 证据 + summary + quarantine + active CSV。支持 `--fixture` 离线夹具、`--resume` 断点续跑、`--limit`、`--concurrency`。
+- `scripts/test-probe-ats-boards.cjs`：22 项契约（去重、active/empty/not_found/blocked/error 六态、robots allow/disallow/401-fallback、sha256 证据、冻结写盘）。`node scripts/test-probe-ats-boards.cjs` → **probe contract ok**。
+- `scripts/freeze-ats-boards.cjs`：探测 JSONL → 冻结 CSV（列与 `data/p1-boards.csv` 同构）+ sha256 冻结报告；自动补公司名（GH `api_name` / board 页 `page_title` / token 兜底）、与上游 `ats_boards`+`companies` 去重、按 vendor 能力自动生成 board/api URL。
+
+**候选池**：`tmp/boards/candidates-p1-remaining4.csv` 162 个未用（去掉已上线 1,500）＋ `tmp/boards/all.csv` 长尾筛出 GH/Ashby/Lever **9,809 个**（另外 6,855 个 breezy/recruitee/teamtailor 上游 `bulk_boards` 不支持，直接排除）。
+
+**探测结果**：batch1 162 → 147 active / 10 empty / 4 not_found / 1 error；长尾 9,809 → **8,713 active**（88.8%）/ 649 empty / 433 not_found / 14 error。可冻结（target_ratio≥0.5 且 postings≥3、去掉已登记）= **5,983**，预估目标地区岗位 **90,491**。总耗时约 20 分钟（concurrency 8–10）。
+
+**冻结**：取前 1,507 个，`data/p2-boards.csv`（sha256 `62ec3d861d2c67b72c20635ce5be2c0cdd68d9a7443a497a7d429f29e284031c`，518,041 B）：
+- vendor GH 798 / Ashby 461 / Lever 248；tier S 8 / A 38 / B 409 / C 1,052
+- 公司名来源 `api_name` 798 / `page_title` 361 / `token` 348；**robots 100% allow**
+- 0 重复 `(vendor,token)`、0 重复公司名、0 缺名；`posting_count` 合计 66,015、`target_count` 合计 38,088
+- 抓出并修掉的 bug：`titleFromHtml` 最初会产出 `Careers at KKR` / `Kaseya Careers` / `Internal Job Board` / `LP Careers Page` 这类名字；加了 `cleanCompanyName()` 统一清洗（去前缀/后缀/纯通用词）后剩 4 个短名（`1x`/`Ro`/`H1`/`LP`，都是真实公司名）
+
+**导入（踩坑记录）**：`docker exec ... python -m app.bulk_boards --csv /tmp/x.csv` 读的是**容器内** `/tmp`，SFTP 传到宿主 `/tmp` 会 `FileNotFoundError`。必须 `docker cp /tmp/x.csv global-jobs-bulk-worker-1:/tmp/x.csv` 再校验容器内 sha256（本次 P1 之所以没踩到，是当时走了别的落地方式）。
+
+三批导入，每批先 dry-run：
+- batch1 500（GH 272 / Lever 93 / Ashby 135）→ dry-run `new_company=500 board_new=500` → apply → active **1,500 → 2,000**
+- batch2 500（GH 274 / Ashby 149 / Lever 77）→ active **2,000 → 2,500**
+- batch3 507（GH 252 / Ashby 177 / Lever 78）→ active **2,500 → 3,007**
+
+**验收（每批后实测）**：`ats_boards` 3,007 全 active，`consecutive_failures>0` = **0**；近 30 分钟 `board_poll_runs` 1,611 次 success、**0 failed**；美国站 active **222,473 → 235,933（+13,460，仍在首轮同步中）**、默认目录可见 219,707；feed lag **2.83 min**；reconcile `missing/extra/field_mismatches/missing_evidence/read_index_gaps` 全 0；`/ /jobs /ai-match` 全 200；30 分钟 0 error；磁盘剩 **6.4 GB**（`jobs_v3` 3,344 MB 仍在长）。
+
+**回滚**：`update ats_boards set status='paused' where token in (...)` 或按 `created_at` 批次回退；岗位由上游 close 流程自然收缩。
 
 ### 2026-11-26 · P0 地区识别修复：默认目录可见 60% → 92.7%（+72,931 条）
 

@@ -5,7 +5,11 @@
 ## 执行进展
 
 - **A（地区识别修复）已于 2026-11-26 13:40 完成**：迁移 `0160_job_region_scope_state_codes.sql` + 回填 90,368 行。默认目录可见 **133,399 → 206,330（60% → 92.7%）**，美国市场 **125,322 → 179,948**，AI 选岗 scope 313,519 行；reconcile 全 0、页面 200、全表 count 35ms。详见 `docs/job-acquisition-progress.md` 同日日志。
-- 下一步：**B1 探测 runner**（进行中）。
+- **B1 探测 runner 已完成**：`scripts/probe-ats-boards.cjs`（+ `scripts/test-probe-ats-boards.cjs`，离线夹具 22 项契约全绿）+ `scripts/freeze-ats-boards.cjs`（冻结清单 + sha256 报告）。
+- **B2–B3 探测已完成**：batch1 162 个候选（147 active / 89 可冻结）+ 长尾 9,809 个（**8,713 active**、5,895 可冻结、预估目标地区岗位 88,980）。总耗时约 20 分钟，0 例外。
+- **B4 冻结已完成**：`data/p2-boards.csv`，**1,507 行**（GH 798 / Ashby 461 / Lever 248），sha256 `62ec3d86…031c`，全部 robots=allow，0 重复 board、0 重复公司名，`estTargetJobs=38,088`。
+- **B5 三批导入已全部完成**：1,500 → 2,000 → 2,500 → **3,007** active board，每批 dry-run 先跑（500 行 → 500 new company / 500 new board），0 失败、0 error、feed lag 2.8min。
+- **待办**：B6 观察首轮全量同步（预计 30–60min，active 岗位会继续上涨）→ 记录 24h 健康数据 → C（方案 B）设计。
 
 ## 0. 现在的位置（实测，2026-11-26 12:00 +08）
 
