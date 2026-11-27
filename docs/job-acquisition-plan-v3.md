@@ -175,9 +175,10 @@ legacy 车道（`src/lib/job-connectors/sync.ts`）没有地区过滤，不用�
 - 空状态/无结果文案同步更新
 - 验收：`/jobs` 首屏 <2s；默认列表能看到印度/巴西岗位；选「美国」结果与 `country_code='US'` 直查一致
 
-#### D6 · 观察 24h
+#### D6 · 观察 24h — ✅ 提前收口（2026-11-27 10:08，实跑约 17 h）
 - feed lag、feed 成功率、reconcile 全 0、页面 200、磁盘
 - 全部达标才进入 C
+- **实际**：17 小时内看门狗每次 rc=0（`missing/extra/field_mismatches/missing_evidence/read_index_gaps` 全 0），feed lag 0.8–1.5 min，连续失败 0，`/api/health` 与 `/jobs` 均 200，无 5xx 抬升，磁盘未继续下滑 → 判定达标，经用户同意不再等满 24 h
 
 ### D 的停止线
 - feed lag >15 min 持续 30 min → 暂停 D3（有游标，可断点续跑）
@@ -204,8 +205,8 @@ legacy 车道（`src/lib/job-connectors/sync.ts`）没有地区过滤，不用�
 |---|---|---|---|
 | C1 | 设计稿 | — | ✅ 已完成 |
 | **C2** | 迁移 `0163_jobs_v3_write_ready.sql` **已在生产执行**：① id 默认改共用 `jobs_id_seq`；② `lane` / `closure_evidence` / 搜索向量由 v3 自己的触发器派生；③ 3 个业务触发器迁到 v3；④ 正向影子改显式列 UPSERT、反向影子为 BEFORE ROW UPSERT + 回环守卫；⑤ 回填 99,369 关闭行；⑥ 对账 `job_ai_match_scopes`（+333 / −22 / ~137）。归档读切 v3 的代码已部署 | P0、D4 | ✅ 2026-11-27 |
-| C3 | `jobWriteTable()` + `JOBS_WRITE_SOURCE`，改 8 个写文件；新增 `scripts/test-job-write-source.ts` | C2 | 3 h |
-| C4 | 双向影子对账 24h | C3 | 24 h 观察 |
+| **C3** | `jobWriteTable()` + `JOBS_WRITE_SOURCE`，改 **14 个文件的 24 处写语句**；新增 `scripts/test-job-write-source.ts`。默认 `jobs`，生产行为不变，已部署 `ded06ab` | C2 | ✅ 2026-11-27 |
+| C4 | 双向影子对账：反向探针已通过（事务内写 v3 → jobs 同 id/同 flag/同 scope，回滚后两侧 0 残留）；顺延 24h 零漂移观察中 | C3 | 观察中 |
 | C5 | 切写 `JOBS_WRITE_SOURCE=v3`，反向影子常开，观察 7 天 | C4 | 7 d |
 | C6 | 归档 `jobs` 表，**再释放 5.5 G** | C5 | 1 h |
 
@@ -250,6 +251,24 @@ legacy 车道（`src/lib/job-connectors/sync.ts`）没有地区过滤，不用�
 **回滚材料**：回填前已建 `public.jobs_v3_c2_undo`（99,369 个 id，已开 RLS），撤销回填
 `delete from public.jobs_v3 v using public.jobs_v3_c2_undo u where v.id = u.id;`；DDL 回滚见迁移头部。
 
+### C3 执行记录（2026-11-27，已部署，生产行为未变）
+
+- 新模块 `src/lib/job-write-source.ts`：`jobWriteTable()`（默认 `jobs`）、`jobWriteIsV3()`、
+  `jobDeleteTables()`（`v3` 时返回 `['jobs_v3','jobs']`）。读、写两个开关**刻意分开**：
+  `JOBS_READ_SOURCE` 已经在 `v3`，`JOBS_WRITE_SOURCE` 未设。
+- 24 处写语句全部改走 `jobWriteTable()`：14 个文件（`job-sync.ts` 4 处、`[id]/route.ts` 3 处、
+  `job-maintenance.ts` 3 处、`jobs-feed.ts` 2 处，其余各 1 处）。**只改写、不改读**。
+- **两处硬删除**（`DELETE /api/jobs/[id]`、批量删除）改为遍历 `jobDeleteTables()`：前向影子会把
+  `jobs` 的删除同步到 v3，但反向影子**故意不镜像 DELETE**，只删 v3 会留下 jobs 残行并让对账报
+  `missing`。
+- 顺手修掉 C2 遗留：`scripts/test-job-read-source.ts` 里「归档必须读 `public.jobs`」的三条断言在
+  0163 回填后已经不成立（会误报失败），改为断言归档跟随读开关、且把 open/close 路由钉在**写开关**上。
+- `scripts/test-job-write-source.ts`：开关默认/回滚/大小写/读写互不影响；14 个文件的写点数量与
+  import；删除路径必须走 `jobDeleteTables()`；写模块不得引用 `jobReadTable`；开关必须每次读环境变量。
+- 验收：两个契约测试全绿；`tsc` 只剩既有的 `.next/dev/types/app/probe-plain` 报错；
+  岗位相关 15 个测试用例 13 绿，2 红（`test-jobs-feed-location`、`test-job-field-policy`）**在 C3 之前的
+  HEAD `7d9b89c` 上同样红**，与本改动无关。
+
 **C 与 D 的关系**：C6 释放的 5.5 G 覆盖 D 的数据增长，所以顺序是 **P0 → D → C**，不必单独扩容。
 **迁移编号**：D4-1 用 `0161`，D4-3 的 facet RPC 用 `0162`（占用后 C2 顺延为 `0163`）。
 
@@ -258,6 +277,7 @@ legacy 车道（`src/lib/job-connectors/sync.ts`）没有地区过滤，不用�
 ## 顺序与时间线
 
 ```
+（实际执行节奏见下方进度账本；下面是原始估算）
 今天 16:00 ─┬─ P0 磁盘清洁                30–45 min
             ├─ D1 缺口量化（只统计）       1–2 h
             ├─ D2 去过滤 + 契约测试         1 h

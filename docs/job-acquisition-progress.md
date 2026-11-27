@@ -1,7 +1,7 @@
 # 岗位采集规模化 · 执行账本
 
 > 这是 AI 唯一允许改状态的地方。`tasks.yaml` 只读；本文件每完成一个任务必须更新。
-> 最后更新：2026-11-27（P0/D1–D5 已上线；C2 `0163` 已上生产、归档读切 v3；下一步 C3 写切换）
+> 最后更新：2026-11-27（P0/D1–D6 完成；C2 已上生产、C3 写切换代码已部署；C4 双向对账观察中）
 >
 > v3 重建计划：`docs/job-acquisition-v3-rebuild-plan.md`
 
@@ -143,6 +143,16 @@
 
 ## 日志（倒序）
 
+### 2026-11-27 · D6 提前收口 + C3 落地并部署（`ded06ab`）
+
+- **D6**：实跑约 17 h（11-26 17:09 起）。看门狗每次 rc=0（`missing/extra/field_mismatches/missing_evidence/read_index_gaps` 全 0），feed lag 0.8–1.5 min，连续失败 0，`/api/health`、`/jobs` 均 200，无 5xx 抬升，磁盘未继续下滑 → 经用户确认不再等满 24 h。
+- **C3**：新增 `src/lib/job-write-source.ts`（`jobWriteTable()` / `jobWriteIsV3()` / `jobDeleteTables()`，默认 `jobs`），把 14 个文件里的 **24 处写语句**（insert/update/upsert/delete）改为走写开关；**只改写、不改读**，生产行为不变。
+- 两处硬删除（`DELETE /api/jobs/[id]`、批量删除）改为遍历 `jobDeleteTables()`：前向影子会把 `jobs` 的删除同步进 v3，反向影子故意不镜像 DELETE，只删 v3 会留下 jobs 残行并让对账报 `missing`。
+- 顺手修 C2 遗留：`scripts/test-job-read-source.ts` 中原「归档必须读 `public.jobs`」的三条断言在 0163 回填后已不成立，改为断言归档跟随读开关、open/close 路由钉在写开关。
+- 新增 `scripts/test-job-write-source.ts`（开关默认/回滚、14 文件写点覆盖、删除路径、写模块不得引用读开关、开关必须懒读环境变量）。两个契约测试全绿；`tsc` 仅剩既有的 `.next/dev/types/app/probe-plain` 报错；岗位相关 15 个用例 13 绿，2 红在 HEAD `7d9b89c` 上同样红（与本改动无关）。
+- 部署 `ded06ab`：`f8e4a25 → ded06ab`，smoke `health=200 login_form=1 admin=307 analytics_unauth=401`。部署后 `/api/health`、`/jobs` 200，看门狗 rc=0。
+- **C4 反向探针**（事务内写 v3 再回滚，生产零残留）：v3 插入 → `public.jobs` 同 id 行出现，`lane=ats`、`country_code=US`、`continent=north_america`、`matches_target_region` 两侧一致、`job_ai_match_scopes` 自动生成 1 行；`rollback` 后两表该 key 均 0 行。
+- 现网（10:19 +08）：`jobs` = `jobs_v3` = **452,218**，active 330,448，关闭 121,770，ATS 219,222 / legacy 232,996；`JOBS_READ_SOURCE=v3`、`JOBS_FEED_REGION_FILTER=all`、`JOBS_WRITE_SOURCE` 未设；磁盘剩 9.6 G（80 %）。
 ### 2026-11-27 · C2 完成：`0163` 上生产 + 归档读切 v3（`0e6c6ed` / `f8e4a25`）
 
 - 迁移 `0163_jobs_v3_write_ready.sql` 已执行到生产。临时库 dry-run 37 条断言全绿后才动生产；回填前建 `public.jobs_v3_c2_undo`（99,369 个 id，开 RLS）作为撤销集。
