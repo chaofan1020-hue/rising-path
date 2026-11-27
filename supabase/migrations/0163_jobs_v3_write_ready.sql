@@ -46,12 +46,26 @@
 --      `liorvix.shadow_pass` ('jobs' or 'v3') so a mirrored write cannot bounce
 --      back and forth forever.
 --
+-- Applied to production 2026-11-27 (452,193 jobs / 352,806 v3 rows before):
+--   DDL (sections 1-5) committed in ~0.5 s of lock time,
+--   backfill 99,369 rows in 2:45, scope reconcile +333 -22 ~137 in 1:10,
+--   analyze ~26 s. Afterwards jobs == jobs_v3 (452,193), closed rows 121,766 on
+--   both sides, and every parity check reads zero drift. The undo snapshot is
+--   public.jobs_v3_c2_undo (99,369 ids).
+--
 -- Rollback: the DDL of section 1-5 is reversed by dropping the triggers and
 -- functions created here, restoring the positional shadow functions from 0149
 -- (they are quoted in that migration), and
 --   alter table public.jobs_v3 alter column id set default nextval('public.jobs_v3_id_seq');
 -- The backfill is additive and idempotent; undo it from the snapshot created
 -- above: delete from public.jobs_v3 v using public.jobs_v3_c2_undo u where v.id = u.id;
+
+-- Production sets statement_timeout = 1min. The backfill below takes ~2:45 for
+-- 99k rows (each one fires five triggers and an upsert back into public.jobs),
+-- so applying this file with the server default aborts halfway: the DDL commits,
+-- the backfill rolls back. Lift the cap for this session, which is what the file
+-- being applied as a whole means anyway.
+set statement_timeout = 0;
 
 begin;
 
@@ -61,11 +75,22 @@ begin;
 alter table public.jobs_v3 alter column id set default nextval('public.jobs_id_seq'::regclass);
 -- jobs_v3_id_seq must never be used again: drop its ownership so a future
 -- `drop table jobs_v3` does not cascade-delete the sequence, and park it above
--- the live maximum so a stray default cannot collide.
-select setval('public.jobs_v3_id_seq',
-              greatest((select last_value from public.jobs_v3_id_seq),
-                       (select coalesce(max(id), 1) from public.jobs_v3)));
-alter sequence public.jobs_v3_id_seq owned by none;
+-- the live maximum so a stray default cannot collide. Guarded because a database
+-- that already ran this migration no longer has the sequence owned (and a fresh
+-- restore from a post-0163 dump may not have it at all).
+do $$
+begin
+  if to_regclass('public.jobs_v3_id_seq') is not null then
+    perform setval('public.jobs_v3_id_seq',
+                   greatest((select last_value from public.jobs_v3_id_seq),
+                            (select coalesce(max(id), 1) from public.jobs_v3)));
+    alter sequence public.jobs_v3_id_seq owned by none;
+    raise notice 'jobs_v3_id_seq parked and released from ownership';
+  else
+    raise notice 'jobs_v3_id_seq absent (already migrated), nothing to park';
+  end if;
+end;
+$$;
 
 -- ---------------------------------------------------------------------------
 -- 2. Derived columns on jobs_v3.

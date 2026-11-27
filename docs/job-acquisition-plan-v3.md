@@ -203,18 +203,26 @@ legacy 车道（`src/lib/job-connectors/sync.ts`）没有地区过滤，不用�
 | # | 动作 | 依赖 | 预计 |
 |---|---|---|---|
 | C1 | 设计稿 | — | ✅ 已完成 |
-| **C2** | 迁移 `0163_jobs_v3_write_ready.sql`（已写、已 dry-run、**未上生产**）：① id 默认改共用 `jobs_id_seq`；② `lane` / `closure_evidence` / 搜索向量由 v3 自己的触发器派生；③ 3 个业务触发器迁到 v3；④ 正向影子改显式列 UPSERT、反向影子为 BEFORE ROW UPSERT + 回环守卫；⑤ 回填 99,369 关闭行；⑥ 对账 `job_ai_match_scopes` 漂移。**待你点头才执行** | P0、D4（触发器可合并到同一迁移批次） | 已备好，执行 10 min |
+| **C2** | 迁移 `0163_jobs_v3_write_ready.sql` **已在生产执行**：① id 默认改共用 `jobs_id_seq`；② `lane` / `closure_evidence` / 搜索向量由 v3 自己的触发器派生；③ 3 个业务触发器迁到 v3；④ 正向影子改显式列 UPSERT、反向影子为 BEFORE ROW UPSERT + 回环守卫；⑤ 回填 99,369 关闭行；⑥ 对账 `job_ai_match_scopes`（+333 / −22 / ~137）。归档读切 v3 的代码已部署 | P0、D4 | ✅ 2026-11-27 |
 | C3 | `jobWriteTable()` + `JOBS_WRITE_SOURCE`，改 8 个写文件；新增 `scripts/test-job-write-source.ts` | C2 | 3 h |
 | C4 | 双向影子对账 24h | C3 | 24 h 观察 |
 | C5 | 切写 `JOBS_WRITE_SOURCE=v3`，反向影子常开，观察 7 天 | C4 | 7 d |
 | C6 | 归档 `jobs` 表，**再释放 5.5 G** | C5 | 1 h |
 
-### C2 已完成的准备（2026-11-27，尚未上生产）
+### C2 执行记录（2026-11-27，已上生产）
 
-`0163_jobs_v3_write_ready.sql` 在生产的**临时库** `liorvix_c2_dryrun` 上完整跑通，
-37 条断言全绿，生产库 `public.jobs` / `public.jobs_v3` 一行未改。临时库的造法是：pg_dump
-只导 5 张相关表的结构 + 相关函数、触发器定义，再灌 5000 行合成岗位（4000 活跃 / 1000 关闭，
-16 种地区写法），然后人为把 v3 做成"影子落后"的状态（只镜像了 2000 行）。
+先在生产的**临时库** `liorvix_c2_dryrun` 上完整跑通 37 条断言（pg_dump 只导 5 张相关表
+的结构 + 相关函数/触发器定义，灌 5000 行合成岗位，人为把 v3 做成"影子落后 3000 行 + AI scope
+漂移 240 行"的状态），确认后再上生产。生产执行结果：
+
+| 阶段 | 实际 |
+|---|---|
+| DDL（第 1–5 段） | 独占锁亚秒级，一次提交成功 |
+| 回填 99,369 行 | **165 s**（第一次按默认 `statement_timeout=1min` 被中断，DDL 已提交、回填整体回滚；迁移文件已内置 `set statement_timeout = 0`） |
+| AI scope 对账 | 70 s，`+333 −22 ~137`（与事前实测漂移完全吻合） |
+| `analyze` 两张表 | 26 s |
+| 执行后 | `jobs` = `jobs_v3` = 452,193；两侧关闭行均 121,766；关闭行 100 % 带 `closure_evidence`；`lane_null=0`、`target_flag_drift=0`、`scope_presence_drift=0`、`scope_value_drift=0`、`search_drift=0`；看门狗 `missing=0 extra=0 field_mismatches=0 missing_evidence=0 read_index_gaps=0` |
+| 归档 API（部署后） | `status=closed` 99,201、`status=all` 452,376、`closed+country=US` 69,418、`all+continent=europe` 46,942，全部 200 |
 
 覆盖到的点：
 
@@ -239,9 +247,8 @@ legacy 车道（`src/lib/job-connectors/sync.ts`）没有地区过滤，不用�
    INSERT/UPDATE 列清单里都不能出现它，所以正/反向影子都把它排除，改由 v3 的
    `jobs_v3_sync_search` 触发器算同一个表达式。
 
-**上线前必做**：先存回填撤销集
-`create table public.jobs_v3_c2_undo as select j.id from public.jobs j where not exists (select 1 from public.jobs_v3 v where v.id = j.id);`
-（当前 99,369 行），回滚按它删。
+**回滚材料**：回填前已建 `public.jobs_v3_c2_undo`（99,369 个 id，已开 RLS），撤销回填
+`delete from public.jobs_v3 v using public.jobs_v3_c2_undo u where v.id = u.id;`；DDL 回滚见迁移头部。
 
 **C 与 D 的关系**：C6 释放的 5.5 G 覆盖 D 的数据增长，所以顺序是 **P0 → D → C**，不必单独扩容。
 **迁移编号**：D4-1 用 `0161`，D4-3 的 facet RPC 用 `0162`（占用后 C2 顺延为 `0163`）。
