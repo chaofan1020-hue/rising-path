@@ -149,14 +149,14 @@ legacy 车道（`src/lib/job-connectors/sync.ts`）没有地区过滤，不用�
   **真正漏判 10,205 行**（长尾唯一字符串），**可归属覆盖率 = 301,576 / 311,781 = 96.75%** ✅
 - 最大单条残差是 `Prolific Expert Network, Remote`（4,039 行，公司名+Remote，本就无国家）
 
-**D4-3 API — ✅ 代码完成（待部署）**
+**D4-3 API — ✅ 已上生产（`f8e4a25`）**
 - `/api/jobs` 新增参数：`country=US,GB,IN`（可重复/逗号分隔）、`continent=europe`（多选）；两者同时传是**取交集**（收窄），前端不会同时传
 - 保留原有 `regions`（目标市场关键词）向后兼容，且 `region=` 优先于国家/大洲
-- 新列只在 `jobs_v3`，所以：归档路径（`status=closed|all` 读 `public.jobs`）不适用；读切换关掉时自动降级（`countryIndex` 标志 + 42703/PGRST204 识别，同 region/target 的既有降级机制）
+- 新列只在 `jobs_v3`；C2 之后归档路径（`status=closed|all`）也读 v3，所以同样适用。读切换关掉时自动降级（`countryIndex` 标志 + 42703/PGRST204 识别，同 region/target 的既有降级机制）
 - 新增 `/api/jobs/filters`：208 行以内的国家 facet（`continent/country_code/country_name/jobs`），进程内缓存 10 min；底层是迁移 `0162_jobs_country_filter_counts.sql` 的 RPC（PostgREST 不支持 GROUP BY，所以用一个聚合函数，口径与列表查询完全一致：`is_active and display_status in ('listed','enriched')`）
 - 实测 facet：158 个国家/地区、301,879 条可归属、`unplaced = 17,768`
 
-**D4-4 前端筛选器 — 🔄 进行中**
+**D4-4 前端筛选器 — ✅ 已上线**
 - 地区筛选从「7 个目标市场」升级为：**大洲快捷 chips（带数量）+ 大洲分组的国家多选（可搜索，带数量）+「未归属地区」提示**
 - 大洲 chips 与国家多选**互斥**（选大洲清空国家，选国家清空大洲），避免「欧洲 + 美国」这种交集为空的组合
 - 未选任何地区 = 全部
@@ -165,7 +165,7 @@ legacy 车道（`src/lib/job-connectors/sync.ts`）没有地区过滤，不用�
 **D4 验收**
 - ✅ 覆盖率：可归属覆盖率 **96.75%**（原始 94.46%，差额是 7,477 行本就无国家的 remote 岗）；阈值 ≥95% 达标
 - ✅ 抽样：`Bangalore, IN`→IN、`London, United Kingdom`→GB、`CA-QC-LONGUEUIL-J01…`→CA、`Remote`→NULL、`USA.VA.Reston`→US、`Warsaw, Poland`→PL、`Atlanta, Georgia`→US、`Tbilisi, Georgia`→GE —— 118 条断言在**生产库临时库**里 118/118 通过（`tmp/dryrun-0161.py`）
-- ⏳ 每个国家筛选的返回数与 SQL 直查一致（误差 0）：待 API 部署后用 curl 抽查
+- ✅ 每个国家筛选的返回数与 SQL 直查一致（误差 0）：158 个国家 0 处不符；`/api/jobs?country=US` = 225,001 = facet = SQL 直查（2026-11-27）
 - ✅ 迁移可回滚：回滚 DDL 写在迁移头注释里（drop 触发器/函数/索引/列 + 重建视图）
 
 #### D5 · 展示与筛选放开（1–2 h）
