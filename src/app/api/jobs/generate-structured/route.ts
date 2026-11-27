@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from 'next/server';
 import { getSupabaseClient } from '@/storage/database/supabase-client';
 import { ADMIN_PERMISSIONS, requireAdminPermission } from '@/lib/admin-permissions';
 import { recordAdminAuditEvent, recordAdminAuditFailure } from '@/lib/admin-audit';
+import { jobWriteTable } from '@/lib/job-write-source';
 
 // 解析岗位描述为结构化数据
 function parseJobDescription(text: string, title: string, company: string): {
@@ -127,7 +128,7 @@ export async function POST(request: NextRequest) {
       // 如果有解析出有效内容，更新数据库
       if (parsed.overview || parsed.responsibilities || parsed.requirements) {
         const { error: updateError } = await supabase
-          .from('jobs')
+          .from(jobWriteTable())
           .update({
             overview: parsed.overview,
             responsibilities: parsed.responsibilities,

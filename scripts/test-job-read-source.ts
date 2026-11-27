@@ -55,7 +55,8 @@ for (const rel of mustFollowSwitch) {
 }
 
 // 3) Writes and lifecycle workers must never follow the read switch: flipping
-//    JOBS_READ_SOURCE=v3 must not redirect an upsert/update into the shadow table.
+//    JOBS_READ_SOURCE=v3 must not redirect an upsert/update into a table the
+//    caller only meant to read. They go through jobWriteTable() instead.
 const mustStayOnWriteTable = [
   'src/lib/job-sync.ts',
   'src/lib/jobs-feed.ts',
@@ -70,27 +71,29 @@ for (const rel of mustStayOnWriteTable) {
   const source = fs.readFileSync(path.join(process.cwd(), rel), 'utf8');
   assert.ok(
     !source.includes('jobReadTable'),
-    `${rel} writes or runs lifecycle maintenance; it must stay on public.jobs`,
+    `${rel} writes or runs lifecycle maintenance; it must not follow the read switch`,
   );
 }
 
 // The open/close route is mixed on purpose: it reads the job through the
-// switch, but its close write must keep hitting public.jobs.
+// switch, but its close write goes through the *write* switch, so flipping
+// JOBS_READ_SOURCE cannot redirect the close into a read-only table.
 const openRoute = fs.readFileSync(path.join(process.cwd(), 'src/app/api/jobs/[id]/open/route.ts'), 'utf8');
 assert.ok(openRoute.includes('.from(jobReadTable())'), 'open route read must follow the switch');
-assert.ok(/\.from\('jobs'\)\.update\(/.test(openRoute), 'open route close write must stay on public.jobs');
+assert.ok(openRoute.includes('.from(jobWriteTable())'), 'open route close write must follow the write switch');
+assert.ok(!/\.from\('jobs'\)/.test(openRoute), 'open route must not name public.jobs directly');
 
-// Archived rows are not in jobs_v3 yet. A `status=closed|all` catalog query
-// must not be routed to the shadow table, or the archive silently empties
-// (jobs_v3: 203 inactive vs public.jobs: 122,112 as of 2026-11-26).
+// 0163 backfilled the ~99k historical closed rows into jobs_v3 and made the two
+// tables dual-write, so the archive no longer needs its own read path. Keeping
+// one would split the catalogue across two tables again.
 const listingRoute = fs.readFileSync(path.join(process.cwd(), 'src/app/api/jobs/route.ts'), 'utf8');
 assert.ok(
-  /status === 'closed' \|\| status === 'all'/.test(listingRoute),
-  'catalog must keep closed/all status queries on public.jobs until closed rows are backfilled',
+  !listingRoute.includes("archiveQuery ? 'jobs'"),
+  'archive must follow JOBS_READ_SOURCE now that 0163 backfilled closed rows',
 );
 assert.ok(
-  listingRoute.includes("archiveQuery ? 'jobs'"),
-  'catalog archive branch must name the write table explicitly',
+  !/status === 'closed' \|\| status === 'all'/.test(listingRoute),
+  'archive branch must be gone; status=closed|all reads the same table as the default list',
 );
 
 // 4) The switch itself must read env lazily, so one restart can flip it.

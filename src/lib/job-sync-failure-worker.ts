@@ -8,6 +8,7 @@ import {
   JOBS_FEED_SOURCE,
   type JobsFeedItem,
 } from '@/lib/jobs-feed';
+import { jobWriteTable } from '@/lib/job-write-source';
 import {
   syncJobRecords,
   type JobSyncRecord,
@@ -105,7 +106,7 @@ async function closeOne(client: SupabaseClient, row: FailureRow): Promise<void> 
     source_system: JOBS_FEED_SOURCE,
     updated_at: new Date().toISOString(),
   };
-  let query = client.from('jobs').update(closePayload).eq('source_system', JOBS_FEED_SOURCE)
+  let query = client.from(jobWriteTable()).update(closePayload).eq('source_system', JOBS_FEED_SOURCE)
     .eq('company', row.company || payloadValue(row, 'company') || '').eq('is_active', true);
   query = externalId ? query.eq('external_job_id', externalId) : query.eq('source_url', sourceUrl || '');
   const { data, error } = await query.select('id');

@@ -5,6 +5,7 @@ import { looksLikeClosedJobPage } from '@/lib/job-maintenance';
 import { nextLinkFailureCount, shouldCloseAfterLinkFailure } from '@/lib/job-link-health';
 import { hasMatchingPhenomDetailPayload, isRegisteredPhenomJobUrl } from '@/lib/job-connectors';
 import { jobReadTable } from '@/lib/job-read-source';
+import { jobWriteTable } from '@/lib/job-write-source';
 
 const LINK_CHECK_MAX_AGE_MS = 30 * 60 * 1000;
 
@@ -91,7 +92,7 @@ export async function GET(
           updated_at: checked,
         }).eq('job_id', Number(id));
         if (shouldClose) {
-          await client.from('jobs').update({ is_active: false, is_closed: true, updated_at: checked }).eq('id', Number(id)).eq('is_active', true);
+          await client.from(jobWriteTable()).update({ is_active: false, is_closed: true, updated_at: checked }).eq('id', Number(id)).eq('is_active', true);
           return NextResponse.json({ error: '该岗位官网已确认下架，已阻止打开失效链接' }, { status: 410 });
         }
       }

@@ -1,4 +1,5 @@
 import type { SupabaseClient } from '@supabase/supabase-js';
+import { jobWriteTable } from '@/lib/job-write-source';
 
 export const TTL_BATCH_SIZE = 5_000;
 export const TTL_SA_MS = 24 * 60 * 60 * 1000;
@@ -100,7 +101,7 @@ export async function runJobTtlCycle(
   for (let index = 0; index < ids.length; index += 1_000) {
     const chunk = ids.slice(index, index + 1_000);
     const { error, count } = await client
-      .from('jobs')
+      .from(jobWriteTable())
       .update({ display_status: 'stale' }, { count: 'exact' })
       .in('id', chunk)
       .eq('is_active', true)

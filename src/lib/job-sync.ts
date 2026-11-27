@@ -2,6 +2,7 @@ import { createHash } from 'node:crypto';
 import type { SupabaseClient } from '@supabase/supabase-js';
 import type { JobAvailabilityStatus, JobLinkHealth } from '@/lib/job-link-health';
 import { isDisplayableJobDescription } from '@/lib/job-content';
+import { jobWriteTable } from '@/lib/job-write-source';
 
 type Sponsorship = 'yes' | 'no' | 'unknown';
 const EXISTING_JOB_LOOKUP_BATCH_SIZE = 20;
@@ -768,7 +769,7 @@ export async function syncJobRecords(
     writeMetrics.batches += 1;
     const { data, error } = await retryDatabaseOperation(
       () => client
-        .from('jobs')
+        .from(jobWriteTable())
         .insert(batch.map(({ job }) => ({ ...toJobPayload(job), last_verified_at: timestamp })))
         .select('id, job_url'),
       '创建岗位',
@@ -782,7 +783,7 @@ export async function syncJobRecords(
         try {
           const single = await retryDatabaseOperation(
             () => client
-              .from('jobs')
+              .from(jobWriteTable())
               .insert({ ...toJobPayload(item.job), last_verified_at: timestamp })
               .select('id, job_url'),
             '创建岗位（单条降级）',
@@ -826,7 +827,7 @@ export async function syncJobRecords(
   for (const batch of chunks(dedupedUpdates, writePolicy.batchSize)) {
     writeMetrics.batches += 1;
     const { error } = await retryDatabaseOperation(
-      () => client.from('jobs').upsert(
+      () => client.from(jobWriteTable()).upsert(
         batch.map((pending) => ({
           id: pending.id,
           ...toJobPayload(pending.job, pending.existing),
@@ -850,7 +851,7 @@ export async function syncJobRecords(
       try {
         const single = await retryDatabaseOperation(
           () => client
-            .from('jobs')
+            .from(jobWriteTable())
             .update({ ...toJobPayload(pending.job, pending.existing), updated_at: timestamp })
             .eq('id', pending.id),
           '更新岗位（单条降级）',

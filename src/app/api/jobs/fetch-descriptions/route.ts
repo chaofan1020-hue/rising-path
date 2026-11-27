@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from 'next/server';
 import { getSupabaseClient } from '@/storage/database/supabase-client';
 import { ADMIN_PERMISSIONS, requireAdminPermission } from '@/lib/admin-permissions';
 import { recordAdminAuditEvent, recordAdminAuditFailure } from '@/lib/admin-audit';
+import { jobWriteTable } from '@/lib/job-write-source';
 
 export async function POST(request: NextRequest) {
   try {
@@ -80,7 +81,7 @@ export async function POST(request: NextRequest) {
 
         // 更新描述
         await supabase
-          .from('jobs')
+          .from(jobWriteTable())
           .update({ description })
           .eq('id', job.id);
 

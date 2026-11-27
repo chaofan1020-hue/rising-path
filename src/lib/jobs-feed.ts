@@ -18,6 +18,7 @@ import {
 } from '@/lib/job-link-health';
 import { enrichGreenhouseOffices } from '@/lib/greenhouse-location-enrichment';
 import { enrichAshbyLocations } from '@/lib/ashby-location-enrichment';
+import { jobWriteTable } from '@/lib/job-write-source';
 
 const DEFAULT_FEED_URL = 'https://hfscareer.com/collector-api/integrations/v1/jobs';
 export const JOBS_FEED_SOURCE = 'collector_feed';
@@ -421,7 +422,7 @@ async function closeJobsByField(
   const failures: JobSyncFailureInput[] = [];
   for (const batch of chunks([...new Set(values)], 100)) {
     const { data, error } = await client
-      .from('jobs')
+      .from(jobWriteTable())
       .update(closePayload)
       .eq('source_system', JOBS_FEED_SOURCE)
       .eq('company', company)
@@ -440,7 +441,7 @@ async function closeJobsByField(
     for (const value of batch) {
       try {
         const single = await client
-          .from('jobs')
+          .from(jobWriteTable())
           .update(closePayload)
           .eq('source_system', JOBS_FEED_SOURCE)
           .eq('company', company)

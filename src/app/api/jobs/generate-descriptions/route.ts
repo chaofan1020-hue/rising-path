@@ -4,6 +4,7 @@ import { ADMIN_PERMISSIONS, requireAdminPermission } from '@/lib/admin-permissio
 import { createTextProviderClient, type TextProviderClient } from '@/lib/ai/text-provider';
 import { invokeTrackedTextGeneration } from '@/lib/ai-usage';
 import { recordAdminAuditEvent, recordAdminAuditFailure } from '@/lib/admin-audit';
+import { jobWriteTable } from '@/lib/job-write-source';
 
 interface Job {
   id: number;
@@ -78,7 +79,7 @@ export async function POST(request: NextRequest) {
         const fullDescription = `${job.title}\n${job.company}\n\n${newDescription}`;
 
         const { error: updateError } = await supabase
-          .from("jobs")
+          .from(jobWriteTable())
           .update({ description: fullDescription })
           .eq("id", job.id);
 

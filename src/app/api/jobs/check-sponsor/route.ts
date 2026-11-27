@@ -3,6 +3,7 @@ import { getSupabaseClient } from '@/storage/database/supabase-client';
 import { detectSponsorship } from '@/lib/utils';
 import { ADMIN_PERMISSIONS, requireAdminPermission } from '@/lib/admin-permissions';
 import { recordAdminAuditEvent, recordAdminAuditFailure } from '@/lib/admin-audit';
+import { jobWriteTable } from '@/lib/job-write-source';
 
 export async function POST(request: NextRequest) {
   try {
@@ -34,7 +35,7 @@ export async function POST(request: NextRequest) {
       // 只更新有变化的
       if (job.sponsorship !== newSponsorship) {
         await supabase
-          .from('jobs')
+          .from(jobWriteTable())
           .update({ sponsorship: newSponsorship })
           .eq('id', job.id);
         updated++;

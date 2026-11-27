@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from 'next/server';
 import { getSupabaseClient } from '@/storage/database/supabase-client';
 import { ADMIN_PERMISSIONS, requireAdminPermission } from '@/lib/admin-permissions';
 import { recordAdminAuditEvent, recordAdminAuditFailure } from '@/lib/admin-audit';
+import { jobDeleteTables, jobWriteTable } from '@/lib/job-write-source';
 
 interface JobInput {
   title: string;
@@ -119,7 +120,7 @@ export async function POST(request: NextRequest) {
     let created = 0;
     if (newJobs.length > 0) {
       const { data, error } = await client
-        .from('jobs')
+        .from(jobWriteTable())
         .insert(newJobs)
         .select();
 
@@ -214,15 +215,17 @@ async function handleBatchDelete(request: NextRequest) {
       .in('job_id', body.ids);
     if (fieldsDelete.error) throw new Error(`删除网申字段失败: ${fieldsDelete.error.message}`);
 
-    // 最后批量删除岗位
-    const { error } = await client
-      .from('jobs')
-      .delete()
-      .in('id', body.ids);
+    // 最后批量删除岗位。反向影子不镜像 DELETE，切到 v3 写之后要两张表都删。
+    for (const table of jobDeleteTables()) {
+      const { error } = await client
+        .from(table)
+        .delete()
+        .in('id', body.ids);
 
-    if (error) {
-      console.error('Database delete error:', error);
-      throw new Error(`批量删除岗位失败: ${error.message}`);
+      if (error) {
+        console.error('Database delete error:', error);
+        throw new Error(`批量删除岗位失败 (${table}): ${error.message}`);
+      }
     }
 
     await recordAdminAuditEvent({

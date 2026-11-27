@@ -8,6 +8,7 @@ import { getSupabaseClient } from '@/storage/database/supabase-client';
 import { extractOfficialJobDetails, isJobContentShell, officialEvercoreDetailUrl } from '@/lib/job-official-detail';
 import { hasMatchingPhenomDetailPayload } from '@/lib/job-connectors/fetch';
 import { isRegisteredPhenomJobUrl } from '@/lib/job-connectors/company-profiles';
+import { jobWriteTable } from '@/lib/job-write-source';
 
 interface LinkCandidate {
   id: number;
@@ -182,7 +183,7 @@ export async function maintainJobLifecycle(options: {
   };
 
   const { data: expiredRows, error: expireError } = await client
-    .from('jobs')
+    .from(jobWriteTable())
     .update({ is_active: false, is_closed: true, updated_at: now })
     // Collector lifecycle comes from the upstream feed. A stale deadline
     // field alone must not hide a role that the official portal still lists.
@@ -376,7 +377,7 @@ export async function maintainJobLifecycle(options: {
         if (Object.keys(jobPatch).length > 0) {
           jobPatch.updated_at = new Date().toISOString();
           const { error: jobUpdateError } = await client
-            .from('jobs')
+            .from(jobWriteTable())
             .update(jobPatch)
             .eq('id', job.id)
             .eq('is_active', true);
@@ -448,7 +449,7 @@ export async function maintainJobLifecycle(options: {
         if (updateError) throw updateError;
         if (allowedToClose) {
           const { error: closeError } = await client
-            .from('jobs')
+            .from(jobWriteTable())
             .update({ is_active: false, is_closed: true, updated_at: new Date().toISOString() })
             .eq('id', job.id)
             .eq('is_active', true);

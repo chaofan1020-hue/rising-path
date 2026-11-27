@@ -10,6 +10,7 @@ import { isVerifiedField } from '@/lib/job-field-provenance';
 import { isDisplayableJobDeadline } from '@/lib/job-deadline';
 import { requireJobAccess } from '@/lib/job-access';
 import { jobListingReadTable, jobReadTable } from '@/lib/job-read-source';
+import { jobWriteTable } from '@/lib/job-write-source';
 
 export const dynamic = 'force-dynamic';
 export const revalidate = 0;
@@ -567,7 +568,7 @@ export async function POST(request: NextRequest) {
       Object.entries(body).map(([key, value]) => [key, typeof value === 'string' ? value.trim() : value]),
     );
     const { data, error } = await client
-      .from('jobs')
+      .from(jobWriteTable())
       .insert({ ...normalizedBody, sponsorship })
       .select()
       .single();

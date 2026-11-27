@@ -14,6 +14,7 @@ import { parseFeedPostedAt } from '@/lib/jobs-feed';
 import { hasMatchingPhenomDetailPayload, isRegisteredPhenomJobUrl } from '@/lib/job-connectors';
 import { requireJobAccess } from '@/lib/job-access';
 import { jobReadTable } from '@/lib/job-read-source';
+import { jobDeleteTables, jobWriteTable } from '@/lib/job-write-source';
 
 // 本地 logo 缓存
 let localLogosCache: Record<string, string> = {};
@@ -137,7 +138,7 @@ export async function GET(
           if (Object.keys(detailPatch).length > 0) {
             detailPatch.updated_at = checkedAt;
             const { error: detailUpdateError } = await client
-              .from('jobs')
+              .from(jobWriteTable())
               .update(detailPatch)
               .eq('id', Number(id))
               .eq('is_active', true);
@@ -184,7 +185,7 @@ export async function GET(
             .eq('job_id', Number(id));
           if (isClosed) {
             await client
-              .from('jobs')
+              .from(jobWriteTable())
               .update({ is_active: false, is_closed: true, updated_at: checkedAt })
               .eq('id', Number(id))
               .eq('is_active', true);
@@ -251,7 +252,7 @@ export async function PUT(
     const { data: beforeData } = await client.from('jobs').select('*').eq('id', id).maybeSingle();
 
     const { data, error } = await client
-      .from('jobs')
+      .from(jobWriteTable())
       .update({
         ...body,
         updated_at: new Date().toISOString(),
@@ -320,14 +321,17 @@ export async function DELETE(
       .eq('job_id', id);
     if (fieldsDelete.error) throw new Error(`删除网申字段失败: ${fieldsDelete.error.message}`);
 
-    // 最后删除岗位
-    const { error } = await client
-      .from('jobs')
-      .delete()
-      .eq('id', id);
+    // 最后删除岗位。jobs 的前向影子会跟着删 v3 行，但反向影子故意不镜像
+    // DELETE（避免误删归档表），所以切到 v3 写之后必须两张表都删。
+    for (const table of jobDeleteTables()) {
+      const { error } = await client
+        .from(table)
+        .delete()
+        .eq('id', id);
 
-    if (error) {
-      throw new Error(`删除岗位失败: ${error.message}`);
+      if (error) {
+        throw new Error(`删除岗位失败 (${table}): ${error.message}`);
+      }
     }
 
     await recordAdminAuditEvent({

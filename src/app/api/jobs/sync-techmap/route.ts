@@ -3,6 +3,7 @@ import { getSupabaseClient } from '@/storage/database/supabase-client';
 import { ADMIN_PERMISSIONS, requireAdminPermission } from '@/lib/admin-permissions';
 import { detectSponsorship } from '@/lib/utils';
 import { recordAdminAuditEvent, recordAdminAuditFailure } from '@/lib/admin-audit';
+import { jobWriteTable } from '@/lib/job-write-source';
 
 export async function POST(request: NextRequest) {
   try {
@@ -93,7 +94,7 @@ export async function POST(request: NextRequest) {
             const salary_range = extractSalary(description);
 
             const { error: insertError } = await supabase
-              .from('jobs')
+              .from(jobWriteTable())
               .insert({
                 title: (job.title || 'Unknown Position').substring(0, 200),
                 company: job.company || job.employer || 'Unknown Company',
