@@ -278,6 +278,17 @@ export async function GET(request: NextRequest) {
     const rangeEnd = entryLevelFilter ? offset + (pageLimit * 3) : offset + pageLimit;
     const regionListingFilter = configuredRegionListingFilter(regions);
 
+    // A planner estimate was 19 % off on the unfiltered catalogue (268,813 shown
+    // while the facet panel next to it said 330,449), so the two disagreed.
+    // Exact counts cost 15-160 ms as long as an index serves every predicate
+    // (jobs_v3_active_display_idx and friends); they only get expensive when a
+    // text or ILIKE predicate forces a scan, which is the case the original
+    // planned-count comment warned about. So: exact when everything is
+    // indexable, planned otherwise.
+    const textFiltered = Boolean(search) || Boolean(company) || exactCompanies.length > 0;
+    const regionTextScan = regions.length > 0 && !regionListingFilter;
+    const exactCountSafe = !textFiltered && !regionTextScan && !entryLevelFilter;
+
     // Keep the public listing usable while a deployment is applying the target
     // region / listing view migration. The indexed path is fast; the fallback
     // uses the older schema and is only triggered when the response proves the
@@ -297,7 +308,7 @@ export async function GET(request: NextRequest) {
       // keeping it would now split the catalogue across two tables again.
       let query = client
         .from(options.listingView ? jobListingReadTable() : jobReadTable())
-        .select(columns, { count: 'planned' });
+        .select(columns, { count: exactCountSafe ? 'exact' : 'planned' });
 
       if (diverseFeed) {
         query = query
@@ -461,10 +472,12 @@ export async function GET(request: NextRequest) {
       : filteredCandidates.slice(0, pageLimit);
 
     // A short page proves the exact total without a COUNT(*) over the whole
-    // index. A full page keeps the planner estimate and is labelled as such.
-    const exactTotal = !entryLevelFilter && jobRows.length <= pageLimit
+    // index. Otherwise an indexable query already carries the exact count from
+    // PostgREST; only the scan-prone queries keep the planner estimate.
+    const shortPageTotal = !entryLevelFilter && jobRows.length <= pageLimit
       ? offset + jobRows.length
       : null;
+    const exactTotal = shortPageTotal ?? (exactCountSafe && typeof count === 'number' ? count : null);
 
     // 为每个岗位添加分类信息和 logo
     const companies = [...new Set(filteredJobs.map((job) => String((job as { company?: unknown }).company || '')).filter(Boolean))];

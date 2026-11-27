@@ -30,8 +30,15 @@ const sqlPatterns = [...migration.matchAll(/'(%[^']+%)'/g)].map((match) => match
 assert.deepEqual([...new Set(sqlPatterns)], patterns);
 
 const route = fs.readFileSync(path.join(process.cwd(), 'src/app/api/jobs/route.ts'), 'utf8');
-assert.match(route, /count: 'planned'/);
-assert.match(route, /total_is_estimate: true/);
+// The count is exact whenever PostgREST can answer it from an index, and falls
+// back to the planner estimate only for text/ILIKE predicates that force a scan.
+// The old blanket `count: 'planned'` under-reported the catalogue by ~19 %.
+assert.match(route, /count: exactCountSafe \? 'exact' : 'planned'/);
+assert.match(route, /const exactCountSafe = !textFiltered && !regionTextScan && !entryLevelFilter;/);
+assert.match(route, /const textFiltered = Boolean\(search\) \|\| Boolean\(company\) \|\| exactCompanies\.length > 0;/);
+assert.match(route, /const regionTextScan = regions\.length > 0 && !regionListingFilter;/);
+assert.match(route, /total_is_estimate: exactTotal === null/);
+assert.doesNotMatch(route, /count: 'planned' \}/, 'the unconditional planned count must not come back');
 assert.match(route, /matches_target_region/);
 assert.match(route, /targetRegionPostgrestClauses\(/);
 const indexedScope = fs.readFileSync(
