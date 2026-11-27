@@ -290,15 +290,12 @@ export async function GET(request: NextRequest) {
       // estimated in the response. Widen the projection to `string` so the
       // generated parser does not instantiate a union of both row shapes.
       const columns: string = summaryOnly ? SUMMARY_COLUMNS : DETAIL_COLUMNS;
-      // Archived rows only exist on public.jobs: jobs_v3 carries 200k active
-      // rows plus the few that closed during the shadow run, while the old
-      // table still holds ~122k historical records. Without this guard a
-      // `status=closed|all` query silently returns an empty archive after the
-      // read switch. Backfilling those rows (~+1.5 GB) is the alternative; until
-      // then the archive is deliberately served from the write table.
-      const archiveQuery = status === 'closed' || status === 'all';
+      // C2 (0163) backfilled the ~99k historical closed rows into jobs_v3 and made
+      // the two tables dual-write, so the archive no longer needs to bypass the
+      // read switch. Until 0163 landed this branch read public.jobs directly;
+      // keeping it would now split the catalogue across two tables again.
       let query = client
-        .from(archiveQuery ? 'jobs' : options.listingView ? jobListingReadTable() : jobReadTable())
+        .from(options.listingView ? jobListingReadTable() : jobReadTable())
         .select(columns, { count: 'planned' });
 
       if (diverseFeed) {
@@ -353,9 +350,10 @@ export async function GET(request: NextRequest) {
           : query.or(targetRegionPostgrestClauses().join(','));
       }
 
-      // Country / continent facets (D4/D5). The archive path reads `public.jobs`,
-      // which does not have these columns until C2 moves the write path to v3.
-      if (!archiveQuery && options.countryIndex) {
+      // Country / continent facets (D4/D5). They live on jobs_v3 (0161), not on
+      // public.jobs, so every read path — archive included since 0163 — has to
+      // target the read table for these filters to bind.
+      if (options.countryIndex) {
         if (countries.length > 0) query = query.in('country_code', countries);
         if (continents.length > 0) query = query.in('continent', continents);
       }
