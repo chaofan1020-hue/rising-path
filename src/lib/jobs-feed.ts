@@ -649,6 +649,11 @@ export function normalizeFeedItem(item: JobsFeedItem): JobSyncRecord | null {
     ? (text(item.workplace_type) || inferredWorkplace.workplaceType || '').slice(0, 50) || null
     : null;
   const now = new Date().toISOString();
+  // `source_tier` is NOT NULL on both job tables. ATS rows always carry a tier
+  // from the feed; legacy official-source rows do not, so they fall back to the
+  // same 'B' the legacy lane already uses instead of sending an explicit null.
+  const tier = feedTier(item.source_tier);
+  const sourceTier = tier ?? (text(item.source_key) ? null : 'B');
   const v2Fields = JOBS_FEED_V2_CLIENT_ENABLED
     ? {
       source_key: text(item.source_key) || null,
@@ -657,7 +662,7 @@ export function normalizeFeedItem(item: JobsFeedItem): JobSyncRecord | null {
       first_seen_at: feedTimestamp(item.first_seen_at) || now,
       last_seen_at: feedTimestamp(item.last_seen_at) || now,
       snapshot_id: text(item.snapshot_id) || null,
-      source_tier: feedTier(item.source_tier),
+      source_tier: sourceTier,
       is_list_only: item.is_list_only === true,
       display_status: 'listed',
     }

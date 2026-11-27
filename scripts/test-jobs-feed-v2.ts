@@ -63,6 +63,9 @@ async function main() {
     assert.ok(legacyRecord, 'legacy row should normalize when the lane is enabled');
     assert.equal(legacyRecord.source_key, null);
     assert.equal(legacyRecord.external_job_id, 'official:example:1');
+    // jobs.source_tier is NOT NULL; the legacy lane carries no tier from the
+    // feed and must fall back to the lane's existing 'B'.
+    assert.equal(legacyRecord.source_tier, 'B');
     assert.equal(normalizeSkipReason(legacyRow), null);
   } finally {
     delete process.env.JOBS_FEED_ALLOW_LEGACY;
