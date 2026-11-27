@@ -53,6 +53,22 @@ async function main() {
   assert.equal(shouldSkipClosedLegacyItem(item({ source_key: null })), true);
   assert.equal(shouldSkipClosedLegacyItem(item()), false);
 
+  // The legacy lane is opt-in. The same row is dropped on the ATS-only path and
+  // accepted once JOBS_FEED_ALLOW_LEGACY grants it; `source_key` stays null so
+  // the derived lane resolves to 'legacy'.
+  const legacyRow = item({ source_key: null, external_job_id: 'official:example:1', source_tier: null });
+  process.env.JOBS_FEED_ALLOW_LEGACY = 'true';
+  try {
+    const legacyRecord = normalizeFeedItem(legacyRow);
+    assert.ok(legacyRecord, 'legacy row should normalize when the lane is enabled');
+    assert.equal(legacyRecord.source_key, null);
+    assert.equal(legacyRecord.external_job_id, 'official:example:1');
+    assert.equal(normalizeSkipReason(legacyRow), null);
+  } finally {
+    delete process.env.JOBS_FEED_ALLOW_LEGACY;
+  }
+  assert.equal(normalizeFeedItem(legacyRow), null);
+
   // The daily heartbeat must not churn the content hash.
   assert.equal(jobContentHash(record), jobContentHash({ ...record, last_seen_at: '2026-11-25T10:00:00.000Z' }));
   // A real source change must churn it.

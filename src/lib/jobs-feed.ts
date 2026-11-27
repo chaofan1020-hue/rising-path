@@ -23,6 +23,23 @@ import { jobWriteTable } from '@/lib/job-write-source';
 const DEFAULT_FEED_URL = 'https://hfscareer.com/collector-api/integrations/v1/jobs';
 export const JOBS_FEED_SOURCE = 'collector_feed';
 export const JOBS_FEED_V2_CLIENT_ENABLED = process.env.JOBS_FEED_V2_ENABLED !== 'false';
+
+/**
+ * The v2 feed mixes the ATS lane (rows with a `source_key`) with the legacy
+ * official-source lane (rows without one). The ATS sync deliberately drops the
+ * legacy rows, because a full ATS pass should not pay for records it does not
+ * own. `JOBS_FEED_ALLOW_LEGACY=true` opts into ingesting that lane as well; the
+ * legacy rows carry no `source_key`, land in `lane = 'legacy'`, and keep the
+ * `source_tier` default, so the same payload builder handles both.
+ */
+export function legacyFeedEnabled(): boolean {
+  return process.env.JOBS_FEED_ALLOW_LEGACY === 'true';
+}
+
+/** True while the feed must stay ATS-only (legacy lane opt-in not granted). */
+function atsOnlyFeed(): boolean {
+  return JOBS_FEED_V2_CLIENT_ENABLED && !legacyFeedEnabled();
+}
 const DEFAULT_PAGE_SIZE = 500;
 const MAX_PAGES_PER_RUN = 1000;
 
@@ -531,7 +548,7 @@ export function normalizeFeedItem(item: JobsFeedItem): JobSyncRecord | null {
   const company = text(item.company_name);
   const sourceUrl = text(item.source_url);
   if (!title || !company || !sourceUrl) return null;
-  if (JOBS_FEED_V2_CLIENT_ENABLED && !text(item.source_key)) return null;
+  if (atsOnlyFeed() && !text(item.source_key)) return null;
 
   // Normalize rich text before writing it to the shared jobs table. The feed
   // frequently returns HTML (and sometimes encoded HTML), so keeping the raw
@@ -714,11 +731,10 @@ export function normalizeSkipReason(item: JobsFeedItem): string | null {
   if (!text(item.title)) return 'missing_title';
   if (!text(item.company_name)) return 'missing_company';
   if (!text(item.source_url)) return 'missing_source_url';
-  // The v2 feed also carries legacy official-source rows whose source_key is
-  // null. They belong to the legacy ingestion lane; accepting them here makes
-  // the ATS sync spend its time on records the US schema cannot store
-  // (source_tier is NOT NULL) and prevents the cursor from advancing.
-  if (!text(item.source_key)) return 'not_ats_source';
+  // Rows without a source_key belong to the legacy lane. The ATS-only client
+  // drops them so a full pass never spends its cursor on another lane's
+  // records; `JOBS_FEED_ALLOW_LEGACY=true` opts that lane back in.
+  if (atsOnlyFeed() && !text(item.source_key)) return 'not_ats_source';
   if (!regionFilterDisabled() && !isTargetRegion(
     [
       normalizeFeedLocation(item.location),
