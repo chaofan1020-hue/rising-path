@@ -274,6 +274,10 @@ feed 延迟 0.1–3.9 min，`consecutive_failures=0`。实跑 1 h 45 min（用�
 | lane 分布 | ats 219,272 / legacy 232,996（legacy 车道这几天没有新增，符合预期） |
 | feed | 延迟 39 s，近 15 min 失败 0 |
 
+**删除路径单独验过**（事务内构造再回滚）：按路由的循环顺序 `jobs_v3` → `jobs` 删除一行探针，
+`job_ai_match_scopes` 与 `job_sync_records` 随 `jobs` 级联清空（删除前 1/1/1/1，删除后全 0）。
+只删 v3 会留下 `jobs` 行、AI 作用域行和同步记录 —— 这正是循环必须存在的理由。
+
 **回滚**（一步）：删掉 `JOBS_WRITE_SOURCE` 那行并重启即可 —— 0163 的反向影子一直开着，
 `jobs` 始终是最新的，回滚后写入会自动回到旧表，不需要迁移数据。
 

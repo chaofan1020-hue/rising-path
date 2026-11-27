@@ -149,6 +149,7 @@
 - **C5 切换**：写入 `JOBS_WRITE_SOURCE=v3`，备份 `.env.local.pre-write-v3.20261127-120101.bak`，重启后 `health=200`、`/jobs` 200、未登录 API 仍 401（预期）。切换脚本先复核漂移再写 flag，非零即拒绝。
 - **切后 2 分钟真实流量验证**：82 笔写入（81 upsert + 1 关闭），关闭行 1/1 带 `closure_evidence`；反向影子 **82/82** 镜像到 `jobs`，`updated_at`/`is_active`/`display_status`/`matches_target_region` 全一致；v3 有 jobs 无 0 行；整体 id 漂移 0/0；`job_ai_match_scopes` 361,484 行漂移 0；lane ats 219,272 / legacy 232,996；feed 延迟 39 s、近 15 min 失败 0。
 - **回滚是一步**：删掉 `JOBS_WRITE_SOURCE` 那行并重启；0163 的反向影子一直开着，`jobs` 始终最新，不需要回迁数据。
+- **删除路径**：事务内按路由顺序 `jobs_v3` → `jobs` 删探针行，`job_ai_match_scopes` / `job_sync_records` 随 `jobs` 级联清空（1/1/1/1 → 0/0/0/0），回滚后零残留；只删 v3 会留下 jobs 行、作用域行和同步记录。
 - 观察期（7 天）每天看三件事：对账日志六项漂移全 0、`job_sync_failures` 15 min 窗口为 0 且 feed 延迟 < 15 min、关闭写入的 `closure_evidence` 不为空。
 ### 2026-11-27 · 列表总数改精确计数（`4cbbd99`）+ C5 前置写平价（`0166`）
 
