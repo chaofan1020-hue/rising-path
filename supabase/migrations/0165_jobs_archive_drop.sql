@@ -46,6 +46,12 @@ $$;
 
 drop table if exists archive.jobs_20261127;
 
+-- 0163 left `jobs_v3_c2_undo` behind so the backfill could be reversed with
+-- `delete from jobs_v3 using jobs_v3_c2_undo`. After C5 has written to v3 for
+-- seven days that rollback is no longer meaningful, and the table is a full copy
+-- of the 99k backfilled ids. It goes in the same step that returns disk.
+drop table if exists public.jobs_v3_c2_undo;
+
 -- Only removes the schema when nothing else lives in it.
 do $$
 begin
