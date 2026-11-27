@@ -1,7 +1,7 @@
 # 岗位采集规模化 · 执行账本
 
 > 这是 AI 唯一允许改状态的地方。`tasks.yaml` 只读；本文件每完成一个任务必须更新。
-> 最后更新：2026-11-27（P0/D1–D6、C1–C5 完成；写入已切到 `jobs_v3`，进入 7 天观察；下一步 C6 归档释放 5.5 G）
+> 最后更新：2026-11-27（P0/D1–D6、C1–C5 完成；写入已切到 `jobs_v3`，进入 7 天观察；L1 legacy 车道停摆已修复、全量回补中；下一步 C6 归档释放 5.5 G）
 >
 > v3 重建计划：`docs/job-acquisition-v3-rebuild-plan.md`
 
@@ -88,6 +88,7 @@
 | C5 | ✅ 观察中 | 11-27 12:01 | `JOBS_WRITE_SOURCE=v3`；切后 2 分钟 82 笔真实写入全部正确镜像；删除路径事务内验过；7 天观察至 **12-04** |
 | C6 | ⏳ 待执行 | 计划 12-04 | `0164`（停双写 + 12 个外键改指 `jobs_v3` + 序列归属 + 移入 `archive` 架构）+ `0165`（dump 校验后 `drop`，回收 5.5 G）；两个迁移都已写好并在生产做过事务内 dry-run |
 | C7 | ⏳ 待执行 | 与 C6 同批部署 | `jobReadTable()` / `jobWriteTable()` 默认值从 `jobs` 改成 `v3`，否则 C6 之后一次没带 flag 的启动就会全线 404 |
+| L1 | 🔄 进行中 | 11-27 16:27 | legacy 车道自 11-24 起停摆：缺 **70,848** 条在招（169 家里 168 家少于上游）。`4ed82e7` 加 `JOBS_FEED_ALLOW_LEGACY` 放行无 `source_key` 的行，`f9c8be1` 让 legacy 行 `source_tier` 回落 `B`；后台 reconcile 全量回补中（801 页 / 约 3 h） |
 
 ### 旧编号（board 扩容路线，2026-11-24 ~ 11-26，已停用）
 
@@ -147,6 +148,23 @@
 | — | — | — | — | — | — |
 
 ## 日志（倒序）
+
+### 2026-11-27 16:27 · L1：legacy 车道停摆（缺 70,848 条在招），修复后开始回补
+
+**症状**：`lane='legacy'` 的 111,066 条 active 岗位 `last_seen_at` 全部停在 `2026-11-24 11:12:23Z`（同一秒），近 1 h / 24 h 的刷新行数都是 **0**。按上游 `/dashboard/company-directory` 逐家比对：169 家里 **168 家我们少于上游**，合计缺口 **70,848 条**（Amazon −4,373 / Hitachi −3,190 / Bosch −3,110 / State Street −2,265 / Citigroup −2,219 / Capital One −1,745 / NVIDIA −1,700 …），只有 Bridgewater 多 1 条。所以差的是**根本没拉进来**，不是数据过期。
+
+**根因**（两层，都要改）：
+1. feed 的 `scope` 默认 `'ats'`（`jobs-feed.ts` 读 `JOBS_FEED_SCOPE`），legacy 车道在 `scope=all` 里；
+2. 即使切到 `all`，`normalizeFeedItem()` / `normalizeSkipReason()` 里 `JOBS_FEED_V2_CLIENT_ENABLED && !source_key → null / 'not_ats_source'` 仍会把整页跳过。实测一页：`received=500 / skipped=500 / skipped_by_reason={"not_ats_source":500} / upserted=0`。
+
+**改动**（`4ed82e7` + `f9c8be1`，均已部署生产）：
+- 新增 `legacyFeedEnabled()`：`JOBS_FEED_ALLOW_LEGACY=true` 时才放行无 `source_key` 的行；默认仍是 ATS-only，生产行为不变。
+- `source_tier` 兜底：两张表的 `source_tier` 都是 `NOT NULL DEFAULT 'B'`，legacy 行上游不带 tier，显式传 `null` 会 100% 写失败（实测 639 条 `null value in column "source_tier" ... violates not-null constraint`）→ legacy 行回落 `'B'`。
+- `scripts/test-jobs-feed-v2.ts` 加三项断言：默认拒绝 / 放行后 `source_key=null` / `source_tier='B'`。
+
+**执行**：`.env.local` 加 `JOBS_FEED_SCOPE=all`、`JOBS_FEED_ALLOW_LEGACY=true`、`JOBS_ALLOW_FULL_RECONCILE=true`（备份 `.env.local.pre-legacy-lane.20261127-073707.bak`）；16:27 起以 `--mode=reconcile --max-pages=1000` 后台全量回补，`include_closed=false`（只拉在招，按你的选择）。实测 13.9 s/页、约 36 行/秒，801 页 ≈ 3 小时；磁盘 8.8 G 空闲，WAL 2.1 G（`max_wal_size=2GB`）封顶不增长。
+
+**安全性**：`finalize_job_feed_reconcile_batch`（`0060`）只写 `missing_from_feed_at`，返回值里 `closed` 恒为 0，不会批量关岗。回补期间自动增量的 5 分钟周期会被 reconcile 租约挡回（租约争用直接抛错，不落失败行），ATS 新鲜度由 reconcile 自身维持。
 
 ### 2026-11-27 12:01 · C4 收口 + C5 切写完成（`JOBS_WRITE_SOURCE=v3`）
 
