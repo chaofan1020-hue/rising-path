@@ -1,7 +1,7 @@
 # 岗位采集规模化 · 执行账本
 
 > 这是 AI 唯一允许改状态的地方。`tasks.yaml` 只读；本文件每完成一个任务必须更新。
-> 最后更新：2026-11-27（P0/D1–D6 完成；C2 已上生产、C3 写切换代码已部署；C4 双向对账观察中）
+> 最后更新：2026-11-27（P0/D1–D6、C1–C5 完成；写入已切到 `jobs_v3`，进入 7 天观察；下一步 C6 归档释放 5.5 G）
 >
 > v3 重建计划：`docs/job-acquisition-v3-rebuild-plan.md`
 
@@ -143,6 +143,13 @@
 
 ## 日志（倒序）
 
+### 2026-11-27 12:01 · C4 收口 + C5 切写完成（`JOBS_WRITE_SOURCE=v3`）
+
+- **C4**：`liorvix-jobs-v3-reconcile.log` 02:04Z 起 **23 轮全 0 漂移**（`missing/extra/bad_ats_key/field_mismatches/missing_evidence/read_index_gaps`），feed 延迟 0.1–3.9 min，`consecutive_failures=0`；实跑 1 h 45 min，经用户同意提前收口。
+- **C5 切换**：写入 `JOBS_WRITE_SOURCE=v3`，备份 `.env.local.pre-write-v3.20261127-120101.bak`，重启后 `health=200`、`/jobs` 200、未登录 API 仍 401（预期）。切换脚本先复核漂移再写 flag，非零即拒绝。
+- **切后 2 分钟真实流量验证**：82 笔写入（81 upsert + 1 关闭），关闭行 1/1 带 `closure_evidence`；反向影子 **82/82** 镜像到 `jobs`，`updated_at`/`is_active`/`display_status`/`matches_target_region` 全一致；v3 有 jobs 无 0 行；整体 id 漂移 0/0；`job_ai_match_scopes` 361,484 行漂移 0；lane ats 219,272 / legacy 232,996；feed 延迟 39 s、近 15 min 失败 0。
+- **回滚是一步**：删掉 `JOBS_WRITE_SOURCE` 那行并重启；0163 的反向影子一直开着，`jobs` 始终最新，不需要回迁数据。
+- 观察期（7 天）每天看三件事：对账日志六项漂移全 0、`job_sync_failures` 15 min 窗口为 0 且 feed 延迟 < 15 min、关闭写入的 `closure_evidence` 不为空。
 ### 2026-11-27 · 列表总数改精确计数（`4cbbd99`）+ C5 前置写平价（`0166`）
 
 - **D4 收尾**：逐国对账 158 个国家 0 处不符，但发现列表页总数与 facets 差 19 %（默认列表估算 268,813 vs 实际 330,449）。根因是 0134 时代留下的 `count: 'planned'`：当时靠几十条 `region ILIKE` 会扫全表超时；0161/0163 之后 `jobs_v3_active_display_idx` 让精确计数只要 15.8 ms（无筛选）/149 ms（US）/162 ms（status=all）。

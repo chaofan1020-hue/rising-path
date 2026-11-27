@@ -206,8 +206,8 @@ legacy 车道（`src/lib/job-connectors/sync.ts`）没有地区过滤，不用�
 | C1 | 设计稿 | — | ✅ 已完成 |
 | **C2** | 迁移 `0163_jobs_v3_write_ready.sql` **已在生产执行**：① id 默认改共用 `jobs_id_seq`；② `lane` / `closure_evidence` / 搜索向量由 v3 自己的触发器派生；③ 3 个业务触发器迁到 v3；④ 正向影子改显式列 UPSERT、反向影子为 BEFORE ROW UPSERT + 回环守卫；⑤ 回填 99,369 关闭行；⑥ 对账 `job_ai_match_scopes`（+333 / −22 / ~137）。归档读切 v3 的代码已部署 | P0、D4 | ✅ 2026-11-27 |
 | **C3** | `jobWriteTable()` + `JOBS_WRITE_SOURCE`，改 **14 个文件的 24 处写语句**；新增 `scripts/test-job-write-source.ts`。默认 `jobs`，生产行为不变，已部署 `ded06ab` | C2 | ✅ 2026-11-27 |
-| C4 | 双向影子对账：反向探针已通过（事务内写 v3 → jobs 同 id/同 flag/同 scope，回滚后两侧 0 残留）；顺延 24h 零漂移观察中 | C3 | 观察中 |
-| **C5** | 切写 `JOBS_WRITE_SOURCE=v3`，反向影子常开，观察 7 天。前置已做：`0166` 给 `jobs_v3` 补上 `jobs` 才有的唯一索引，列约束逐项比对无差异 | C4 | 7 d |
+| **C4** | 双向影子对账：反向探针通过（事务内写 v3 → jobs 同 id/同 flag/同 scope，回滚零残留）+ **23 轮对账全 0 漂移**，经用户同意提前收口（实跑 1 h 45 min） | C3 | ✅ 2026-11-27 12:00 |
+| **C5** | 切写 `JOBS_WRITE_SOURCE=v3`，反向影子常开，观察 7 天。前置已做：`0166` 给 `jobs_v3` 补上 `jobs` 才有的唯一索引，列约束逐项比对无差异。**已于 2026-11-27 12:01 切换**，切后 2 分钟内 82 笔真实写入全部正确镜像 | C4 | ✅ 切写完成，观察中 |
 | **C6** | 归档 `jobs` 表，**再释放 5.5 G**：`0164`（停双向影子 + 12 个外键改指 `jobs_v3` + 序列归属 + 移入 `archive` 架构）+ `0165`（**dump 校验后**才 `drop`，才是真正回收磁盘） | C5 | 已备好，等 C5 满 7 天 |
 
 ### C2 执行记录（2026-11-27，已上生产）
@@ -250,6 +250,38 @@ legacy 车道（`src/lib/job-connectors/sync.ts`）没有地区过滤，不用�
 
 **回滚材料**：回填前已建 `public.jobs_v3_c2_undo`（99,369 个 id，已开 RLS），撤销回填
 `delete from public.jobs_v3 v using public.jobs_v3_c2_undo u where v.id = u.id;`；DDL 回滚见迁移头部。
+
+### C4 / C5 执行记录（2026-11-27 12:01 切换写入口）
+
+**C4（零漂移观察，提前收口）**：`/var/log/liorvix-jobs-v3-reconcile.log` 从 02:04Z 起 23 轮，
+每轮 `missing=0 extra=0 bad_ats_key=0 field_mismatches=0 missing_evidence=0 read_index_gaps=0`，
+feed 延迟 0.1–3.9 min，`consecutive_failures=0`。实跑 1 h 45 min（用户同意不必等满 4 h）。
+
+**C5（切写）**：`JOBS_WRITE_SOURCE=v3` 写入 `/opt/liorvix/.env.local`（备份
+`.env.local.pre-write-v3.20261127-120101.bak`），重启后 `health=200`、`/jobs` 200。
+切换脚本在写 flag 前先自行复核影子漂移，非零直接拒绝。
+
+切后 2 分钟内的真实流量验证（不是构造数据，是 feed 自己写进来的行）：
+
+| 指标 | 结果 |
+|---|---|
+| 切后写入行数 | **82**（81 条 upsert + **1 条关闭**） |
+| 关闭行带 `closure_evidence` | 1/1（`jobs` 没有这一列，证据留在 v3） |
+| 反向影子镜像到 `jobs` | **82/82**，`updated_at` / `is_active` / `display_status` / `matches_target_region` 逐字段一致 |
+| v3 有、jobs 没有 | 0 |
+| 两表整体 id 漂移 | 0 / 0 |
+| `job_ai_match_scopes` | 361,484 行，漂移 0 |
+| lane 分布 | ats 219,272 / legacy 232,996（legacy 车道这几天没有新增，符合预期） |
+| feed | 延迟 39 s，近 15 min 失败 0 |
+
+**回滚**（一步）：删掉 `JOBS_WRITE_SOURCE` 那行并重启即可 —— 0163 的反向影子一直开着，
+`jobs` 始终是最新的，回滚后写入会自动回到旧表，不需要迁移数据。
+
+### 观察期（C5 起 7 天）：每天要看的三件事
+
+1. `liorvix-jobs-v3-reconcile.log` 每 5 分钟一轮，六项漂移必须全 0；
+2. `job_sync_failures` 15 分钟窗口内为 0，feed 延迟 < 15 min；
+3. 关闭类写入的 `closure_evidence` 不能出现空值（停线条件之一）。
 
 ### D4 收尾：列表总数改成"能走索引就算精确"（2026-11-27，已部署 `4cbbd99`）
 
