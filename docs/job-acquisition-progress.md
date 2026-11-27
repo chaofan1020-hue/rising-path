@@ -143,6 +143,14 @@
 
 ## 日志（倒序）
 
+### 2026-11-27 · 列表总数改精确计数（`4cbbd99`）+ C5 前置写平价（`0166`）
+
+- **D4 收尾**：逐国对账 158 个国家 0 处不符，但发现列表页总数与 facets 差 19 %（默认列表估算 268,813 vs 实际 330,449）。根因是 0134 时代留下的 `count: 'planned'`：当时靠几十条 `region ILIKE` 会扫全表超时；0161/0163 之后 `jobs_v3_active_display_idx` 让精确计数只要 15.8 ms（无筛选）/149 ms（US）/162 ms（status=all）。
+- 改为「谓词都能走索引时 `exact`，文本/ILIKE 或 region ILIKE 回退时保留 `planned`」，契约测试改钉分流规则。部署 `4cbbd99` 后实测：默认 **330,473**（=facets，0.13 s）、US **225,001**（=facets，0.22 s）、`status=all` 452,249（0.30 s）、`search` 仍估算（0.09 s）、`region=北美` 226,202（0.67 s）。
+- 顺带确认 `unplaced` 在 UI 里是非交互的提示行（虚线边框、不可点），未定位岗位通过默认列表仍可访问，不是死链。
+- **C5 前置**：逐列比对 `jobs` / `jobs_v3` —— 共有列的可空性/默认值差异 0 处；v3 独有的 5 列除 `closure_evidence`（NOT NULL DEFAULT '{}'）外均可空；v3 无生成列；v3 的 2 条 CHECK 比 jobs 更严且已全量满足。
+- 发现唯一索引不对称：`jobs` 有 `(source_system, company, external_job_id) WHERE 三者非空`，`jobs_v3` 只有 `(source_key, external_job_id) WHERE lane='ats' AND is_active`。`job-sync.ts` 的插入是普通 `.insert()`，去重靠 JS 预比对，数据库唯一索引是并发兜底 —— 切写后会丢这一层。
+- 新增并执行 `0166_jobs_v3_write_parity.sql`：给 `jobs_v3` 建同名同列的 `jobs_v3_source_company_external_uidx`（建前查重，有重复就 raise）。执行后 30 min `job_sync_failures`=0，最新同步 lag 1.9 min，无批次损失。
 ### 2026-11-27 · C6 准备完成（`0164` / `0165`，均未执行）
 
 - 依赖清点（生产实测）：**12 个外键**指向 `jobs(id)`（8 个 CASCADE + 4 个 SET NULL），指向 `jobs_v3` 的 0 个；视图 `jobs_listing`(→jobs) / `jobs_listing_v3`(→v3)；影子函数 8 个；触发器 6+7；**`jobs_id_seq` 是 `OWNED BY jobs.id`**（不先改归属，移表会把序列带走、直接打掉 v3）；PostgREST `PGRST_DB_SCHEMAS=public`，所以移出 public 即从 API 面消失。

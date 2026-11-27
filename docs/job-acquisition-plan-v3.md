@@ -207,7 +207,7 @@ legacy 车道（`src/lib/job-connectors/sync.ts`）没有地区过滤，不用�
 | **C2** | 迁移 `0163_jobs_v3_write_ready.sql` **已在生产执行**：① id 默认改共用 `jobs_id_seq`；② `lane` / `closure_evidence` / 搜索向量由 v3 自己的触发器派生；③ 3 个业务触发器迁到 v3；④ 正向影子改显式列 UPSERT、反向影子为 BEFORE ROW UPSERT + 回环守卫；⑤ 回填 99,369 关闭行；⑥ 对账 `job_ai_match_scopes`（+333 / −22 / ~137）。归档读切 v3 的代码已部署 | P0、D4 | ✅ 2026-11-27 |
 | **C3** | `jobWriteTable()` + `JOBS_WRITE_SOURCE`，改 **14 个文件的 24 处写语句**；新增 `scripts/test-job-write-source.ts`。默认 `jobs`，生产行为不变，已部署 `ded06ab` | C2 | ✅ 2026-11-27 |
 | C4 | 双向影子对账：反向探针已通过（事务内写 v3 → jobs 同 id/同 flag/同 scope，回滚后两侧 0 残留）；顺延 24h 零漂移观察中 | C3 | 观察中 |
-| C5 | 切写 `JOBS_WRITE_SOURCE=v3`，反向影子常开，观察 7 天 | C4 | 7 d |
+| **C5** | 切写 `JOBS_WRITE_SOURCE=v3`，反向影子常开，观察 7 天。前置已做：`0166` 给 `jobs_v3` 补上 `jobs` 才有的唯一索引，列约束逐项比对无差异 | C4 | 7 d |
 | **C6** | 归档 `jobs` 表，**再释放 5.5 G**：`0164`（停双向影子 + 12 个外键改指 `jobs_v3` + 序列归属 + 移入 `archive` 架构）+ `0165`（**dump 校验后**才 `drop`，才是真正回收磁盘） | C5 | 已备好，等 C5 满 7 天 |
 
 ### C2 执行记录（2026-11-27，已上生产）
@@ -250,6 +250,53 @@ legacy 车道（`src/lib/job-connectors/sync.ts`）没有地区过滤，不用�
 
 **回滚材料**：回填前已建 `public.jobs_v3_c2_undo`（99,369 个 id，已开 RLS），撤销回填
 `delete from public.jobs_v3 v using public.jobs_v3_c2_undo u where v.id = u.id;`；DDL 回滚见迁移头部。
+
+### D4 收尾：列表总数改成"能走索引就算精确"（2026-11-27，已部署 `4cbbd99`）
+
+D4 的验收里一直挂着"每国数量与 SQL 直查一致"。逐国对账本身是过的（158 个国家、0 处不符），
+但对账时发现**列表页顶部的总数和旁边的 facets 不一致**：默认列表显示"约 268,813 个岗位"，
+facets 却是 330,449 —— 差 19 %。
+
+原因是路由一直用 `count: 'planned'`（规划器估算）。这个选择是 0134 时代做的：当时筛选靠几十条
+`region ILIKE`，精确计数会扫全表、超 `statement_timeout`。但 0161/0163 之后
+`jobs_v3_active_display_idx` 让常见谓词都能走索引，实测精确计数只要 **15.8 ms（无筛选）/
+149 ms（country=US）/ 162 ms（status=all）**。
+
+改成：**每个谓词都能走索引时用 `exact`，只有文本/ILIKE 谓词或回退到 region ILIKE 扫表时保留
+`planned`**。生产验证（部署后，真实登录态）：
+
+| 请求 | 总数 | 是否估算 | 耗时 | facets 侧 |
+|---|---|---|---|---|
+| 默认列表 | **330,473** | 否 | 0.13 s | 330,473（一致） |
+| `country=US` | **225,001** | 否 | 0.22 s | 225,001（一致） |
+| `country=US&offset=5000` | 225,001 | 否 | 0.26 s | — |
+| `continent=europe` | 38,719 | 否 | 0.26 s | — |
+| `status=all` | 452,249 | 否 | 0.30 s | — |
+| `search=engineer` | 73,161 | **是** | 0.09 s | 按设计保留估算 |
+| `region=北美` | 226,202 | 否 | 0.67 s | — |
+
+契约测试 `scripts/test-jobs-listing-counts.ts` 从"必须永远 `planned`"改成钉住这个分流规则
+（并断言无条件的 `planned` 不能回来）。
+
+### C5 前置：列约束与唯一索引比对（2026-11-27）
+
+切写之前先确认"写 `jobs` 能成的语句，写 `jobs_v3` 也一定成"：
+
+| 检查 | 结果 |
+|---|---|
+| 只有 `jobs_v3` 有的列 | `lane` / `country_code` / `continent` / `closure_evidence` / `canonical_job_id` —— 除 `closure_evidence`（`NOT NULL DEFAULT '{}'`）外都可空，插入不写这些列即可 |
+| 共有列的可空性 / 默认值差异 | **0 处** |
+| `jobs_v3` 上的生成列 | 0（`ai_match_search` 在 v3 是普通列，由 `jobs_v3_sync_search()` 维护；代码里没有任何写入点提到它） |
+| `jobs_v3` 的 CHECK | 2 条：`lane in (ats,legacy)`、`lane='ats'` 时 `source_key` 必须非空 —— 比 `jobs` 更严，回填时已全量满足 |
+| 唯一索引差异 | **`jobs` 有 `(source_system, company, external_job_id) WHERE 三者非空`，`jobs_v3` 只有 `(source_key, external_job_id) WHERE lane='ats' AND is_active`** |
+
+差异有实际后果：`job-sync.ts` 的插入走的是普通 `.insert()`，去重全靠 JS 里按
+`source_key / job_url / title+company` 先比对，**数据库唯一索引是防并发的兜底**。切到 v3 后这个兜底
+会从"三列"变成"两列且只覆盖 active 的 ATS 行"，两个 worker 抢同一批时可能插出重复行。
+
+所以补了 `0166_jobs_v3_write_parity.sql`：给 `jobs_v3` 建一条与 `jobs` 完全一致的
+`jobs_v3_source_company_external_uidx`。**已在生产执行**（建索引前先查重、有重复就拒绝建）。
+执行后 30 分钟内 `job_sync_failures` = 0，最新同步延迟 1.9 min，没有批次损失。
 
 ### C6 准备（2026-11-27，**未执行**，等 C5 满 7 天）
 
