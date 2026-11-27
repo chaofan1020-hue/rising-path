@@ -143,6 +143,13 @@
 
 ## 日志（倒序）
 
+### 2026-11-27 · C6 准备完成（`0164` / `0165`，均未执行）
+
+- 依赖清点（生产实测）：**12 个外键**指向 `jobs(id)`（8 个 CASCADE + 4 个 SET NULL），指向 `jobs_v3` 的 0 个；视图 `jobs_listing`(→jobs) / `jobs_listing_v3`(→v3)；影子函数 8 个；触发器 6+7；**`jobs_id_seq` 是 `OWNED BY jobs.id`**（不先改归属，移表会把序列带走、直接打掉 v3）；PostgREST `PGRST_DB_SCHEMAS=public`，所以移出 public 即从 API 面消失。
+- `supabase/migrations/0164_jobs_archive.sql`：drop `jobs_listing` → 停双向影子（触发器 + 函数）→ 12 个外键 `drop` + `add ... not valid` + `validate`（保持各自删除行为）→ 序列归属改 `jobs_v3.id` → `create schema archive` → 移入并改名 `jobs_20261127`。带 `liorvix.c6_confirm='yes'` 守卫 + 「两表行集必须一致」前置检查。
+- `supabase/migrations/0165_jobs_archive_drop.sql`：**dump 校验后才允许**，真正回收 5.5 G（`0164` 只是搬表，不释放磁盘）。护栏 `liorvix.c6_drop_confirm='yes'` + 「表内必须仍有 ~452k 行」。
+- **生产事务内 dry-run（rollback 结尾）**：`preconditions ok: 452,221 rows on both tables`；12 个外键全部改指 `jobs_v3`（cascade / set null 保持）；`jobs_id_seq ownership moved to jobs_v3.id`；`public.jobs moved to archive.jobs_20261127`；`ROLLBACK`。跑前跑后逐项一致（`fks_on_jobs=12 fks_on_v3=0 triggers 6/7 shadow_functions=8 jobs_in_public=1 archive_table=0 jobs_listing_view=1`，序列归属仍 `public.jobs`），零残留。
+- 记下 C6 之后必须紧跟的 **C7 代码改动**：`jobReadTable()` / `jobWriteTable()` 默认值仍指向 `jobs`，而 C6 之后 `public.jobs` 已不存在 —— 必须在同一部署里把默认值改成 `v3` 或直接删掉开关，否则一次没带 flag 的启动就会全线 404。
 ### 2026-11-27 · D6 提前收口 + C3 落地并部署（`ded06ab`）
 
 - **D6**：实跑约 17 h（11-26 17:09 起）。看门狗每次 rc=0（`missing/extra/field_mismatches/missing_evidence/read_index_gaps` 全 0），feed lag 0.8–1.5 min，连续失败 0，`/api/health`、`/jobs` 均 200，无 5xx 抬升，磁盘未继续下滑 → 经用户确认不再等满 24 h。

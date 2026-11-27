@@ -208,7 +208,7 @@ legacy 车道（`src/lib/job-connectors/sync.ts`）没有地区过滤，不用�
 | **C3** | `jobWriteTable()` + `JOBS_WRITE_SOURCE`，改 **14 个文件的 24 处写语句**；新增 `scripts/test-job-write-source.ts`。默认 `jobs`，生产行为不变，已部署 `ded06ab` | C2 | ✅ 2026-11-27 |
 | C4 | 双向影子对账：反向探针已通过（事务内写 v3 → jobs 同 id/同 flag/同 scope，回滚后两侧 0 残留）；顺延 24h 零漂移观察中 | C3 | 观察中 |
 | C5 | 切写 `JOBS_WRITE_SOURCE=v3`，反向影子常开，观察 7 天 | C4 | 7 d |
-| C6 | 归档 `jobs` 表，**再释放 5.5 G** | C5 | 1 h |
+| **C6** | 归档 `jobs` 表，**再释放 5.5 G**：`0164`（停双向影子 + 12 个外键改指 `jobs_v3` + 序列归属 + 移入 `archive` 架构）+ `0165`（**dump 校验后**才 `drop`，才是真正回收磁盘） | C5 | 已备好，等 C5 满 7 天 |
 
 ### C2 执行记录（2026-11-27，已上生产）
 
@@ -250,6 +250,33 @@ legacy 车道（`src/lib/job-connectors/sync.ts`）没有地区过滤，不用�
 
 **回滚材料**：回填前已建 `public.jobs_v3_c2_undo`（99,369 个 id，已开 RLS），撤销回填
 `delete from public.jobs_v3 v using public.jobs_v3_c2_undo u where v.id = u.id;`；DDL 回滚见迁移头部。
+
+### C6 准备（2026-11-27，**未执行**，等 C5 满 7 天）
+
+生产实测的依赖清单（决定归档能做不能做）：
+
+| 依赖类型 | 实际 |
+|---|---|
+| 外键指向 `jobs(id)` | **12 张表**：8 个 `ON DELETE CASCADE`（`ai_match_feedback` / `ai_matches` / `application_fields` / `applications` / `favorites` / `job_ai_match_scopes` / `job_sync_records` / `prefill_feedback`）+ 4 个 `SET NULL`（`ai_usage_events` / `interview_questions` / `interview_sessions` / `resume_optimizations`） |
+| 外键指向 `jobs_v3(id)` | 0 个 |
+| 视图 | `jobs_listing`（依赖 `jobs`）、`jobs_listing_v3`（依赖 `jobs_v3`） |
+| 函数 | 影子族 8 个（`shadow_jobs_to_v3*` 5 个、`shadow_v3_to_jobs_upsert`、`shadow_closure_evidence` 两个重载）；facet RPC `job_country_filter_counts()` / `job_unplaced_count()` **只读 `jobs_v3`，不受影响** |
+| 触发器 | `jobs` 上 6 个（3 业务 + 3 影子）、`jobs_v3` 上 7 个（3 业务 + 国家派生 + 3 派生/影子） |
+| 序列 | `jobs_id_seq` **OWNED BY `jobs.id`** —— 不先改归属，移动旧表会把序列一起带走，直接打掉 `jobs_v3` |
+| 权限 / RLS | 两表 grant 一致；RLS 都开，策略分别是 `jobs_read_active` 与 `jobs_v3_public_read` |
+| PostgREST | `PGRST_DB_SCHEMAS=public` → 表移出 `public` 即从 API 面消失 |
+
+两个迁移（都带 GUC 守卫，**自动跑迁移的工具会直接报错而不是归档线上表**）：
+
+- `0164_jobs_archive.sql`：drop `jobs_listing` → drop 正/反向影子触发器与函数 → 12 个外键 `drop` + `add ... not valid` + `validate`（保持各自 `CASCADE` / `SET NULL`）→ `jobs_id_seq` 归属改到 `jobs_v3.id` → `create schema archive` → `public.jobs` 移入并改名 `jobs_20261127` → `analyze` + `notify pgrst`。
+- `0165_jobs_archive_drop.sql`：**只有 dump 校验过才跑**。护栏是「表还在且有 ~452k 行」，否则拒绝。真正回收那 5.5 G 的是这一步，`0164` 只是搬走（搬表是目录操作，不释放磁盘）。
+
+**生产事务内 dry-run（已做，`rollback` 结尾，零残留）**：`set liorvix.c6_confirm='yes'` 后整段跑通——
+`preconditions ok: 452,221 rows on both tables`、12 个外键全部改指 `jobs_v3`（`cascade`/`set null` 保持）、
+`jobs_id_seq ownership moved to jobs_v3.id`、`public.jobs moved to archive.jobs_20261127`、`ROLLBACK`。
+跑前跑后逐项对比完全一致：`fks_on_jobs=12 fks_on_v3=0 triggers_on_jobs=6 triggers_on_v3=7 shadow_functions=8 jobs_in_public=1 archive_table=0 jobs_listing_view=1`，序列归属仍是 `public.jobs`。
+
+**C6 之后必须紧跟的代码改动（C7）**：`jobReadTable()` / `jobWriteTable()` 的默认值还指向 `jobs`，而 `public.jobs` 已经不存在 —— 要么把默认值改成 `v3`，要么在 C6 的同一个部署里删掉开关。这一步不能漏，否则一次没带 flag 的启动就会全线 404。
 
 ### C3 执行记录（2026-11-27，已部署，生产行为未变）
 
