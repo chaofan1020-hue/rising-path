@@ -1,7 +1,7 @@
 # 岗位采集规模化 · 执行账本
 
 > 这是 AI 唯一允许改状态的地方。`tasks.yaml` 只读；本文件每完成一个任务必须更新。
-> 最后更新：2026-11-26（P0 磁盘清洁完成；D1 实测完成；D2 开关上线；D3 全量 reconcile 完成；D4-a/D4-b + D5 已上生产并验证）
+> 最后更新：2026-11-27（P0/D1/D2/D3/D4/D5 已上线；C2 迁移 `0163` 已写好并在临时库 dry-run 通过，等点头再上生产）
 >
 > v3 重建计划：`docs/job-acquisition-v3-rebuild-plan.md`
 
@@ -143,6 +143,17 @@
 
 ## 日志（倒序）
 
+### 2026-11-27 · C2 预备完成：`0163` 已写好并在临时库 dry-run 通过（未上生产）
+
+- 迁移：`supabase/migrations/0163_jobs_v3_write_ready.sql`（约 31.7 KB，已提交，**未执行到生产库**）。
+- dry-run 方式：生产的临时库 `liorvix_c2_dryrun`（`pg_dump` 导 5 张表结构 + 函数/触发器定义，灌 5000 行合成岗位，人为造成影子落后 3000 行 + AI scope 漂移 240 行），跑两遍迁移 + 37 条断言全绿；生产 `public.jobs` / `public.jobs_v3` 一行未改。
+- 关键修复（dry-run 才暴露出来的）：
+  1. `public.jobs.ai_match_search` 是 `GENERATED ALWAYS` 列，正/反向影子的列清单都必须排除它，v3 侧改由 `jobs_v3_sync_search` 触发器算同一表达式（已断言两表向量逐行一致）。
+  2. 旧 `0163` 草稿在反向影子里写成了 56 列 + 57 个值（漏改 `new.` 那一侧），会静默跳过每一行。
+  3. 回填前必须先归一化 `lane`（不是所有历史行都带 lane），否则回填出来的行 `lane is null`。
+- 结构改进：迁移拆成两个事务——DDL 段（`jobs_v3` 排他锁亚秒级）+ 回填段单独提交，避免 9.9 万行回填全程压着锁。临时库 1000 行回填 509 ms，外推生产约 50 s。
+- 新增第 6b 段：对账 `job_ai_match_scopes`。上线前实测生产漂移为 缺 333 行 / 多 22 行 / 值错 159 行（`flag_vs_scope_disagree=5`），原因是该表只由 `public.jobs` 的 AFTER 触发器维护，绕过触发器的历史写入没被覆盖。0163 把触发器挂到 v3 后顺手把存量对齐，幂等（第二次 `+0 -0 ~0`）。
+- 待你点头才执行：先 `create table public.jobs_v3_c2_undo as select j.id from public.jobs j where not exists (select 1 from public.jobs_v3 v where v.id = j.id);`（当前 99,369 行）再做撤销快照，然后 `psql -f 0163` → 部署 → 归档页 `status=closed|all` 切 v3。
 ### 2026-11-26 · D3 完成：全量 reconcile 走完（425 页 / 212,139 行），feed 已恢复
 
 - 前置：`JOBS_FEED_REGION_FILTER=all` 写入 `/opt/liorvix/.env.local`（备份 `.env.local.pre-region-all`），清空 `reconcile_*` 状态后 16:09:55 重启，16:12:57 起 detached 全量 reconcile（`/tmp/d3-reconcile.out`）。

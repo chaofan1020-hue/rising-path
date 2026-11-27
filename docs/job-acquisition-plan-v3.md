@@ -203,11 +203,45 @@ legacy 车道（`src/lib/job-connectors/sync.ts`）没有地区过滤，不用�
 | # | 动作 | 依赖 | 预计 |
 |---|---|---|---|
 | C1 | 设计稿 | — | ✅ 已完成 |
-| **C2** | 迁移 `0163_jobs_v3_write_ready.sql`：① id 默认改共用序列；② 3 个业务触发器迁到 v3；③ `lane` 加默认；④ 反向影子 + 回环守卫（`liorvix.reverse_shadow` session 变量）；⑤ 提交 12.2 万关闭行回填到 v3（归档读一并切 v3） | P0、D4（触发器可合并到同一迁移批次） | 4–6 h |
+| **C2** | 迁移 `0163_jobs_v3_write_ready.sql`（已写、已 dry-run、**未上生产**）：① id 默认改共用 `jobs_id_seq`；② `lane` / `closure_evidence` / 搜索向量由 v3 自己的触发器派生；③ 3 个业务触发器迁到 v3；④ 正向影子改显式列 UPSERT、反向影子为 BEFORE ROW UPSERT + 回环守卫；⑤ 回填 99,369 关闭行；⑥ 对账 `job_ai_match_scopes` 漂移。**待你点头才执行** | P0、D4（触发器可合并到同一迁移批次） | 已备好，执行 10 min |
 | C3 | `jobWriteTable()` + `JOBS_WRITE_SOURCE`，改 8 个写文件；新增 `scripts/test-job-write-source.ts` | C2 | 3 h |
 | C4 | 双向影子对账 24h | C3 | 24 h 观察 |
 | C5 | 切写 `JOBS_WRITE_SOURCE=v3`，反向影子常开，观察 7 天 | C4 | 7 d |
 | C6 | 归档 `jobs` 表，**再释放 5.5 G** | C5 | 1 h |
+
+### C2 已完成的准备（2026-11-27，尚未上生产）
+
+`0163_jobs_v3_write_ready.sql` 在生产的**临时库** `liorvix_c2_dryrun` 上完整跑通，
+37 条断言全绿，生产库 `public.jobs` / `public.jobs_v3` 一行未改。临时库的造法是：pg_dump
+只导 5 张相关表的结构 + 相关函数、触发器定义，再灌 5000 行合成岗位（4000 活跃 / 1000 关闭，
+16 种地区写法），然后人为把 v3 做成"影子落后"的状态（只镜像了 2000 行）。
+
+覆盖到的点：
+
+| 断言组 | 结果 |
+|---|---|
+| `jobs_v3.id` 默认值 = `nextval('jobs_id_seq')` | ✅ |
+| 直写 v3 → 反向影子进 `jobs` → 3 个业务触发器生效（lane=ats、country=US、continent、target flag、AI scope 行） | ✅ |
+| 直写 `jobs` → 正向影子进 v3（lane=legacy、country 从 region 重新推导） | ✅ |
+| 双向 UPDATE 互通、改 region 会同时改 country/continent/target flag/scope 行 | ✅ |
+| 回填后 `jobs` 与 `jobs_v3` 行集合一致、关闭行仍关闭、关闭行带 `closure_evidence` | ✅ |
+| `ai_match_search` 两表向量完全一致（`jobs` 是生成列，v3 用触发器同步） | ✅ |
+| `job_ai_match_scopes` 与 region 解析函数逐行一致（注入 240 行漂移后修好） | ✅ |
+| 删 v3 行**不会**级联删 `jobs`（保护 12 张 FK 的用户数据），删 `jobs` 行会清掉 v3 镜像 | ✅ |
+| 迁移幂等：第二次执行 `normalised 0 / backfilled 0 / +0 -0 ~0` | ✅ |
+
+两个设计取舍（与最初设计的差异）：
+
+1. **拆成两个事务**。DDL 段在自己的事务里（`jobs_v3` 的 ACCESS EXCLUSIVE 锁只持续亚秒级），
+   回填段单独成事务——否则 9.9 万行 × 每次 5 个触发器 + 回 v3 的 upsert 会一直压着排他锁。
+   实测临时库 1000 行回填 509 ms，线性外推生产约 50 s。
+2. **`ai_match_search` 不走影子列**：`public.jobs` 上它是 `GENERATED ALWAYS` 列，任何
+   INSERT/UPDATE 列清单里都不能出现它，所以正/反向影子都把它排除，改由 v3 的
+   `jobs_v3_sync_search` 触发器算同一个表达式。
+
+**上线前必做**：先存回填撤销集
+`create table public.jobs_v3_c2_undo as select j.id from public.jobs j where not exists (select 1 from public.jobs_v3 v where v.id = j.id);`
+（当前 99,369 行），回滚按它删。
 
 **C 与 D 的关系**：C6 释放的 5.5 G 覆盖 D 的数据增长，所以顺序是 **P0 → D → C**，不必单独扩容。
 **迁移编号**：D4-1 用 `0161`，D4-3 的 facet RPC 用 `0162`（占用后 C2 顺延为 `0163`）。
